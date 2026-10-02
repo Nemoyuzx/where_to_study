@@ -762,6 +762,7 @@ class MainActivity : Activity() {
                     InformationQueryPage(
                         activity = this@MainActivity,
                         shuttleRepository = shuttleBusRepository,
+                        holidayRepository = holidayRepository,
                         dailyInfoRepository = calendarDailyInfoRepository,
                         preferences = preferences,
                         availableWidthDp = currentLayoutSpec?.contentWidthDp

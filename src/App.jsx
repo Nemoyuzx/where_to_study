@@ -159,11 +159,17 @@ const EN_TEXT = Object.freeze({
   '课程日期格式不正确。': 'The course date is invalid.',
   '操作失败，请重试。': 'The change could not be saved. Please try again.',
   '教学云平台密码': 'Teaching Cloud password',
+  '填写能登录移动教务的密码，不一定与统一身份认证密码相同。部分账号的初始密码可能是 8 位出生日期（YYYYMMDD），请以本人实际设置为准。':
+    'Enter the password that works for Mobile Academic Services. It may differ from your unified identity password. For some accounts, the initial password may be an eight-digit birth date (YYYYMMDD); use your actual current password.',
+  '用于获取课程作业，通常填写统一身份认证密码。此项选填：未单独设置时，应用会沿用教务密码。':
+    'Used for assignments, usually with your unified identity password. Optional: if left unset, the app uses your academic password.',
   '独立密码已安全保存，留空保持不变': 'Separate password is securely saved; leave blank to keep it',
   '未设置时使用教务密码': 'Uses the academic password when not set',
   '仅用于作业 DDL；与教务密码不同时填写，保存后生效。':
     'Only for assignment deadlines. Enter it if different from your academic password, then save.',
   '使用教务密码': 'Use academic password',
+  '改用教务密码': 'Use academic password instead',
+  '打开教学云': 'Open Teaching Cloud',
   '保存后将清除独立密码并使用教务密码': 'Saving will remove the separate password and use the academic password',
   '空教室': 'Empty Classrooms',
   '教学日历': 'Teaching Calendar',
@@ -497,6 +503,10 @@ const PRIVACY_SECTIONS = [
     body: 'UAPI 按所选校区对应行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 提供竞赛、会议、期刊专题、夏令营、预推免和黑客松，校内竞赛通知由服务器脚本从学校内部网站公开通知页提取整理。班车查询从 where-to-study.cn 读取后勤部公开通知的结构化结果，不发送账号、课表或位置。用户还可选择公开 HTTPS JSON 自定义日程源；请求不附带个人数据，客户端拒绝含凭据、回环/私网字面量或重定向的地址并限制响应大小。各类别均有独立开关，所有显示数据仅供参考。\n\nUAPI provides district-level campus weather and base almanac data without GPS; Timeless may add advice. Contest DDL provides competitions, conferences, journal special issues, summer camps, pre-admission events, and hackathons. School notices are extracted by a server-side script from public pages on the university’s internal website. Shuttle queries read structured public Logistics Department notices from where-to-study.cn and send no account, schedule, or location data. Users may also select a public HTTPS JSON custom feed. Requests contain no personal data; credential-bearing, loopback/private literal, redirecting, and oversized endpoints are rejected. Each category has its own switch, and displayed data is for reference only.',
   },
   {
+    title: '公开竞赛数据备份 / Public contest data backups',
+    body: '应用比较 GitHub 主源与 https://where-to-study.cn/contest-ddl/data/competitions.json 镜像的有效 generated_at，镜像更新时使用镜像；两者都不可用时才访问原 contest-events API。请求为不带账号、密码、Cookie、令牌、课表或作业的固定 HTTPS GET，拒绝重定向并限制响应大小。\n\nThe app compares valid generated_at timestamps from the GitHub source and the fixed mirror at https://where-to-study.cn/contest-ddl/data/competitions.json, choosing the mirror when newer. The existing contest-events API is used only if both static sources fail. Fixed HTTPS GET requests contain no credentials, cookies, tokens, schedules, or assignments, reject redirects, and enforce size limits.',
+  },
+  {
     title: '云课堂作业 / UCloud assignments',
     body: '应用仅把密码通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存令牌并从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\nThe password is submitted only to auth.bupt.edu.cn over HTTPS. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. The app reads no browser cookies, sends no password to UCloud APIs, persists no ticket, cookie, token, or assignment, and reuses results in memory for at most ten minutes.',
   },
@@ -506,7 +516,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '不收集的数据与第三方元数据 / Data not collected and third-party metadata',
-    body: '项目不运营应用后端，不含广告、分析或行为跟踪 SDK，也不收集 GPS、联系人、广告标识符、诊断或使用行为。所连接的第三方服务可能按各自政策处理 IP 和请求时间等普通网络元数据。\n\nThe project operates no app backend and collects no GPS, contacts, advertising identifiers, diagnostics, or usage behavior. Connected third parties may process ordinary network metadata such as IP address and request time under their own policies.',
+    body: '项目只运营整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS、联系人、广告标识符、诊断或使用行为。公开接口和所连接的第三方服务可能按各自政策处理 IP 和请求时间等普通网络元数据。\n\nThe project operates only fixed endpoints for public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and collects no GPS, contacts, advertising identifiers, diagnostics, or usage behavior. Public endpoints and connected third parties may process ordinary network metadata under their own policies.',
   },
   {
     title: '保留与删除 / Retention and deletion',
@@ -571,7 +581,7 @@ function PrivacyPolicyDialog({ onClose }) {
           <div>
             <p className="eyebrow">Where To Study</p>
             <h2 id="privacy-dialog-title">隐私声明 / Privacy Policy</h2>
-            <span>生效日期 / Effective date: 2026-08-31</span>
+            <span>生效日期 / Effective date: 2026-10-02</span>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
@@ -1248,7 +1258,8 @@ function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) 
       ) : (
         <div className="deadline-empty">{response?.unavailable_reason || t('当天没有课程作业截止')}</div>
       )}
-      <p>{t('第三方来源')}：<a href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer">{t('北京邮电大学云邮教学空间')}</a></p>
+      <p>{t('第三方来源')}：{t('北京邮电大学云邮教学空间')}</p>
+      <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={15} aria-hidden="true" />{t('打开教学云')}</a>
     </section>
   )
 }
@@ -1342,6 +1353,8 @@ function ContestDeadlineCard({
             <>
               <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a>
               {' · '}{t('备用：')}
+              <a href="https://where-to-study.cn/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL mirror</a>
+              {' · '}
               <a href="https://where-to-study.cn/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a>
             </>
           ) : null}
@@ -2132,7 +2145,7 @@ function App() {
       const target = dateFromString(targetDate)
       if (Number.isNaN(target.getTime())) return
       const targetYear = target.getFullYear()
-      ;[targetYear - 1, targetYear, targetYear + 1].forEach((year) => {
+      ;[targetYear - 1, targetYear, targetYear + 1, Number(todayYear)].forEach((year) => {
         void loadHolidayYear(year)
       })
       if (settings.almanacEnabled) void loadAlmanac(targetDate, periodic)
@@ -2176,6 +2189,7 @@ function App() {
     settings.customDeadlinesEnabled,
     settings.customDeadlinesUrl,
     settingsLoaded,
+    todayYear,
   ])
 
   useEffect(() => {
@@ -3852,6 +3866,7 @@ function App() {
               onToggleFavorite={toggleFavoriteDeadline}
               hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
               examSnapshot={schedule?.exam_schedule}
+              holidayItems={calendarHolidayItems}
               onOpenAccount={() => setActivePage('settings')}
               t={t}
             />
@@ -4756,8 +4771,10 @@ function App() {
                   type="password"
                   placeholder={settings.hasSavedPassword ? t('已安全保存，留空保持不变') : t('输入后保存到系统凭据存储')}
                   autoComplete="new-password"
+                  aria-describedby="academic-password-hint"
                 />
               </label>
+              <p id="academic-password-hint" className="account-password-hint">{t('填写能登录移动教务的密码，不一定与统一身份认证密码相同。部分账号的初始密码可能是 8 位出生日期（YYYYMMDD），请以本人实际设置为准。')}</p>
               <label>
                 {t('教学云平台密码')}
                 <input
@@ -4771,9 +4788,9 @@ function App() {
                   aria-describedby="teaching-cloud-password-hint"
                 />
               </label>
-              <p id="teaching-cloud-password-hint" className="term-detect-note">{t('仅用于作业 DDL；与教务密码不同时填写，保存后生效。')}</p>
-              <button type="button" className="secondary cloud-password-reset" onClick={() => updateSetting('clearTeachingCloudPassword', true)} disabled={settingsSaving || courseEditBusy}>
-                {t('使用教务密码')}
+              <p id="teaching-cloud-password-hint" className="account-password-hint">{t('用于获取课程作业，通常填写统一身份认证密码。此项选填：未单独设置时，应用会沿用教务密码。')}</p>
+              <button type="button" className="secondary cloud-password-reset account-action-button" onClick={() => updateSetting('clearTeachingCloudPassword', true)} disabled={settingsSaving || courseEditBusy}>
+                <KeyRound size={16} aria-hidden="true" />{t('改用教务密码')}
               </button>
               {settings.clearTeachingCloudPassword ? <p className="term-detect-note" role="status">{t('保存后将清除独立密码并使用教务密码')}</p> : null}
               <div className="field-group">

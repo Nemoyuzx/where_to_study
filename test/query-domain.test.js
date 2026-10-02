@@ -3,13 +3,16 @@ import test from 'node:test'
 
 import {
   buildShuttleDayView,
+  buildShuttleTimetable,
   filterImportantEvents,
   importantEventFavorite,
   importantEventFilterOptions,
   importantEventVisibleCount,
+  isLegalShuttleHoliday,
   IMPORTANT_EVENT_BATCH_SIZE,
   mergeImportantEventCatalog,
   nextImportantEventVisibleCount,
+  resolvedShuttleSelection,
   selectShuttleNotice,
   shuttlePeriodState,
 } from '../src/query-domain.js'
@@ -53,7 +56,9 @@ const shuttlePayload = {
           from: '西土城路校区',
           to: '沙河校区',
           parse_status: 'parsed',
-          rows: [],
+          rows: [
+            { departure_time: '08:00', services: { monday: { vehicle: '大巴', count: 1 } } },
+          ],
         },
       ],
     },
@@ -104,6 +109,124 @@ test('shuttle query never presents an upcoming or ended timetable as active toda
   })
   assert.equal(manuallySelectedFuture.periodState, 'upcoming')
   assert.deepEqual(manuallySelectedFuture.routes, [])
+})
+
+test('shuttle next departure uses clock order rather than response order', () => {
+  const payload = structuredClone(shuttlePayload)
+  payload.items[1].schedules[0].rows.reverse()
+  const view = buildShuttleDayView(payload, {
+    today: '2026-08-31', weekday: 'monday', currentWeekday: 'monday', nowMinutes: 7 * 60,
+  })
+  assert.deepEqual(view.routes[0].departures.map((row) => row.departureTime), ['08:30', '12:00'])
+  assert.deepEqual(view.routes[0].departures.map((row) => row.next), [true, false])
+})
+
+test('shuttle day uses the newest active verified period and excludes unreadable options', () => {
+  const period = (label, start, status, rows) => ({
+    period: { label, start_date: start, end_date: null },
+    from: '西土城路校区', to: '沙河校区', parse_status: status, rows,
+  })
+  const row = (time) => ({ departure_time: time, services: { thursday: { vehicle: '大巴', count: 1 } } })
+  const payload = {
+    items: [{
+      id: 'latest', stops: [], schedules: [
+        period('未核实', '2026-09-09', 'needs_review', [row('06:00')]),
+        period('较早时段', '2026-09-01', 'parsed', [row('07:00')]),
+        period('较新时段', '2026-09-07', 'parsed', [row('08:00')]),
+        period('空时段', '2026-09-10', 'parsed', []),
+        period('无班次服务', '2026-09-11', 'parsed', [
+          { departure_time: '09:00', services: { monday: null } },
+        ]),
+      ],
+    }],
+  }
+  const view = buildShuttleDayView(payload, {
+    today: '2026-09-10', weekday: 'thursday', currentWeekday: 'thursday', nowMinutes: 0,
+  })
+  assert.deepEqual(view.periods.map(({ period: item }) => item.label), ['较早时段', '较新时段'])
+  assert.equal(view.period.label, '较新时段')
+  assert.deepEqual(view.routes[0].departures.map(({ departureTime }) => departureTime), ['08:00'])
+  assert.deepEqual(buildShuttleTimetable(payload, '2026-09-10').periods.map(({ period: item }) => item.label),
+    ['较早时段', '较新时段'])
+})
+
+test('shuttle selection keeps deliberate same-day browsing but resets at midnight or a new notice', () => {
+  const weekdaySelection = { key: 'monday', date: '2026-09-07' }
+  const periodSelection = { key: 'older', date: '2026-09-07', noticeIdentity: 'latest\u001fparsed' }
+  const selection = (today, noticeIdentity) => resolvedShuttleSelection({
+    weekdaySelection, periodSelection, today, currentWeekday: 'tuesday', noticeIdentity,
+  })
+  assert.deepEqual(selection('2026-09-07', 'latest\u001fparsed'), {
+    weekday: 'monday', period: 'older',
+  })
+  assert.deepEqual(selection('2026-09-08', 'latest\u001fparsed'), {
+    weekday: 'tuesday', period: '',
+  })
+  assert.deepEqual(selection('2026-09-07', 'new-latest\u001fparsed'), {
+    weekday: 'monday', period: '',
+  })
+})
+
+test('full shuttle timetable retains all verified periods, directions, and weekday services', () => {
+  const payload = {
+    last_parsed_notice_id: 'parsed',
+    items: [
+      { id: 'latest', notes: ['法定节假日期间，班车停运。'], schedules: [] },
+      {
+        id: 'parsed',
+        notes: ['旧通知的假期安排'],
+        stops: [{ campus: '沙河校区', location: '学生活动中心南侧' }],
+        schedules: [
+          {
+            period: { label: '第一时段', start_date: '2026-08-27', end_date: '2026-09-04' },
+            from: '西土城路校区', to: '沙河校区', parse_status: 'parsed',
+            rows: [
+              { departure_time: '12:00', services: { friday: { vehicle: '大巴', count: 2 } } },
+              { departure_time: '08:00', services: { monday: { vehicle: '中巴', count: 1 }, sunday: null } },
+            ],
+          },
+          {
+            period: { label: '第一时段', start_date: '2026-08-27', end_date: '2026-09-04' },
+            from: '沙河校区', to: '西土城路校区', parse_status: 'parsed',
+            rows: [{ departure_time: '09:00', services: { tuesday: { vehicle: '大巴', count: 1 } } }],
+          },
+          {
+            period: { label: '第二时段', start_date: '2026-09-07', end_date: null },
+            from: '西土城路校区', to: '沙河校区', parse_status: 'parsed',
+            rows: [{ departure_time: '07:30', services: { wednesday: { vehicle: '大巴', count: 3 } } }],
+          },
+          {
+            period: { label: '未核实', start_date: '2026-09-07', end_date: null },
+            from: '沙河校区', to: '西土城路校区', parse_status: 'needs_review',
+            rows: [{ departure_time: '06:00', services: { monday: { vehicle: '大巴', count: 1 } } }],
+          },
+        ],
+      },
+    ],
+  }
+  const timetable = buildShuttleTimetable(payload, '2026-09-05')
+  assert.equal(timetable.usingFallback, true)
+  assert.equal(timetable.holidayNotice.text, '法定节假日期间，班车停运。')
+  assert.equal(timetable.holidayNotice.source.id, 'latest')
+  assert.deepEqual(timetable.periods.map(({ period, state }) => [period.label, state]), [
+    ['第一时段', 'ended'], ['第二时段', 'upcoming'],
+  ])
+  assert.deepEqual(timetable.periods.map(({ routes }) => routes.length), [2, 1])
+  assert.deepEqual(timetable.periods[0].routes[0].rows.map((row) => row.departure_time), ['08:00', '12:00'])
+  assert.deepEqual(timetable.periods[0].routes[0].rows[0].services.monday, { vehicle: '中巴', count: 1 })
+  assert.equal(timetable.periods[0].routes[0].rows[0].services.sunday, null)
+  assert.equal(timetable.periods[0].routes[1].stop, '学生活动中心南侧')
+  assert.deepEqual(timetable.periods[1].routes[0].rows[0].services.wednesday, { vehicle: '大巴', count: 3 })
+})
+
+test('shuttle holiday notice uses legal rest days and excludes festivals and transfer workdays', () => {
+  const today = '2026-10-02'
+  assert.equal(isLegalShuttleHoliday([{ date: today, type: 'holiday' }], today), true)
+  assert.equal(isLegalShuttleHoliday([{ date: today, type: 'festival' }], today), false)
+  assert.equal(isLegalShuttleHoliday([{ date: '2026-10-01', type: 'holiday' }], today), false)
+  assert.equal(isLegalShuttleHoliday([
+    { date: today, type: 'holiday' }, { date: today, type: 'workday' },
+  ], today), false)
 })
 
 test('important-event query searches metadata, filters categories, and sorts by DDL', () => {

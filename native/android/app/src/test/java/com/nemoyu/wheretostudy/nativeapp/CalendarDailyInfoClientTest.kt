@@ -139,6 +139,7 @@ class CalendarDailyInfoClientTest {
     fun startupWarmupSharesFullFeedAndPageChangesOnlyFilterCachedPayload() {
         var elapsedMillis = 1_000L
         val primaryCalls = AtomicInteger(0)
+        val mirrorCalls = AtomicInteger(0)
         val schoolCalls = AtomicInteger(0)
         val primaryParses = AtomicInteger(0)
         val schoolParses = AtomicInteger(0)
@@ -147,10 +148,14 @@ class CalendarDailyInfoClientTest {
                 when (uri.toString()) {
                     CalendarDailyInfoSources.deadlinePrimary -> {
                         primaryCalls.incrementAndGet()
-                        """{"items":[
+                        """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-22T10:00:00+08:00","items":[
                           {"id":"first","name":"First","event_type":"competition","primary_deadline":"2026-08-22T20:00:00+08:00"},
                           {"id":"second","name":"Second","event_type":"hackathon","primary_deadline":"2026-08-23T20:00:00+08:00"}
                         ]}"""
+                    }
+                    CalendarDailyInfoSources.deadlineMirror -> {
+                        mirrorCalls.incrementAndGet()
+                        """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-21T10:00:00+08:00","items":[]}"""
                     }
                     CalendarDailyInfoSources.schoolContestNotices -> {
                         schoolCalls.incrementAndGet()
@@ -175,8 +180,9 @@ class CalendarDailyInfoClientTest {
 
         assertEquals("second", client.fetchDeadlines("2026-08-23").items.single().id)
         assertEquals(1, primaryCalls.get())
+        assertEquals(1, mirrorCalls.get())
         assertEquals(1, schoolCalls.get())
-        assertEquals(1, primaryParses.get())
+        assertEquals(2, primaryParses.get())
         assertEquals(1, schoolParses.get())
 
         assertEquals(
@@ -184,14 +190,127 @@ class CalendarDailyInfoClientTest {
             client.fetchImportantEvents(refreshStaleCache = false).map { it.id },
         )
         assertEquals(1, primaryCalls.get())
+        assertEquals(1, mirrorCalls.get())
         assertEquals(1, schoolCalls.get())
 
         client.prewarmDeadlines("2026-08-23")
         assertEquals(2, primaryCalls.get())
+        assertEquals(2, mirrorCalls.get())
         assertEquals(2, schoolCalls.get())
-        assertEquals(2, primaryParses.get())
+        assertEquals(4, primaryParses.get())
         assertEquals(2, schoolParses.get())
     }
+
+    @Test
+    fun mirrorIsSelectedOnlyWhenItsValidatedGenerationIsNewer() {
+        for ((mirrorGeneratedAt, expectedID) in listOf(
+            "2026-08-23T10:00:00+08:00" to "mirror",
+            "2026-08-22T10:00:00+08:00" to "primary",
+            "2026-08-21T10:00:00+08:00" to "primary",
+        )) {
+            val client = contestClient(
+                primary = contestPayload("primary", "2026-08-22T10:00:00+08:00"),
+                mirror = contestPayload("mirror", mirrorGeneratedAt),
+            )
+            val snapshot = client.fetchDeadlines("2026-08-22")
+            assertEquals(expectedID, snapshot.items.single().id)
+            assertEquals(expectedID == "mirror", snapshot.usedBackup)
+            assertEquals(
+                if (expectedID == "mirror") CalendarDailyInfoSources.deadlineMirror
+                else CalendarDailyInfoSources.deadlinePrimary,
+                snapshot.source,
+            )
+        }
+    }
+
+    @Test
+    fun invalidMirrorKeepsPrimaryAndPrimaryFailureUsesMirror() {
+        val primaryPayload = contestPayload("primary", "2026-08-22T10:00:00+08:00")
+        val invalidMirror = """{"schema_version":"2.0","timezone":"Asia/Shanghai","generated_at":"2026-08-23T10:00:00+08:00","items":[]}"""
+        assertEquals(
+            "primary",
+            contestClient(primaryPayload, invalidMirror).fetchDeadlines("2026-08-22").items.single().id,
+        )
+        val mirrorOnly = contestClient(
+            primary = null,
+            mirror = contestPayload("mirror", "2026-08-23T10:00:00+08:00"),
+        ).fetchDeadlines("2026-08-22")
+        assertEquals("mirror", mirrorOnly.items.single().id)
+        assertTrue(mirrorOnly.usedBackup)
+    }
+
+    @Test
+    fun newerValidEmptyMirrorClearsObsoleteContestItems() {
+        val snapshot = contestClient(
+            primary = contestPayload("obsolete", "2026-08-22T10:00:00+08:00"),
+            mirror = """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-23T10:00:00+08:00","items":[]}""",
+        ).fetchDeadlines("2026-08-22")
+        assertTrue(snapshot.items.isEmpty())
+        assertEquals(CalendarDailyInfoSources.deadlineMirror, snapshot.source)
+    }
+
+    @Test
+    fun existingApiBackupRemainsAvailableWhenBothVersionedSourcesFail() {
+        val requests = mutableListOf<String>()
+        val snapshot = contestClient(
+            primary = null,
+            mirror = """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"bad","items":[]}""",
+            backup = contestPayload("api", "2026-08-20T10:00:00+08:00"),
+            requests = requests,
+        ).fetchDeadlines("2026-08-22")
+        assertEquals("api", snapshot.items.single().id)
+        assertEquals(CalendarDailyInfoSources.deadlineBackup, snapshot.source)
+        assertTrue(snapshot.usedBackup)
+        assertEquals(
+            listOf(
+                CalendarDailyInfoSources.deadlinePrimary,
+                CalendarDailyInfoSources.deadlineMirror,
+                CalendarDailyInfoSources.deadlineBackup,
+                CalendarDailyInfoSources.schoolContestNotices,
+            ),
+            requests,
+        )
+    }
+
+    @Test
+    fun generatedAtValidationRejectsInvalidSchemaAndComparesTimezones() {
+        assertEquals(
+            ContestFeedMetadata.generatedAtMillis(contestPayload("a", "2026-08-22T10:00:00+08:00")),
+            ContestFeedMetadata.generatedAtMillis(contestPayload("a", "2026-08-22T02:00:00Z")),
+        )
+        for (payload in listOf(
+            """{"generated_at":"2026-08-22T10:00:00+08:00","items":[]}""",
+            """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-13-22T10:00:00+08:00","items":[]}""",
+            """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-22T10:00:00+08:00","items":{}}""",
+            """{"schema_version":"1.4","timezone":"UTC","generated_at":"2026-08-22T10:00:00+08:00","items":[]}""",
+            """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-22T10:00:00+08:00","items":[${List(5_001) { "{}" }.joinToString(",") }]}""",
+        )) {
+            assertThrows(DailyInfoClientException::class.java) {
+                ContestFeedMetadata.generatedAtMillis(payload)
+            }
+        }
+    }
+
+    private fun contestPayload(id: String, generatedAt: String): String =
+        """{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"$generatedAt","items":[{"id":"$id","name":"$id","event_type":"competition","primary_deadline":"2026-08-22T20:00:00+08:00"}]}"""
+
+    private fun contestClient(
+        primary: String?,
+        mirror: String?,
+        backup: String? = null,
+        requests: MutableList<String> = mutableListOf(),
+    ): CalendarDailyInfoClient = CalendarDailyInfoClient(
+        fetchPublicJson = { uri, _, _, _ ->
+            requests += uri.toString()
+            when (uri.toString()) {
+                CalendarDailyInfoSources.deadlinePrimary -> primary
+                CalendarDailyInfoSources.deadlineMirror -> mirror
+                CalendarDailyInfoSources.deadlineBackup -> backup
+                CalendarDailyInfoSources.schoolContestNotices -> """{"items":[]}"""
+                else -> null
+            } ?: error("source unavailable")
+        },
+    )
 
     @Test
     fun assignmentParserSupportsCourseAndHomepageContracts() {

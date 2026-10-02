@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { GraduationCap, RefreshCw } from 'lucide-react'
+import { GraduationCap, RefreshCw, Settings2 } from 'lucide-react'
 
 export function GradeCard({ item, words }) {
   const metadata = [item.semester_name, item.course_attribute, item.course_nature, item.exam_nature, item.grade_status]
@@ -18,14 +18,14 @@ export default function GradesPanel({ command, language, enabled, hasAccount, on
   const en = language === 'en'
   const words = en ? {
     title: 'Grades', account: 'Save an academic account in Settings to view your own grades.',
-    settings: 'Account settings', term: 'Semester', all: 'All semesters', best: 'Best', first: 'First',
+    settings: 'Go to account settings', term: 'Semester', all: 'All semesters', best: 'Best', first: 'First',
     attempts: 'All records', records: 'Record type', refresh: 'Refresh grades', loading: 'Loading grades…',
     empty: 'No published grades in this selection. Try All semesters.', average: 'Average grade point',
     score: 'Grade', credits: 'Credits', retry: 'Unable to load grades. Check your academic account and try again.',
     source: 'Source: the university academic service. Results are shown on this device; this app does not upload them to its servers.',
     updated: 'Updated',
   } : {
-    title: '成绩查询', account: '请先在设置中保存教务账号，再查看本人的成绩。', settings: '个人账户设置',
+    title: '成绩查询', account: '请先在设置中保存教务账号，再查看本人的成绩。', settings: '前往个人账户',
     term: '学年学期', all: '全部学期', best: '最好', first: '首次', attempts: '全部记录', records: '成绩记录',
     refresh: '刷新成绩', loading: '正在读取成绩…', empty: '当前选择暂无已公布成绩，可切换“全部学期”查看。',
     average: '平均学分绩点', score: '成绩', credits: '学分', retry: '成绩暂时无法读取，请检查教务账户后重试。',
@@ -85,7 +85,7 @@ export default function GradesPanel({ command, language, enabled, hasAccount, on
     <header className="query-section-header"><h2><GraduationCap size={24} /> {words.title}</h2>
       <button type="button" onClick={reload} disabled={loading || !hasAccount} aria-label={words.refresh}><RefreshCw size={18} />{words.refresh}</button>
     </header>
-    {!hasAccount ? <div className="query-grade-status"><p>{words.account}</p><button type="button" onClick={onOpenAccount}>{words.settings}</button></div> : <>
+    {!hasAccount ? <div className="query-grade-status"><p>{words.account}</p><button type="button" className="query-action-button" onClick={onOpenAccount}><Settings2 size={16} aria-hidden="true" />{words.settings}</button></div> : <>
       {refresh === 0 && <p className="query-grade-status">{en ? 'Use Refresh grades to retrieve your results.' : '点击“刷新成绩”读取本人成绩。'}</p>}
       <div className="query-grade-filters">
         <label>{words.term}<select aria-label={words.term} value={term ?? ''} disabled={!terms} onChange={change(setTerm)}>

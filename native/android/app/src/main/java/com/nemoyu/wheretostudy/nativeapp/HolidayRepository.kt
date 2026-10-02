@@ -126,6 +126,10 @@ class HolidayRepository(
     context: Context,
     private val client: HolidayClient = HolidayClient(),
     private val store: HolidayStore = HolidayStore(context.applicationContext),
+    private val authoritativeStore: HolidayStore = HolidayStore(
+        context.applicationContext, "authoritative_holidays",
+    ),
+    private val fetchAuthoritative: (Int) -> HolidaysSnapshot = client::fetch,
     private val deviceCalendarClient: DeviceCalendarHolidayClient = DeviceCalendarHolidayClient(
         context.applicationContext,
     ),
@@ -134,10 +138,14 @@ class HolidayRepository(
     private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val snapshots = ConcurrentHashMap<Int, HolidaysSnapshot>()
+    private val authoritativeSnapshots = ConcurrentHashMap<Int, HolidaysSnapshot>()
     private val loadedYears = ConcurrentHashMap.newKeySet<Int>()
+    private val authoritativeLoadedYears = ConcurrentHashMap.newKeySet<Int>()
     private val inFlightYears = ConcurrentHashMap<Int, Long>()
+    private val authoritativeInFlightYears = ConcurrentHashMap<Int, Long>()
     private val statusByYear = ConcurrentHashMap<Int, String>()
     private val failureCooldown = HolidayFailureCooldown()
+    private val authoritativeFailureCooldown = HolidayFailureCooldown()
     private val observers = HolidayObserverRegistry()
     private val closed = AtomicBoolean(false)
 
@@ -156,6 +164,59 @@ class HolidayRepository(
     }
 
     fun items(year: Int): List<HolidayItem> = snapshot(year)?.items.orEmpty()
+
+    // Shuttle service warnings must never infer legal holidays from device
+    // calendars, which may include ordinary festivals. Keep the pinned feed's
+    // last-good full snapshot even when the calendar UI prefers device events.
+    fun authoritativeSnapshot(year: Int): HolidaysSnapshot? {
+        val generation = LocalDataCoordinator.snapshot()
+        val cached = runCatching {
+            LocalDataCoordinator.withCurrent(generation) {
+                authoritativeSnapshots[year] ?: if (!authoritativeLoadedYears.add(year)) {
+                    authoritativeSnapshots[year]
+                } else {
+                    authoritativeStore.load(year)?.takeIf { it.source == HolidayMetadata.source }
+                        ?.also { authoritativeSnapshots[year] = it }
+                }
+            }
+        }.getOrNull()
+        if (cached != null) return cached
+        return snapshot(year, generation)?.takeIf {
+            it.source == HolidayMetadata.source || it.source == HolidayMetadata.fallbackSource
+        } ?: HolidayOfflineFallback.snapshot(year)
+    }
+
+    fun ensureAuthoritative(year: Int) {
+        val generation = LocalDataCoordinator.snapshot()
+        if (closed.get() || year !in HolidayMetadata.minimumYear..HolidayMetadata.maximumYear) return
+        val cached = authoritativeSnapshot(year)
+        if (cached != null && cached.source == HolidayMetadata.source && isFresh(cached)) return
+        if (!authoritativeFailureCooldown.shouldAttempt(year, false)) return
+        if (authoritativeInFlightYears.putIfAbsent(year, generation) != null) return
+        try {
+            worker.execute {
+                runCatching { fetchAndSaveAuthoritative(year, generation) }
+                    .onSuccess { authoritativeFailureCooldown.recordSuccess(year) }
+                    .onFailure { error ->
+                        if (error !is LocalDataInvalidatedException &&
+                            LocalDataCoordinator.isCurrent(generation)
+                        ) authoritativeFailureCooldown.recordFailure(year)
+                    }
+                if (closed.get() || !LocalDataCoordinator.isCurrent(generation)) {
+                    authoritativeInFlightYears.remove(year, generation)
+                    return@execute
+                }
+                mainHandler.post {
+                    authoritativeInFlightYears.remove(year, generation)
+                    if (!closed.get() && LocalDataCoordinator.isCurrent(generation)) {
+                        observers.snapshot().forEach { observer -> observer() }
+                    }
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            authoritativeInFlightYears.remove(year, generation)
+        }
+    }
 
     fun status(year: Int): String = statusByYear[year].orEmpty()
 
@@ -238,11 +299,16 @@ class HolidayRepository(
 
     internal fun clearLocalDataCoordinated() {
         store.clear()
+        authoritativeStore.clear()
         snapshots.clear()
+        authoritativeSnapshots.clear()
         loadedYears.clear()
+        authoritativeLoadedYears.clear()
         statusByYear.clear()
         failureCooldown.clear()
+        authoritativeFailureCooldown.clear()
         inFlightYears.clear()
+        authoritativeInFlightYears.clear()
     }
 
     fun close() {
@@ -250,6 +316,7 @@ class HolidayRepository(
         mainHandler.removeCallbacksAndMessages(null)
         observers.clear()
         inFlightYears.clear()
+        authoritativeInFlightYears.clear()
         worker.shutdownNow()
     }
 
@@ -267,9 +334,34 @@ class HolidayRepository(
     }
 
     private fun workdays(year: Int): List<HolidayItem> {
-        val remote = runCatching { client.fetch(year) }.getOrNull()
-        if (remote != null) return remote.items.filter { it.type == "workday" }
+        val lastGood = authoritativeSnapshot(year)?.takeIf { it.source == HolidayMetadata.source }
+        val cached = lastGood?.takeIf(::isFresh)
+        val remote = cached ?: if (authoritativeFailureCooldown.shouldAttempt(year, false)) {
+            runCatching { fetchAndSaveAuthoritative(year, LocalDataCoordinator.snapshot()) }
+                .onSuccess { authoritativeFailureCooldown.recordSuccess(year) }
+                .onFailure { error ->
+                    if (error !is LocalDataInvalidatedException) {
+                        authoritativeFailureCooldown.recordFailure(year)
+                    }
+                }
+                .getOrNull()
+        } else null
+        val usable = remote ?: lastGood
+        if (usable != null) return usable.items.filter { it.type == "workday" }
         return HolidayOfflineFallback.snapshot(year)?.items?.filter { it.type == "workday" }.orEmpty()
+    }
+
+    private fun fetchAndSaveAuthoritative(year: Int, generation: Long): HolidaysSnapshot {
+        val fetched = fetchAuthoritative(year)
+        if (fetched.source != HolidayMetadata.source) {
+            throw HolidayClientException("权威节假日来源不受信任。")
+        }
+        LocalDataCoordinator.withCurrent(generation) {
+            authoritativeStore.save(fetched)
+            authoritativeSnapshots[year] = fetched
+            authoritativeLoadedYears.add(year)
+        }
+        return fetched
     }
 
     private fun isFresh(snapshot: HolidaysSnapshot, now: Date = Date()): Boolean {

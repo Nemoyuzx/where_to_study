@@ -2,7 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import { DateParts } from '../main/ets/common/StrictDates';
 import {
   ShuttleBusClient, ShuttleBusLogic, ShuttleBusPeriodState, ShuttleBusResponseParser,
-  ShuttleBusSnapshot, ShuttleBusSources
+  ShuttleBusPeriod, ShuttleBusSchedule, ShuttleBusSnapshot, ShuttleBusSources
 } from '../main/ets/net/ShuttleBusClient';
 
 export default function shuttleBusClientTest() {
@@ -68,6 +68,57 @@ export default function shuttleBusClientTest() {
       const futureRows = snapshot.notices[0].schedules[0].rows;
       expect(ShuttleBusLogic.nextDepartureIndex(
         futureRows, ShuttleBusPeriodState.upcoming, 7 * 60)).assertEqual(-1);
+      expect(daily.scheduleNotice?.schedules.length).assertEqual(1);
+      expect(ShuttleBusLogic.servicesForToday(daily.scheduleNotice?.schedules[0] as
+        ShuttleBusSchedule, 'monday').length).assertEqual(1);
+    });
+
+    it('full_notice_retains_both_periods_directions_and_weekdays', 0, () => {
+      const payload: string = '{"schema_version":"1.0",' +
+        '"generated_at":"2026-08-31T01:00:00.000Z","status":"healthy",' +
+        '"last_parsed_notice_id":"full","items":[{' +
+        '"id":"full","title":"完整班车安排","published_at":"2026-08-19",' +
+        '"schedules":[' +
+        '{"period":{"label":"第一时段","start_date":"2026-08-27","end_date":"2026-09-04"},' +
+        '"from":"西土城路校区","to":"沙河校区","parse_status":"parsed","rows":[' +
+        '{"departure_time":"08:30","services":{"monday":{"vehicle":"大巴","count":1}}}]},' +
+        '{"period":{"label":"第二时段","start_date":"2026-09-07"},' +
+        '"from":"沙河校区","to":"西土城路校区","parse_status":"parsed","rows":[' +
+        '{"departure_time":"17:30","services":{"sunday":{"vehicle":"大巴","count":2}}}]}]}]}';
+      const daily = ShuttleBusLogic.dailyView(ShuttleBusResponseParser.parse(payload),
+        new DateParts(2026, 8, 31));
+      expect(daily.schedules.length).assertEqual(1);
+      expect(daily.scheduleNotice?.schedules.length).assertEqual(2);
+      expect(daily.scheduleNotice?.schedules[1].period.label).assertEqual('第二时段');
+      expect(daily.scheduleNotice?.schedules[1].from).assertEqual('沙河校区');
+      expect(ShuttleBusLogic.periodState(
+        daily.scheduleNotice?.schedules[0].period as ShuttleBusPeriod,
+        '2026-08-31')).assertEqual(ShuttleBusPeriodState.active);
+      expect(ShuttleBusLogic.periodState(
+        daily.scheduleNotice?.schedules[1].period as ShuttleBusPeriod,
+        '2026-08-31')).assertEqual(ShuttleBusPeriodState.upcoming);
+      expect(ShuttleBusLogic.servicesForToday(
+        daily.scheduleNotice?.schedules[1] as ShuttleBusSchedule,
+        'sunday').length).assertEqual(1);
+    });
+
+    it('overlapping_active_periods_prefer_the_later_start_date', 0, () => {
+      const payload: string = '{"schema_version":"1.0",' +
+        '"generated_at":"2026-09-02T01:00:00.000Z","status":"healthy",' +
+        '"last_parsed_notice_id":"overlap","items":[{' +
+        '"id":"overlap","title":"重叠时段","published_at":"2026-08-19",' +
+        '"schedules":[' +
+        '{"period":{"label":"旧时段","start_date":"2026-08-27","end_date":"2026-09-20"},' +
+        '"from":"西土城路校区","to":"沙河校区","parse_status":"parsed","rows":[' +
+        '{"departure_time":"08:30","services":{"wednesday":{"vehicle":"大巴","count":1}}}]},' +
+        '{"period":{"label":"新时段","start_date":"2026-09-01","end_date":"2026-09-20"},' +
+        '"from":"西土城路校区","to":"沙河校区","parse_status":"parsed","rows":[' +
+        '{"departure_time":"09:30","services":{"wednesday":{"vehicle":"大巴","count":1}}}]}]}]}';
+      const daily = ShuttleBusLogic.dailyView(ShuttleBusResponseParser.parse(payload),
+        new DateParts(2026, 9, 2));
+      expect(daily.period?.label).assertEqual('新时段');
+      expect(daily.schedules.length).assertEqual(1);
+      expect(daily.schedules[0].rows[0].departureTime).assertEqual('09:30');
     });
 
     it('fixed_public_endpoint_rejects_every_redirect', 0, () => {

@@ -3,6 +3,7 @@ import { deviceInfo } from '@kit.BasicServicesKit';
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 import { ControlMetrics } from '../common/ControlMetrics';
+import { DateParts, StrictDates } from '../common/StrictDates';
 import { DeadlineVisual } from '../common/DeadlineVisual';
 import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
@@ -50,7 +51,57 @@ export struct QueryView {
   aboutToAppear(): void {
     this.updateFontScale();
     this.loadShuttle();
+    this.model.ensureHolidays(StrictDates.todayParts().year, false);
     this.model.loadImportantEvents(false);
+  }
+
+  private todayIsPublicHoliday(): boolean {
+    const today: DateParts = StrictDates.todayParts();
+    const date: string = StrictDates.formatDateParts(today);
+    return this.model.holidayItems(today.year).some((item): boolean =>
+      item.date === date && item.type === 'holiday');
+  }
+
+  private shuttleWeekdays(): string[] {
+    return ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  }
+
+  private shuttleWeekdayLabel(key: string): string {
+    if (key === 'monday') { return '周一'; }
+    if (key === 'tuesday') { return '周二'; }
+    if (key === 'wednesday') { return '周三'; }
+    if (key === 'thursday') { return '周四'; }
+    if (key === 'friday') { return '周五'; }
+    if (key === 'saturday') { return '周六'; }
+    return '周日';
+  }
+
+  private shuttleWeekdayDepartures(schedule: ShuttleBusSchedule, key: string,
+    separator: string = ' · '): string {
+    const rows: ShuttleBusRow[] = ShuttleBusLogic.servicesForToday(schedule, key);
+    if (rows.length === 0) {
+      return this.model.text('无计划班次');
+    }
+    return rows.map((row: ShuttleBusRow): string =>
+      row.departureTime + ' ' + this.serviceLabel(row.services.get(key))).join(separator);
+  }
+
+  private fullTimetablePeriodMetadata(schedule: ShuttleBusSchedule): string {
+    const period = schedule.period;
+    let dates: string = this.model.text('日期待确认');
+    if (period.startDate !== null && period.endDate !== null) {
+      dates = period.startDate + ' – ' + period.endDate;
+    } else if (period.startDate !== null) {
+      dates = period.startDate + ' ' + this.model.text('起');
+    } else if (period.endDate !== null) {
+      dates = this.model.text('截至') + ' ' + period.endDate;
+    }
+    const today: string = StrictDates.formatDateParts(StrictDates.todayParts());
+    const state: ShuttleBusPeriodState = ShuttleBusLogic.periodState(period, today);
+    const stateLabel: string = state === ShuttleBusPeriodState.active ? '当前生效' :
+      state === ShuttleBusPeriodState.upcoming ? '即将生效' :
+        state === ShuttleBusPeriodState.ended ? '已结束时段' : '时段待确认';
+    return dates + ' · ' + this.model.text(stateLabel);
   }
 
   private selectedTab(): QueryPageTab {
@@ -328,6 +379,7 @@ export struct QueryView {
     Column({ space: 16 }) {
       this.shuttleStatusCard(daily)
       this.shuttleScheduleGrid(daily)
+      this.shuttleFullTimetable(daily)
       this.shuttleSourceCard()
     }
     .width('100%')
@@ -376,7 +428,8 @@ export struct QueryView {
           .fontSize(24)
           .fontColor([AppTheme.primary()])
         Column({ space: 4 }) {
-          Text(this.model.text(ShuttleQueryLayout.statusTitle(daily)))
+          Text(this.model.text(this.todayIsPublicHoliday() ?
+            '法定节假日，班车安排以学校通知为准' : ShuttleQueryLayout.statusTitle(daily)))
             .id('query.shuttle.status')
             .fontSize(17)
             .fontWeight(FontWeight.Bold)
@@ -466,6 +519,14 @@ export struct QueryView {
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
+      if (this.todayIsPublicHoliday()) {
+        Text(this.model.text('今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。'))
+          .fontSize(12)
+          .fontColor(AppTheme.danger())
+          .lineHeight(17)
+          .width('100%')
+          .id('query.shuttle.holiday.warning')
+      }
     }
     .padding(16)
     .width('100%')
@@ -522,6 +583,87 @@ export struct QueryView {
           }, (schedules: ShuttleBusSchedule[]) => this.routeRowKey(schedules, daily))
       }
       .width('100%')
+    }
+  }
+
+  @Builder
+  shuttleFullTimetable(daily: ShuttleBusDailyView) {
+    if (daily.scheduleNotice !== null && daily.scheduleNotice.schedules.length > 0) {
+      Column({ space: 12 }) {
+        Text(this.model.text('完整班车时刻表'))
+          .fontSize(17)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.text())
+          .width('100%')
+        Text(daily.scheduleNotice.title)
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+        ForEach(daily.scheduleNotice.schedules, (schedule: ShuttleBusSchedule) => {
+          Column({ space: 5 }) {
+            Text(schedule.period.label + ' · ' + schedule.from + ' → ' + schedule.to)
+              .fontSize(14)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.primary())
+              .width('100%')
+            Text(this.fullTimetablePeriodMetadata(schedule))
+              .fontSize(12)
+              .fontColor(AppTheme.secondaryText())
+              .width('100%')
+            if (this.isWide()) {
+              Row({ space: 6 }) {
+                ForEach(this.shuttleWeekdays(), (weekday: string) => {
+                  Column({ space: 5 }) {
+                    Text(this.model.text(this.shuttleWeekdayLabel(weekday)))
+                      .fontSize(12)
+                      .fontWeight(FontWeight.Bold)
+                      .fontColor(AppTheme.primary())
+                    Text(this.shuttleWeekdayDepartures(schedule, weekday, '\n'))
+                      .fontSize(11)
+                      .fontColor(AppTheme.text())
+                      .width('100%')
+                  }
+                  .layoutWeight(1)
+                  .padding(6)
+                  .borderRadius(6)
+                  .backgroundColor(AppTheme.background())
+                  .alignItems(HorizontalAlign.Start)
+                }, (weekday: string) => schedule.period.key() + schedule.from + schedule.to + weekday)
+              }
+              .width('100%')
+              .alignItems(VerticalAlign.Top)
+            } else {
+              ForEach(this.shuttleWeekdays(), (weekday: string) => {
+                Row({ space: 10 }) {
+                  Text(this.model.text(this.shuttleWeekdayLabel(weekday)))
+                    .fontSize(12)
+                    .fontColor(AppTheme.secondaryText())
+                    .width(34)
+                  Text(this.shuttleWeekdayDepartures(schedule, weekday))
+                    .fontSize(12)
+                    .fontColor(AppTheme.text())
+                    .layoutWeight(1)
+                }
+                .width('100%')
+                .alignItems(VerticalAlign.Top)
+              }, (weekday: string) => schedule.period.key() + schedule.from + schedule.to + weekday)
+            }
+          }
+          .width('100%')
+          .padding(12)
+          .borderRadius(8)
+          .backgroundColor(AppTheme.surfaceVariant())
+          .alignItems(HorizontalAlign.Start)
+        }, (schedule: ShuttleBusSchedule) =>
+          schedule.period.key() + schedule.from + schedule.to)
+      }
+      .padding(16)
+      .width('100%')
+      .borderRadius(10)
+      .border({ width: 0.5, color: AppTheme.border() })
+      .backgroundColor(AppTheme.surface())
+      .alignItems(HorizontalAlign.Start)
+      .id('query.shuttle.full-timetable')
     }
   }
 
@@ -770,8 +912,10 @@ export struct QueryView {
           this.appendEventPage(end);
         })
       }
-      this.sourceCard('第三方来源：Contest DDL 公开活动与校内竞赛通知；校内通知由脚本从学校内部网站公开通知页提取整理。',
+      this.sourceCard('第三方来源：Contest DDL 主源、较新镜像及备用 API；校内通知由脚本从学校内部网站公开通知页提取整理。',
         CalendarDailyInfoSources.deadlinePrimaryPage)
+      this.sourceCard('Contest DDL 较新镜像数据', CalendarDailyInfoSources.deadlineMirror)
+      this.sourceCard('Contest DDL 备用 API', CalendarDailyInfoSources.deadlineBackup)
     }
     .layoutWeight(1)
     .width('100%')
@@ -959,6 +1103,9 @@ export struct QueryView {
 
   private isNextDeparture(row: ShuttleBusRow, schedule: ShuttleBusSchedule,
     daily: ShuttleBusDailyView): boolean {
+    if (this.todayIsPublicHoliday()) {
+      return false;
+    }
     const rows: ShuttleBusRow[] = ShuttleBusLogic.servicesForToday(schedule, daily.weekdayKey);
     return rows.indexOf(row) === ShuttleBusLogic.nextDepartureIndex(rows, daily.state);
   }

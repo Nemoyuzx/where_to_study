@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use chrono::{DateTime, NaiveDate};
+use chrono::{DateTime, FixedOffset, NaiveDate};
 use reqwest::Url;
 use serde::Deserialize;
 
@@ -15,10 +15,12 @@ use crate::models::{
 
 const PRIMARY_URL: &str = "https://nemoyuzx.github.io/contest-ddl/data/competitions.json";
 const PRIMARY_HOST: &str = "nemoyuzx.github.io";
+const MIRROR_URL: &str = "https://where-to-study.cn/contest-ddl/data/competitions.json";
 const BACKUP_URL: &str = "https://where-to-study.cn/api/contest-events";
 const SCHOOL_NOTICES_URL: &str = "https://where-to-study.cn/api/contest-notices";
 const BACKUP_HOST: &str = "where-to-study.cn";
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_CONTEST_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_ITEMS_PER_DAY: usize = 100;
 const MAX_CUSTOM_ITEMS: usize = 5_000;
 const MAX_CALENDAR_RANGE_DAYS: i64 = 370;
@@ -61,7 +63,24 @@ fn cache_source(endpoint: &str, bytes: &[u8]) {
 
 #[derive(Debug, Deserialize)]
 struct SourceEnvelope {
+    schema_version: String,
+    generated_at: String,
+    timezone: String,
     items: Vec<SourceDeadline>,
+}
+
+fn parse_contest_envelope(bytes: &[u8]) -> ServiceResult<(SourceEnvelope, DateTime<FixedOffset>)> {
+    let envelope: SourceEnvelope = serde_json::from_slice(bytes)
+        .map_err(|error| ServiceError::new(format!("公开竞赛数据解析失败：{error}")))?;
+    let generated_at = DateTime::parse_from_rfc3339(&envelope.generated_at)
+        .map_err(|_| ServiceError::new("公开竞赛数据更新时间无效。"))?;
+    if envelope.schema_version != "1.4"
+        || envelope.timezone != "Asia/Shanghai"
+        || envelope.items.len() > MAX_CUSTOM_ITEMS
+    {
+        return Err(ServiceError::new("公开竞赛数据不符合 Schema 1.4。"));
+    }
+    Ok((envelope, generated_at))
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,10 +288,10 @@ pub fn validate_custom_feed_endpoint(endpoint: &str) -> ServiceResult<Url> {
     Ok(url)
 }
 
-async fn read_limited(mut response: reqwest::Response) -> ServiceResult<Vec<u8>> {
+async fn read_limited(mut response: reqwest::Response, maximum: usize) -> ServiceResult<Vec<u8>> {
     if response
         .content_length()
-        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
+        .is_some_and(|length| length > maximum as u64)
     {
         return Err(ServiceError::new("DDL 数据响应过大。"));
     }
@@ -282,7 +301,7 @@ async fn read_limited(mut response: reqwest::Response) -> ServiceResult<Vec<u8>>
         .await
         .map_err(|error| ServiceError::new(format!("无法读取 DDL 数据：{error}")))?
     {
-        if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
+        if body.len() + chunk.len() > maximum {
             return Err(ServiceError::new("DDL 数据响应过大。"));
         }
         body.extend_from_slice(&chunk);
@@ -294,6 +313,7 @@ async fn fetch_source(
     endpoint: &str,
     host: &'static str,
     allow_plain_http: bool,
+    maximum: usize,
 ) -> ServiceResult<Vec<u8>> {
     if let Some(bytes) = cached_source(endpoint) {
         return Ok(bytes);
@@ -322,7 +342,7 @@ async fn fetch_source(
     let response = response
         .error_for_status()
         .map_err(|error| ServiceError::new(format!("DDL 数据源返回错误：{error}")))?;
-    let bytes = read_limited(response).await?;
+    let bytes = read_limited(response, maximum).await?;
     cache_source(endpoint, &bytes);
     Ok(bytes)
 }
@@ -352,7 +372,7 @@ async fn fetch_custom_source(endpoint: &str) -> ServiceResult<Vec<u8>> {
     let response = response
         .error_for_status()
         .map_err(|error| ServiceError::new(format!("自定义日程接口返回错误：{error}")))?;
-    let bytes = read_limited(response).await?;
+    let bytes = read_limited(response, MAX_RESPONSE_BYTES).await?;
     cache_source(&cache_key, &bytes);
     Ok(bytes)
 }
@@ -361,9 +381,8 @@ fn parse_source_range(
     bytes: &[u8],
     start_date: NaiveDate,
     end_date: NaiveDate,
-) -> ServiceResult<Vec<DeadlineItem>> {
-    let envelope: SourceEnvelope = serde_json::from_slice(bytes)
-        .map_err(|error| ServiceError::new(format!("DDL 数据解析失败：{error}")))?;
+) -> ServiceResult<(Vec<DeadlineItem>, DateTime<FixedOffset>)> {
+    let (envelope, generated_at) = parse_contest_envelope(bytes)?;
     let max_items = MAX_ITEMS_PER_DAY.saturating_mul(
         (end_date.signed_duration_since(start_date).num_days() + 1).max(1) as usize,
     );
@@ -422,7 +441,7 @@ fn parse_source_range(
     items.sort_by(|left, right| {
         (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
     });
-    Ok(items)
+    Ok((items, generated_at))
 }
 
 fn parse_custom_source_range(
@@ -566,7 +585,7 @@ fn parse_custom_source_range(
 
 #[cfg(test)]
 fn parse_source(bytes: &[u8], requested_date: NaiveDate) -> ServiceResult<Vec<DeadlineItem>> {
-    parse_source_range(bytes, requested_date, requested_date)
+    parse_source_range(bytes, requested_date, requested_date).map(|(items, _)| items)
 }
 
 fn parse_school_notices_range(
@@ -717,12 +736,10 @@ fn public_deadline_label(source: &SourceDeadline) -> Option<String> {
     .find_map(|(candidate, label)| (candidate == Some(deadline)).then(|| label.to_string()))
 }
 
-fn parse_important_public_events(bytes: &[u8]) -> ServiceResult<Vec<ImportantEventItem>> {
-    let envelope: SourceEnvelope = serde_json::from_slice(bytes)
-        .map_err(|error| ServiceError::new(format!("重要事件数据解析失败：{error}")))?;
-    if envelope.items.len() > MAX_CUSTOM_ITEMS {
-        return Err(ServiceError::new("重要事件条目超过安全上限。"));
-    }
+fn parse_important_public_events(
+    bytes: &[u8],
+) -> ServiceResult<(Vec<ImportantEventItem>, DateTime<FixedOffset>)> {
+    let (envelope, generated_at) = parse_contest_envelope(bytes)?;
     let mut items = Vec::new();
     for source in envelope.items {
         if !matches!(
@@ -789,7 +806,7 @@ fn parse_important_public_events(bytes: &[u8]) -> ServiceResult<Vec<ImportantEve
     items.sort_by(|left, right| {
         (&left.primary_deadline, &left.name).cmp(&(&right.primary_deadline, &right.name))
     });
-    Ok(items)
+    Ok((items, generated_at))
 }
 
 fn parse_important_school_notices(bytes: &[u8]) -> ServiceResult<Vec<ImportantEventItem>> {
@@ -911,6 +928,27 @@ fn merge_items_with_limit(
     items
 }
 
+fn choose_contest_source<T>(
+    primary: ServiceResult<(T, DateTime<FixedOffset>)>,
+    mirror: ServiceResult<(T, DateTime<FixedOffset>)>,
+) -> ServiceResult<(T, &'static str, bool)> {
+    match (primary, mirror) {
+        (Ok((primary_items, primary_at)), Ok((mirror_items, mirror_at))) => {
+            if mirror_at > primary_at {
+                Ok((mirror_items, MIRROR_URL, true))
+            } else {
+                Ok((primary_items, PRIMARY_URL, false))
+            }
+        }
+        (Ok((items, _)), Err(_)) => Ok((items, PRIMARY_URL, false)),
+        (Err(_), Ok((items, _))) => Ok((items, MIRROR_URL, true)),
+        (Err(primary_error), Err(mirror_error)) => Err(ServiceError::new(format!(
+            "GitHub 竞赛数据不可用（{}）；站点镜像也不可用（{}）。",
+            primary_error.message, mirror_error.message
+        ))),
+    }
+}
+
 async fn fetch_contest_deadlines(
     date: NaiveDate,
 ) -> ServiceResult<(Vec<DeadlineItem>, String, bool)> {
@@ -921,50 +959,60 @@ async fn fetch_contest_deadlines_range(
     start_date: NaiveDate,
     end_date: NaiveDate,
 ) -> ServiceResult<(Vec<DeadlineItem>, String, bool)> {
-    let primary = fetch_source(PRIMARY_URL, PRIMARY_HOST, false)
-        .await
-        .and_then(|bytes| parse_source_range(&bytes, start_date, end_date));
-    match primary {
-        Ok(items) => Ok((items, PRIMARY_URL.to_string(), false)),
-        Err(primary_error) => {
-            let items = fetch_source(BACKUP_URL, BACKUP_HOST, false)
+    let (primary, mirror) = tokio::join!(
+        fetch_source(PRIMARY_URL, PRIMARY_HOST, false, MAX_CONTEST_RESPONSE_BYTES),
+        fetch_source(MIRROR_URL, BACKUP_HOST, false, MAX_CONTEST_RESPONSE_BYTES)
+    );
+    let selected = choose_contest_source(
+        primary.and_then(|bytes| parse_source_range(&bytes, start_date, end_date)),
+        mirror.and_then(|bytes| parse_source_range(&bytes, start_date, end_date)),
+    );
+    match selected {
+        Ok((items, source, used_backup)) => Ok((items, source.to_string(), used_backup)),
+        Err(source_error) => {
+            let items = fetch_source(BACKUP_URL, BACKUP_HOST, false, MAX_CONTEST_RESPONSE_BYTES)
                 .await
                 .and_then(|bytes| parse_source_range(&bytes, start_date, end_date))
                 .map_err(|backup_error| {
                     ServiceError::new(format!(
-                        "主 DDL 数据源不可用（{}）；备用数据源也不可用（{}）。",
-                        primary_error.message, backup_error.message
+                        "GitHub 和站点镜像均不可用（{}）；备用 API 也不可用（{}）。",
+                        source_error.message, backup_error.message
                     ))
                 })?;
-            Ok((items, BACKUP_URL.to_string(), true))
+            Ok((items.0, BACKUP_URL.to_string(), true))
         }
     }
 }
 
 async fn fetch_public_important_events() -> ServiceResult<(Vec<ImportantEventItem>, String, bool)> {
-    let primary = fetch_source(PRIMARY_URL, PRIMARY_HOST, false)
-        .await
-        .and_then(|bytes| parse_important_public_events(&bytes));
-    match primary {
-        Ok(items) => Ok((items, PRIMARY_URL.to_string(), false)),
-        Err(primary_error) => {
-            let items = fetch_source(BACKUP_URL, BACKUP_HOST, false)
+    let (primary, mirror) = tokio::join!(
+        fetch_source(PRIMARY_URL, PRIMARY_HOST, false, MAX_CONTEST_RESPONSE_BYTES),
+        fetch_source(MIRROR_URL, BACKUP_HOST, false, MAX_CONTEST_RESPONSE_BYTES)
+    );
+    let selected = choose_contest_source(
+        primary.and_then(|bytes| parse_important_public_events(&bytes)),
+        mirror.and_then(|bytes| parse_important_public_events(&bytes)),
+    );
+    match selected {
+        Ok((items, source, used_backup)) => Ok((items, source.to_string(), used_backup)),
+        Err(source_error) => {
+            let items = fetch_source(BACKUP_URL, BACKUP_HOST, false, MAX_CONTEST_RESPONSE_BYTES)
                 .await
                 .and_then(|bytes| parse_important_public_events(&bytes))
                 .map_err(|backup_error| {
                     ServiceError::new(format!(
-                        "主重要事件数据源不可用（{}）；备用数据源也不可用（{}）。",
-                        primary_error.message, backup_error.message
+                        "GitHub 和站点镜像均不可用（{}）；备用 API 也不可用（{}）。",
+                        source_error.message, backup_error.message
                     ))
                 })?;
-            Ok((items, BACKUP_URL.to_string(), true))
+            Ok((items.0, BACKUP_URL.to_string(), true))
         }
     }
 }
 
 pub async fn fetch_important_events() -> ServiceResult<ImportantEventsResponse> {
     let public = fetch_public_important_events().await;
-    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false)
+    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false, MAX_RESPONSE_BYTES)
         .await
         .and_then(|bytes| parse_important_school_notices(&bytes));
     let (mut items, source, used_backup) = match (public, school) {
@@ -1008,7 +1056,7 @@ pub async fn fetch_important_events() -> ServiceResult<ImportantEventsResponse> 
 pub async fn fetch_deadlines(payload: &DeadlinesRequest) -> ServiceResult<DeadlinesResponse> {
     let date = parse_date(payload.date.trim())?;
     let contest = fetch_contest_deadlines(date).await;
-    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false)
+    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false, MAX_RESPONSE_BYTES)
         .await
         .and_then(|bytes| parse_school_notices(&bytes, date));
     let (contest_items, source, used_backup) = match (contest, school) {
@@ -1049,7 +1097,7 @@ pub async fn fetch_deadline_calendar(
     }
 
     let contest = fetch_contest_deadlines_range(start, end).await;
-    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false)
+    let school = fetch_source(SCHOOL_NOTICES_URL, BACKUP_HOST, false, MAX_RESPONSE_BYTES)
         .await
         .and_then(|bytes| parse_school_notices_range(&bytes, start, end));
     let (contest_items, source, used_backup) = match (contest, school) {
@@ -1113,6 +1161,7 @@ mod tests {
     #[test]
     fn parser_filters_selected_day_and_supported_types() {
         let data = r#"{
+          "schema_version":"1.4","generated_at":"2026-08-30T13:21:07+08:00","timezone":"Asia/Shanghai",
           "items":[
             {"id":"c1","name":"数据库竞赛","event_type":"competition","primary_deadline":"2026-08-22T18:00:00+08:00","organizer":"组委会","official_url":"https://example.com/c1"},
             {"id":"h1","name":"校园黑客松","event_type":"hackathon","primary_deadline":"2026-08-22T23:59:59+08:00"},
@@ -1132,7 +1181,7 @@ mod tests {
 
     #[test]
     fn parser_drops_plaintext_official_links() {
-        let data = r#"{"items":[{"id":"c1","name":"竞赛","event_type":"competition","primary_deadline":"2026-08-22T18:00:00+08:00","official_url":"http://example.com"}]}"#;
+        let data = r#"{"schema_version":"1.4","generated_at":"2026-08-30T13:21:07+08:00","timezone":"Asia/Shanghai","items":[{"id":"c1","name":"竞赛","event_type":"competition","primary_deadline":"2026-08-22T18:00:00+08:00","official_url":"http://example.com"}]}"#;
         let date = NaiveDate::from_ymd_opt(2026, 8, 22).unwrap();
         let parsed = parse_source(data.as_bytes(), date).unwrap();
         assert_eq!(parsed[0].official_url, None);
@@ -1140,14 +1189,14 @@ mod tests {
 
     #[test]
     fn calendar_parser_returns_each_supported_deadline_in_the_requested_range() {
-        let data = r#"{"items":[
+        let data = r#"{"schema_version":"1.4","generated_at":"2026-08-30T13:21:07+08:00","timezone":"Asia/Shanghai","items":[
           {"id":"d1","name":"第一项","event_type":"competition","primary_deadline":"2026-08-17T18:00:00+08:00"},
           {"id":"d2","name":"第二项","event_type":"hackathon","primary_deadline":"2026-08-23T23:59:59+08:00"},
           {"id":"d3","name":"范围外","event_type":"summer_camp","primary_deadline":"2026-08-24T23:59:59+08:00"}
         ]}"#;
         let start = NaiveDate::from_ymd_opt(2026, 8, 17).unwrap();
         let end = NaiveDate::from_ymd_opt(2026, 8, 23).unwrap();
-        let parsed = parse_source_range(data.as_bytes(), start, end).unwrap();
+        let parsed = parse_source_range(data.as_bytes(), start, end).unwrap().0;
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0].id, "d1");
         assert_eq!(parsed[1].id, "d2");
@@ -1155,13 +1204,13 @@ mod tests {
 
     #[test]
     fn important_event_parser_keeps_search_metadata_and_every_public_type() {
-        let data = r#"{"items":[
+        let data = r#"{"schema_version":"1.4","generated_at":"2026-08-30T13:21:07+08:00","timezone":"Asia/Shanghai","items":[
           {"id":"conf-1","name":"Example Conference","event_type":"conference","categories":["人工智能"],"tags":["CCF A"],"level":"CCF A","location":"Beijing","description":"Paper deadline","eligibility":"Open to students","notes":"See CFP","region":"China","mode":"hybrid","primary_deadline":"2026-09-01T23:59:59+08:00","submission_deadline":"2026-09-01T23:59:59+08:00","official_url":"https://conference.example/cfp","source":{"name":"CCFDDL","url":"https://ccfddl.com/source"}},
           {"id":"journal-1","name":"Special Issue","event_type":"journal_special_issue","categories":["软件工程"],"primary_deadline":"2026-10-01T23:59:59+08:00"},
           {"id":"pre-1","name":"预推免","event_type":"pre_admission","categories":["预推免"],"primary_deadline":"2026-09-15T12:00:00+08:00"},
           {"id":"bad","name":"Unknown","event_type":"other","primary_deadline":"2026-09-01T12:00:00+08:00"}
         ]}"#;
-        let parsed = parse_important_public_events(data.as_bytes()).unwrap();
+        let parsed = parse_important_public_events(data.as_bytes()).unwrap().0;
         assert_eq!(parsed.len(), 3);
         let conference = parsed
             .iter()
@@ -1245,6 +1294,7 @@ mod tests {
     #[test]
     fn endpoint_policy_only_allows_the_pinned_primary_and_backup_hosts() {
         assert!(validate_endpoint(&Url::parse(PRIMARY_URL).unwrap(), PRIMARY_HOST, false).is_ok());
+        assert!(validate_endpoint(&Url::parse(MIRROR_URL).unwrap(), BACKUP_HOST, false).is_ok());
         assert!(validate_endpoint(&Url::parse(BACKUP_URL).unwrap(), BACKUP_HOST, false).is_ok());
         assert!(
             validate_endpoint(&Url::parse(SCHOOL_NOTICES_URL).unwrap(), BACKUP_HOST, false).is_ok()
@@ -1255,6 +1305,43 @@ mod tests {
             false
         )
         .is_err());
+    }
+
+    #[test]
+    fn contest_mirror_requires_a_strictly_newer_generation() {
+        let stamp = |value| DateTime::parse_from_rfc3339(value).unwrap();
+        let primary = || Ok(("github", stamp("2026-10-01T16:00:00+08:00")));
+        let mirror = || Ok(("mirror", stamp("2026-10-01T08:01:00Z")));
+        assert_eq!(
+            choose_contest_source(primary(), mirror()).unwrap(),
+            ("mirror", MIRROR_URL, true)
+        );
+        assert_eq!(
+            choose_contest_source(primary(), Ok(("mirror", stamp("2026-10-01T08:00:00Z"))))
+                .unwrap(),
+            ("github", PRIMARY_URL, false)
+        );
+        assert_eq!(
+            choose_contest_source(primary(), Err(ServiceError::new("镜像不可用"))).unwrap(),
+            ("github", PRIMARY_URL, false)
+        );
+        assert_eq!(
+            choose_contest_source(Err(ServiceError::new("GitHub 不可用")), mirror()).unwrap(),
+            ("mirror", MIRROR_URL, true)
+        );
+    }
+
+    #[test]
+    fn contest_source_rejects_missing_or_invalid_freshness_metadata() {
+        let date = NaiveDate::from_ymd_opt(2026, 8, 22).unwrap();
+        for payload in [
+            r#"{"items":[]}"#,
+            r#"{"schema_version":"1.3","generated_at":"2026-08-30T13:21:07+08:00","timezone":"Asia/Shanghai","items":[]}"#,
+            r#"{"schema_version":"1.4","generated_at":"not-a-date","timezone":"Asia/Shanghai","items":[]}"#,
+        ] {
+            assert!(parse_source_range(payload.as_bytes(), date, date).is_err());
+            assert!(parse_important_public_events(payload.as_bytes()).is_err());
+        }
     }
 
     #[test]

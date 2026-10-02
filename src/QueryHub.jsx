@@ -18,13 +18,16 @@ import {
 import { calendarDeadlineVisualKind, shanghaiDateString } from './planner-domain.js'
 import {
   buildShuttleDayView,
+  buildShuttleTimetable,
   filterImportantEvents,
   importantEventFavorite,
   importantEventFilterOptions,
   importantEventVisibleCount,
+  isLegalShuttleHoliday,
   IMPORTANT_EVENT_BATCH_SIZE,
   mergeImportantEventCatalog,
   nextImportantEventVisibleCount,
+  resolvedShuttleSelection,
   shanghaiClockMinutes,
   shanghaiWeekdayKey,
   SHUTTLE_WEEKDAYS,
@@ -96,6 +99,7 @@ export default function QueryHub({
   hasAcademicAccount = false,
   onOpenAccount,
   examSnapshot,
+  holidayItems = [],
   t,
 }) {
   const [tab, setTab] = useState('shuttle')
@@ -105,8 +109,8 @@ export default function QueryHub({
   const [importantEvents, setImportantEvents] = useState(null)
   const [eventsLoading, setEventsLoading] = useState(true)
   const [eventsError, setEventsError] = useState('')
-  const [selectedWeekday, setSelectedWeekday] = useState(() => shanghaiWeekdayKey())
-  const [selectedPeriod, setSelectedPeriod] = useState('')
+  const [weekdaySelection, setWeekdaySelection] = useState(null)
+  const [periodSelection, setPeriodSelection] = useState(null)
   const [now, setNow] = useState(() => new Date())
   const [query, setQuery] = useState('')
   const [eventType, setEventType] = useState('all')
@@ -150,14 +154,27 @@ export default function QueryHub({
   }, [])
 
   const today = shanghaiDateString(now)
+  const isPublicHoliday = isLegalShuttleHoliday(holidayItems, today)
   const currentWeekday = shanghaiWeekdayKey(now)
+  const shuttleTimetable = useMemo(
+    () => buildShuttleTimetable(shuttle || {}, today),
+    [shuttle, today],
+  )
+  const noticeIdentity = `${shuttleTimetable.latest?.id || ''}\u001f${shuttleTimetable.notice?.id || ''}`
+  const { weekday: selectedWeekday, period: selectedPeriod } = resolvedShuttleSelection({
+    weekdaySelection,
+    periodSelection,
+    today,
+    currentWeekday,
+    noticeIdentity,
+  })
   const shuttleView = useMemo(() => buildShuttleDayView(shuttle || {}, {
     today,
     weekday: selectedWeekday,
     currentWeekday,
-    nowMinutes: shanghaiClockMinutes(now),
+    nowMinutes: isPublicHoliday ? null : shanghaiClockMinutes(now),
     selectedPeriod,
-  }), [currentWeekday, now, selectedPeriod, selectedWeekday, shuttle, today])
+  }), [currentWeekday, isPublicHoliday, now, selectedPeriod, selectedWeekday, shuttle, today])
   const eventCatalog = useMemo(
     () => mergeImportantEventCatalog(importantEvents?.items || [], favoriteItems),
     [favoriteItems, importantEvents],
@@ -283,10 +300,25 @@ export default function QueryHub({
                 <a href={shuttleView.latest?.source_url || shuttle.source?.page_url} target="_blank" rel="noreferrer">{t('后勤部原文')}<ExternalLink size={14} /></a>
               </section>
 
+              {isPublicHoliday ? <aside className="shuttle-holiday-notice" role="note">
+                <AlertTriangle size={18} aria-hidden="true" />
+                <div>
+                  <strong>{language === 'en' ? 'Public holiday shuttle notice' : '节假日班车提示'}</strong>
+                  <p>{language === 'en'
+                    ? 'Today is a public holiday; shuttle service may be unavailable. Follow the university holiday arrangements. Shuttle buses do not run during the holiday closure.'
+                    : '今日为法定节假日，不一定有班车。请以学校放假安排为准，放假期间无班车。'}</p>
+                  {shuttleTimetable.holidayNotice?.source?.source_url ? (
+                    <a href={shuttleTimetable.holidayNotice.source.source_url} target="_blank" rel="noreferrer">
+                      {t('后勤部原文')}<ExternalLink size={13} />
+                    </a>
+                  ) : null}
+                </div>
+              </aside> : null}
+
               {shuttleView.periods.length > 1 ? (
                 <div className="shuttle-period-options" aria-label={t('运行时段')}>
                   {shuttleView.periods.map(({ key, period }, index) => (
-                    <button type="button" className={shuttleView.visiblePeriod === key ? 'active' : ''} onClick={() => setSelectedPeriod(key)} key={key}>
+                    <button type="button" className={shuttleView.visiblePeriod === key ? 'active' : ''} onClick={() => setPeriodSelection({ key, date: today, noticeIdentity })} key={key}>
                       <span>{t('时段')} {index + 1}</span><strong>{periodLabel(period, language)}</strong>
                     </button>
                   ))}
@@ -295,7 +327,7 @@ export default function QueryHub({
 
               <div className="shuttle-weekday-options" aria-label={t('选择星期')}>
                 {SHUTTLE_WEEKDAYS.map((weekday) => (
-                  <button type="button" className={selectedWeekday === weekday.key ? 'active' : ''} onClick={() => setSelectedWeekday(weekday.key)} key={weekday.key}>
+                  <button type="button" className={selectedWeekday === weekday.key ? 'active' : ''} onClick={() => setWeekdaySelection({ key: weekday.key, date: today })} key={weekday.key}>
                     {language === 'en' ? weekday.english : weekday.label}
                     {currentWeekday === weekday.key ? <small>{t('今')}</small> : null}
                   </button>
@@ -320,6 +352,70 @@ export default function QueryHub({
                     : '暂无可安全展示的结构化班次',
                 )}</p>}
               </div>
+
+              <section className="shuttle-full-timetable" aria-label={language === 'en' ? 'Full shuttle timetable' : '完整班车时刻表'}>
+                <header className="shuttle-full-heading">
+                  <div>
+                    <h3>{language === 'en' ? 'Full shuttle timetable' : '完整班车时刻表'}</h3>
+                    <p>{language === 'en'
+                      ? 'Scheduled departures by service period, direction, and weekday. Holiday and temporary changes follow the official notice.'
+                      : '按运行时段、方向和星期查看计划班次；节假日及临时调整以官方通知为准。'}</p>
+                  </div>
+                  {shuttleTimetable.notice?.source_url ? (
+                    <a href={shuttleTimetable.notice.source_url} target="_blank" rel="noreferrer">
+                      {t('后勤部原文')}<ExternalLink size={14} />
+                    </a>
+                  ) : null}
+                </header>
+                {shuttleTimetable.usingFallback ? (
+                  <p className="shuttle-full-fallback">{language === 'en'
+                    ? 'The newest notice has no verified timetable; the tables below come from the previous parsed notice for reference.'
+                    : '最新通知暂无已核实的结构化时刻表，以下为上一份已解析通知的班次，仅供对照。'}</p>
+                ) : null}
+                {shuttleTimetable.periods.length ? shuttleTimetable.periods.map(({ key, period, state, routes }) => (
+                  <div className={`shuttle-full-period ${state}`} key={key}>
+                    <header>
+                      <div><h4>{period.label}</h4><span>{periodLabel(period, language)}</span></div>
+                      <small>{statusLabel(state, t)}</small>
+                    </header>
+                    <div className="shuttle-full-routes">
+                      {routes.map((route, routeIndex) => (
+                        <article className="shuttle-full-route" key={`${route.from}-${route.to}-${routeIndex}`}>
+                          <header>
+                            <strong>{route.from} → {route.to}</strong>
+                            {route.stop ? <span><MapPin size={13} />{route.stop}</span> : null}
+                          </header>
+                          <div className="shuttle-full-table-scroll" role="region" aria-label={`${route.from} → ${route.to}`} tabIndex={0}>
+                            <table className="shuttle-full-table">
+                              <thead><tr>
+                                <th scope="col">{language === 'en' ? 'Departure' : '发车'}</th>
+                                {SHUTTLE_WEEKDAYS.map((weekday) => (
+                                  <th scope="col" key={weekday.key}>{language === 'en' ? weekday.english : weekday.label}</th>
+                                ))}
+                              </tr></thead>
+                              <tbody>
+                                {route.rows.map((row, rowIndex) => (
+                                  <tr key={`${row.departure_time}-${rowIndex}`}>
+                                    <th scope="row">{row.departure_time}</th>
+                                    {SHUTTLE_WEEKDAYS.map((weekday) => {
+                                      const service = row.services?.[weekday.key]
+                                      return <td key={weekday.key}>{service ? `${service.vehicle} × ${service.count}` : '—'}</td>
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  </div>
+                )) : (
+                  <p className="query-empty">{language === 'en'
+                    ? 'No verified full timetable is available. Please check the source notice.'
+                    : '暂无可安全展示的完整时刻表，请查看通知原文。'}</p>
+                )}
+              </section>
 
               <p className="query-source-note">
                 {t('第三方来源：北京邮电大学后勤部，经 Where To Study 服务端结构化整理；法定节假日及临时调整请以原文为准。')}
@@ -373,7 +469,7 @@ export default function QueryHub({
             ><Loader2 className="spin" size={17} /><span>{t('继续加载重要事件')}</span></div>
           ) : null}
           {favoriteOnlyMissing.length ? <p className="query-source-note">{t('另有 {count} 条已收藏事件因当前筛选或来源变化未列出，可在收藏管理中查看。', { count: favoriteOnlyMissing.length })}</p> : null}
-          <p className="query-source-note">{t('第三方来源：Contest DDL 与校内竞赛通知脚本；不包含课程作业 DDL，所有时间请以官方原文为准。')} <a href="https://where-to-study.cn/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a> · <a href="https://where-to-study.cn/api/contest-notices" target="_blank" rel="noreferrer">contest-notices API</a></p>
+          <p className="query-source-note">{t('第三方来源：Contest DDL 与校内竞赛通知脚本；不包含课程作业 DDL，所有时间请以官方原文为准。')} <a href="https://nemoyuzx.github.io/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL</a> · <a href="https://where-to-study.cn/contest-ddl/" target="_blank" rel="noreferrer">Contest DDL mirror</a> · <a href="https://where-to-study.cn/api/contest-events" target="_blank" rel="noreferrer">contest-events API</a> · <a href="https://where-to-study.cn/api/contest-notices" target="_blank" rel="noreferrer">contest-notices API</a></p>
         </div>
       ) : null}
     </section>

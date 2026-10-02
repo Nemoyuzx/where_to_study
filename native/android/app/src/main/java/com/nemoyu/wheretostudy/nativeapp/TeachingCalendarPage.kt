@@ -3517,11 +3517,25 @@ internal class TeachingCalendarPage(
             })
             else -> addView(statusText("当天没有已收录的活动截止事项"))
         }
+        val selectedSource = when (snapshot?.source) {
+            CalendarDailyInfoSources.deadlineMirror -> "本次使用 Contest DDL 镜像数据"
+            CalendarDailyInfoSources.deadlineBackup -> "本次使用备用 API"
+            else -> null
+        }
+        selectedSource?.let { label ->
+            addView(TextView(activity).apply {
+                text = label
+                textSize = 11f
+                setThemeTextColor { Palette.muted }
+                setPadding(0, activity.dp(6), 0, 0)
+            })
+        }
         addView(thirdPartyFooter(
             "第三方来源 · 校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考",
             buildList {
                 addAll(listOf(
                 "主数据：Contest DDL" to CalendarDailyInfoSources.deadlinePrimaryPage,
+                "较新镜像数据" to CalendarDailyInfoSources.deadlineMirror,
                 "备用 API" to CalendarDailyInfoSources.deadlineBackup,
                 "校内竞赛通知" to CalendarDailyInfoSources.schoolContestNotices,
                 ))

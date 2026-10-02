@@ -164,6 +164,7 @@ jobs:
             }
             foreach ($endpoint in @(
               "https://where-to-study.cn/api/contest-events",
+              "https://where-to-study.cn/contest-ddl/data/competitions.json",
               "https://where-to-study.cn/api/contest-notices",
               "https://where-to-study.cn/api/shuttle-bus"
             )) {

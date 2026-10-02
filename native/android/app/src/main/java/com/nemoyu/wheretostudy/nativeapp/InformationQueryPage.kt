@@ -289,6 +289,9 @@ internal class InformationQueryPage(
     private val usesBottomNavigation: Boolean,
     private val gradesRepository: AcademicGradesRepository,
     private val scheduleRepository: ScheduleRepository,
+    private val holidayRepository: HolidayRepository? = null,
+    private val holidaySnapshotForYear: (Int) -> HolidaysSnapshot? =
+        { year -> holidayRepository?.authoritativeSnapshot(year) },
 ) {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
@@ -342,6 +345,11 @@ internal class InformationQueryPage(
         if (::root.isInitialized && root.isAttachedToWindow && sessionState.selectedMode == InformationQueryMode.GRADES)
             renderMode(animate = false)
     }
+    private val holidayObserver: () -> Unit = {
+        if (::root.isInitialized && root.isAttachedToWindow &&
+            sessionState.selectedMode == InformationQueryMode.SHUTTLE
+        ) renderMode(animate = false)
+    }
 
     fun build(): View {
         root = LinearLayout(activity).apply {
@@ -385,8 +393,11 @@ internal class InformationQueryPage(
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
                 shuttleRepository.addObserver(shuttleObserver)
+                holidayRepository?.addObserver(root, holidayObserver)
                 dailyInfoRepository.addObserver(root, deadlineObserver)
                 shuttleRepository.load()
+                holidayRepository?.ensure(Calendar.getInstance(shanghai).get(Calendar.YEAR))
+                holidayRepository?.ensureAuthoritative(Calendar.getInstance(shanghai).get(Calendar.YEAR))
                 dailyInfoRepository.loadImportantEvents()
                 gradesRepository.addObserver(gradeObserver)
                 gradesRepository.reconcile()
@@ -394,6 +405,7 @@ internal class InformationQueryPage(
 
             override fun onViewDetachedFromWindow(view: View) {
                 shuttleRepository.removeObserver(shuttleObserver)
+                holidayRepository?.removeObserver(root)
                 dailyInfoRepository.removeObserver(root)
                 gradesRepository.removeObserver(gradeObserver)
             }
@@ -653,7 +665,7 @@ internal class InformationQueryPage(
     private fun gradesContent(): LinearLayout = queryBody {
         if (!gradesRepository.hasCredentials) {
             addView(statusCard("请先在设置中保存教务账号和密码，再查询成绩。"))
-            addView(gradeAction("前往账号设置") {
+            addView(gradeAction("前往个人账户", R.drawable.ic_settings_account) {
                 activity.findViewById<View>(R.id.navigation_settings)?.performClick()
             })
         } else {
@@ -776,10 +788,19 @@ internal class InformationQueryPage(
 
     private fun assignmentsContent(): LinearLayout = privateQueryContent {
         val (items, loading, error) = assignmentState().also { renderedAssignments = it }
+        if (!gradesRepository.hasCredentials) {
+            addView(statusCard("请先在个人账户中保存教务账号和密码。"))
+            addView(gradeAction("前往个人账户", R.drawable.ic_settings_account) {
+                activity.findViewById<View>(R.id.navigation_settings)?.performClick()
+            })
+        }
         addView(gradeAction(if (loading) "正在获取…" else "刷新课程作业") {
             dailyInfoRepository.loadAllAssignments(force = true)
         }.apply { id = R.id.information_query_assignments_refresh; isEnabled = !loading })
         addView(querySourceFooter("教学云 · 课程作业", CalendarDailyInfoSources.assignments))
+        addView(gradeAction("打开教学云", R.drawable.ic_shuttle_external) {
+            openURL(CalendarDailyInfoSources.assignments)
+        })
         error?.let { message ->
             addView(statusCard(if (items == null) message else "作业刷新失败，正在显示已获取的缓存。\n$message"))
         }
@@ -835,10 +856,22 @@ internal class InformationQueryPage(
         }
     }
 
-    private fun gradeAction(label: String, action: () -> Unit): TextView = TextView(activity).apply {
+    private fun gradeAction(label: String, iconResource: Int = 0, action: () -> Unit): TextView = TextView(activity).apply {
         text = label; textSize = 15f; gravity = Gravity.CENTER
         setThemeTextColor { Palette.primaryText }; minimumHeight = activity.dp(UiMetrics.controlHeightDp)
         setPadding(activity.dp(12), 0, activity.dp(12), 0)
+        if (iconResource != 0) {
+            val iconSize = activity.dp(16)
+            val icon = activity.getDrawable(iconResource)?.mutate()?.apply {
+                setBounds(0, 0, iconSize, iconSize)
+            }
+            setCompoundDrawablesRelative(icon, null, null, null)
+            compoundDrawablePadding = activity.dp(6)
+            bindTheme("gradeActionIcon") {
+                compoundDrawableTintList = ColorStateList.valueOf(Palette.primaryText)
+            }
+            contentDescription = activity.uiText(label)
+        }
         background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 8)
         isClickable = true; isFocusable = true
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -860,9 +893,16 @@ internal class InformationQueryPage(
     private fun LinearLayout.renderShuttleSnapshot(snapshot: ShuttleBusSnapshot) {
         val now = Calendar.getInstance(shanghai)
         val currentTime = "%02d:%02d".format(Locale.ROOT, now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE))
-        val presentation = ShuttleBusLogic.today(snapshot, now)
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+            timeZone = shanghai
+        }.format(now.time)
+        val isHoliday = ShuttleBusLogic.isPublicHoliday(
+            holidaySnapshotForYear(now.get(Calendar.YEAR)), today,
+        )
+        val presentation = ShuttleBusLogic.today(snapshot, now, isHoliday)
         val departureCount = presentation.routes.sumOf { it.departures.size }
         val statusTitle = when {
+            isHoliday -> "法定节假日，班车安排以学校通知为准"
             presentation.routes.isEmpty() -> "今日暂无生效班车时刻表"
             departureCount == 0 -> "今日没有计划班次"
             else -> "今日班车按时刻表运行"
@@ -959,13 +999,24 @@ internal class InformationQueryPage(
                 })
             }
         })
+        if (isHoliday) {
+            addView(shuttleSurface().apply {
+                tag = "information.query.shuttle.holiday.warning"
+                addView(TextView(activity).apply {
+                    text = "今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。"
+                    textSize = 13f
+                    setThemeTextColor { Palette.danger }
+                })
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(12) })
+        }
         addView(spacer(activity, ShuttleQueryLayoutLogic.ROUTE_SPACING_DP))
         addView(adaptiveShuttleGrid(
             presentation.routes,
             activity.dp(ShuttleQueryLayoutLogic.ROUTE_MIN_WIDTH_DP),
             activity.dp(ShuttleQueryLayoutLogic.ROUTE_SPACING_DP),
             maximumColumns = 2,
-        ) { route -> shuttleRouteCard(route, currentTime, presentation.stops.filter { (campus, _) ->
+        ) { route -> shuttleRouteCard(route, currentTime, !isHoliday, presentation.stops.filter { (campus, _) ->
             shuttleStopMatches(campus, route.from)
         }.map { it.second }) }.apply {
             id = R.id.information_query_shuttle_routes
@@ -982,7 +1033,113 @@ internal class InformationQueryPage(
             setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(12), 0, 0)
         })
+        ShuttleBusLogic.latestTimetableNotice(snapshot)?.let { notice ->
+            val schedules = notice.schedules.filter { it.parseStatus == "parsed" && it.rows.isNotEmpty() }
+            addView(shuttleSurface().apply {
+                tag = "information.query.shuttle.full-timetable"
+                addView(TextView(activity).apply {
+                    text = "完整班车时刻表"
+                    textSize = 17f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setThemeTextColor { Palette.text }
+                })
+                addView(TextView(activity).apply {
+                    text = notice.title
+                    UiText.preserveRawText(this)
+                    textSize = 12f
+                    setThemeTextColor { Palette.muted }
+                    setPadding(0, activity.dp(4), 0, activity.dp(10))
+                })
+                addView(adaptiveShuttleGrid(schedules, activity.dp(600), activity.dp(12),
+                    maximumColumns = 2, makeCell = { fullTimetableCell(it, today) }))
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(16) })
+        }
         addView(shuttleSourceFooter(snapshot.sourcePage))
+    }
+
+    private fun fullTimetableCell(schedule: ShuttleBusSchedule, today: String): LinearLayout =
+        LinearLayout(activity).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
+        background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 8)
+        addView(TextView(activity).apply {
+            text = "${schedule.period.label} · ${schedule.from.orEmpty()} → ${schedule.to.orEmpty()}"
+            UiText.preserveRawText(this)
+            textSize = 14f
+            setTypeface(typeface, Typeface.BOLD)
+            setThemeTextColor { Palette.primaryText }
+            setPadding(0, 0, 0, activity.dp(5))
+        })
+        addView(TextView(activity).apply {
+            tag = "information.query.shuttle.full-period.meta"
+            text = fullTimetablePeriodMetadata(schedule.period, today)
+            UiText.preserveRawText(this)
+            textSize = 12f
+            setThemeTextColor { Palette.muted }
+            setPadding(0, 0, 0, activity.dp(8))
+        })
+        if (availableWidthDp >= 760) {
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                ShuttleBusLogic.timetableWeekdays.forEachIndexed { index, (key, label) ->
+                    val departures = ShuttleBusLogic.timetableDepartures(schedule, key)
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(activity.dp(5), activity.dp(7), activity.dp(5), activity.dp(7))
+                        background = themedRoundedBackground(activity, { Palette.surface }, radius = 6)
+                        addView(TextView(activity).apply {
+                            text = activity.uiText(label)
+                            textSize = 12f
+                            setTypeface(typeface, Typeface.BOLD)
+                            setThemeTextColor { Palette.primaryText }
+                        })
+                        addView(TextView(activity).apply {
+                            text = if (departures.isEmpty()) activity.uiText("无计划班次") else
+                                departures.joinToString("\n") { departure ->
+                                    "${departure.time} ${departure.vehicle}×${departure.count}"
+                                }
+                            UiText.preserveRawText(this)
+                            textSize = 11f
+                            setThemeTextColor { Palette.text }
+                            setPadding(0, activity.dp(5), 0, 0)
+                        })
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        if (index < ShuttleBusLogic.timetableWeekdays.lastIndex) marginEnd = activity.dp(6)
+                    })
+                }
+            })
+        } else ShuttleBusLogic.timetableWeekdays.forEach { (key, label) ->
+            val departures = ShuttleBusLogic.timetableDepartures(schedule, key)
+            addView(TextView(activity).apply {
+                text = "${activity.uiText(label)}  " +
+                    if (departures.isEmpty()) activity.uiText("无计划班次") else
+                        departures.joinToString(" · ") { departure ->
+                            "${departure.time} ${departure.vehicle} × ${departure.count}"
+                        }
+                UiText.preserveRawText(this)
+                textSize = 12f
+                setThemeTextColor { Palette.text }
+                setPadding(0, activity.dp(3), 0, activity.dp(3))
+            })
+        }
+    }
+
+    private fun fullTimetablePeriodMetadata(period: ShuttleBusPeriod, today: String): String {
+        val dates = when {
+            period.startDate != null && period.endDate != null ->
+                "${period.startDate} – ${period.endDate}"
+            period.startDate != null -> "${period.startDate} ${activity.uiText("起")}"
+            period.endDate != null -> "${activity.uiText("截至")} ${period.endDate}"
+            else -> activity.uiText("日期待确认")
+        }
+        val state = when (ShuttleBusLogic.periodStatus(period, today)) {
+            TimetablePeriodStatus.ACTIVE -> "当前生效"
+            TimetablePeriodStatus.UPCOMING -> "即将生效"
+            TimetablePeriodStatus.PAST -> "已结束时段"
+            TimetablePeriodStatus.UNCONFIRMED -> "时段待确认"
+        }
+        return "$dates · ${activity.uiText(state)}"
     }
 
     private fun shuttleStopMatches(campus: String, departureCampus: String): Boolean =
@@ -1044,7 +1201,12 @@ internal class InformationQueryPage(
         activity.dp(ShuttleQueryLayoutLogic.ACTION_TOUCH_SIZE_DP),
     )
 
-    private fun shuttleRouteCard(route: TodayShuttleRoute, currentTime: String, pickupLocations: List<String>): LinearLayout =
+    private fun shuttleRouteCard(
+        route: TodayShuttleRoute,
+        currentTime: String,
+        showNext: Boolean,
+        pickupLocations: List<String>,
+    ): LinearLayout =
         shuttleSurface().apply {
             tag = "information.query.shuttle.route"
             addView(LinearLayout(activity).apply {
@@ -1091,12 +1253,17 @@ internal class InformationQueryPage(
                     setThemeTextColor { Palette.muted }
                 })
             } else {
-                addView(shuttleDepartureGrid(route.departures, currentTime))
+                addView(shuttleDepartureGrid(route.departures, currentTime, showNext))
             }
         }
 
-    private fun shuttleDepartureGrid(departures: List<TodayShuttleDeparture>, currentTime: String): LinearLayout {
-        val nextDeparture = ShuttleQueryLayoutLogic.nextDeparture(departures, currentTime)
+    private fun shuttleDepartureGrid(
+        departures: List<TodayShuttleDeparture>,
+        currentTime: String,
+        showNext: Boolean,
+    ): LinearLayout {
+        val nextDeparture = if (showNext) ShuttleQueryLayoutLogic.nextDeparture(departures, currentTime)
+        else null
         val timeMeasure = TextView(activity).apply {
             textSize = 15f
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
@@ -1269,9 +1436,14 @@ internal class InformationQueryPage(
             addView(eventList)
             renderImportantEventList(eventList)
             addView(querySourceFooter(
-                "第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业",
+                "第三方来源：Contest DDL 主源、较新镜像及备用 API；校内竞赛通知另行获取，不包含课程作业",
                 CalendarDailyInfoSources.deadlinePrimaryPage,
             ))
+            addView(querySourceFooter(
+                "Contest DDL 较新镜像数据",
+                CalendarDailyInfoSources.deadlineMirror,
+            ))
+            addView(querySourceFooter("Contest DDL 备用 API", CalendarDailyInfoSources.deadlineBackup))
         }
     }
 

@@ -36,6 +36,7 @@ VERSION="${APPLE_MARKETING_VERSION:-$(configured_value MARKETING_VERSION)}"
 BUILD_NUMBER="${APPLE_BUILD_NUMBER:-$(configured_value CURRENT_PROJECT_VERSION)}"
 printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
 CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_MIRROR_URL="https://where-to-study.cn/contest-ddl/data/competitions.json"
 CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
 SHUTTLE_BUS_URL="https://where-to-study.cn/api/shuttle-bus"
 
@@ -301,7 +302,7 @@ validate_archive() {
     echo "App Store archive contains the retired contest API host: $app" >&2
     exit 1
   fi
-  for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
+  for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_MIRROR_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
     if ! path_contains_fixed_text "$endpoint" "$executable"; then
       echo "App Store archive executable is missing a required HTTPS public-data endpoint: $endpoint" >&2
       exit 1

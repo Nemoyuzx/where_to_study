@@ -58,7 +58,7 @@ test("release validation treats shell metacharacters in paths and labels as data
   }
 });
 
-test("client versions consistently release 0.3.1 with fresh distribution build counters", () => {
+test("client versions consistently release 0.3.2 with fresh distribution build counters", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -110,31 +110,31 @@ test("client versions consistently release 0.3.1 with fresh distribution build c
     "utf8",
   );
 
-  assert.equal(packageMetadata.version, "0.3.1");
-  assert.equal(tauriMetadata.version, "0.3.1");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 2013);
-  assert.match(cargoManifest, /^version = "0\.3\.1"$/m);
-  assert.match(coreManifest, /^version = "0\.3\.1"$/m);
-  assert.match(cliManifest, /^version = "0\.3\.1"$/m);
-  assert.match(tuiManifest, /^version = "0\.3\.1"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.3\.1"/);
-  assert.match(nativeAndroid, /versionCode = 58/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.3\.1"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "99"/);
-  assert.match(nativeHarmony, /"versionName": "0\.3\.1"/);
-  assert.match(nativeHarmony, /"versionCode": 1002035/);
-  assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.3\.1'/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.3\.1/);
-  assert.match(tauriApple, /CFBundleVersion: "52"/);
-  assert.match(tauriAppleInfo, /<string>0\.3\.1<\/string>/);
-  assert.match(tauriAppleInfo, /<string>52<\/string>/);
-  assert.match(cliWorkflow, /grep -F '0\.3\.1'/);
-  assert.match(tuiWorkflow, /grep -F '0\.3\.1'/);
+  assert.equal(packageMetadata.version, "0.3.2");
+  assert.equal(tauriMetadata.version, "0.3.2");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 2014);
+  assert.match(cargoManifest, /^version = "0\.3\.2"$/m);
+  assert.match(coreManifest, /^version = "0\.3\.2"$/m);
+  assert.match(cliManifest, /^version = "0\.3\.2"$/m);
+  assert.match(tuiManifest, /^version = "0\.3\.2"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.3\.2"/);
+  assert.match(nativeAndroid, /versionCode = 59/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.3\.2"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "100"/);
+  assert.match(nativeHarmony, /"versionName": "0\.3\.2"/);
+  assert.match(nativeHarmony, /"versionCode": 1002036/);
+  assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.3\.2'/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.3\.2/);
+  assert.match(tauriApple, /CFBundleVersion: "53"/);
+  assert.match(tauriAppleInfo, /<string>0\.3\.2<\/string>/);
+  assert.match(tauriAppleInfo, /<string>53<\/string>/);
+  assert.match(cliWorkflow, /grep -F '0\.3\.2'/);
+  assert.match(tuiWorkflow, /grep -F '0\.3\.2'/);
   assert.match(nativeWorkflow, /native-android-universal\.apk/);
   assert.doesNotMatch(nativeWorkflow, /native-android\.aab/);
-  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.1-prerelease\}"/);
-  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.1-prerelease\}"/);
-  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.1-prerelease\}"/);
+  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.2-prerelease\}"/);
+  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.2-prerelease\}"/);
+  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.2-prerelease\}"/);
 });
 
 test("native Android CI avoids the removed legacy SDK tools package", () => {
@@ -244,6 +244,7 @@ test("all graphical clients pin contest APIs to the HTTPS product domain", () =>
   for (const filename of sourceFiles) {
     const source = readFileSync(filename, "utf8");
     assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-events/);
+    assert.match(source, /https:\/\/where-to-study\.cn\/contest-ddl\/data\/competitions\.json/);
     assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-notices/);
     assert.doesNotMatch(source, /101\.201\.29\.29|http:\/\/where-to-study\.cn/);
   }
@@ -491,6 +492,7 @@ test("desktop release packages verify all fixed public-data endpoints", () => {
 
   for (const source of [linuxPackaging, windowsWorkflow, macosPackaging]) {
     assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-events/);
+    assert.match(source, /https:\/\/where-to-study\.cn\/contest-ddl\/data\/competitions\.json/);
     assert.match(source, /https:\/\/where-to-study\.cn\/api\/contest-notices/);
     assert.match(source, /https:\/\/where-to-study\.cn\/api\/shuttle-bus/);
     assert.match(source, /retired contest API host/);
@@ -508,6 +510,7 @@ test("every graphical release package validates the fixed shuttle endpoint", () 
   ]) {
     const source = readFileSync(path.join(root, filename), "utf8");
     assert.match(source, /https:\/\/where-to-study\.cn\/api\/shuttle-bus/);
+    assert.match(source, /https:\/\/where-to-study\.cn\/contest-ddl\/data\/competitions\.json/);
     assert.match(source, /required HTTPS public-data endpoint/);
   }
 });

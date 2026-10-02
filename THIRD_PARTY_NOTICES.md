@@ -19,8 +19,10 @@ information returned by UAPI.
 
 Where To Study reads public competition, academic-conference, journal-special-issue, summer-camp,
 pre-admission, and hackathon deadline data from
-[Contest DDL](https://nemoyuzx.github.io/contest-ddl/) and may use its fixed backup API when the
-primary endpoint is unavailable. These are external data services; no service source code or complete
+[Contest DDL](https://nemoyuzx.github.io/contest-ddl/) and its fixed
+[site mirror](https://where-to-study.cn/contest-ddl/), selecting the mirror when its validated generation
+timestamp is newer. The existing [backup API](https://where-to-study.cn/api/contest-events) remains
+available when both static sources fail. These are external data services; no service source code or complete
 event dataset is redistributed with the application. Every corresponding card identifies the external
 source, and users can disable each event category separately.
 

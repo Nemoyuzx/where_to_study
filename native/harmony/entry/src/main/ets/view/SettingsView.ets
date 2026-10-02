@@ -375,7 +375,7 @@ export struct SettingsView {
         this.model.account = value;
       }, true, 'settings_account_input')
       Blank().height(7)
-      this.field('密码', this.model.password, InputType.Password, (value: string): void => {
+      this.field('教务密码', this.model.password, InputType.Password, (value: string): void => {
         this.model.password = value;
       }, true, 'settings_password_input')
       if (this.model.canPreserveSavedPassword()) {
@@ -385,6 +385,11 @@ export struct SettingsView {
           .width('100%')
           .padding({ left: 2, right: 2, top: 7 })
       }
+      Text(this.model.text('用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。'))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+        .padding({ left: 2, right: 2, top: 5 })
       Blank().height(10)
       this.field('教学云平台密码', this.model.cloudPassword, InputType.Password, (value: string): void => {
         this.model.cloudPassword = value;
@@ -397,16 +402,28 @@ export struct SettingsView {
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: 7 })
-      Text(this.model.text('仅用于作业 DDL；与教务密码不同时填写，保存后生效。'))
+      Text(this.model.text('用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
         .padding({ top: 4 })
-      Button(this.model.text('使用教务密码'))
+      Button() {
+        Row({ space: 6 }) {
+          SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
+            .fontSize(15)
+            .fontColor([AppTheme.primary()])
+          Text(this.model.text('改用教务密码'))
+            .fontSize(13)
+            .fontColor(AppTheme.primary())
+        }
+      }
         .type(ButtonType.Normal)
-        .fontSize(13)
-        .fontColor(AppTheme.primary())
-        .backgroundColor(Color.Transparent)
+        .height(ControlMetrics.height)
+        .padding({ left: 12, right: 12 })
+        .borderRadius(8)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .accessibilityText(this.model.text('改用教务密码'))
+        .id('settings.cloud.use-academic-password')
         .enabled(!this.model.isSampleMode())
         .onClick(() => {
           this.model.cloudPassword = '';

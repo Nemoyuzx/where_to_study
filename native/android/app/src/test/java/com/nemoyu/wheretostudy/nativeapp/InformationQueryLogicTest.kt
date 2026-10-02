@@ -217,6 +217,47 @@ class InformationQueryLogicTest {
     }
 
     @Test
+    fun fullShuttleTimetableUsesLatestParsedNoticeAcrossPeriodsAndWeekdays() {
+        val snapshot = ShuttleBusResponseParser.parse(shuttlePayload())
+        val notice = ShuttleBusLogic.latestTimetableNotice(snapshot)
+        assertEquals("new", notice?.id)
+        assertEquals(listOf("第一时段", "第一时段", "第二时段"),
+            notice?.schedules?.map { it.period.label })
+        assertEquals(7, ShuttleBusLogic.timetableWeekdays.size)
+        assertEquals(listOf("08:30"), ShuttleBusLogic.timetableDepartures(
+            notice!!.schedules[0], "monday").map { it.time })
+        assertTrue(ShuttleBusLogic.timetableDepartures(notice.schedules[0], "tuesday").isEmpty())
+        assertEquals(listOf("06:50"), ShuttleBusLogic.timetableDepartures(
+            notice.schedules[2], "monday").map { it.time })
+        assertEquals(TimetablePeriodStatus.ACTIVE,
+            ShuttleBusLogic.periodStatus(notice.schedules[0].period, "2026-08-31"))
+        assertEquals(TimetablePeriodStatus.UPCOMING,
+            ShuttleBusLogic.periodStatus(notice.schedules[2].period, "2026-08-31"))
+        assertEquals(TimetablePeriodStatus.PAST,
+            ShuttleBusLogic.periodStatus(notice.schedules[0].period, "2026-09-05"))
+        assertEquals(TimetablePeriodStatus.UNCONFIRMED,
+            ShuttleBusLogic.periodStatus(ShuttleBusPeriod("未标日期", null, null), "2026-08-31"))
+        assertTrue(ShuttleBusLogic.isPublicHoliday(
+            HolidaysSnapshot(2026, HolidayMetadata.source, "fixture",
+                listOf(HolidayItem("2026-10-01", "国庆节", "holiday"))), "2026-10-01"))
+        assertFalse(ShuttleBusLogic.isPublicHoliday(
+            HolidaysSnapshot(2026, HolidayMetadata.source, "fixture",
+                listOf(HolidayItem("2026-10-02", "国庆节", "holiday"),
+                    HolidayItem("2026-10-02", "调休", "workday"))), "2026-10-02"))
+        assertFalse(ShuttleBusLogic.isPublicHoliday(
+            HolidaysSnapshot(2026, DeviceCalendarHolidayLogic.sourceLabel, "fixture",
+                listOf(HolidayItem("2026-03-03", "元宵节", "holiday"))), "2026-03-03"))
+        val now = Calendar.getInstance(TimeZone.getTimeZone("Asia/Shanghai")).apply {
+            set(2026, Calendar.AUGUST, 31, 8, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val holidayPresentation = ShuttleBusLogic.today(snapshot, now, isPublicHoliday = true)
+        assertNull("Holiday schedules must not advertise a next departure", holidayPresentation.nextDeparture)
+        assertEquals("法定节假日，班车安排以学校通知为准", holidayPresentation.status)
+        assertEquals(2, holidayPresentation.routes.size)
+    }
+
+    @Test
     fun shuttleUnknownPeriodIsNotActiveAndExactDepartureMinuteIsAlreadyDeparted() {
         val parsed = ShuttleBusResponseParser.parse(shuttlePayload())
         val unknownOnly = parsed.copy(notices = listOf(parsed.notices.last()))

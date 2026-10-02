@@ -68,6 +68,11 @@ export class AppLocalization {
     '点击刷新以查询，切换页面保留上次结果。': 'Tap Refresh to query. Switching pages keeps your results.',
     '刷新作业': 'Refresh Assignments',
     '打开教学云': 'Open UCloud',
+    '前往个人账户': 'Open Personal Account',
+    '较新镜像数据': 'Newer mirror data',
+    'Contest DDL 较新镜像数据': 'Newer Contest DDL mirror data',
+    'Contest DDL 备用 API': 'Contest DDL backup API',
+    '本次使用 Contest DDL 镜像数据': 'Using Contest DDL mirror data',
     '搜索课程或作业': 'Search courses or assignments',
     '暂无匹配的课程作业 DDL。': 'No matching assignment deadlines.',
     '刷新考试': 'Refresh Exams',
@@ -277,6 +282,12 @@ export class AppLocalization {
     '个人账户': 'Account',
     '教务账号': 'School Account',
     '密码': 'Password',
+    '教务密码': 'Academic password',
+    '改用教务密码': 'Use academic password instead',
+    '用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。':
+      'Used to sign in to mobile academic services for timetables, grades and exams. It may differ from your unified identity password. For some accounts, the initial password may be the eight-digit birth date (YYYYMMDD); use your actual account settings.',
+    '用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。':
+      'Used for assignment deadlines and usually matches the unified identity password. If unset, the academic password is used. Leave a saved separate password blank to keep it; save settings after making changes.',
     '教学云平台密码': 'Teaching Cloud password',
     '教学云登录失败，请检查设置中的教学云平台密码；未设置时使用教务密码。若官方页面要求验证码，请先完成验证。':
       'Teaching Cloud sign-in failed. Check the Teaching Cloud password in Settings; without an override, the academic password is used. Complete verification on the official site if requested.',
@@ -407,6 +418,17 @@ export class AppLocalization {
       'The latest notice is not yet safely structured. The previous verified timetable is shown for reference only.',
     '法定节假日班车安排以学校通知为准，请提前五分钟候车。':
       'Holiday service follows official notices. Please arrive five minutes early.',
+    '今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。':
+      'Today is a public holiday. Shuttles may not run; follow the university holiday schedule. There is no shuttle service during the holiday break.',
+    '完整班车时刻表': 'Full Shuttle Timetable',
+    '当前生效': 'Active now',
+    '即将生效': 'Upcoming',
+    '已结束时段': 'Past period',
+    '日期待确认': 'Dates unconfirmed',
+    '截至': 'Until',
+    '起': 'onward',
+    '法定节假日，班车安排以学校通知为准': 'Public holiday: follow the university shuttle notices',
+    '无计划班次': 'No scheduled departures',
     '发车地点：': 'Departure: ',
     '今日暂无计划班车': 'No Scheduled Shuttle Today',
     '下一班': 'Next',
@@ -443,6 +465,8 @@ export class AppLocalization {
       'Third-party source: public BUPT Logistics notices, processed hourly by Where To Study for reference only.',
     '第三方来源：Contest DDL 公开活动与校内竞赛通知；校内通知由脚本从学校内部网站公开通知页提取整理。':
       'Third-party sources: Contest DDL and campus contest notices. Campus notices are script-extracted from public pages on an internal school website.',
+    '第三方来源：Contest DDL 主源、较新镜像及备用 API；校内通知由脚本从学校内部网站公开通知页提取整理。':
+      'Third-party sources: Contest DDL primary, newer mirror, and backup API. Campus notices are script-extracted from public pages on an internal school website.',
     '课程作业获取失败。': 'Unable to load course assignments.',
     '正在展示内置示例课表，未连接北邮服务':
       'Showing the built-in demo schedule; no BUPT service connection',

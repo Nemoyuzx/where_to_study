@@ -62,11 +62,18 @@ export function shuttlePeriodState(period = {}, today = '') {
   return 'unknown'
 }
 
+function verifiedShuttleSchedule(schedule) {
+  return schedule?.parse_status === 'parsed'
+    && Array.isArray(schedule.rows) && schedule.rows.length > 0
+    && Boolean(schedule.from && schedule.to)
+    && schedule.rows.some((row) => SHUTTLE_WEEKDAYS.some(({ key }) => row.services?.[key]))
+}
+
 export function selectShuttleNotice(payload = {}) {
   const items = Array.isArray(payload.items) ? payload.items : []
   const latest = items[0] || null
   const latestHasParsedSchedule = latest?.schedules?.some(
-    (schedule) => schedule.parse_status === 'parsed' && schedule.rows?.length,
+    verifiedShuttleSchedule,
   )
   const notice = latestHasParsedSchedule
     ? latest
@@ -81,6 +88,7 @@ export function selectShuttleNotice(payload = {}) {
 export function shuttlePeriods(notice) {
   const periods = new Map()
   ;(notice?.schedules || []).forEach((schedule) => {
+    if (!verifiedShuttleSchedule(schedule)) return
     const key = shuttlePeriodKey(schedule.period)
     if (!periods.has(key)) periods.set(key, schedule.period)
   })
@@ -88,8 +96,57 @@ export function shuttlePeriods(notice) {
 }
 
 export function defaultShuttlePeriodKey(periods, today) {
-  return periods.find(({ period }) => shuttlePeriodState(period, today) === 'active')?.key
-    || ''
+  return periods
+    .filter(({ period }) => shuttlePeriodState(period, today) === 'active')
+    .reduce((selected, candidate) => (
+      !selected || candidate.period.start_date > selected.period.start_date
+        ? candidate : selected
+    ), null)?.key || ''
+}
+
+export function resolvedShuttleSelection({
+  weekdaySelection,
+  periodSelection,
+  today,
+  currentWeekday,
+  noticeIdentity,
+}) {
+  return {
+    weekday: weekdaySelection?.date === today ? weekdaySelection.key : currentWeekday,
+    period: periodSelection?.date === today
+      && periodSelection.noticeIdentity === noticeIdentity
+      ? periodSelection.key : '',
+  }
+}
+
+export function buildShuttleTimetable(payload = {}, today = '') {
+  const { latest, notice, usingFallback } = selectShuttleNotice(payload)
+  const holidayNotice = [latest, notice]
+    .filter(Boolean)
+    .flatMap((item) => (item.notes || []).map((text) => ({ text, source: item })))
+    .find(({ text }) => /法定节假日|放假|假期/.test(text)) || null
+  const periods = shuttlePeriods(notice).map(({ key, period }) => ({
+    key,
+    period,
+    state: shuttlePeriodState(period, today),
+    routes: (notice?.schedules || [])
+      .filter((schedule) => shuttlePeriodKey(schedule.period) === key
+        && verifiedShuttleSchedule(schedule))
+      .map((schedule) => ({
+        from: schedule.from,
+        to: schedule.to,
+        stop: notice?.stops?.find((item) => item.campus === schedule.from)?.location || '',
+        rows: [...schedule.rows].sort((left, right) =>
+          left.departure_time.localeCompare(right.departure_time)),
+      })),
+  })).filter(({ routes }) => routes.length > 0)
+  return { latest, notice, usingFallback, holidayNotice, periods }
+}
+
+export function isLegalShuttleHoliday(items = [], today = '') {
+  const todayItems = items.filter((item) => item.date === today)
+  return todayItems.some((item) => item.type === 'holiday')
+    && !todayItems.some((item) => item.type === 'workday')
 }
 
 export function departureMinutes(value) {
@@ -118,14 +175,13 @@ export function buildShuttleDayView(payload, {
     && Number.isInteger(nowMinutes)
   const schedules = periodState === 'active' ? (notice?.schedules || []).filter((schedule) => (
     shuttlePeriodKey(schedule.period) === visiblePeriod
-      && schedule.parse_status === 'parsed'
-      && Array.isArray(schedule.rows)
+      && verifiedShuttleSchedule(schedule)
   )) : []
   const routes = schedules.map((schedule) => {
     const departures = schedule.rows.flatMap((row) => {
       const service = row.services?.[weekday]
       return service ? [{ departureTime: row.departure_time, service }] : []
-    })
+    }).sort((left, right) => left.departureTime.localeCompare(right.departureTime))
     const nextIndex = compareWithNow
       ? departures.findIndex(({ departureTime }) => (
         (departureMinutes(departureTime) ?? -1) > nowMinutes

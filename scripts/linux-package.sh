@@ -13,6 +13,7 @@ APP_VERSION="$(node -p "require('$ROOT_DIR/package.json').version")"
 RELEASE_LABEL="${1:-v$APP_VERSION}"
 printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
 CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_MIRROR_URL="https://where-to-study.cn/contest-ddl/data/competitions.json"
 CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
 SHUTTLE_BUS_URL="https://where-to-study.cn/api/shuttle-bus"
 validate_release_label "$RELEASE_LABEL"
@@ -109,7 +110,7 @@ validate_extracted_bundle() {
     echo "Linux bundle is missing the Where To Study executable." >&2
     exit 1
   fi
-  for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
+  for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_MIRROR_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
     if ! path_contains_fixed_text "$endpoint" "$executable"; then
       echo "Linux executable is missing a required HTTPS public-data endpoint: $endpoint" >&2
       exit 1

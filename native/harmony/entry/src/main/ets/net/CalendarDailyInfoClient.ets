@@ -1,6 +1,6 @@
 // 教学日历日期详情的公开数据客户端：黄历（UAPI + Timeless）、
 // 学科竞赛/会议/期刊专题/夏令营/黑客松/预推免 DDL
-//（Contest DDL 主源 + where-to-study.cn 备用源 + 校内竞赛通知），
+//（Contest DDL 主源 + where-to-study.cn 镜像与 API 备用源 + 校内竞赛通知），
 // 以及北邮云课堂真实响应契约的作业解析器。
 //
 // 公开数据请求不携带账号、密码或 Cookie；所有地址均固定校验、禁止重定向，
@@ -362,18 +362,44 @@ export class CalendarDailyInfoSources {
   static readonly deadlinePrimary: string =
     'https://nemoyuzx.github.io/contest-ddl/data/competitions.json';
   static readonly deadlinePrimaryPage: string = 'https://nemoyuzx.github.io/contest-ddl/';
+  static readonly deadlineMirror: string = 'https://where-to-study.cn/contest-ddl/data/competitions.json';
   static readonly deadlineBackup: string = 'https://where-to-study.cn/api/contest-events';
   static readonly schoolContestNotices: string = 'https://where-to-study.cn/api/contest-notices';
   static readonly assignments: string =
     'https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3';
   static readonly smallPayloadLimit: number = 128 * 1024;
   static readonly deadlinePayloadLimit: number = 2 * 1024 * 1024;
+  static readonly contestPayloadLimit: number = 4 * 1024 * 1024;
   static readonly maximumItemsPerDay: number = 100;
 }
 
 export class CalendarDailyInfoError extends Error {
   constructor(message: string) {
     super(message);
+  }
+}
+
+export class ContestFeedMetadata {
+  private static readonly timestamp: RegExp = new RegExp(
+    '^\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d' +
+      '(?:\\.\\d+)?(?:Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$');
+
+  static generatedAtMillis(payload: string): number {
+    const root: Record<string, Object> | null = JsonUtil.parseObject(payload);
+    if (root === null || root['schema_version'] !== '1.4' ||
+      root['timezone'] !== 'Asia/Shanghai' || !Array.isArray(root['items']) ||
+      (root['items'] as Object[]).length > 5000) {
+      throw new CalendarDailyInfoError('Contest DDL 数据结构不正确。');
+    }
+    const generatedAt: Object | undefined = root['generated_at'];
+    if (typeof generatedAt !== 'string' || !ContestFeedMetadata.timestamp.test(generatedAt as string)) {
+      throw new CalendarDailyInfoError('Contest DDL 更新时间格式不正确。');
+    }
+    const timestamp: number = new Date(generatedAt as string).getTime();
+    if (!Number.isFinite(timestamp)) {
+      throw new CalendarDailyInfoError('Contest DDL 更新时间格式不正确。');
+    }
+    return timestamp;
   }
 }
 
@@ -898,6 +924,21 @@ class DeadlineIndexCache {
   }
 }
 
+class ContestIndexSelection {
+  readonly itemsByDate: Map<string, PublicDeadlineItem[]>;
+  readonly source: string;
+  readonly usedBackup: boolean;
+  readonly generatedAtMillis: number;
+
+  constructor(itemsByDate: Map<string, PublicDeadlineItem[]>, source: string,
+    usedBackup: boolean, generatedAtMillis: number) {
+    this.itemsByDate = itemsByDate;
+    this.source = source;
+    this.usedBackup = usedBackup;
+    this.generatedAtMillis = generatedAtMillis;
+  }
+}
+
 export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
   private static readonly deadlineCacheLifetimeMs: number = 5 * 60 * 1000;
   private deadlineIndexCache: DeadlineIndexCache | null = null;
@@ -1072,25 +1113,46 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     let contestSource: string = CalendarDailyInfoSources.deadlinePrimary;
     let usedBackup: boolean = false;
     let contestError: string | null = null;
+    let primary: ContestIndexSelection | null = null;
+    let mirror: ContestIndexSelection | null = null;
+    let primaryError: string | null = null;
+    let mirrorError: string | null = null;
     try {
-      const payload: string = await this.transport.fetch(
-        CalendarDailyInfoSources.deadlinePrimary, 'https', 'nemoyuzx.github.io',
-        CalendarDailyInfoSources.deadlinePayloadLimit);
-      contestItemsByDate = this.parseContestIndex(payload);
-    } catch (primaryError) {
+      primary = await this.fetchVersionedContest(
+        CalendarDailyInfoSources.deadlinePrimary, 'nemoyuzx.github.io', false);
+    } catch (error) {
+      primaryError = error instanceof Error ? error.message : '未知错误';
+    }
+    try {
+      mirror = await this.fetchVersionedContest(
+        CalendarDailyInfoSources.deadlineMirror, 'where-to-study.cn', true);
+    } catch (error) {
+      mirrorError = error instanceof Error ? error.message : '未知错误';
+    }
+    let selected: ContestIndexSelection | null = primary;
+    if (mirror !== null && (primary === null || mirror.generatedAtMillis > primary.generatedAtMillis)) {
+      selected = mirror;
+    }
+    if (selected === null) {
       try {
         const payload: string = await this.transport.fetch(
           CalendarDailyInfoSources.deadlineBackup, 'https', 'where-to-study.cn',
-          CalendarDailyInfoSources.deadlinePayloadLimit);
-        contestItemsByDate = this.parseContestIndex(payload);
-        contestSource = CalendarDailyInfoSources.deadlineBackup;
-        usedBackup = true;
+          CalendarDailyInfoSources.contestPayloadLimit);
+        const generatedAtMillis: number = ContestFeedMetadata.generatedAtMillis(payload);
+        selected = new ContestIndexSelection(
+          this.parseContestIndex(payload), CalendarDailyInfoSources.deadlineBackup, true,
+          generatedAtMillis);
       } catch (backupError) {
-        const primaryMessage: string = primaryError instanceof Error ? primaryError.message : '未知错误';
         const backupMessage: string = backupError instanceof Error ? backupError.message : '未知错误';
-        contestError = '主 DDL 数据源不可用（' + primaryMessage + '）；备用数据源也不可用（' +
-          backupMessage + '）。';
+        contestError = '主 DDL 数据源不可用（' + (primaryError ?? '未知错误') +
+          '）；镜像数据源不可用（' + (mirrorError ?? '未知错误') +
+          '）；备用数据源也不可用（' + backupMessage + '）。';
       }
+    }
+    if (selected !== null) {
+      contestItemsByDate = selected.itemsByDate;
+      contestSource = selected.source;
+      usedBackup = selected.usedBackup;
     }
     let schoolItemsByDate: Map<string, PublicDeadlineItem[]> | null = null;
     let schoolError: string | null = null;
@@ -1109,6 +1171,15 @@ export class CalendarDailyInfoClient implements CalendarDailyInfoFetching {
     }
     return new DeadlineIndexBundle(
       contestItemsByDate, contestSource, usedBackup, contestError, schoolItemsByDate, schoolError);
+  }
+
+  private async fetchVersionedContest(source: string, host: string,
+    usedBackup: boolean): Promise<ContestIndexSelection> {
+    const payload: string = await this.transport.fetch(
+      source, 'https', host, CalendarDailyInfoSources.contestPayloadLimit);
+    const generatedAtMillis: number = ContestFeedMetadata.generatedAtMillis(payload);
+    return new ContestIndexSelection(
+      this.parseContestIndex(payload), source, usedBackup, generatedAtMillis);
   }
 }
 

@@ -71,6 +71,7 @@ pub fn login(account: Option<String>, use_academic_password: bool) -> ServiceRes
         return Err(ServiceError::new("请输入教务账号。"));
     }
     let mut existing = credentials::load()?;
+    println!("教务密码用于登录移动教务，可能与统一身份认证密码不同；部分账号的初始密码可能是 8 位出生日期（YYYYMMDD），请以本人实际设置为准。");
     let mut entered = credentials::prompt_password("教务密码（同账号留空则保留已保存密码）：")?;
     let password = if entered.is_empty() {
         let Some(saved) = existing.as_mut().filter(|credentials| {
@@ -85,6 +86,7 @@ pub fn login(account: Option<String>, use_academic_password: bool) -> ServiceRes
     let mut cloud = if use_academic_password {
         Zeroizing::new(String::new())
     } else {
+        println!("教学云平台密码用于查询课程作业，通常填写统一身份认证密码；此项选填，未设置时沿用教务密码。");
         credentials::prompt_password(
             "教学云平台密码（选填；同账号留空保持，未设置时使用教务密码）：",
         )?

@@ -3,6 +3,7 @@ import {
   AlmanacInfo, AlmanacResponseParser, AssignmentDeadlineItem,
   AssignmentDeadlineResponseParser, PublicDeadlineItem, PublicDeadlineKind,
   PublicDeadlineResponseParser, CalendarDailyInfoClient, CalendarDailyInfoSources,
+  ContestFeedMetadata,
   CustomDeadlineURLPolicy, FavoriteDeadlineCodec, FixedPublicJsonFetching,
   PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../main/ets/net/CalendarDailyInfoClient';
@@ -249,29 +250,118 @@ export default function calendarDailyInfoClientTest() {
       expect(results[1].items.length).assertEqual(1);
       expect(results[1].items[0].id).assertEqual('second');
       expect(transport.primaryCalls).assertEqual(1);
+      expect(transport.mirrorCalls).assertEqual(1);
       expect(transport.schoolCalls).assertEqual(1);
       await client.fetchImportantEvents();
       expect(transport.primaryCalls).assertEqual(1);
       expect(transport.schoolCalls).assertEqual(1);
-      expect(contestParses).assertEqual(1);
+      expect(contestParses).assertEqual(2);
       expect(schoolParses).assertEqual(1);
 
       const catalog: PublicDeadlineItem[] = await client.fetchImportantEvents();
       expect(catalog.length).assertEqual(2);
       expect(transport.primaryCalls).assertEqual(1);
+      expect(transport.mirrorCalls).assertEqual(1);
       expect(transport.schoolCalls).assertEqual(1);
 
       await client.fetchDeadlines('2026-08-24');
       expect(transport.primaryCalls).assertEqual(1);
+      expect(transport.mirrorCalls).assertEqual(1);
       expect(transport.schoolCalls).assertEqual(1);
-      expect(contestParses).assertEqual(1);
+      expect(contestParses).assertEqual(2);
       expect(schoolParses).assertEqual(1);
 
       await client.prewarmDeadlines('2026-08-23', true);
       expect(transport.primaryCalls).assertEqual(2);
+      expect(transport.mirrorCalls).assertEqual(2);
       expect(transport.schoolCalls).assertEqual(2);
-      expect(contestParses).assertEqual(2);
+      expect(contestParses).assertEqual(4);
       expect(schoolParses).assertEqual(2);
+    });
+
+    it('mirror_wins_only_when_its_validated_generation_is_newer', 0, async () => {
+      for (const generation of [
+        '2026-08-23T10:00:00+08:00',
+        '2026-08-22T10:00:00+08:00',
+        '2026-08-21T10:00:00+08:00'
+      ]) {
+        const client: CalendarDailyInfoClient = new CalendarDailyInfoClient(
+          new ContestSelectionTransport(
+            contestPayload('primary', '2026-08-22T10:00:00+08:00'),
+            contestPayload('mirror', generation)));
+        const snapshot: PublicDeadlineSnapshot = await client.fetchDeadlines('2026-08-22');
+        const newer: boolean = generation === '2026-08-23T10:00:00+08:00';
+        expect(snapshot.items[0].id).assertEqual(newer ? 'mirror' : 'primary');
+        expect(snapshot.usedBackup).assertEqual(newer);
+        expect(snapshot.source).assertEqual(newer ? CalendarDailyInfoSources.deadlineMirror :
+          CalendarDailyInfoSources.deadlinePrimary);
+      }
+    });
+
+    it('invalid_mirror_keeps_primary_and_primary_failure_uses_mirror', 0, async () => {
+      const invalidMirror: string = '{"schema_version":"2.0","timezone":"Asia/Shanghai",' +
+        '"generated_at":"2026-08-23T10:00:00+08:00","items":[]}';
+      const withPrimary: CalendarDailyInfoClient = new CalendarDailyInfoClient(
+        new ContestSelectionTransport(
+          contestPayload('primary', '2026-08-22T10:00:00+08:00'), invalidMirror));
+      const primarySnapshot: PublicDeadlineSnapshot = await withPrimary.fetchDeadlines('2026-08-22');
+      expect(primarySnapshot.items[0].id).assertEqual('primary');
+
+      const withMirror: CalendarDailyInfoClient = new CalendarDailyInfoClient(
+        new ContestSelectionTransport(null, contestPayload('mirror', '2026-08-23T10:00:00+08:00')));
+      const mirrorSnapshot: PublicDeadlineSnapshot = await withMirror.fetchDeadlines('2026-08-22');
+      expect(mirrorSnapshot.items[0].id).assertEqual('mirror');
+      expect(mirrorSnapshot.usedBackup).assertTrue();
+    });
+
+    it('api_backup_remains_available_after_both_versioned_sources_fail', 0, async () => {
+      const transport: ContestSelectionTransport = new ContestSelectionTransport(
+        null, '{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"bad","items":[]}',
+        contestPayload('api', '2026-08-20T10:00:00+08:00'));
+      const snapshot: PublicDeadlineSnapshot = await new CalendarDailyInfoClient(transport)
+        .fetchDeadlines('2026-08-22');
+      expect(snapshot.items[0].id).assertEqual('api');
+      expect(snapshot.source).assertEqual(CalendarDailyInfoSources.deadlineBackup);
+      expect(snapshot.usedBackup).assertTrue();
+      expect(transport.requests.join(',')).assertEqual([
+        CalendarDailyInfoSources.deadlinePrimary,
+        CalendarDailyInfoSources.deadlineMirror,
+        CalendarDailyInfoSources.deadlineBackup,
+        CalendarDailyInfoSources.schoolContestNotices
+      ].join(','));
+    });
+
+    it('newer_valid_empty_mirror_clears_obsolete_contest_items', 0, async () => {
+      const client: CalendarDailyInfoClient = new CalendarDailyInfoClient(
+        new ContestSelectionTransport(
+          contestPayload('obsolete', '2026-08-22T10:00:00+08:00'),
+          '{"schema_version":"1.4","timezone":"Asia/Shanghai",' +
+            '"generated_at":"2026-08-23T10:00:00+08:00","items":[]}'));
+      const snapshot: PublicDeadlineSnapshot = await client.fetchDeadlines('2026-08-22');
+      expect(snapshot.items.length).assertEqual(0);
+      expect(snapshot.source).assertEqual(CalendarDailyInfoSources.deadlineMirror);
+    });
+
+    it('contest_generation_metadata_validates_schema_and_timezones', 0, () => {
+      expect(ContestFeedMetadata.generatedAtMillis(
+        contestPayload('a', '2026-08-22T10:00:00+08:00'))).assertEqual(
+        ContestFeedMetadata.generatedAtMillis(contestPayload('a', '2026-08-22T02:00:00Z')));
+      for (const invalid of [
+        '{"generated_at":"2026-08-22T10:00:00+08:00","items":[]}',
+        '{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-13-22T10:00:00+08:00","items":[]}',
+        '{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-22T10:00:00+08:00","items":{}}',
+        '{"schema_version":"1.4","timezone":"UTC","generated_at":"2026-08-22T10:00:00+08:00","items":[]}'
+      ]) {
+        let rejected: boolean = false;
+        try { ContestFeedMetadata.generatedAtMillis(invalid); } catch (e) { rejected = true; }
+        expect(rejected).assertTrue();
+      }
+      const oversized: string = '{"schema_version":"1.4","timezone":"Asia/Shanghai",' +
+        '"generated_at":"2026-08-22T10:00:00+08:00","items":[' +
+        Array(5001).fill('{}').join(',') + ']}';
+      let oversizedRejected: boolean = false;
+      try { ContestFeedMetadata.generatedAtMillis(oversized); } catch (e) { oversizedRejected = true; }
+      expect(oversizedRejected).assertTrue();
     });
 
     it('custom_feed_and_favorites_follow_the_shared_v1_contract', 0, () => {
@@ -340,18 +430,23 @@ export default function calendarDailyInfoClientTest() {
 
 class CountingDeadlineTransport implements FixedPublicJsonFetching {
   primaryCalls: number = 0;
+  mirrorCalls: number = 0;
   schoolCalls: number = 0;
   customCalls: number = 0;
 
   async fetch(url: string, scheme: string, host: string, maximumBytes: number): Promise<string> {
     if (url === CalendarDailyInfoSources.deadlinePrimary) {
       this.primaryCalls++;
-      return '{"items":[' +
+      return '{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-22T10:00:00+08:00","items":[' +
         '{"id":"first","name":"First","event_type":"competition",' +
         '"primary_deadline":"2026-08-22T20:00:00+08:00"},' +
         '{"id":"second","name":"Second","event_type":"hackathon",' +
         '"primary_deadline":"2026-08-23T20:00:00+08:00"}' +
         ']}';
+    }
+    if (url === CalendarDailyInfoSources.deadlineMirror) {
+      this.mirrorCalls++;
+      return '{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"2026-08-21T10:00:00+08:00","items":[]}';
     }
     if (url === CalendarDailyInfoSources.schoolContestNotices) {
       this.schoolCalls++;
@@ -363,5 +458,46 @@ class CountingDeadlineTransport implements FixedPublicJsonFetching {
   async fetchCustom(url: string, maximumBytes: number): Promise<string> {
     this.customCalls++;
     return customDeadlineFeedText;
+  }
+}
+
+function contestPayload(id: string, generatedAt: string): string {
+  return '{"schema_version":"1.4","timezone":"Asia/Shanghai","generated_at":"' + generatedAt + '","items":[' +
+    '{"id":"' + id + '","name":"' + id + '","event_type":"competition",' +
+    '"primary_deadline":"2026-08-22T20:00:00+08:00"}]}';
+}
+
+class ContestSelectionTransport implements FixedPublicJsonFetching {
+  readonly requests: string[] = [];
+  private readonly primary: string | null;
+  private readonly mirror: string | null;
+  private readonly backup: string | null;
+
+  constructor(primary: string | null, mirror: string | null, backup: string | null = null) {
+    this.primary = primary;
+    this.mirror = mirror;
+    this.backup = backup;
+  }
+
+  async fetch(url: string, scheme: string, host: string, maximumBytes: number): Promise<string> {
+    this.requests.push(url);
+    let payload: string | null = null;
+    if (url === CalendarDailyInfoSources.deadlinePrimary) {
+      payload = this.primary;
+    } else if (url === CalendarDailyInfoSources.deadlineMirror) {
+      payload = this.mirror;
+    } else if (url === CalendarDailyInfoSources.deadlineBackup) {
+      payload = this.backup;
+    } else if (url === CalendarDailyInfoSources.schoolContestNotices) {
+      payload = '{"items":[]}';
+    }
+    if (payload === null) {
+      throw new Error('source unavailable');
+    }
+    return payload;
+  }
+
+  async fetchCustom(url: string, maximumBytes: number): Promise<string> {
+    throw new Error('unexpected custom source');
   }
 }

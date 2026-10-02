@@ -271,8 +271,10 @@ class SettingsPage(
                 useAcademicPassword -> "保存后使用教务密码获取作业 DDL"
                 hasPersistedCloudPassword && persistedAccount == account.text.toString().trim() ->
                     "教学云平台密码已安全保存，留空保持不变"
-                else -> "仅用于课程作业 DDL；未设置时使用教务密码"
+                else -> ""
             })
+            cloudPasswordStatus.visibility =
+                if (cloudPasswordStatus.text.isEmpty()) View.GONE else View.VISIBLE
         }
         account.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -296,15 +298,40 @@ class SettingsPage(
         addView(spacer(activity, compactGap))
         addView(password)
         addView(passwordStatus)
+        addView(TextView(activity).apply {
+            text = "用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。"
+            textSize = 12f
+            setThemeTextColor { Palette.muted }
+            setPadding(activity.dp(2), activity.dp(5), activity.dp(2), 0)
+        })
         addView(spacer(activity, compactGap))
         addView(cloudPassword)
         addView(cloudPasswordStatus)
         addView(TextView(activity).apply {
-            text = "使用教务密码"
+            text = "用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。"
+            textSize = 12f
+            setThemeTextColor { Palette.muted }
+            setPadding(activity.dp(2), activity.dp(5), activity.dp(2), activity.dp(8))
+        })
+        addView(TextView(activity).apply {
+            text = "改用教务密码"
             textSize = 13f
-            setThemeTextColor { Palette.primary }
-            gravity = Gravity.CENTER_VERTICAL
+            setThemeTextColor { Palette.primaryText }
+            gravity = Gravity.CENTER
             minHeight = activity.dp(controlHeight)
+            setPadding(activity.dp(12), 0, activity.dp(12), 0)
+            background = themedRoundedBackground(activity, { Palette.surfaceVariant },
+                { Palette.border }, radius = 8)
+            val iconSize = activity.dp(16)
+            val icon = activity.getDrawable(R.drawable.ic_refresh)?.mutate()?.apply {
+                setBounds(0, 0, iconSize, iconSize)
+            }
+            setCompoundDrawablesRelative(icon, null, null, null)
+            compoundDrawablePadding = activity.dp(6)
+            bindTheme("passwordActionIcon") {
+                compoundDrawableTintList = android.content.res.ColorStateList.valueOf(Palette.primaryText)
+            }
+            contentDescription = activity.uiText("改用教务密码")
             isClickable = true
             isFocusable = true
             setOnClickListener {
@@ -1596,7 +1623,7 @@ class SettingsPage(
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
-                text = "生效日期 / Effective date: 2026-08-31"
+                text = "生效日期 / Effective date: 2026-10-02"
                 textSize = 13f
                 setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(4), 0, activity.dp(14))
@@ -1683,8 +1710,8 @@ class SettingsPage(
             ("应用可能通过 unpkg 获取固定版本 holiday-calendar 数据；Android 在已有权限时也可能读取系统节假日日历。请求仅含 CN 与年份。iOS 只依据权威休息日数据显示“休”。\n\n" +
                 "The app may retrieve pinned holiday-calendar data through unpkg; Android may read the OS holiday calendar when permitted. Requests contain only CN and year. iOS marks rest days only from authoritative rest-day data."),
         "天气、黄历与公开活动 / Weather, almanac, and public events" to
-            ("UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。Contest DDL 与校内通知提供公开活动。自定义日程只向用户填写的 HTTPS 地址发送无凭据 GET，拒绝重定向、本机和私有/保留 IP 字面量，响应上限 2 MiB。所有显示数据仅供参考。\n\n" +
-                "UAPI provides district-level weather and base almanac data without GPS; Timeless may add advice. Contest DDL and campus notices provide public events. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."),
+            ("UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。公开活动优先读取 GitHub 上的 Contest DDL，where-to-study.cn 镜像仅在数据更新时间较新时使用，两者不可用时改用原有备用 API；校内竞赛通知另有来源。这些公开请求均不附带个人凭据。自定义日程只向用户填写的 HTTPS 地址发送无凭据 GET，拒绝重定向、本机和私有/保留 IP 字面量，响应上限 2 MiB。所有显示数据仅供参考。\n\n" +
+                "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Public events use Contest DDL on GitHub first; the where-to-study.cn mirror is selected only when its generated data is newer, and the existing API is a fallback if both fail. Campus contest notices have a separate source. These public requests carry no personal credentials. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."),
         "云课堂作业 / UCloud assignments" to
             ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\n" +
                 "The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate teaching cloud password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."),

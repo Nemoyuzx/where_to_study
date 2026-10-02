@@ -199,8 +199,8 @@ class HolidayStore private constructor(
     private val directory: File,
     private val cacheIO: HolidayCacheIO,
 ) {
-    constructor(context: Context) : this(
-        directory = File(context.filesDir, DIRECTORY_NAME),
+    constructor(context: Context, directoryName: String = DIRECTORY_NAME) : this(
+        directory = File(context.filesDir, directoryName),
         cacheIO = AtomicHolidayCacheIO,
     )
 

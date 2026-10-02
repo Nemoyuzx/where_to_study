@@ -107,6 +107,17 @@ object UiText {
         "刷新成绩" to "Refresh Grades",
         "正在获取成绩…" to "Loading grades…",
         "前往账号设置" to "Open Account Settings",
+        "前往个人账户" to "Open Personal Account",
+        "请先在个人账户中保存教务账号和密码。" to "Save your academic account and password in Personal Account first.",
+        "打开教学云" to "Open Teaching Cloud",
+        "Contest DDL 较新镜像数据" to "Newer Contest DDL mirror data",
+        "Contest DDL 备用 API" to "Contest DDL backup API",
+        "第三方来源：Contest DDL 主源、较新镜像及备用 API；校内竞赛通知另行获取，不包含课程作业" to "Third-party sources: Contest DDL primary, newer mirror, and backup API. Campus contest notices are fetched separately; assignments are excluded.",
+        "本次使用 Contest DDL 镜像数据" to "Using Contest DDL mirror data",
+        "本次使用备用 API" to "Using backup API",
+        "主数据：Contest DDL" to "Primary data: Contest DDL",
+        "备用 API" to "Backup API",
+        "较新镜像数据" to "Newer mirror data",
         "请先在设置中保存教务账号和密码，再查询成绩。" to "Save your academic account and password in Settings to view grades.",
         "成绩来自学校教务系统，仅在本次使用期间保留。" to "Grades come from the university system and remain in memory for this session only.",
         "该学期暂无已公布成绩" to "No grades have been published for this semester.",
@@ -284,6 +295,9 @@ object UiText {
         "教务密码" to "Academic Password",
         "教学云平台密码（可选）" to "Teaching Cloud Password (Optional)",
         "使用教务密码" to "Use Academic Password",
+        "改用教务密码" to "Use Academic Password Instead",
+        "用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。" to "Used to sign in to mobile academic services for timetables, grades and exams. It may differ from your unified identity password. For some accounts, the initial password may be the eight-digit birth date (YYYYMMDD); use your actual account settings.",
+        "用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。" to "Used for assignment deadlines and usually matches the unified identity password. If unset, the academic password is used. Leave a saved separate password blank to keep it; save settings after making changes.",
         "保存后使用独立教学云平台密码获取作业 DDL" to "After saving, assignments use the separate teaching cloud password",
         "保存后使用教务密码获取作业 DDL" to "After saving, assignments use the academic password",
         "教学云平台密码已安全保存，留空保持不变" to "Teaching cloud password saved securely; leave blank to keep it",
@@ -327,6 +341,17 @@ object UiText {
         "今日暂无生效班车时刻表" to "No active shuttle timetable today",
         "今日没有计划班次" to "No departures scheduled today",
         "今日班车按时刻表运行" to "Today's shuttles follow the timetable",
+        "完整班车时刻表" to "Full Shuttle Timetable",
+        "当前生效" to "Active now",
+        "即将生效" to "Upcoming",
+        "已结束时段" to "Past period",
+        "时段待确认" to "Period unconfirmed",
+        "日期待确认" to "Dates unconfirmed",
+        "截至" to "Until",
+        "起" to "onward",
+        "法定节假日，班车安排以学校通知为准" to "Public holiday: follow the university's shuttle notices",
+        "无计划班次" to "No scheduled departures",
+        "今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。" to "Today is a public holiday. Shuttles may not run; follow the university's holiday schedule. There is no shuttle service during the holiday break.",
         "当前展示最近一次成功同步的缓存" to "Showing the latest successfully synced cache",
         "刷新班车信息" to "Refresh shuttle information",
         "查看班车通知原文" to "View the original shuttle notice",
@@ -596,7 +621,7 @@ object UiText {
         source.startsWith("应用可能通过 unpkg") ->
             "The app may fetch a fixed holiday-calendar dataset from unpkg. Android may also read a system holiday calendar when permission already exists. Requests contain only CN and the year. iOS marks days off only from authoritative rest-day data."
         source.startsWith("UAPI 按校区行政区") ->
-            "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Contest DDL and campus notices provide public events. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."
+            "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Public events use Contest DDL on GitHub first; the where-to-study.cn mirror is selected only when its generated data is newer, and the existing API is a fallback if both fail. Campus contest notices have a separate source. These public requests carry no personal credentials. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."
         source.startsWith("日历写入和本地课程通知") ->
             "Calendar writes and local course notifications require your action and permission. The app manages only events marked Where To Study. Course widgets are provided only on supported systems, and their data is not uploaded."
         source.startsWith("本项目只运营用于整理公开班车与活动数据的固定接口") ->

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarClock, ClipboardList, RefreshCw } from 'lucide-react'
+import { CalendarClock, ClipboardList, ExternalLink, RefreshCw, Settings2 } from 'lucide-react'
 import { filterAssignmentQueries } from './query-domain.js'
 
 // Kept mounted across Query segments. Opening/changing a segment never logs in;
@@ -43,7 +43,7 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
     <header className="query-section-header"><h2>{assignments ? <ClipboardList size={22} /> : <CalendarClock size={22} />}{title}</h2>
       <button type="button" onClick={load} disabled={busy || !hasAccount}><RefreshCw size={16} className={busy ? 'spin' : ''} />{en ? 'Fetch / refresh' : '获取／刷新'}</button>
     </header>
-    {!hasAccount ? <div className="query-grade-status"><p>{en ? 'Save your academic account in Settings first. Assignments use the separate Teaching Cloud password if provided.' : '请先在设置中保存个人账户；作业优先使用单独填写的教学云密码。'}</p><button type="button" onClick={onOpenAccount}>{en ? 'Account settings' : '个人账户设置'}</button></div> : <>
+    {!hasAccount ? <div className="query-grade-status"><p>{en ? 'Save your academic account in Settings first. Assignments use the separate Teaching Cloud password if provided.' : '请先在设置中保存个人账户；作业优先使用单独填写的教学云密码。'}</p><button type="button" className="query-action-button" onClick={onOpenAccount}><Settings2 size={16} aria-hidden="true" />{en ? 'Go to account settings' : '前往个人账户'}</button></div> : <>
       <div className="query-grade-filters">
         <label>{en ? 'Search' : '搜索'}<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={en ? 'Course or title' : '课程或标题'} /></label>
         {assignments && <><label>{en ? 'Course' : '课程'}<select value={course} onChange={e => setCourse(e.target.value)}><option value="">{en ? 'All courses' : '全部课程'}</option>{courses.map(name => <option key={name}>{name}</option>)}</select></label>
@@ -64,5 +64,6 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
       {updated && <small>{en ? 'Updated' : '更新于'} {updated}</small>}
     </>}
     <p className="query-source">{assignments ? (en ? 'Source: university Teaching Cloud. Assignments are queried directly using your saved account and are not uploaded to this app’s server.' : '第三方来源：学校教学云平台。使用已保存账户直接查询，不上传至本应用服务端。') : (en ? 'Source: university academic service. Exam arrangements are also synchronized when refreshing the timetable.' : '第三方来源：学校教务服务。考试安排也会随个人课表一起同步。')} {en ? 'For reference only; confirm against the official platform.' : '显示数据仅供参考，请以学校实际安排为准。'}</p>
+    {assignments ? <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />{en ? 'Open Teaching Cloud' : '打开教学云'}</a> : null}
   </div>
 }

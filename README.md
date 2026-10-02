@@ -34,7 +34,7 @@ Linux 的 `x86_64` 对应普通 Intel/AMD 64 位电脑，`aarch64` 对应 ARM 64
 
 - **课表与空教室：** 个人课表通过移动教务 HTTPS 接口获取并缓存；空教室一次查询西土城与沙河两个校区，可按教学楼和个人空闲节次筛选。课程可仅在本地删除某次排课或本学期整门课，并在设置中恢复；不会向学校退课。[课程管理说明](./docs/course-management-v0.2.9.md)
 - **教学日历：** 日、周、月、年视图展示课程、期末考试和各类 DDL；公历周与教学周并列显示，Apple、Android 和鸿蒙客户端支持导入设备系统日历。月视图日期详情包含课程、云课堂作业、黄历宜忌与活动截止信息。日程可收藏为本地快照，也可接入符合[自定义日程接口规范](./docs/custom-schedule-api.md)的公开 HTTPS JSON 地址。
-- **信息查询：** 独立查询页提供班车、重要事件、成绩、考试和课程作业。班车与重要事件属于公开信息；个人成绩、考试和作业使用学校账号。教学云密码可与教务密码分开保存，未单独设置时使用教务密码。[成绩与考试说明](./docs/academic-query-contract.md)
+- **信息查询：** 独立查询页提供班车、重要事件、成绩、考试和课程作业。从 0.3.2 起，班车除当日班次外还可查看完整的时段、方向和星期时刻表，法定节假日会提示以学校放假安排为准。班车与重要事件属于公开信息；个人成绩、考试和作业使用学校账号。教务密码应使用移动教务密码，可能与统一认证密码不同；可选的教学云密码通常使用统一认证密码，未单独设置时沿用教务密码。[成绩与考试说明](./docs/academic-query-contract.md)
 - **提醒与小组件：** 每日课程摘要默认提醒时间为北京时间 07:30；课前提醒默认提前 10 分钟，可自定义 1–5 次。两类提醒都默认关闭。iOS、macOS、Android 小组件与鸿蒙服务卡片优先显示今日课程，有空间时补充明日课程；Windows/Linux 提供运行时通知，不提供课程小组件。[课前提醒与平台限制](./docs/pre-class-reminders.md)
 - **外观与语言：** 图形客户端支持简体中文和 English，以及多套预设和自定义颜色主题；第三方接口返回的课程、天气、黄历和活动文字保持原文。[主题说明](./docs/color-themes.md)
 
@@ -75,7 +75,7 @@ Android 原生客户端在用户已授权系统日历访问时，可从设备自
 
 校区天气和基础黄历信息来自 [UAPI 天气接口](https://uapis.cn/docs/api-reference/get-misc-weather)与[农历接口](https://uapis.cn/docs/api-reference/get-misc-lunartime)，黄历中的“宜/忌”由 [Timeless API](https://api.timelessq.com/docs/api-15277838)补充。西土城按海淀区行政区划代码查询，沙河按昌平区查询；黄历请求只提交所选日期或由其换算的时间戳和上海时区，不会附带教务凭据、课表或空教室数据。Windows、Linux、iOS、macOS、Android 与 HarmonyOS 图形客户端的天气区域统一为默认折叠卡片，折叠时保留校区与当前天气摘要，展开后显示今日、明日详情和数据来源；设置中可以完全关闭天气或黄历卡片。
 
-学科竞赛、学术会议、期刊专题、夏令营、预推免与黑客松 DDL 的主数据来自 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) 的[公开 JSON](https://nemoyuzx.github.io/contest-ddl/data/competitions.json)，应用下载后仅在本地按所选日期和已开启类别筛选。主源不可用时，支持的平台会尝试固定 HTTPS 备用地址 [`https://where-to-study.cn/api/contest-events`](https://where-to-study.cn/api/contest-events)。独立的[北邮校内竞赛通知 API](https://where-to-study.cn/api/contest-notices)由服务器脚本从学校内部网站的公开通知页提取并整理截止节点，条目链接回云课堂 HTTPS 原文。两条固定接口都只发送不含账号、密码、Cookie、token、课表、教室或作业数据的 HTTPS GET，并拒绝重定向。学科竞赛、学术会议、校内竞赛通知、夏令营和黑客松各有独立的教学日历开关，卡片底部会标明全部第三方来源。
+学科竞赛、学术会议、期刊专题、夏令营、预推免与黑客松 DDL 的主数据来自 [Contest DDL](https://nemoyuzx.github.io/contest-ddl/) 的[公开 JSON](https://nemoyuzx.github.io/contest-ddl/data/competitions.json)。从 0.3.2 起，客户端同时核对[站点镜像 JSON](https://where-to-study.cn/contest-ddl/data/competitions.json)的 `generated_at`，镜像更新时使用镜像，同时间优先 GitHub；两者都不可用时才尝试原[备用 API](https://where-to-study.cn/api/contest-events)。应用取得整表后仅在本地按日期和类别筛选。独立的[校内竞赛通知 API](https://where-to-study.cn/api/contest-notices)由服务器脚本从学校内部网站的公开通知页提取并整理截止节点，条目链接回云课堂 HTTPS 原文。所有这些请求都是不含账号、密码、Cookie、token、课表、教室或作业数据的固定 HTTPS GET，并拒绝重定向；卡片底部列出第三方来源，各日程类别可独立关闭。
 
 ### 班车、自定义日程与课程作业
 

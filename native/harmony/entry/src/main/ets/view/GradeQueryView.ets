@@ -34,9 +34,17 @@ export struct GradeQueryView {
       if (this.model.account.trim().length === 0 || !this.model.canPreserveSavedPassword()) {
         Text(this.model.text('请先在账户设置中保存教务账号和密码。'))
           .fontSize(15).fontColor(AppTheme.secondaryText())
-        Button(this.model.text('前往账户设置'))
-          .height(ControlMetrics.height)
-          .id('query.grades.settings').onClick(() => this.onOpenSettings())
+        Button() {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.gearshape')).fontSize(15).fontColor([AppTheme.primary()])
+            Text(this.model.text('前往个人账户')).fontSize(13).fontColor(AppTheme.primary())
+          }
+        }
+        .type(ButtonType.Normal).height(ControlMetrics.height)
+        .padding({ left: 12, right: 12 }).borderRadius(8)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .accessibilityText(this.model.text('前往个人账户'))
+        .id('query.grades.settings').onClick(() => this.onOpenSettings())
       } else {
         Column({ space: 10 }) {
           Text(this.model.text('学期')).fontSize(13).fontColor(AppTheme.secondaryText())

@@ -24,14 +24,33 @@ export struct AssignmentQueryView {
       Text(this.model.text('直接查询教学云课程作业，按截止时间排序。')).fontSize(13).fontColor(AppTheme.secondaryText())
       if (this.model.account.trim().length === 0 || !this.model.canPreserveSavedPassword()) {
         Text(this.model.text('请先在账户设置中保存教务账号和密码。')).fontSize(15).fontColor(AppTheme.secondaryText())
-        Button(this.model.text('前往账户设置')).height(ControlMetrics.height)
-          .id('query.assignments.settings').onClick(() => this.onOpenSettings())
+        Button() {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.gearshape')).fontSize(15).fontColor([AppTheme.primary()])
+            Text(this.model.text('前往个人账户')).fontSize(13).fontColor(AppTheme.primary())
+          }
+        }
+        .type(ButtonType.Normal).height(ControlMetrics.height)
+        .padding({ left: 12, right: 12 }).borderRadius(8)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .accessibilityText(this.model.text('前往个人账户'))
+        .id('query.assignments.settings').onClick(() => this.onOpenSettings())
       } else {
         Row({ space: 8 }) {
           Button(this.model.text(this.model.assignmentCatalogLoading ? '正在同步云课堂作业…' : '刷新作业'))
             .height(ControlMetrics.height).enabled(!this.model.assignmentCatalogLoading)
             .id('query.assignments.refresh').onClick(() => this.model.loadAssignmentCatalog(true))
-          Button(this.model.text('打开教学云')).height(ControlMetrics.height)
+          Button() {
+            Row({ space: 6 }) {
+              SymbolGlyph($r('sys.symbol.arrow_up_right')).fontSize(15).fontColor([AppTheme.primary()])
+              Text(this.model.text('打开教学云')).fontSize(13).fontColor(AppTheme.primary())
+            }
+          }
+            .type(ButtonType.Normal).height(ControlMetrics.height)
+            .padding({ left: 12, right: 12 }).borderRadius(8)
+            .backgroundColor(AppTheme.surfaceVariant())
+            .accessibilityText(this.model.text('打开教学云'))
+            .id('query.assignments.open-cloud')
             .onClick(() => {
               try { AppContext.get().openLink(CalendarDailyInfoSources.assignments); } catch (e) {}
             })
@@ -93,8 +112,17 @@ export struct ExamQueryView {
       Text(this.model.text('按学期查询教务考试安排。')).fontSize(13).fontColor(AppTheme.secondaryText())
       if (this.model.account.trim().length === 0 || !this.model.canPreserveSavedPassword()) {
         Text(this.model.text('请先在账户设置中保存教务账号和密码。')).fontSize(15).fontColor(AppTheme.secondaryText())
-        Button(this.model.text('前往账户设置')).height(ControlMetrics.height)
-          .id('query.exams.settings').onClick(() => this.onOpenSettings())
+        Button() {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.gearshape')).fontSize(15).fontColor([AppTheme.primary()])
+            Text(this.model.text('前往个人账户')).fontSize(13).fontColor(AppTheme.primary())
+          }
+        }
+        .type(ButtonType.Normal).height(ControlMetrics.height)
+        .padding({ left: 12, right: 12 }).borderRadius(8)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .accessibilityText(this.model.text('前往个人账户'))
+        .id('query.exams.settings').onClick(() => this.onOpenSettings())
       } else {
         if (this.model.examTerms.length > 0) {
           Select(this.termOptions()).height(ControlMetrics.height).width('100%')

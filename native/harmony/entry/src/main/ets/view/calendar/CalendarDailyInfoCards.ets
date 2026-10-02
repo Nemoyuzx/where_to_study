@@ -288,12 +288,6 @@ export struct CalendarDailyInfoCards {
           this.publicDeadlineRow(item)
         }, (item: PublicDeadlineItem) => 'public-deadline.' + this.date() + '.' +
           this.model.favoriteDeadlineKey(item))
-        if (this.deadlineSnapshot() !== null &&
-          (this.deadlineSnapshot() as PublicDeadlineSnapshot).usedBackup) {
-          Text(this.model.text('本次使用备用 API'))
-            .fontSize(11)
-            .fontColor(AppTheme.secondaryText())
-        }
       } else if (this.deadlineSnapshot() !== null) {
           Text(this.model.text('当天暂无已启用类别的 DDL'))
             .fontSize(13)
@@ -316,6 +310,13 @@ export struct CalendarDailyInfoCards {
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       }
+      if (this.deadlineSnapshot() !== null &&
+        (this.deadlineSnapshot() as PublicDeadlineSnapshot).usedBackup) {
+        Text(this.model.text((this.deadlineSnapshot() as PublicDeadlineSnapshot).source ===
+          CalendarDailyInfoSources.deadlineMirror ? '本次使用 Contest DDL 镜像数据' : '本次使用备用 API'))
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+      }
       if (this.showsContestSource() || this.showsSchoolSource()) {
         Row({ space: 10 }) {
           if (this.showsContestSource()) {
@@ -324,6 +325,12 @@ export struct CalendarDailyInfoCards {
               .fontColor(AppTheme.primary())
               .onClick(() => {
                 this.open(CalendarDailyInfoSources.deadlinePrimaryPage);
+              })
+            Text(this.model.text('较新镜像数据'))
+              .fontSize(11)
+              .fontColor(AppTheme.secondaryText())
+              .onClick(() => {
+                this.open(CalendarDailyInfoSources.deadlineMirror);
               })
             Text(this.model.text('备用 API'))
               .fontSize(11)

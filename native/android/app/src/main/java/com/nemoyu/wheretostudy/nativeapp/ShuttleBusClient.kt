@@ -84,6 +84,8 @@ data class TodayShuttlePresentation(
     val noticePublishedAt: String? = null,
 )
 
+internal enum class TimetablePeriodStatus { ACTIVE, UPCOMING, PAST, UNCONFIRMED }
+
 internal object ShuttleBusResponseParser {
     private val weekdays = setOf(
         "monday", "tuesday", "wednesday", "thursday",
@@ -232,8 +234,44 @@ internal object ShuttleBusResponseParser {
 
 internal object ShuttleBusLogic {
     private val shanghai = TimeZone.getTimeZone("Asia/Shanghai")
+    val timetableWeekdays = listOf(
+        "monday" to "周一", "tuesday" to "周二", "wednesday" to "周三",
+        "thursday" to "周四", "friday" to "周五", "saturday" to "周六",
+        "sunday" to "周日",
+    )
 
-    fun today(snapshot: ShuttleBusSnapshot, now: Calendar): TodayShuttlePresentation {
+    fun latestTimetableNotice(snapshot: ShuttleBusSnapshot): ShuttleBusNotice? =
+        snapshot.notices.firstOrNull { notice ->
+            notice.schedules.any { it.parseStatus == "parsed" && it.rows.isNotEmpty() }
+        }
+
+    fun timetableDepartures(schedule: ShuttleBusSchedule, weekday: String): List<TodayShuttleDeparture> =
+        schedule.rows.mapNotNull { row ->
+            row.services[weekday]?.let { TodayShuttleDeparture(row.departureTime, it.vehicle, it.count) }
+        }
+
+    fun isPublicHoliday(snapshot: HolidaysSnapshot?, date: String): Boolean {
+        val year = date.take(4).toIntOrNull() ?: return false
+        val authoritative = snapshot?.takeIf {
+            it.year == year && it.source in setOf(HolidayMetadata.source, HolidayMetadata.fallbackSource)
+        } ?: HolidayOfflineFallback.snapshot(year)
+        val sameDay = authoritative?.items.orEmpty().filter { it.date == date }
+        return sameDay.any { it.type == "holiday" } && sameDay.none { it.type == "workday" }
+    }
+
+    fun periodStatus(period: ShuttleBusPeriod, today: String): TimetablePeriodStatus = when {
+        period.endDate != null && today > period.endDate -> TimetablePeriodStatus.PAST
+        period.startDate != null && today < period.startDate -> TimetablePeriodStatus.UPCOMING
+        period.startDate != null && (period.endDate == null || today <= period.endDate) ->
+            TimetablePeriodStatus.ACTIVE
+        else -> TimetablePeriodStatus.UNCONFIRMED
+    }
+
+    fun today(
+        snapshot: ShuttleBusSnapshot,
+        now: Calendar,
+        isPublicHoliday: Boolean = false,
+    ): TodayShuttlePresentation {
         val localNow = Calendar.getInstance(shanghai).apply { timeInMillis = now.timeInMillis }
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
             timeZone = shanghai
@@ -260,6 +298,7 @@ internal object ShuttleBusLogic {
         val departureCount = routes.sumOf { it.departures.size }
         val vehicleCount = routes.sumOf { route -> route.departures.sumOf { it.count } }
         val status = when {
+            isPublicHoliday -> "法定节假日，班车安排以学校通知为准"
             notice == null -> "未找到当前生效的班车时刻表"
             departureCount == 0 -> "今日暂无已安排班车"
             else -> "今日安排 $departureCount 个发车时刻 · $vehicleCount 辆车"
@@ -278,7 +317,8 @@ internal object ShuttleBusLogic {
             }
         return TodayShuttlePresentation(
             status = status,
-            nextDeparture = next ?: if (departureCount > 0) "今日班车已结束" else null,
+            nextDeparture = if (isPublicHoliday) null else
+                (next ?: if (departureCount > 0) "今日班车已结束" else null),
             noticeTitle = notice?.title,
             noticeURL = notice?.sourceURL,
             stops = notice?.stops.orEmpty(),

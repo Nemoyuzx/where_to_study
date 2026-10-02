@@ -15,6 +15,7 @@ SIGNED_APP="$HARMONY_DIR/build/outputs/default/harmony-default-signed.app"
 printf -v LEGACY_CONTEST_HOST '%s.%s.%s.%s' 101 201 29 29
 CONTEST_API_HOST="where-to-study.cn"
 CONTEST_EVENTS_URL="https://where-to-study.cn/api/contest-events"
+CONTEST_MIRROR_URL="https://where-to-study.cn/contest-ddl/data/competitions.json"
 CONTEST_NOTICES_URL="https://where-to-study.cn/api/contest-notices"
 SHUTTLE_BUS_URL="https://where-to-study.cn/api/shuttle-bus"
 
@@ -110,7 +111,7 @@ if ! unzip -p "$SIGNED_HAP" | stream_contains_fixed_text "$CONTEST_API_HOST"; th
   echo "HarmonyOS HAP is missing the HTTPS contest API host." >&2
   exit 1
 fi
-for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
+for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_MIRROR_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
   if ! unzip -p "$SIGNED_HAP" | stream_contains_fixed_text "$endpoint"; then
     echo "HarmonyOS HAP is missing a required HTTPS public-data endpoint: $endpoint" >&2
     exit 1
@@ -131,7 +132,7 @@ if ! unzip -p "$SIGNED_APP" | stream_contains_fixed_text "$CONTEST_API_HOST"; th
   echo "HarmonyOS APP is missing the HTTPS contest API host." >&2
   exit 1
 fi
-for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
+for endpoint in "$CONTEST_EVENTS_URL" "$CONTEST_MIRROR_URL" "$CONTEST_NOTICES_URL" "$SHUTTLE_BUS_URL"; do
   if ! unzip -p "$SIGNED_APP" | stream_contains_fixed_text "$endpoint"; then
     echo "HarmonyOS APP is missing a required HTTPS public-data endpoint: $endpoint" >&2
     exit 1

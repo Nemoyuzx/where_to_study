@@ -19,6 +19,7 @@ use crate::models::{
 
 const SHUTTLE_URL: &str = "https://where-to-study.cn/api/shuttle-bus";
 const CONTEST_PRIMARY_URL: &str = "https://nemoyuzx.github.io/contest-ddl/data/competitions.json";
+const CONTEST_MIRROR_URL: &str = "https://where-to-study.cn/contest-ddl/data/competitions.json";
 const CONTEST_BACKUP_URL: &str = "https://where-to-study.cn/api/contest-events";
 const SCHOOL_NOTICES_URL: &str = "https://where-to-study.cn/api/contest-notices";
 const SHUTTLE_HOST: &str = "where-to-study.cn";
@@ -26,7 +27,7 @@ const CONTEST_PRIMARY_HOST: &str = "nemoyuzx.github.io";
 const SCHOOL_SOURCE_HOST: &str = "ucloud.bupt.edu.cn";
 const SHUTTLE_SOURCE_HOST: &str = "hq.bupt.edu.cn";
 const MAX_SHUTTLE_BYTES: usize = 512 * 1024;
-const MAX_EVENT_BYTES: usize = 2 * 1024 * 1024;
+const MAX_EVENT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_EVENT_ITEMS: usize = 5_000;
 const CACHE_TTL: Duration = Duration::from_secs(5 * 60);
 const USER_AGENT: &str = concat!("WhereToStudyTerminal/", env!("CARGO_PKG_VERSION"));
@@ -799,17 +800,53 @@ fn parse_school_events(bytes: &[u8]) -> ServiceResult<(Vec<ImportantEventItem>, 
     Ok((items, envelope.generated_at))
 }
 
+fn choose_contest_source<T>(
+    primary: ServiceResult<(T, String)>,
+    mirror: ServiceResult<(T, String)>,
+) -> ServiceResult<(T, &'static str, bool)> {
+    match (primary, mirror) {
+        (Ok((primary_items, primary_at)), Ok((mirror_items, mirror_at))) => {
+            // Both parsers have already validated RFC 3339 timestamps. Compare
+            // instants, not their text representations or the HTTP cache age.
+            let primary_at = DateTime::parse_from_rfc3339(&primary_at)
+                .map_err(|_| ServiceError::new("GitHub 竞赛数据更新时间无效。"))?;
+            let mirror_at = DateTime::parse_from_rfc3339(&mirror_at)
+                .map_err(|_| ServiceError::new("镜像竞赛数据更新时间无效。"))?;
+            if mirror_at > primary_at {
+                Ok((mirror_items, CONTEST_MIRROR_URL, true))
+            } else {
+                Ok((primary_items, CONTEST_PRIMARY_URL, false))
+            }
+        }
+        (Ok((items, _)), Err(_)) => Ok((items, CONTEST_PRIMARY_URL, false)),
+        (Err(_), Ok((items, _))) => Ok((items, CONTEST_MIRROR_URL, true)),
+        (Err(primary_error), Err(mirror_error)) => Err(ServiceError::new(format!(
+            "GitHub 竞赛数据不可用（{}）；站点镜像也不可用（{}）。",
+            primary_error.message, mirror_error.message
+        ))),
+    }
+}
+
 async fn fetch_contest_source() -> ServiceResult<(Vec<ImportantEventItem>, String, bool)> {
-    let primary = fetch_limited(
-        fixed_url(CONTEST_PRIMARY_URL, CONTEST_PRIMARY_HOST)?,
-        MAX_EVENT_BYTES,
-        "公开重要事件",
-    )
-    .await
-    .and_then(|bytes| parse_contest_events(&bytes));
-    match primary {
-        Ok((items, _)) => Ok((items, CONTEST_PRIMARY_URL.to_string(), false)),
-        Err(primary_error) => {
+    let (primary, mirror) = tokio::join!(
+        fetch_limited(
+            fixed_url(CONTEST_PRIMARY_URL, CONTEST_PRIMARY_HOST)?,
+            MAX_EVENT_BYTES,
+            "GitHub 公开重要事件",
+        ),
+        fetch_limited(
+            fixed_url(CONTEST_MIRROR_URL, SHUTTLE_HOST)?,
+            MAX_EVENT_BYTES,
+            "站点镜像公开重要事件",
+        )
+    );
+    let selected = choose_contest_source(
+        primary.and_then(|bytes| parse_contest_events(&bytes)),
+        mirror.and_then(|bytes| parse_contest_events(&bytes)),
+    );
+    match selected {
+        Ok((items, source, used_backup)) => Ok((items, source.to_string(), used_backup)),
+        Err(source_error) => {
             let (items, _) = fetch_limited(
                 fixed_url(CONTEST_BACKUP_URL, SHUTTLE_HOST)?,
                 MAX_EVENT_BYTES,
@@ -819,8 +856,8 @@ async fn fetch_contest_source() -> ServiceResult<(Vec<ImportantEventItem>, Strin
             .and_then(|bytes| parse_contest_events(&bytes))
             .map_err(|backup_error| {
                 ServiceError::new(format!(
-                    "主重要事件源不可用（{}）；备用源也不可用（{}）。",
-                    primary_error.message, backup_error.message
+                    "GitHub 和站点镜像均不可用（{}）；备用 API 也不可用（{}）。",
+                    source_error.message, backup_error.message
                 ))
             })?;
             Ok((items, CONTEST_BACKUP_URL.to_string(), true))
@@ -1245,6 +1282,41 @@ mod tests {
     }
 
     #[test]
+    fn contest_mirror_wins_only_when_its_generation_is_newer() {
+        let primary = || Ok(("github", "2026-10-01T16:00:00+08:00".to_string()));
+        let newer_mirror = || Ok(("mirror", "2026-10-01T08:01:00Z".to_string()));
+        let (value, source, used_backup) =
+            choose_contest_source(primary(), newer_mirror()).unwrap();
+        assert_eq!(
+            (value, source, used_backup),
+            ("mirror", CONTEST_MIRROR_URL, true)
+        );
+
+        let equal_mirror = || Ok(("mirror", "2026-10-01T08:00:00Z".to_string()));
+        let (value, source, used_backup) =
+            choose_contest_source(primary(), equal_mirror()).unwrap();
+        assert_eq!(
+            (value, source, used_backup),
+            ("github", CONTEST_PRIMARY_URL, false)
+        );
+
+        let (value, source, used_backup) =
+            choose_contest_source(primary(), Err(ServiceError::new("镜像暂时不可用"))).unwrap();
+        assert_eq!(
+            (value, source, used_backup),
+            ("github", CONTEST_PRIMARY_URL, false)
+        );
+
+        let (value, source, used_backup) =
+            choose_contest_source(Err(ServiceError::new("GitHub 暂时不可用")), newer_mirror())
+                .unwrap();
+        assert_eq!(
+            (value, source, used_backup),
+            ("mirror", CONTEST_MIRROR_URL, true)
+        );
+    }
+
+    #[test]
     fn event_filter_defaults_to_upcoming_and_sorts_by_deadline() {
         let (mut items, _) = parse_contest_events(&contest_fixture()).unwrap();
         let (school, _) = parse_school_events(&school_fixture()).unwrap();
@@ -1330,6 +1402,12 @@ mod tests {
             Some(SHUTTLE_HOST)
         );
         assert!(!SHUTTLE_URL.contains("www."));
+        assert_eq!(
+            fixed_url(CONTEST_MIRROR_URL, SHUTTLE_HOST)
+                .unwrap()
+                .scheme(),
+            "https"
+        );
         assert_eq!(
             fixed_url(CONTEST_BACKUP_URL, SHUTTLE_HOST)
                 .unwrap()

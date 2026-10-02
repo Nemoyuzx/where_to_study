@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -115,6 +116,7 @@ internal object CalendarDailyInfoSources {
     const val deadlinePrimary =
         "https://nemoyuzx.github.io/contest-ddl/data/competitions.json"
     const val deadlinePrimaryPage = "https://nemoyuzx.github.io/contest-ddl/"
+    const val deadlineMirror = "https://where-to-study.cn/contest-ddl/data/competitions.json"
     const val deadlineBackup = "https://where-to-study.cn/api/contest-events"
     const val schoolContestNotices = "https://where-to-study.cn/api/contest-notices"
     const val shuttleBus = "https://where-to-study.cn/api/shuttle-bus"
@@ -122,6 +124,7 @@ internal object CalendarDailyInfoSources {
         "https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3"
     const val smallPayloadLimit = 128 * 1024
     const val deadlinePayloadLimit = 2 * 1024 * 1024
+    const val contestPayloadLimit = 4 * 1024 * 1024
     const val shuttlePayloadLimit = 8 * 1024 * 1024
 }
 
@@ -390,6 +393,43 @@ internal object PublicDeadlineResponseParser {
     }
 }
 
+internal object ContestFeedMetadata {
+    private val timestamp = Regex(
+        "^(\\d{4}-\\d{2}-\\d{2}T(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d)" +
+            "(?:\\.(\\d+))?(Z|[+-](?:[01]\\d|2[0-3]):[0-5]\\d)$",
+    )
+
+    fun generatedAtMillis(payload: String): Long {
+        val root = try {
+            JSONObject(payload)
+        } catch (error: Exception) {
+            throw DailyInfoClientException("Contest DDL 数据格式不正确。", error)
+        }
+        val records = root.optJSONArray("items")
+        if (root.optString("schema_version") != "1.4" ||
+            root.optString("timezone") != "Asia/Shanghai" ||
+            records == null || records.length() > 5_000
+        ) {
+            throw DailyInfoClientException("Contest DDL 数据结构不正确。")
+        }
+        val parts = timestamp.matchEntire(root.optString("generated_at"))
+            ?: throw DailyInfoClientException("Contest DDL 更新时间格式不正确。")
+        val wholeSecond = parts.groupValues[1] + parts.groupValues[3]
+        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).apply {
+            isLenient = false
+        }
+        val position = ParsePosition(0)
+        val date = format.parse(wholeSecond, position)
+            ?: throw DailyInfoClientException("Contest DDL 更新时间格式不正确。")
+        if (position.index != wholeSecond.length) {
+            throw DailyInfoClientException("Contest DDL 更新时间格式不正确。")
+        }
+        val milliseconds = parts.groupValues[2].padEnd(3, '0').take(3)
+            .toLongOrNull() ?: 0L
+        return date.time + milliseconds
+    }
+}
+
 internal object AssignmentDeadlineResponseParser {
     fun parse(payload: String, requestedDate: String): List<AssignmentDeadlineItem> {
         requireContractDate(requestedDate, "作业")
@@ -462,6 +502,13 @@ class CalendarDailyInfoClient internal constructor(
     private val parseCustomFeed: (String, String) -> ParsedCustomDeadlineFeed =
         CustomDeadlineFeedParser::parse,
 ) {
+    private data class ContestIndexSelection(
+        val itemsByDate: Map<String, List<PublicDeadlineItem>>,
+        val source: String,
+        val usedBackup: Boolean,
+        val generatedAtMillis: Long,
+    )
+
     private data class DeadlineFeed(
         val contestItemsByDate: Map<String, List<PublicDeadlineItem>>?,
         val contestSource: String,
@@ -727,26 +774,38 @@ class CalendarDailyInfoClient internal constructor(
             !forceRemote && (!refreshStaleCache ||
                 nowMillis - it.fetchedAtMillis in 0 until DEADLINE_FEED_CACHE_MILLIS)
         }?.let { return it }
-        val contestResult = runCatching {
-            val payload = fetchPublicJson(
-                URI.create(CalendarDailyInfoSources.deadlinePrimary),
-                "https",
-                "nemoyuzx.github.io",
-                CalendarDailyInfoSources.deadlinePayloadLimit,
-            )
-            Triple(parseContestIndex(payload), CalendarDailyInfoSources.deadlinePrimary, false)
-        }.recoverCatching { primaryError ->
-            try {
+        val primaryResult = runCatching {
+            fetchVersionedContest(CalendarDailyInfoSources.deadlinePrimary, "nemoyuzx.github.io", false)
+        }
+        val mirrorResult = runCatching {
+            fetchVersionedContest(CalendarDailyInfoSources.deadlineMirror, "where-to-study.cn", true)
+        }
+        val contestResult: Result<ContestIndexSelection> = when {
+            primaryResult.isSuccess -> {
+                val primary = primaryResult.getOrThrow()
+                val mirror = mirrorResult.getOrNull()
+                Result.success(
+                    if (mirror != null && mirror.generatedAtMillis > primary.generatedAtMillis) mirror
+                    else primary,
+                )
+            }
+            mirrorResult.isSuccess -> mirrorResult
+            else -> runCatching {
                 val payload = fetchPublicJson(
                     URI.create(CalendarDailyInfoSources.deadlineBackup),
                     "https",
                     "where-to-study.cn",
-                    CalendarDailyInfoSources.deadlinePayloadLimit,
+                    CalendarDailyInfoSources.contestPayloadLimit,
                 )
-                Triple(parseContestIndex(payload), CalendarDailyInfoSources.deadlineBackup, true)
-            } catch (backupError: Exception) {
+                val generatedAtMillis = ContestFeedMetadata.generatedAtMillis(payload)
+                ContestIndexSelection(
+                    parseContestIndex(payload), CalendarDailyInfoSources.deadlineBackup, true,
+                    generatedAtMillis,
+                )
+            }.recoverCatching { backupError ->
                 throw DailyInfoClientException(
-                    "主 DDL 数据源不可用（${primaryError.message}）；" +
+                    "主 DDL 数据源不可用（${primaryResult.exceptionOrNull()?.message}）；" +
+                        "镜像数据源不可用（${mirrorResult.exceptionOrNull()?.message}）；" +
                         "备用数据源也不可用（${backupError.message}）。",
                     backupError,
                 )
@@ -770,14 +829,26 @@ class CalendarDailyInfoClient internal constructor(
         }
         val contest = contestResult.getOrNull()
         return DeadlineFeed(
-            contestItemsByDate = contest?.first,
-            contestSource = contest?.second ?: CalendarDailyInfoSources.deadlinePrimary,
-            contestUsedBackup = contest?.third ?: false,
+            contestItemsByDate = contest?.itemsByDate,
+            contestSource = contest?.source ?: CalendarDailyInfoSources.deadlinePrimary,
+            contestUsedBackup = contest?.usedBackup ?: false,
             contestError = contestResult.exceptionOrNull(),
             schoolItemsByDate = schoolResult.getOrNull(),
             schoolError = schoolResult.exceptionOrNull(),
             fetchedAtMillis = nowMillis,
         ).also { cachedDeadlineFeed = it }
+    }
+
+    private fun fetchVersionedContest(
+        source: String,
+        host: String,
+        usedBackup: Boolean,
+    ): ContestIndexSelection {
+        val payload = fetchPublicJson(
+            URI.create(source), "https", host, CalendarDailyInfoSources.contestPayloadLimit,
+        )
+        val generatedAtMillis = ContestFeedMetadata.generatedAtMillis(payload)
+        return ContestIndexSelection(parseContestIndex(payload), source, usedBackup, generatedAtMillis)
     }
 
     private companion object {

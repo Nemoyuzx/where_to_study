@@ -204,11 +204,7 @@ class QueryCardsVisualUiTest {
                 }.toList()
                 assertEquals(10, tiles.size)
                 val nextTiles = tiles.filter { it.isSelected }
-                val currentTime = SimpleDateFormat("HH:mm", Locale.ROOT).apply {
-                    timeZone = TimeZone.getTimeZone("Asia/Shanghai")
-                }.format(Date())
-                assertEquals("Each direction marks only its next future departure",
-                    if (currentTime < "23:59") 2 else 0, nextTiles.size)
+                assertEquals("A holiday must not advertise a next departure", 0, nextTiles.size)
                 nextTiles.forEach { tile ->
                     val dot = tile.findViewWithTag<View>("information.query.shuttle.next.dot")
                     assertEquals(activity.dp(5), dot.width)
@@ -227,6 +223,39 @@ class QueryCardsVisualUiTest {
             val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "shuttle-alignment")
                 .apply { mkdirs() }
             assertTrue(device.takeScreenshot(File(directory, "$stage-$language-top.png")))
+            val timetableFrame = CountDownLatch(1)
+            scenario.onActivity { activity ->
+                val scroll = activity.findViewById<ScrollView>(R.id.information_query_shuttle_scroll)
+                val timetable = scroll.findViewWithTag<ViewGroup>("information.query.shuttle.full-timetable")
+                val warning = scroll.findViewWithTag<ViewGroup>("information.query.shuttle.holiday.warning")
+                assertNotNull("Full timetable must be present", timetable)
+                assertNotNull("The holiday fixture must show the conditional warning", warning)
+                val routes = descendants(timetable).filterIsInstance<TextView>().count {
+                    it.text.contains('→')
+                }
+                assertEquals("Both directions in both periods must be rendered", 4, routes)
+                val periodMetadata = descendants(timetable).filterIsInstance<TextView>().filter {
+                    it.tag == "information.query.shuttle.full-period.meta"
+                }.map { it.text.toString() }.toList()
+                assertEquals(4, periodMetadata.size)
+                assertTrue(periodMetadata.any { it.contains(todayFromFixture()) &&
+                    it.contains(activity.uiText("当前生效")) })
+                assertTrue(periodMetadata.any { it.contains("2099-01-01") &&
+                    it.contains(activity.uiText("即将生效")) })
+                descendants(timetable).filterIsInstance<TextView>().forEach(::assertTextFits)
+                descendants(warning).filterIsInstance<TextView>().forEach(::assertTextFits)
+                val timetableLocation = IntArray(2).also(timetable::getLocationOnScreen)
+                val scrollLocation = IntArray(2).also(scroll::getLocationOnScreen)
+                val range = (scroll.getChildAt(0).bottom + scroll.paddingBottom - scroll.height)
+                    .coerceAtLeast(0)
+                val target = (scroll.scrollY + timetableLocation[1] - scrollLocation[1])
+                    .coerceIn(0, range)
+                scroll.scrollTo(0, target)
+                scroll.postOnAnimation { scroll.postOnAnimation { timetableFrame.countDown() } }
+            }
+            assertTrue("The timetable scroll frame must be drawn", timetableFrame.await(5, TimeUnit.SECONDS))
+            device.waitForIdle()
+            assertTrue(device.takeScreenshot(File(directory, "$stage-$language-timetable.png")))
             scrollToEndAndWaitForFrame(scenario, R.id.information_query_shuttle_scroll)
             assertTrue(device.takeScreenshot(File(directory, "$stage-$language-bottom.png")))
             scenario.onActivity { activity ->
@@ -243,6 +272,53 @@ class QueryCardsVisualUiTest {
         } finally { closeFixture() }
     }
 
+    @Test
+    fun captureAccountPasswordHintsAndIconButton() = inBothLanguages(phonesOnly = false) { scenario ->
+        scenario.onActivity { activity ->
+            assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
+            activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+        awaitViewInHierarchy(scenario, R.id.page_settings)
+        val stage = InstrumentationRegistry.getArguments().getString("shuttleStage", "phone-light")
+            .replace(Regex("[^a-zA-Z0-9_-]"), "")
+        val language = AppPreferences(context).languageCode
+        val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "shuttle-alignment")
+            .apply { mkdirs() }
+        scenario.onActivity { activity ->
+            val page = activity.findViewById<ScrollView>(R.id.page_settings)
+            val texts = descendants(page).filterIsInstance<TextView>().toList()
+            val academicHint = texts.firstOrNull {
+                it.text.toString().contains(if (language == "en") "mobile academic" else "移动教务登录")
+            }
+            val cloudHint = texts.firstOrNull {
+                it.text.toString().contains(if (language == "en") "unified identity password" else "统一身份认证密码")
+            }
+            val switch = texts.firstOrNull { it.contentDescription == activity.uiText("改用教务密码") }
+            assertNotNull(academicHint)
+            assertNotNull(cloudHint)
+            assertNotNull(switch)
+            assertNotNull("Switch action must have an icon", switch?.compoundDrawablesRelative?.get(0))
+            assertTrue("Switch action must be clickable", switch?.isClickable == true)
+            assertTextFits(checkNotNull(academicHint))
+            assertTextFits(checkNotNull(cloudHint))
+            assertTextFits(checkNotNull(switch))
+        }
+        val device = UiDevice.getInstance(instrumentation)
+        device.waitForIdle()
+        assertTrue(device.takeScreenshot(File(directory, "$stage-$language-account-top.png")))
+        scenario.onActivity { activity ->
+            val scroll = activity.findViewById<ScrollView>(R.id.page_settings)
+            val switch = descendants(scroll).filterIsInstance<TextView>().first {
+                it.contentDescription == activity.uiText("改用教务密码")
+            }
+            val bounds = Rect(0, 0, switch.width, switch.height)
+            (scroll.getChildAt(0) as ViewGroup).offsetDescendantRectToMyCoords(switch, bounds)
+            scroll.scrollTo(0, (bounds.top - scroll.height / 2).coerceAtLeast(0))
+        }
+        device.waitForIdle()
+        assertTrue(device.takeScreenshot(File(directory, "$stage-$language-account-cloud.png")))
+    }
+
     private fun installShuttleVisualFixture(scenario: ActivityScenario<MainActivity>): () -> Unit {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
             timeZone = TimeZone.getTimeZone("Asia/Shanghai")
@@ -252,10 +328,14 @@ class QueryCardsVisualUiTest {
         val rows = listOf("07:00", "08:30", "13:30", "17:30", "23:59").joinToString(",") {
             """{"departure_time":"$it","services":{$services}}"""
         }
-        val schedules = listOf("西土城路校区" to "沙河校区", "沙河校区" to "西土城路校区")
-            .joinToString(",") { (from, to) ->
-                """{"period":{"label":"视觉回归示例","start_date":"$today"},"from":"$from","to":"$to","parse_status":"parsed","rows":[$rows]}"""
+        val schedules = listOf("视觉回归现行时段" to today, "视觉回归后续时段" to "2099-01-01")
+            .flatMap { (period, starts) ->
+                listOf("西土城路校区" to "沙河校区", "沙河校区" to "西土城路校区")
+                    .map { (from, to) ->
+                        """{"period":{"label":"$period","start_date":"$starts"},"from":"$from","to":"$to","parse_status":"parsed","rows":[$rows]}"""
+                    }
             }
+            .joinToString(",")
         val payload = """{"schema_version":"1.0","generated_at":"${today}T00:00:00+08:00","status":"healthy",
             "source":{"name":"示例数据","page_url":"https://hq.bupt.edu.cn/tzgg.htm"},"items":[{
             "id":"visual-only","title":"班车布局视觉回归示例（非真实时刻表）","published_at":"$today",
@@ -274,11 +354,20 @@ class QueryCardsVisualUiTest {
             parent.removeView(original)
             val page = InformationQueryPage(activity, shuttles, events, AppPreferences(activity),
                 (parent.width / activity.resources.displayMetrics.density).toInt(), InformationQuerySessionState(),
-                activity.findViewById<View?>(R.id.phone_navigation) != null, grades, academicSchedules).build()
+                activity.findViewById<View?>(R.id.phone_navigation) != null, grades, academicSchedules,
+                holidaySnapshotForYear = { year -> HolidaysSnapshot(
+                    year, HolidayMetadata.fallbackSource, "2026-10-02T00:00:00+08:00",
+                    listOf(HolidayItem(today, "视觉回归节日", "holiday")),
+                ) }).build()
             parent.addView(page, index, params)
         }
         return { shuttles.close(); events.close(); grades.close(); academicSchedules.close() }
     }
+
+    private fun todayFromFixture(): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+            timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+        }.format(Date())
 
     private fun assertShuttleActionIcons(activity: MainActivity) {
         listOf(

@@ -247,8 +247,9 @@ test('Tauri calendar scheduling uses one conference-aware built-in deadline gate
   )
   assert.match(
     app,
-    /calendarSupplementRevision,\s*builtInDeadlineSourcesActive,[\s\S]*?settingsLoaded,\s*\]\)/,
+    /calendarSupplementRevision,\s*builtInDeadlineSourcesActive,[\s\S]*?settingsLoaded,\s*todayYear,\s*\]\)/,
   )
+  assert.match(app, /targetYear \+ 1, Number\(todayYear\)/)
   assert.match(app, /\{builtInDeadlineSourcesActive\s*\|\| settings\.customDeadlinesEnabled/)
   assert.match(app, /enabledTypes=\{enabledDeadlineTypes\}/)
   assert.match(

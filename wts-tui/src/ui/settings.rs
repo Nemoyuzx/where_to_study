@@ -10,7 +10,7 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(10),
+            Constraint::Length(12),
             Constraint::Min(4),
             Constraint::Length(5),
         ])
@@ -69,7 +69,9 @@ pub fn draw(frame: &mut Frame, area: Rect, app: &mut App, theme: &Theme) {
         Line::from(format!("账号：{account_display}")).style(account_style),
         Line::from(format!("教务密码：{password_display}")).style(password_style),
         Line::from(format!("教学云平台密码（选填）：{cloud_display}")).style(cloud_style),
-        Line::from("同学号，仅作业认证；TUI 暂无作业页，CLI 使用其单独保存的账户。"),
+        Line::from("教务密码用于移动教务登录，可能与统一身份认证密码不同。"),
+        Line::from("部分账号初始密码可能是 8 位出生日期 YYYYMMDD，请以本人实际设置为准。"),
+        Line::from("教学云密码用于课程作业，通常是统一认证密码；选填，不填沿用教务密码。"),
         Line::from(""),
         Line::from(if app.settings_editing {
             "输入模式 · ↑↓/Tab 切换 · Enter 登录 · Esc 结束输入"

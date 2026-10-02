@@ -981,6 +981,53 @@ button:disabled {
   margin-bottom: 12px;
 }
 
+.account-password-hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: -4px 0 10px;
+}
+
+.account-action-button,
+.external-action-button,
+.query-grade-status .query-action-button {
+  align-items: center;
+  background: var(--primary-surface);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  color: var(--primary-text);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 7px;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 12px;
+  text-decoration: none;
+  width: fit-content;
+}
+
+.account-action-button:hover,
+.external-action-button:hover,
+.query-grade-status .query-action-button:hover {
+  background: var(--primary-fill);
+  color: var(--on-primary);
+}
+
+.account-action-button:focus-visible,
+.external-action-button:focus-visible,
+.query-grade-status .query-action-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.account-action-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .calendar-agenda-list {
   display: grid;
   gap: 9px;
@@ -5487,6 +5534,55 @@ input:disabled {
   min-width: 0;
   overflow: hidden;
 }
+
+.shuttle-holiday-notice {
+  align-items: flex-start;
+  background: var(--busy-surface);
+  border: 1px solid var(--busy-border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.shuttle-holiday-notice > svg { color: var(--gold-text); flex: 0 0 auto; margin-top: 2px; }
+.shuttle-holiday-notice p { font-size: 13px; line-height: 1.6; margin: 5px 0; }
+.shuttle-holiday-notice a,
+.shuttle-full-heading a { align-items: center; color: var(--primary-text); display: inline-flex; font-size: 12px; gap: 5px; }
+
+.shuttle-full-timetable {
+  border-top: 1px solid var(--divider);
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding-top: 16px;
+}
+
+.shuttle-full-heading,
+.shuttle-full-period > header { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.shuttle-full-heading h3,
+.shuttle-full-period h4 { margin: 0; }
+.shuttle-full-heading p,
+.shuttle-full-period > header span { color: var(--text-secondary); font-size: 12px; line-height: 1.5; margin: 5px 0 0; }
+.shuttle-full-fallback { background: var(--busy-surface); border-radius: 8px; color: var(--text-secondary); font-size: 12px; line-height: 1.6; margin: 0; padding: 10px 12px; }
+.shuttle-full-period { border: 1px solid var(--border-subtle); border-radius: 10px; display: grid; gap: 12px; min-width: 0; padding: 14px; }
+.shuttle-full-period.active { border-color: var(--primary-border); }
+.shuttle-full-period > header small { background: var(--surface-muted); border-radius: 5px; color: var(--text-secondary); padding: 3px 6px; }
+.shuttle-full-period.active > header small { background: var(--primary-surface); color: var(--primary-text); }
+.shuttle-full-routes { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 720px), 1fr)); min-width: 0; }
+.shuttle-full-route { background: var(--surface-subtle); border: 1px solid var(--border-subtle); border-radius: 8px; min-width: 0; overflow: hidden; }
+.shuttle-full-route > header { display: grid; gap: 5px; padding: 11px 12px; }
+.shuttle-full-route > header span { align-items: center; color: var(--text-secondary); display: flex; font-size: 11px; gap: 4px; }
+.shuttle-full-table-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+.shuttle-full-table-scroll::-webkit-scrollbar { display: none; }
+.shuttle-full-table-scroll:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.shuttle-full-table { border-collapse: collapse; font-size: 12px; min-width: 720px; text-align: center; width: 100%; }
+.shuttle-full-table th,
+.shuttle-full-table td { border-top: 1px solid var(--border-subtle); padding: 9px 8px; white-space: nowrap; }
+.shuttle-full-table thead th { background: var(--surface-muted); color: var(--text-secondary); font-weight: 650; }
+.shuttle-full-table tbody th { color: var(--primary-text); font-variant-numeric: tabular-nums; }
+.shuttle-full-table th:first-child { width: 70px; }
 
 .shuttle-route-list > article > header {
   align-items: center;

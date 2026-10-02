@@ -350,12 +350,14 @@ export class ShuttleBusLogic {
   }
 
   private static activePeriod(periods: ShuttleBusPeriod[], date: string): ShuttleBusPeriod | null {
+    let selected: ShuttleBusPeriod | null = null;
     for (const period of periods) {
-      if (ShuttleBusLogic.periodState(period, date) === ShuttleBusPeriodState.active) {
-        return period;
+      if (ShuttleBusLogic.periodState(period, date) === ShuttleBusPeriodState.active &&
+        (selected === null || (period.startDate ?? '') > (selected.startDate ?? ''))) {
+        selected = period;
       }
     }
-    return null;
+    return selected;
   }
 
   private static shanghaiClockMinutes(): number {
