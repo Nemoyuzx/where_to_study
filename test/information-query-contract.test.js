@@ -122,7 +122,9 @@ test('fixed shuttle clients reject redirects and show only an active timetable',
   assert.match(appleShuttle, /ShuttleBusRedirectDelegate\(\)/)
   assert.match(appleShuttle, /completionHandler\(nil\)/)
   assert.match(appleShuttle, /static func activeSchedules/)
-  assert.match(appleShuttle, /\$0\.period\.contains\(dateString\)/)
+  assert.match(appleShuttle, /selectedSchedules\(from: notice\.schedules, for: dateString\)/)
+  assert.match(appleShuttle, /schedule\.period\.contains\(date\)/)
+  assert.match(appleShuttle, /latestByDirection/)
 
   assert.match(androidShuttle, /FixedPublicJsonTransport::fetch/)
   assert.match(androidShuttle, /未找到当前生效的班车时刻表/)

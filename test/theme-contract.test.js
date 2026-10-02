@@ -596,7 +596,12 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   )
   assert.match(androidAgendaSection, /val indicator = ImageView\(activity\)/)
   assert.match(androidAgendaSection, /setImageResource\(R\.drawable\.ic_chevron_down\)/)
-  assert.match(androidAgendaSection, /TransitionManager\.beginDelayedTransition/)
+  assert.match(androidAgendaSection, /animateDayWeekCourseContent\(/)
+  assert.match(androidAgendaSection, /ValueAnimator\.ofFloat\(0f, 1f\)/)
+  assert.match(androidAgendaSection, /content\.layoutParams\.height =/)
+  assert.match(androidAgendaSection, /agendaExpansionAnimator !== animation/)
+  assert.match(androidAgendaSection, /onViewDetachedFromWindow/)
+  assert.doesNotMatch(androidAgendaSection, /TransitionManager\.beginDelayedTransition/)
   assert.match(androidAgendaSection, /addView\(compactCourseArea\(selectedDay\.date, compact\)\)/)
   assert.ok(
     androidAgendaSection.indexOf('addView(allDayStrip(days, compact))') >

@@ -17,11 +17,10 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.TransitionDrawable
+import android.os.Build
 import android.os.Bundle
 import android.net.Uri
 import android.text.TextUtils
-import android.transition.AutoTransition
-import android.transition.TransitionManager
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -912,6 +911,9 @@ internal class TeachingCalendarPage(
     private var renderedMonthSheetPosition = monthSheetPosition
     private var expandedMonthCellHeightDp = TeachingCalendarLogic.monthCellHeightDp(true)
     private var monthExpansionAnimator: ValueAnimator? = null
+    private var agendaExpansionAnimator: ValueAnimator? = null
+    private var agendaAnimationSection: View? = null
+    private var pendingAgendaRefreshDateKey: String? = null
     private var pendingPageDirection = 0
     private var pendingModeSelectionFrom: Mode? = null
     private var pendingMonthSelectionStartPosition: Float? = null
@@ -1071,8 +1073,17 @@ internal class TeachingCalendarPage(
                 weekDates().mapTo(mutableSetOf()) { contractDate().format(it.time) }
             }
             if (expectedDateKey !in visibleKeys) return@post
-            val oldSection = root.findViewById<LinearLayout?>(R.id.calendar_day_week_agenda)
+            val surface = root.findViewById<ViewGroup?>(R.id.calendar_swipe_surface)
+            val activePage = surface?.takeIf { it.childCount > 0 }
+                ?.getChildAt(surface.childCount - 1) ?: root
+            val oldSection = activePage.findViewById<LinearLayout?>(R.id.calendar_day_week_agenda)
                 ?: return@post
+            // Keep the mounted course viewport intact until its height animation
+            // settles. This refresh is UI-only; data fetching stays in repositories.
+            if (agendaAnimationSection === oldSection && agendaExpansionAnimator?.isRunning == true) {
+                pendingAgendaRefreshDateKey = expectedDateKey
+                return@post
+            }
             val parent = oldSection.parent as? ViewGroup ?: return@post
             val index = parent.indexOfChild(oldSection)
             val layoutParams = oldSection.layoutParams
@@ -1776,26 +1787,11 @@ internal class TeachingCalendarPage(
                 } else {
                     "展开当前日期课程"
                 })
-                indicator.animate().cancel()
-                indicator.animate()
-                    .rotation(if (sessionState.dayWeekAgendaExpanded) 180f else 0f)
-                    .setDuration(TeachingCalendarLogic.agendaAnimationDurationMillis)
-                    .setInterpolator(AccelerateDecelerateInterpolator())
-                    .start()
-                if (courses.isNotEmpty()) {
-                    TransitionManager.beginDelayedTransition(
-                        section,
-                        AutoTransition().apply {
-                            duration = TeachingCalendarLogic.agendaAnimationDurationMillis
-                            interpolator = AccelerateDecelerateInterpolator()
-                        },
-                    )
-                    content.visibility = if (sessionState.dayWeekAgendaExpanded) {
-                        View.VISIBLE
-                    } else {
-                        View.GONE
-                    }
-                }
+                animateDayWeekCourseContent(
+                    section, content, indicator,
+                    expanded = sessionState.dayWeekAgendaExpanded,
+                    hasCourses = courses.isNotEmpty(),
+                )
             }
         }
         section.addView(toggle, LinearLayout.LayoutParams(
@@ -1809,11 +1805,110 @@ internal class TeachingCalendarPage(
             ),
         ))
         section.addView(content)
+        section.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) = Unit
+
+            override fun onViewDetachedFromWindow(view: View) {
+                if (agendaAnimationSection !== section) return
+                val animator = agendaExpansionAnimator
+                agendaExpansionAnimator = null
+                agendaAnimationSection = null
+                pendingAgendaRefreshDateKey = null
+                animator?.cancel()
+            }
+        })
         val hasSupplementaryItems = days.any { supplementaryItemsOn(it.date).isNotEmpty() }
         if (hasSupplementaryItems) {
             section.addView(allDayStrip(days, compact))
         }
         return section
+    }
+
+    private fun animateDayWeekCourseContent(
+        section: LinearLayout,
+        content: LinearLayout,
+        indicator: ImageView,
+        expanded: Boolean,
+        hasCourses: Boolean,
+    ) {
+        // Clear ownership before cancellation so a previous onEnd cannot settle
+        // the new target. Reversals start at the last rendered/requested height.
+        val previous = agendaExpansionAnimator
+        agendaExpansionAnimator = null
+        agendaAnimationSection = null
+        previous?.cancel()
+        indicator.animate().cancel()
+        val startHeight = if (content.visibility == View.VISIBLE) {
+            content.layoutParams.height.takeIf { it >= 0 } ?: content.height
+        } else 0
+        val startAlpha = if (content.visibility == View.VISIBLE) content.alpha else 0f
+        val startRotation = indicator.rotation
+        val showContent = hasCourses && expanded
+        val targetRotation = if (expanded) 180f else 0f
+        val width = section.width - section.paddingLeft - section.paddingRight
+        if (hasCourses && width > 0) {
+            content.measure(
+                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            )
+        }
+        val targetHeight = if (showContent) content.measuredHeight else 0
+
+        fun settle() {
+            content.visibility = if (showContent) View.VISIBLE else View.GONE
+            content.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            content.alpha = 1f
+            content.requestLayout()
+            indicator.rotation = targetRotation
+        }
+
+        fun refreshPending() {
+            val pendingKey = pendingAgendaRefreshDateKey
+            pendingAgendaRefreshDateKey = null
+            if (section.isAttachedToWindow && pendingKey != null) {
+                refreshDayWeekAgendaInPlace(pendingKey)
+            }
+        }
+
+        if (!section.isAttachedToWindow || width <= 0 ||
+            (Build.VERSION.SDK_INT >= 26 && !ValueAnimator.areAnimatorsEnabled())
+        ) {
+            settle()
+            refreshPending()
+            return
+        }
+        if (hasCourses) {
+            content.layoutParams.height = startHeight
+            content.alpha = startAlpha
+            content.visibility = View.VISIBLE
+            content.requestLayout()
+        }
+        val animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = TeachingCalendarLogic.agendaAnimationDurationMillis
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animation ->
+                val progress = animation.animatedValue as Float
+                if (hasCourses) {
+                    content.layoutParams.height =
+                        (startHeight + (targetHeight - startHeight) * progress).roundToInt()
+                    content.alpha = startAlpha + ((if (showContent) 1f else 0f) - startAlpha) * progress
+                    content.requestLayout()
+                }
+                indicator.rotation = startRotation + (targetRotation - startRotation) * progress
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (agendaExpansionAnimator !== animation) return
+                    agendaExpansionAnimator = null
+                    agendaAnimationSection = null
+                    settle()
+                    refreshPending()
+                }
+            })
+        }
+        agendaExpansionAnimator = animator
+        agendaAnimationSection = section
+        animator.start()
     }
 
     private fun compactCourseArea(day: Calendar, compact: Boolean): LinearLayout =

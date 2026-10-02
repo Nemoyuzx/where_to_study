@@ -1,5 +1,6 @@
 package com.nemoyu.wheretostudy.nativeapp
 
+import android.animation.ValueAnimator
 import android.app.NotificationManager
 import android.app.job.JobScheduler
 import android.content.Context
@@ -9,11 +10,14 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.graphics.drawable.TransitionDrawable
+import android.os.Build
+import android.os.Environment
 import android.os.SystemClock
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.HorizontalScrollView
 import android.widget.ImageView
@@ -38,15 +42,99 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.text.SimpleDateFormat
+import java.io.File
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 @RunWith(AndroidJUnit4::class)
 class MainNavigationSmokeTest {
     @Before
     fun acceptPrivacyConsent() = ensurePrivacyConsentForUiTest()
+
+    private data class AgendaAnimationFrame(
+        val contentHeight: Int,
+        val requestedHeight: Int,
+        val contentVisibility: Int,
+        val contentAlpha: Float,
+        val indicatorRotation: Float,
+        val timelineTop: Int,
+        val headerHeight: Int,
+    )
+
+    private fun agendaAnimationFrame(activity: MainActivity): AgendaAnimationFrame {
+        val content = activity.findViewById<View>(R.id.calendar_day_week_agenda_content)
+        val indicator = activity.findViewById<ImageView>(R.id.calendar_day_week_agenda_indicator)
+        val header = activity.findViewById<View>(R.id.calendar_day_week_agenda_toggle)
+        val timeline = activity.findViewById<View>(R.id.calendar_timeline_scroll)
+        return AgendaAnimationFrame(
+            contentHeight = content.height,
+            requestedHeight = content.layoutParams.height,
+            contentVisibility = content.visibility,
+            contentAlpha = content.alpha,
+            indicatorRotation = indicator.rotation,
+            timelineTop = timeline.top,
+            headerHeight = header.height,
+        )
+    }
+
+    private fun clickAndSampleAgenda(
+        scenario: ActivityScenario<MainActivity>,
+        afterSample: (MainActivity, AgendaAnimationFrame) -> Unit = { _, _ -> },
+    ): AgendaAnimationFrame {
+        val sampled = arrayOfNulls<AgendaAnimationFrame>(1)
+        val callbackError = arrayOfNulls<Throwable>(1)
+        val done = CountDownLatch(1)
+        scenario.onActivity { activity ->
+            val toggle = activity.findViewById<View>(R.id.calendar_day_week_agenda_toggle)
+            assertTrue(toggle.performClick())
+            toggle.postOnAnimationDelayed({
+                try {
+                    sampled[0] = agendaAnimationFrame(activity)
+                    afterSample(activity, checkNotNull(sampled[0]))
+                } catch (error: Throwable) {
+                    callbackError[0] = error
+                } finally {
+                    done.countDown()
+                }
+            }, 80L)
+        }
+        assertTrue("A rendered agenda animation frame must arrive", done.await(3, TimeUnit.SECONDS))
+        callbackError[0]?.let { throw AssertionError("Agenda frame callback failed", it) }
+        return checkNotNull(sampled[0])
+    }
+
+    private fun setAnimatorScale(device: UiDevice, value: String) {
+        device.executeShellCommand("settings put global animator_duration_scale $value")
+    }
+
+    private fun restoreAnimatorScale(device: UiDevice, original: String) {
+        if (original.matches(Regex("^[0-9]+(?:\\.[0-9]+)?$"))) {
+            setAnimatorScale(device, original)
+        } else {
+            device.executeShellCommand("settings delete global animator_duration_scale")
+        }
+    }
+
+    private fun awaitAnimatorEnabled(scenario: ActivityScenario<MainActivity>, expected: Boolean) {
+        if (Build.VERSION.SDK_INT < 26) return
+        val deadline = SystemClock.elapsedRealtime() + 2_000L
+        var actual = !expected
+        while (actual != expected && SystemClock.elapsedRealtime() < deadline) {
+            scenario.onActivity { actual = ValueAnimator.areAnimatorsEnabled() }
+            if (actual != expected) SystemClock.sleep(30L)
+        }
+        assertEquals("Animator duration setting must reach the app process", expected, actual)
+    }
+
+    private fun saveAgendaScreenshot(device: UiDevice, context: Context, name: String) {
+        val directory = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            "week-agenda-animation").apply { mkdirs() }
+        assertTrue(device.takeScreenshot(File(directory, name)))
+    }
 
     @Test
     fun appTypographyFontScaleAppliesToActivityAndSpText() {
@@ -690,6 +778,228 @@ class MainNavigationSmokeTest {
     }
 
     @Test
+    fun dayAndWeekCourseSummaryAnimateActualHeightAndReverseFromMidFrame() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        val originalScale = device.executeShellCommand("settings get global animator_duration_scale").trim()
+        val scheduleStore = ScheduleStore(context)
+        val previousSchedule = runCatching(scheduleStore::load).getOrNull()
+        scheduleStore.save(dayWeekAgendaTestSchedule())
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        setAnimatorScale(device, "1")
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                }
+                awaitAnimatorEnabled(scenario, expected = true)
+                for ((name, modeID) in listOf(
+                    "week" to R.id.calendar_mode_week,
+                    "day" to R.id.calendar_mode_day,
+                )) {
+                    scenario.onActivity { activity ->
+                        assertTrue(activity.findViewById<View>(modeID).performClick())
+                    }
+                    SystemClock.sleep(TeachingCalendarLogic.pageAnimationDurationMillis + 80L)
+                    instrumentation.waitForIdleSync()
+                    lateinit var expanded: AgendaAnimationFrame
+                    scenario.onActivity { activity -> expanded = agendaAnimationFrame(activity) }
+                    assertTrue("$name fixture needs visible course rows", expanded.contentHeight > 0)
+                    assertEquals(View.VISIBLE, expanded.contentVisibility)
+                    assertEquals(180f, expanded.indicatorRotation, 0.5f)
+                    saveAgendaScreenshot(device, context, "$name-expanded.png")
+
+                    val collapsing = clickAndSampleAgenda(scenario)
+                    assertTrue("$name collapse must have an actual intermediate height",
+                        collapsing.contentHeight in 1 until expanded.contentHeight)
+                    assertTrue("$name collapse opacity must be in flight",
+                        collapsing.contentAlpha > 0f && collapsing.contentAlpha < 1f)
+                    assertTrue("$name chevron must rotate before settling",
+                        collapsing.indicatorRotation > 0f && collapsing.indicatorRotation < 180f)
+                    SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
+                    instrumentation.waitForIdleSync()
+                    lateinit var collapsed: AgendaAnimationFrame
+                    scenario.onActivity { activity -> collapsed = agendaAnimationFrame(activity) }
+                    assertEquals(View.GONE, collapsed.contentVisibility)
+                    assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, collapsed.requestedHeight)
+                    assertEquals(0f, collapsed.indicatorRotation, 0.5f)
+                    assertEquals(expanded.headerHeight, collapsed.headerHeight)
+                    assertTrue("$name timeline must move with course height",
+                        collapsed.timelineTop < collapsing.timelineTop &&
+                            collapsing.timelineTop < expanded.timelineTop)
+                    saveAgendaScreenshot(device, context, "$name-collapsed.png")
+
+                    val expanding = clickAndSampleAgenda(scenario)
+                    assertTrue("$name expansion must have an actual intermediate height",
+                        expanding.contentHeight in 1 until expanded.contentHeight)
+                    assertTrue("$name expansion opacity must be in flight",
+                        expanding.contentAlpha > 0f && expanding.contentAlpha < 1f)
+                    assertTrue("$name chevron must rotate before settling",
+                        expanding.indicatorRotation > 0f && expanding.indicatorRotation < 180f)
+                    assertTrue("$name timeline must move during expansion",
+                        collapsed.timelineTop < expanding.timelineTop &&
+                            expanding.timelineTop < expanded.timelineTop)
+                    SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
+                    instrumentation.waitForIdleSync()
+                    scenario.onActivity { activity ->
+                        val settled = agendaAnimationFrame(activity)
+                        assertEquals(View.VISIBLE, settled.contentVisibility)
+                        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, settled.requestedHeight)
+                        assertEquals(expanded.contentHeight, settled.contentHeight)
+                        assertEquals(expanded.timelineTop, settled.timelineTop)
+                        assertEquals(180f, settled.indicatorRotation, 0.5f)
+                    }
+
+                    var reverseStartHeight = -1
+                    val reversing = clickAndSampleAgenda(scenario) { activity, _ ->
+                        assertTrue(activity.findViewById<View>(R.id.calendar_day_week_agenda_toggle)
+                            .performClick())
+                        reverseStartHeight = agendaAnimationFrame(activity).requestedHeight
+                    }
+                    assertTrue(reversing.contentHeight in 1 until expanded.contentHeight)
+                    assertEquals("$name reverse must start from current requested height",
+                        reversing.requestedHeight, reverseStartHeight)
+                    SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
+                    instrumentation.waitForIdleSync()
+                    scenario.onActivity { activity ->
+                        val settled = agendaAnimationFrame(activity)
+                        assertEquals(View.VISIBLE, settled.contentVisibility)
+                        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, settled.requestedHeight)
+                        assertEquals(expanded.contentHeight, settled.contentHeight)
+                        assertEquals(180f, settled.indicatorRotation, 0.5f)
+                    }
+                }
+            }
+        } finally {
+            restoreAnimatorScale(device, originalScale)
+            if (previousSchedule == null) scheduleStore.clear() else scheduleStore.save(previousSchedule)
+        }
+    }
+
+    @Test
+    fun dayWeekCourseSummaryCancelsOnDateAndPageChangesAndSettlesWithoutAnimation() {
+        clearCredentialRecord()
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        val originalScale = device.executeShellCommand("settings get global animator_duration_scale").trim()
+        val scheduleStore = ScheduleStore(context)
+        val previousSchedule = runCatching(scheduleStore::load).getOrNull()
+        scheduleStore.save(dayWeekAgendaTestSchedule())
+        val launchIntent = Intent(context, MainActivity::class.java)
+            .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)
+
+        setAnimatorScale(device, "1")
+        try {
+            ActivityScenario.launch<MainActivity>(launchIntent).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                    assertTrue(activity.findViewById<View>(R.id.calendar_mode_week).performClick())
+                }
+                awaitAnimatorEnabled(scenario, expected = true)
+                SystemClock.sleep(TeachingCalendarLogic.pageAnimationDurationMillis + 80L)
+                instrumentation.waitForIdleSync()
+                lateinit var selectedCourseDay: String
+                lateinit var initial: AgendaAnimationFrame
+                scenario.onActivity { activity ->
+                    selectedCourseDay = courseSummaryTitle(activity)
+                    initial = agendaAnimationFrame(activity)
+                    assertTrue(initial.contentHeight > 0)
+                }
+
+                val interruptedByDate = clickAndSampleAgenda(scenario) { activity, _ ->
+                    val dates = activity.findViewById<ViewGroup>(R.id.calendar_date_strip)
+                    val emptyDate = (0 until dates.childCount).map(dates::getChildAt).first { candidate ->
+                        candidate.id != R.id.calendar_week_number &&
+                            candidate.contentDescription?.toString() != selectedCourseDay
+                    }
+                    assertTrue(emptyDate.performClick())
+                }
+                assertTrue(interruptedByDate.contentHeight in 1 until initial.contentHeight)
+                SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
+                instrumentation.waitForIdleSync()
+                lateinit var empty: AgendaAnimationFrame
+                scenario.onActivity { activity ->
+                    empty = agendaAnimationFrame(activity)
+                    assertNull(activity.findViewById<View?>(R.id.calendar_day_week_course_area))
+                    assertEquals(View.GONE, empty.contentVisibility)
+                    assertEquals(0, empty.contentHeight)
+                    assertEquals(0f, empty.indicatorRotation, 0.5f)
+                    assertEquals(initial.headerHeight, empty.headerHeight)
+                }
+                saveAgendaScreenshot(device, context, "week-empty-date.png")
+
+                val emptyMid = clickAndSampleAgenda(scenario)
+                assertEquals("An empty day must not animate phantom content", 0, emptyMid.contentHeight)
+                assertTrue(emptyMid.indicatorRotation > 0f && emptyMid.indicatorRotation < 180f)
+                SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val settled = agendaAnimationFrame(activity)
+                    assertEquals(View.GONE, settled.contentVisibility)
+                    assertEquals(empty.timelineTop, settled.timelineTop)
+                    assertEquals(empty.headerHeight, settled.headerHeight)
+                    assertEquals(180f, settled.indicatorRotation, 0.5f)
+                    val dates = activity.findViewById<ViewGroup>(R.id.calendar_date_strip)
+                    val courseDate = (0 until dates.childCount).map(dates::getChildAt).first {
+                        it.contentDescription?.toString() == selectedCourseDay
+                    }
+                    assertTrue(courseDate.performClick())
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertEquals(View.VISIBLE,
+                        activity.findViewById<View>(R.id.calendar_day_week_agenda_content).visibility)
+                }
+
+                val interruptedByNavigation = clickAndSampleAgenda(scenario) { activity, _ ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_settings).performClick())
+                }
+                assertTrue(interruptedByNavigation.contentHeight in 1 until initial.contentHeight)
+                SystemClock.sleep(TeachingCalendarLogic.agendaAnimationDurationMillis + 80L)
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    assertTrue(activity.findViewById<View>(R.id.navigation_calendar).performClick())
+                }
+                instrumentation.waitForIdleSync()
+                scenario.onActivity { activity ->
+                    val returned = agendaAnimationFrame(activity)
+                    assertEquals(View.GONE, returned.contentVisibility)
+                    assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, returned.requestedHeight)
+                    assertEquals(0f, returned.indicatorRotation, 0.5f)
+                    assertEquals(initial.headerHeight, returned.headerHeight)
+                }
+
+                setAnimatorScale(device, "0")
+                awaitAnimatorEnabled(scenario, expected = false)
+                scenario.onActivity { activity ->
+                    val toggle = activity.findViewById<View>(R.id.calendar_day_week_agenda_toggle)
+                    assertTrue(toggle.performClick())
+                    val expanded = agendaAnimationFrame(activity)
+                    assertEquals(View.VISIBLE, expanded.contentVisibility)
+                    assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, expanded.requestedHeight)
+                    assertEquals(180f, expanded.indicatorRotation, 0.5f)
+                    assertTrue(toggle.performClick())
+                    val collapsed = agendaAnimationFrame(activity)
+                    assertEquals(View.GONE, collapsed.contentVisibility)
+                    assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, collapsed.requestedHeight)
+                    assertEquals(0f, collapsed.indicatorRotation, 0.5f)
+                }
+                saveAgendaScreenshot(device, context, "week-reduced-motion-collapsed.png")
+            }
+        } finally {
+            restoreAnimatorScale(device, originalScale)
+            if (previousSchedule == null) scheduleStore.clear() else scheduleStore.save(previousSchedule)
+        }
+    }
+
+    @Test
     fun android025CourseSummaryAndSettingsControlsUseNativeAnimatedGeometry() {
         clearCredentialRecord()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -743,7 +1053,9 @@ class MainNavigationSmokeTest {
                 scenario.onActivity { activity ->
                     val settings = activity.findViewById<ScrollView>(R.id.page_settings)
                     assertFalse(containsSpinner(settings))
-                    assertEquals(12, countSwitches(settings))
+                    // The independently configurable pre-class reminder adds
+                    // a native switch alongside the daily summary control.
+                    assertEquals(13, countSwitches(settings))
                     listOf(
                         R.id.settings_language_selector,
                         R.id.settings_campus_selector,
@@ -2090,7 +2402,9 @@ class MainNavigationSmokeTest {
             )
         }
         return ScheduleSnapshot(
-            termID = "day-week-ui-test",
+            // Production correctly rejects a foreign/invalid automatic-term
+            // cache; keep this current-date fixture in the real term namespace.
+            termID = SemesterLogic.suggestTermForDate(selectedDate).termId,
             termStartDate = formatter.format(weekStart.time),
             fetchedAt = "2026-08-24T00:00:00+08:00",
             courses = courses,
