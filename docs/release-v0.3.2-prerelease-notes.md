@@ -1,6 +1,8 @@
 # Where To Study v0.3.2-prerelease
 
-这是 0.3.2 预发布版，用于测试竞赛数据备份、账户说明与班车完整时刻表。GitHub 最新正式版仍为 0.3.1。
+这是 0.3.2 预发布版，用于测试竞赛备份、完整班车时刻表，以及最新的动画、隐私弹窗和语言切换修复。GitHub 最新正式版仍为 0.3.1。
+
+当前 GitHub 预发布仍为草稿：Windows／Linux 等构建因账户账单锁定尚未运行，完整安装包未公开。请不要把旧构建当作包含全部修复的新版本。
 
 ## 本次更新
 
@@ -12,12 +14,16 @@
 - 班车查询在当日班次下增加完整时刻表，按运行时段、方向、周一至周日展示已解析班次。历史、未来和当前时段分别标注；最新通知未解析时明确显示上一份时刻表仅供对照。
 - 法定节假日显示班车提醒，普通节日名称和调休上班日不会误触发；假日当天不再强调计划表中的“下一班”。实际运行请以学校通知与放假安排为准。
 - 合入并修复依赖 PR #66、#70、#71；同步第三方许可证，避免引入已撤回的 `yoke-derive` 版本。
+- 修复日／周课程摘要、月／年视图及跨平台切换的动画与迟到回调；减少 Apple 隐私页出现前的准备工作，保留原生呈现动画。
+- 设置弹窗、收藏长列表与未保存草稿使用稳定的页面所有者；收藏按批次展示，离页后取消旧任务。
+- 切换中英界面时保留当前位置、输入草稿、查询筛选和已加载数据；修复导航条测量及鸿蒙局部文字刷新，原始 API 内容不自动翻译。
+- 语言变化不触发额外登录或课表获取；公开班车快照复用有界缓存，过期或手动刷新仍会正常获取。
 
 ## 安装与渠道
 
-包内版本为 **0.3.2**：Android build **59**、Apple build **100**、HarmonyOS versionCode **1002036**。构建、测试与上传状态见[工程记录](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.2-prerelease.md)。
+包内版本为 **0.3.2**：Android build **60**、Apple build **101**、HarmonyOS versionCode **1002037**。构建、测试与上传状态见[工程记录](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.2-prerelease.md)。
 
-GitHub 预发布提供 Windows 安装程序、Linux x86_64/arm64 的 DEB 与 AppImage、CLI/TUI、Android Universal APK 与原生 macOS Universal DMG。Apple 和鸿蒙测试渠道的可安装状态以实际上传回执及渠道页面为准。
+公开前计划补齐 Windows 安装程序、Linux x86_64/arm64 的 DEB 与 AppImage、CLI/TUI、Android Universal APK 与原生 macOS Universal DMG。当前草稿附件和未完成项以工程记录为准。Apple 与鸿蒙测试上传不等于已经对所有测试者可安装；本轮不提交正式商店审核。
 
 ## English
 
@@ -26,5 +32,7 @@ GitHub 预发布提供 Windows 安装程序、Linux x86_64/arm64 的 DEB 与 App
 - Clarified Mobile Academic Services versus Teaching Cloud passwords and added accessible icon buttons for account and cloud actions.
 - Added full shuttle timetables by operating period, direction, and weekday, with statutory-holiday notices and clear historical/fallback labels.
 - Updated reviewed dependencies and their bundled license notices.
+- Preserved scroll anchors, unsaved drafts, query filters and cached data across language changes, without extra authentication or schedule requests.
+- Fixed animation lifecycles, privacy-sheet preparation, native tab geometry and incremental favorites rendering.
 
-**This is a pre-release. 0.3.1 remains the stable GitHub version.** See the [build and upload record](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.2-prerelease.md) for channel completion.
+**The GitHub pre-release is still a draft while Windows/Linux builds are blocked by an account billing lock. 0.3.1 remains the stable version.** See the [build and upload record](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.2-prerelease.md) for the actual channel and asset status.

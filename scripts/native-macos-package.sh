@@ -47,6 +47,7 @@ CONFIGURED_BUILD="$(sed -n 's/^[[:space:]]*CURRENT_PROJECT_VERSION: "\([^"]*\)"/
 
 "$ROOT_DIR/scripts/native-apple-generate.sh"
 xcodebuild \
+  -jobs "${NATIVE_BUILD_JOBS:-2}" \
   -project "$PROJECT" \
   -scheme WhereToStudyMac \
   -configuration Release \

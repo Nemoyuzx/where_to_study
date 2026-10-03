@@ -396,7 +396,7 @@ archive_platform() {
   rm -rf "$archive" "$platform_derived"
   mkdir -p "$(dirname "$archive")"
 
-  command=(xcodebuild)
+  command=(xcodebuild -jobs "${NATIVE_BUILD_JOBS:-2}")
   if (( auth_value_count == 3 )); then
     command+=("${AUTH_ARGUMENTS[@]}")
   fi
@@ -527,7 +527,7 @@ export_or_upload_platform() {
   mkdir -p "$export_dir"
   write_export_options "$destination" "$export_options" "$platform"
 
-  command=(xcodebuild)
+  command=(xcodebuild -jobs "${NATIVE_BUILD_JOBS:-2}")
   if (( auth_value_count == 3 )); then
     command+=("${AUTH_ARGUMENTS[@]}")
   fi

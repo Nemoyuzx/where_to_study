@@ -28,7 +28,7 @@ android {
         applicationId = "com.nemoyu.wheretostudy.nativeapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 59
+        versionCode = 60
         versionName = "0.3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

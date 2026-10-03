@@ -86,9 +86,10 @@ verify_packed_version() {
 
 cd "$HARMONY_DIR"
 "$OHPM" install
-"$HVIGOR" assembleHap -p buildMode=release
-"$HVIGOR" test --mode module -p module=entry -p buildMode=test
-"$HVIGOR" assembleApp -p buildMode=release
+HVIGOR_RELEASE_OPTIONS=(--no-daemon --no-parallel --max-old-space-size=2048 --optimization-strategy=memory)
+"$HVIGOR" assembleHap -p buildMode=release "${HVIGOR_RELEASE_OPTIONS[@]}"
+"$HVIGOR" test --mode module -p module=entry -p buildMode=test "${HVIGOR_RELEASE_OPTIONS[@]}"
+"$HVIGOR" assembleApp -p buildMode=release "${HVIGOR_RELEASE_OPTIONS[@]}"
 
 if [[ ! -f "$TEST_RESULT" ]] || ! grep -Eq 'Tests run: [0-9]+, Failure: 0, Error: 0' "$TEST_RESULT"; then
   echo "HarmonyOS unit-test report is missing or contains failures: $TEST_RESULT" >&2

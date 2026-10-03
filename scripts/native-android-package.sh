@@ -29,11 +29,6 @@ fi
 CONFIGURED_VERSION="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' "$ANDROID_DIR/app/build.gradle.kts" | head -n 1)"
 CONFIGURED_BUILD="$(sed -n 's/.*versionCode = \([0-9][0-9]*\).*/\1/p' "$ANDROID_DIR/app/build.gradle.kts" | head -n 1)"
 
-cleanup() {
-  "$ANDROID_DIR/gradlew" --project-dir "$ANDROID_DIR" --stop >/dev/null 2>&1 || true
-}
-trap cleanup EXIT INT TERM
-
 read_property() {
   local key="$1"
   sed -n "s/^${key}=//p" "$PROPERTIES_PATH" | tail -n 1
@@ -114,6 +109,7 @@ fi
 
 "$ANDROID_DIR/gradlew" \
   --project-dir "$ANDROID_DIR" \
+  --no-daemon --no-parallel --max-workers="${NATIVE_BUILD_JOBS:-2}" \
   testReleaseUnitTest lintRelease assembleRelease bundleRelease
 
 SIGNED_APK="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
