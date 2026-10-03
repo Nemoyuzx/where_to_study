@@ -6,6 +6,34 @@ import XCTest
 
 @MainActor
 final class ColorThemeMacRenderingTests: XCTestCase {
+    func testPrivacySheetUsesStableHostAcrossWindowResizingAndThemes() async throws {
+        for preset in [ColorThemePreset.default, .rose] {
+            let presentation = PrivacyPolicyPresentation()
+            let host = NSHostingView(rootView: Color.clear
+                .background { PrivacyPolicyPresentationHost(presentation: presentation) }
+                .environment(\.appTheme, AppTheme(configuration: .default.selecting(preset)))
+                .environment(\.locale, AppLanguage.english.locale))
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 680, height: 720),
+                                  styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.contentView = host
+            window.orderFront(nil)
+            defer { window.close() }
+            presentation.isPresented = true
+            try await Task.sleep(for: .milliseconds(500))
+            XCTAssertNotNil(window.attachedSheet)
+            for width in [1100.0, 640.0] {
+                window.setContentSize(CGSize(width: width, height: 720))
+                try await Task.sleep(for: .milliseconds(150))
+                XCTAssertTrue(presentation.isPresented)
+                XCTAssertNotNil(window.attachedSheet)
+            }
+            presentation.isPresented = false
+            try await Task.sleep(for: .milliseconds(500))
+            XCTAssertNil(window.attachedSheet)
+        }
+    }
+
     func testRootCanvasTracksPresetCustomAndAppearanceWithoutReplacingThePage() async throws {
         let suite = "SurfaceThemeRootTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

@@ -11,7 +11,7 @@ struct PrivacyPolicyView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("WHERE TO STUDY")
                             .font(.caption.bold())
@@ -24,6 +24,15 @@ struct PrivacyPolicyView: View {
                             .font(.callout)
                             .foregroundStyle(theme.secondaryText)
                     }
+
+                    #if os(iOS) && DEBUG
+                    if PrivacyPolicyPresentationTiming.isEnabled {
+                        MobileDetailPresentationProbe(
+                            metricsLabel: "Privacy policy presentation metrics",
+                            requestedAt: { PrivacyPolicyPresentationTiming.requestedAt }
+                        ).frame(width: 48, height: 10)
+                    }
+                    #endif
 
                     Text("Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由学校运营，也不代表学校官方立场。\n\nWhere To Study is an independent, unofficial client for BUPT schedules, empty classrooms, and related study information. It is not operated by or affiliated with BUPT.")
                         .foregroundStyle(theme.text)
@@ -96,15 +105,73 @@ struct PrivacyPolicyView: View {
     }
 
     private func privacySection(title: String, body: String) -> some View {
+        PrivacyPolicySection(title: title, content: body)
+    }
+}
+
+// A separate body keeps text shaping and theme resolution lazy as well as the
+// section's layout; creating the scroll container does not measure every block.
+private struct PrivacyPolicySection: View {
+    @Environment(\.appTheme) private var theme
+    let title: String
+    let content: String
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
             Text(title)
                 .font(.headline)
                 .foregroundStyle(theme.text)
-            Text(body)
+            Text(content)
                 .font(.callout)
                 .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+// The stable screen owns the reference without observing its publications.
+// Only the small presentation host observes changes, so neither the Settings
+// body nor its widget previews need to update when the sheet opens/closes.
+@MainActor
+final class PrivacyPolicyPresentation: ObservableObject {
+    @Published var isPresented = false
+}
+
+struct PrivacyPolicyPresentationHost: View {
+    @ObservedObject var presentation: PrivacyPolicyPresentation
+
+    var body: some View {
+        Color.clear
+            .sheet(isPresented: $presentation.isPresented) {
+                PrivacyPolicyView().buttonStyle(.automatic)
+            }
+    }
+}
+
+struct PrivacyPolicyButton<LabelContent: View>: View {
+    private let presentation: PrivacyPolicyPresentation
+    private let beforePresent: @MainActor () -> Void
+    private let label: LabelContent
+
+    init(presentation: PrivacyPolicyPresentation, beforePresent: @escaping @MainActor () -> Void = {},
+         @ViewBuilder label: () -> LabelContent) {
+        self.presentation = presentation
+        self.beforePresent = beforePresent
+        self.label = label()
+    }
+
+    var body: some View {
+        Button {
+            guard !presentation.isPresented else { return }
+            #if os(iOS) && DEBUG
+            PrivacyPolicyPresentationTiming.begin()
+            #endif
+            AppHaptics.impact()
+            beforePresent()
+            presentation.isPresented = true
+        } label: {
+            label
         }
     }
 }

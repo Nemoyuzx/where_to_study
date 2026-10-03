@@ -196,7 +196,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
     @State private var showingClearDataConfirmation = false
-    @State private var showingPrivacyPolicy = false
+    @State private var privacyPresentation = PrivacyPolicyPresentation()
     @State private var showingAppSupport = false
     @State private var showingFavoriteManagement = false
     @State private var widgetPreviewSize: WidgetPreviewSize = .medium
@@ -275,10 +275,8 @@ struct SettingsView: View {
             .background(theme.configuration.preset == .default ? Color.clear : theme.background)
         }
         .background(theme.background)
+        .background { PrivacyPolicyPresentationHost(presentation: privacyPresentation) }
         .accessibilityIdentifier("screen.settings")
-        .sheet(isPresented: $showingPrivacyPolicy) {
-            PrivacyPolicyView()
-        }
         .sheet(isPresented: $showingAppSupport) {
             AppSupportView()
         }
@@ -399,11 +397,7 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
                 .accessibilityHint("在应用内查看联系方式和常见问题")
                 .accessibilityIdentifier("action.open-app-support")
-                Button {
-                    AppHaptics.impact()
-                    dismissKeyboard()
-                    showingPrivacyPolicy = true
-                } label: {
+                PrivacyPolicyButton(presentation: privacyPresentation, beforePresent: dismissKeyboard) {
                     Label("隐私说明", systemImage: "hand.raised")
                         .frame(maxWidth: .infinity)
                 }
@@ -515,11 +509,7 @@ struct SettingsView: View {
                     Text("保存账号前请阅读并同意隐私政策。")
                         .font(.caption)
                         .foregroundStyle(theme.secondaryText)
-                    Button {
-                        AppHaptics.impact()
-                        dismissKeyboard()
-                        showingPrivacyPolicy = true
-                    } label: {
+                    PrivacyPolicyButton(presentation: privacyPresentation, beforePresent: dismissKeyboard) {
                         Label("查看隐私政策", systemImage: "hand.raised")
                     }
                     .buttonStyle(.borderless)
@@ -1096,6 +1086,6 @@ struct SettingsView: View {
     }
 
     private func dismissKeyboard() {
-        focusedAccountField = nil
+        if focusedAccountField != nil { focusedAccountField = nil }
     }
 }

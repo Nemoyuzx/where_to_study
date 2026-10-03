@@ -1472,6 +1472,114 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertFalse(app.keyboards.firstMatch.waitForExistence(timeout: 1))
     }
 
+    func testPrivacyPresentationTimingsFromSettings() throws {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--ui-testing", "--ui-test-privacy-presentation"]
+        defer { app.terminate() }
+        for preset in ["default", "rose"] {
+            app.launch()
+            navigate(to: "设置", in: app)
+            if preset == "rose" {
+                let theme = app.buttons["theme.preset.rose"]
+                revealByScrolling(visibleElement: theme, in: app)
+                theme.tap()
+            }
+            for attempt in 0..<2 {
+                let open = app.descendants(matching: .any)["action.open-privacy-policy"].firstMatch
+                revealByScrolling(visibleElement: open, in: app)
+                open.tap()
+                try assertPrivacyPresentationTrace(app, context: "settings-\(preset)-\(attempt)")
+                app.buttons["action.dismiss-privacy-policy"].tap()
+                XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"].waitForNonExistence(timeout: 5))
+            }
+            app.terminate()
+        }
+    }
+
+    func testPrivacyPresentationTimingsBeforeConsent() throws {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--ui-testing", "--ui-testing-privacy-consent", "--ui-test-privacy-presentation"]
+        app.launch()
+        defer { app.terminate() }
+        assertScreen("screen.privacy-consent", in: app)
+        for attempt in 0..<2 {
+            app.buttons["privacy-consent.open-policy"].tap()
+            try assertPrivacyPresentationTrace(app, context: "consent-\(attempt)")
+            app.buttons["action.dismiss-privacy-policy"].tap()
+            XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"].waitForNonExistence(timeout: 5))
+            assertScreen("screen.privacy-consent", in: app)
+            XCTAssertFalse(app.descendants(matching: .any)["screen.planner"].exists)
+        }
+    }
+
+    private func assertPrivacyPresentationTrace(_ app: XCUIApplication, context: String) throws {
+        XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"].waitForExistence(timeout: 5))
+        let probe = app.descendants(matching: .any).matching(NSPredicate(
+            format: "label == %@", "Privacy policy presentation metrics"
+        )).firstMatch
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        let ready = NSPredicate { element, _ in
+            ((element as? XCUIElement)?.value as? String)?.contains("requestToDidAppear") == true
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: probe)], timeout: 5), .completed)
+        let value = try XCTUnwrap(probe.value as? String)
+        let metrics = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(value.utf8)) as? [String: Any])
+        let start = try XCTUnwrap(metrics["requestToWillAppear"] as? Double)
+        let end = try XCTUnwrap(metrics["requestToDidAppear"] as? Double)
+        XCTAssertGreaterThanOrEqual(start, 0)
+        XCTAssertGreaterThanOrEqual(end, start)
+        print("PRIVACY_PRESENTATION_TRACE \(context) \(value)")
+    }
+
+    func testPrivacySheetKeepsItsOwnerAcrossRotationAndPreservesAccountDraft() {
+        continueAfterFailure = false
+        let app = configuredApplication()
+        app.launchArguments = ["--ui-testing-live"]
+        XCUIDevice.shared.orientation = .portrait
+        app.launch()
+        defer { app.terminate(); XCUIDevice.shared.orientation = .portrait }
+        navigate(to: "设置", in: app)
+        let account = app.textFields["field.account"]
+        revealByScrolling(visibleElement: account, in: app)
+        account.tap()
+        account.typeText("2026000000")
+        let open = app.descendants(matching: .any)["action.open-account-privacy-policy"].firstMatch
+        XCTAssertTrue(open.waitForExistence(timeout: 5))
+        let scroll = app.scrollViews.firstMatch
+        for _ in 0..<12 where !open.isHittable {
+            let target = open.frame
+            let viewport = scroll.frame
+            let keyboardTop = app.keyboards.firstMatch.exists ? app.keyboards.firstMatch.frame.minY : viewport.maxY
+            let top = max(viewport.minY, app.frame.minY + 80)
+            let bottom = min(viewport.maxY, keyboardTop) - 20
+            let center = (top + bottom) / 2
+            // Full-screen swipes jumped this 20pt link from behind the keyboard
+            // to behind the status bar. Scroll by its observed distance within
+            // the actually visible area instead of bouncing between endpoints.
+            let delta = min(abs(target.midY - center), 240)
+            let startY = target.midY > center ? bottom : top + 20
+            let endY = target.midY > center ? startY - delta : startY + delta
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: viewport.midX, dy: startY)).press(forDuration: 0.05,
+                thenDragTo: origin.withOffset(CGVector(dx: viewport.midX, dy: endY)))
+        }
+        XCTAssertTrue(open.isHittable)
+        open.tap()
+        let title = app.descendants(matching: .any)["screen.privacy-policy"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["action.dismiss-privacy-policy"].isHittable)
+        XCUIDevice.shared.orientation = .portrait
+        XCTAssertTrue(title.waitForExistence(timeout: 5))
+        app.buttons["action.dismiss-privacy-policy"].tap()
+        XCTAssertTrue(title.waitForNonExistence(timeout: 5))
+        for _ in 0..<10 where !account.isHittable { app.swipeDown() }
+        XCTAssertEqual(account.value as? String, "2026000000")
+    }
+
     func testPrivacyPolicyOpensInsideTheAppAndOffersGitHubLink() {
         continueAfterFailure = false
         let app = configuredApplication()
@@ -1490,21 +1598,18 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
 
         XCTAssertTrue(app.descendants(matching: .any)["screen.privacy-policy"]
             .waitForExistence(timeout: 5))
-        XCTAssertTrue(
-            app.staticTexts.matching(
-                NSPredicate(
-                    format: "label CONTAINS %@",
-                    "本项目只运营用于整理公开班车与活动数据的固定接口"
-                )
-            ).firstMatch.waitForExistence(timeout: 5)
-        )
+        XCTAssertTrue(app.buttons["action.dismiss-privacy-policy"].firstMatch.isHittable)
+        let publicServiceStatement = app.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@", "本项目只运营用于整理公开班车与活动数据的固定接口"
+        )).firstMatch
+        revealByScrolling(visibleElement: publicServiceStatement, in: app)
         XCTAssertFalse(
             app.staticTexts.matching(
                 NSPredicate(format: "label CONTAINS %@", "项目不运营应用后端")
             ).firstMatch.exists
         )
-        XCTAssertTrue(app.descendants(matching: .any)["action.open-privacy-github"]
-            .waitForExistence(timeout: 5))
+        let fullPolicyLink = app.descendants(matching: .any)["action.open-privacy-github"].firstMatch
+        revealByScrolling(visibleElement: fullPolicyLink, in: app)
 
         let dismissButton = app.buttons["action.dismiss-privacy-policy"].firstMatch
         XCTAssertTrue(dismissButton.waitForExistence(timeout: 5))

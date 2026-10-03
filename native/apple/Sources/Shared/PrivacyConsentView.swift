@@ -45,7 +45,7 @@ final class PrivacyConsentState: ObservableObject {
 struct PrivacyConsentGate: View {
     @Environment(\.appTheme) private var theme
     @ObservedObject var state: PrivacyConsentState
-    @State private var showingPrivacyPolicy = false
+    @State private var privacyPresentation = PrivacyPolicyPresentation()
 
     var body: some View {
         ZStack {
@@ -84,10 +84,7 @@ struct PrivacyConsentGate: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
 
-                    Button {
-                        AppHaptics.impact()
-                        showingPrivacyPolicy = true
-                    } label: {
+                    PrivacyPolicyButton(presentation: privacyPresentation) {
                         Label("查看完整隐私政策", systemImage: "doc.text.magnifyingglass")
                             .frame(maxWidth: .infinity)
                     }
@@ -130,8 +127,6 @@ struct PrivacyConsentGate: View {
             }
         }
         .accessibilityIdentifier("screen.privacy-consent")
-        .sheet(isPresented: $showingPrivacyPolicy) {
-            PrivacyPolicyView()
-        }
+        .background { PrivacyPolicyPresentationHost(presentation: privacyPresentation) }
     }
 }
