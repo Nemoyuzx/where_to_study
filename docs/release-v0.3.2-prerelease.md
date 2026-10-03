@@ -1,5 +1,39 @@
 # 0.3.2 预发布构建与上传记录
 
+## 当前进度（2026-10-03，同步最新修复）
+
+本轮构建源码为 `35e0a504c29336326b96843b497f8132bfce6594`，包含 `96c9091` 及此前全部动画、隐私页、收藏／设置生命周期、班车图标与中英切换修复。包内版本保持 **0.3.2**，构建号递增为 **Android 60 / Apple 101 / HarmonyOS 1002037**。下方 59／100／1002036 是历史回执，不能作为本轮最新版本的证明。
+
+已完成：
+
+- Android：Release JVM **294/294**，Lint **0 Error / 73 Warning**，签名、固定证书、16KB ZIP 对齐、许可证、HTTPS 策略与端点门禁通过。新 Universal APK **1,192,270 bytes**，SHA-256 `88b6ba736fc452cf3ff8734e03bfc2c3702b5dbca6c6021e15068f6405d5650a`。
+- 原生 macOS Universal DMG：主程序／Widget 均签名验证，arm64+x86_64、隐私清单、许可证、端点和磁盘校验通过；**8,186,155 bytes**，SHA-256 `7bb26e615b50c41fbd23807fd93e45c14c0d3a609dba20c315f645bc0f98dd7f`。此公共 DMG 仍为 ad-hoc 签名、未公证，不冒称 Apple Distribution 包。
+- 本地 Xcode 完整逻辑门禁：macOS **422 通过 / 1 条件跳过**；iOS **443 通过 / 1 条件跳过**；严格并发和警告门禁通过。此前最终手机语言往返、未提交草稿／查询数据／月视图状态与导航胶囊回归 5/5，iPad 英文宽屏 1/1 证据仍适用，未重复这些 UI 流程。
+- **2026-10-03 17:32:20 +0800**：iOS **0.3.2（101）**返回 `Upload succeeded`、`EXPORT SUCCEEDED`。iOS Automatic 归档并通过 Distribution 导出验证；开发者会话一度报告过期，但最终上传确实成功，不据中间警告误记失败或重传。
+- **2026-10-03 17:35:55 +0800**：macOS **0.3.2（101）**返回 `Upload succeeded`、`EXPORT SUCCEEDED`，沿用既有 Manual App Store 主程序／Widget 配置。上传成功后停止，没有检查 App Store Connect 处理状态或提交正式审核；不宣称已对全部测试者可安装。
+- HarmonyOS：release HAP/APP、**280/280** Hypium、实际 `pack.info` **0.3.2（1002037，build 3）**、release 模式、独立 `hap-sign-tool verify-app` SHA-256 签名验证通过。DevEco 的已注册 `Where To Study` 上传结果显示“云测试结果：通过”。向导版本文字仍曾显示旧 0.3.1，不采用该缓存文字作包版本；以实际生成包为准。此阶段没有在 AppGallery 网页提交正式审核。
+- Node **259 通过 / 1 项 Windows 已安装 PE 用例按宿主条件跳过**；版本一致性断言同步到新构建号。脚本语法与 Gitleaks 暂存扫描通过。
+
+GitHub 同一草稿（Release ID `401567537`）的 **APK 与 DMG 已替换为上述最新两件**，API 名称、大小、SHA-256 均与本地一致，没有回下载 Release 资产。保留 `draft=true`、`prerelease=true` 和正确标题 `Where To Study v0.3.2-prerelease`；没有上传 AAB、鸿蒙包、iOS 归档、MAC ZIP 或校验侧文件。
+
+剩余边界：
+
+- GitHub 最新主线工作流仍被 `The job was not started because your account is locked due to a billing issue.` 阻止。Windows／Linux x86_64+arm64／CLI／TUI 与标签安全门禁尚未产出，不使用旧安装包补位，**完整预发布尚未公开**。
+- 用户选择“暂不改服务器，等 GitHub 恢复”：已只读核对现有环境，没有安装远端依赖或修改 SSH 服务器。每两小时在本会话检查恢复；跟进 ID `0-3-2`，无变化保持安静。恢复后仅续跑剩余构建，**不要重传本轮 Apple 101 或重复 DevEco 已通过的包**。
+- 既有 `v0.3.2-prerelease` 标签仍在 `5c95152`。更新尚未公开标签到最终源码的选择已询问用户，未收到确认前不移动标签；Release 的 `targetCommitish=main` 不会自动改变已存在标签。公开前须解决源码／标签一致性，不混发旧源码与新二进制。
+
+### 本轮实际发布途径（续跑优先使用回执）
+
+所有本轮日志与包位于忽略目录 `release-artifacts/v0.3.2-prerelease-sync-20261003/`。
+
+1. Android：`native-android-package.sh v0.3.2-prerelease`，既有本地 keystore；脚本一次执行 Release 单测、Lint、APK/AAB 和所有包门禁，默认 2 workers、无常驻 daemon。AAB 仅本地保存。
+2. Apple：`native-apple-app-store.sh upload ios`（Automatic）与 `upload macos`（Manual），各自一次调用即含重新归档与上传。Team 从已装身份临时取得，不提交签名字段。停止点为真实上传成功；不再走 `archive → export → upload` 重复归档。
+3. GitHub macOS：`native-macos-package.sh v0.3.2-prerelease`，与 TestFlight 分发签名渠道分开；公开只选 Universal DMG。
+4. HarmonyOS：DevEco Studio 的“上传产品”，已注册应用 `Where To Study`，以生成包 `pack.info` 和最终云测试“通过”为准；本地 `native-harmony-build.sh` 串行补齐完整门禁。后续单纯 GitHub 构建恢复不需要重新上传已通过的鸿蒙版本。
+5. GitHub：使用同一预发布草稿 `gh release upload --clobber` 替换明确名称，API 校验，不回下载。待 11 件完整平台安装文件、CI／安全门禁和最终源码标签对齐之后，才公开预发布；稳定入口继续为 0.3.1。
+
+---
+
 本轮包括开放依赖 PR 修复、竞赛镜像择新、个人账户密码说明与图标按钮、班车完整时刻表和法定节假日提醒。版本标签计划为 `v0.3.2-prerelease`，包内版本为 0.3.2；Android 59、Apple 100、HarmonyOS 1002036。
 
 ## 已完成的依赖合并
