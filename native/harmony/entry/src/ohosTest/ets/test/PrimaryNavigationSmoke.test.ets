@@ -326,6 +326,12 @@ export default function primaryNavigationSmokeTest() {
       await settingsTab.click();
       await driver.delayMs(500);
       expect(await findText(driver, '个人账户') !== null).assertTrue();
+      // 设置（包含语言）会卸载查询页；回到查询时仍停在原“重要事件”栏目，
+      // 不能因新 QueryView 实例的默认 Shuttle tab 误发另一份公开请求。
+      await (await driver.findComponent(ON.id('navigation.query'))).click();
+      await driver.delayMs(500);
+      expect(await (await driver.findComponent(ON.id('query.tab.events'))).isSelected()).assertTrue();
+      expect(await driver.findComponent(ON.id('query.events.show_ended')) !== null).assertTrue();
     });
 
     it('query_tabs_stay_in_one_fixed_row_and_expose_selected_accessibility_state', 0, async () => {

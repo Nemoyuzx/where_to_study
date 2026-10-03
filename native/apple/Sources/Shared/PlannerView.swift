@@ -166,7 +166,7 @@ struct PlannerView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("weather.toggle")
-                .accessibilityValue(isWeatherExpanded ? "已展开" : "已折叠")
+                .accessibilityValue(model.localized(isWeatherExpanded ? "已展开" : "已折叠"))
 
                 if isWeatherExpanded {
                     Divider()

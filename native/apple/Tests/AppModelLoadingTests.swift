@@ -7,6 +7,36 @@ import XCTest
 
 final class AppModelLoadingTests: XCTestCase {
     @MainActor
+    func testLanguageNoOpDoesNotPublishAndLanguageChangeKeepsDataOwners() async throws {
+        let fixture = try LoadingFixture()
+        defer { fixture.cleanUp() }
+        let model = fixture.makeModel()
+        fixture.scheduleStore.releaseLoad()
+        await model.awaitInitialLocalData()
+        model.navigation.selectedSection = .queries
+        let snapshot = model.schedule
+        let owner = model.calendarDataOwnerRevision
+        let scheduleFetches = fixture.scheduleClient.callCount
+        let classroomFetches = fixture.classroomClient.callCount
+        var publications = 0
+        let observation = model.$appLanguage.dropFirst().sink { _ in publications += 1 }
+        defer { observation.cancel() }
+        model.setAppLanguage(model.appLanguage)
+        XCTAssertEqual(publications, 0)
+        XCTAssertNil(fixture.defaults.object(forKey: AppLocalization.defaultsKey))
+        model.setAppLanguage(.english)
+        XCTAssertEqual(publications, 1)
+        XCTAssertEqual(model.navigation.selectedSection, .queries)
+        XCTAssertEqual(model.calendarDataOwnerRevision, owner)
+        XCTAssertEqual(fixture.scheduleClient.callCount, scheduleFetches)
+        XCTAssertEqual(fixture.classroomClient.callCount, classroomFetches)
+        XCTAssertEqual(model.schedule, snapshot)
+        model.setAppLanguage(.english)
+        XCTAssertEqual(publications, 1)
+        XCTAssertEqual(model.calendarDataOwnerRevision, owner)
+    }
+
+    @MainActor
     func testClearLocalDataResetsThemeAndWidgetPreferencesIncludingCustomSeeds() async throws {
         let fixture = try LoadingFixture()
         defer { fixture.cleanUp() }

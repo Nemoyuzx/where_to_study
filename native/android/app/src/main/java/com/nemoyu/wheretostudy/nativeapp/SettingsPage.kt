@@ -25,8 +25,9 @@ import android.widget.TextView
 import android.widget.Toast
 import android.widget.TimePicker
 import java.util.concurrent.atomic.AtomicBoolean
+import java.lang.ref.WeakReference
 
-class SettingsPage(
+class SettingsPage internal constructor(
     private val activity: MainActivity,
     private val credentialStore: SecureCredentialStore,
     private val preferences: AppPreferences,
@@ -34,12 +35,29 @@ class SettingsPage(
     private val classroomRepository: ClassroomRepository,
     private val availableWidthDp: Int,
     private val usesBottomNavigation: Boolean,
+    private val restoredDraft: SettingsPageDraft? = null,
 ) {
     private val toastHandler = Handler(Looper.getMainLooper())
     private var transientToast: Toast? = null
     private var refreshSchedulePresentation: (() -> Unit)? = null
     private var favoriteCountButton: TextView? = null
     private var scheduleRefreshButton: TextView? = null
+    private var customURLField: EditText? = null
+    private var customSaveButton: TextView? = null
+    private lateinit var pageRoot: ScrollView
+    private var captureCampus: () -> Int? = { null }
+    private var captureAcademicPassword: () -> Boolean = { false }
+    private var captureAutomaticTerm: () -> Boolean? = { null }
+    private var captureCustomEnabled: () -> Boolean? = { null }
+    private var captureReminderOffsets: () -> List<String>? = { null }
+    private var pendingLanguageCommit: Runnable? = null
+    private var pendingLanguageSource: WeakReference<View>? = null
+    private var languageRevision = 0
+
+    internal fun captureDraft(): SettingsPageDraft = SettingsPageDraft(
+        if (::pageRoot.isInitialized) captureInputDrafts(pageRoot) else emptyMap(),
+        captureCampus(), captureAcademicPassword(), captureAutomaticTerm(), captureCustomEnabled(), captureReminderOffsets(),
+    )
 
     internal fun scheduleDidRefresh() {
         refreshScheduleAction()
@@ -58,6 +76,11 @@ class SettingsPage(
         favoriteCountButton?.text = activity.uiText("收藏管理（${preferences.favoriteDeadlines.size}）")
     }
 
+    internal fun customValidationDidComplete(submitted: String, result: Result<CustomDeadlineFeedMetadata>) {
+        customSaveButton?.apply { isEnabled = true; text = activity.uiText("校验并保存自定义日程") }
+        if (result.isSuccess) customURLField?.takeIf { it.text.toString().trim() == submitted }?.setText(submitted)
+    }
+
     private fun showSavedToast() {
         transientToast?.cancel()
         val toast = Toast.makeText(activity, activity.uiText("设置已保存"), Toast.LENGTH_SHORT)
@@ -72,16 +95,12 @@ class SettingsPage(
     }
 
     private fun refreshScheduleAutomaticallyAfterSave() {
-        scheduleRepository.refreshAutomatically { result ->
-            if (result.isSuccess) {
-                activity.reconcileDailyCourseNotifications()
-            }
-            activity.scheduleDidRefresh(result.isSuccess)
-        }
+        scheduleRepository.refreshAutomatically(activity.scheduleCompletionCallback())
         refreshScheduleAction()
     }
 
     fun build(): ScrollView = ScrollView(activity).apply {
+        pageRoot = this
         isFillViewport = true
         clipToPadding = false
         scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
@@ -155,6 +174,19 @@ class SettingsPage(
                 addView(localDataSurface())
             }
         })
+        restoredDraft?.inputs?.let { drafts ->
+            uiDescendants(this).filterIsInstance<EditText>().forEach { field ->
+                field.sessionKey()?.let(drafts::get)?.let { draft ->
+                    field.setText(draft.text)
+                    field.setSelection(draft.selectionStart.coerceIn(0, draft.text.length), draft.selectionEnd.coerceIn(0, draft.text.length))
+                }
+            }
+            postOnAnimation {
+                if (isAttachedToWindow) uiDescendants(this).filterIsInstance<EditText>().firstOrNull {
+                    it.sessionKey()?.let(drafts::get)?.focused == true
+                }?.requestFocus()
+            }
+        }
     }
 
     private fun languageSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
@@ -164,26 +196,52 @@ class SettingsPage(
         val languages = AppLanguage.entries
         val current = languages.indexOfFirst { it.code == preferences.languageCode }
             .coerceAtLeast(0)
-        addView(segmentedControl(
+        val languageControl = segmentedControl(
             labels = languages.map { AppLocale.displayName(activity, it) },
             initialIndex = current,
             viewID = R.id.settings_language_selector,
         ) { position, source ->
             val selectedLanguage = languages[position]
+            cancelPendingLanguageCommit()
             if (selectedLanguage.code != preferences.languageCode) {
                 activity.performControlHaptic(source)
-                source.postDelayed(
-                    { activity.updateAppLanguage(selectedLanguage) },
-                    SEGMENT_SELECTION_COMMIT_DELAY_MILLIS,
-                )
+                val revision = languageRevision
+                val weakPage = WeakReference(this@SettingsPage)
+                val weakActivity = WeakReference(activity)
+                val weakSource = WeakReference(source)
+                val action = object : Runnable {
+                    override fun run() {
+                        val page = weakPage.get() ?: return
+                        if (page.pendingLanguageCommit !== this || revision != page.languageRevision) return
+                        page.pendingLanguageCommit = null
+                        val owner = weakActivity.get() ?: return
+                        if (weakSource.get()?.isAttachedToWindow == true && owner.isCurrentUiOwner()) owner.updateAppLanguage(selectedLanguage)
+                    }
+                }
+                pendingLanguageCommit = action
+                pendingLanguageSource = weakSource
+                source.postDelayed(action, SEGMENT_SELECTION_COMMIT_DELAY_MILLIS)
             }
+        }
+        val weakPage = WeakReference(this@SettingsPage)
+        languageControl.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) = Unit
+            override fun onViewDetachedFromWindow(view: View) { weakPage.get()?.cancelPendingLanguageCommit() }
         })
+        addView(languageControl)
         addView(TextView(activity).apply {
             text = "更改语言后将立即重新加载界面。"
             textSize = 12f
             setThemeTextColor { Palette.muted }
             setPadding(0, activity.dp(7), 0, 0)
         })
+    }
+
+    private fun cancelPendingLanguageCommit() {
+        languageRevision++
+        pendingLanguageCommit?.let { action -> pendingLanguageSource?.get()?.removeCallbacks(action) }
+        pendingLanguageCommit = null
+        pendingLanguageSource = null
     }
 
     private fun deletedCoursesSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
@@ -223,11 +281,17 @@ class SettingsPage(
         val active = bindCourseDialogOwner(loading, source) { source.isEnabled = true }
         loading.show()
         UiText.localizeDialog(loading)
+        val weakPage = WeakReference(this)
+        val weakSource = WeakReference(source)
+        val weakLoading = WeakReference(loading)
         scheduleRepository.loadDeletedCourses(active::get) { result ->
-            if (!source.isAttachedToWindow || activity.isFinishing || activity.isDestroyed || !loading.isShowing) return@loadDeletedCourses
-            loading.dismiss()
-            result.onSuccess { records -> showDeletedCourseRecords(records, source) }
-                .onFailure(::showCourseDeletionError)
+            val page = weakPage.get() ?: return@loadDeletedCourses
+            val anchor = weakSource.get() ?: return@loadDeletedCourses
+            val dialog = weakLoading.get() ?: return@loadDeletedCourses
+            if (!page.isCourseDialogOwnerValid(anchor) || !dialog.isShowing) return@loadDeletedCourses
+            dialog.dismiss()
+            result.onSuccess { records -> page.showDeletedCourseRecords(records, anchor) }
+                .onFailure(page::showCourseDeletionError)
         }
     }
 
@@ -267,6 +331,9 @@ class SettingsPage(
                     .setPositiveButton(activity.uiText("恢复"), null)
                     .create()
                 val active = bindCourseDialogOwner(confirmation, source)
+                val weakPage = WeakReference(this)
+                val weakSource = WeakReference(source)
+                val weakConfirmation = WeakReference(confirmation)
                 confirmation.setOnShowListener {
                     val restore = confirmation.getButton(AlertDialog.BUTTON_POSITIVE)
                     restore.setOnClickListener restoreClick@ {
@@ -279,17 +346,21 @@ class SettingsPage(
                         confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = false
                         confirmation.setCancelable(false)
                         scheduleRepository.restoreCourseAsync(record.id, active::get) { result ->
-                            if (!source.isAttachedToWindow || activity.isFinishing || activity.isDestroyed || !confirmation.isShowing) return@restoreCourseAsync
+                            val page = weakPage.get() ?: return@restoreCourseAsync
+                            val anchor = weakSource.get() ?: return@restoreCourseAsync
+                            val dialog = weakConfirmation.get() ?: return@restoreCourseAsync
+                            if (!page.isCourseDialogOwnerValid(anchor) || !dialog.isShowing) return@restoreCourseAsync
                             result.onSuccess {
-                                confirmation.dismiss()
-                                activity.personalScheduleWasEdited()
-                                Toast.makeText(activity, activity.uiText("课程删除记录已恢复"), Toast.LENGTH_SHORT).show()
+                                dialog.dismiss()
+                                page.activity.personalScheduleWasEdited()
+                                Toast.makeText(page.activity, page.activity.uiText("课程删除记录已恢复"), Toast.LENGTH_SHORT).show()
                             }.onFailure { error ->
-                                restore.isEnabled = true
-                                restore.text = activity.uiText("恢复")
-                                confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
-                                confirmation.setCancelable(true)
-                                showCourseDeletionError(error)
+                                dialog.getButton(AlertDialog.BUTTON_POSITIVE).apply {
+                                    isEnabled = true; text = page.activity.uiText("恢复")
+                                }
+                                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
+                                dialog.setCancelable(true)
+                                page.showCourseDeletionError(error)
                             }
                         }
                     }
@@ -337,7 +408,8 @@ class SettingsPage(
         var persistedAccount = savedIdentity?.first.orEmpty()
         var hasPersistedPassword = savedIdentity?.second == true
         var hasPersistedCloudPassword = savedIdentity?.third == true
-        var useAcademicPassword = false
+        var useAcademicPassword = restoredDraft?.useAcademicPassword ?: false
+        captureAcademicPassword = { useAcademicPassword }
         addView(sectionTitle(activity, "个人账户", R.drawable.ic_settings_account))
         val account = field("教务账号", persistedAccount, false)
         val password = field("教务密码", "", true)
@@ -446,9 +518,10 @@ class SettingsPage(
             setPadding(0, 0, 0, activity.dp(if (isCompact) 5 else 7))
         })
         val campusLabels = AppMetadata.campuses.map { activity.uiText(it.name) }
-        var selectedCampusIndex = AppMetadata.campuses
+        var selectedCampusIndex = restoredDraft?.campusIndex ?: AppMetadata.campuses
             .indexOfFirst { it.id == preferences.campusID }
             .coerceAtLeast(0)
+        captureCampus = { selectedCampusIndex }
         val campus = segmentedControl(
             labels = campusLabels,
             initialIndex = selectedCampusIndex,
@@ -608,25 +681,7 @@ class SettingsPage(
                 applySavedCredentials(saveResult.getOrThrow())
                 button.text = activity.uiText("正在获取…")
                 button.isEnabled = false
-                scheduleRepository.refresh { result ->
-                    button.text = activity.uiText("获取/刷新个人课表")
-                    button.isEnabled = true
-                    result.onSuccess { schedule ->
-                        activity.reconcileDailyCourseNotifications()
-                        Toast.makeText(
-                            activity,
-                            activity.uiText("个人课表已更新，共 ${schedule.courses.size} 门课程"),
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }.onFailure { error ->
-                        Toast.makeText(
-                            activity,
-                            activity.uiText(error.message ?: "个人课表获取失败"),
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    }
-                    activity.scheduleDidRefresh(result.isSuccess)
-                }
+                scheduleRepository.refresh(activity.scheduleCompletionCallback(userRequested = true))
             }
         })
         addView(TextView(activity).apply {
@@ -670,11 +725,12 @@ class SettingsPage(
             text = "自动检测当前学期"
             textSize = 15f
             setThemeTextColor { Palette.text }
-            isChecked = preferences.automaticTermDetectionEnabled
+            isChecked = restoredDraft?.automaticTerm ?: preferences.automaticTermDetectionEnabled
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
             applyPhoneSwitchStyle()
         }
+        captureAutomaticTerm = { autoDetect.isChecked }
         refreshSchedulePresentation = {
             examStatus.text = activity.uiText(AcademicScheduleLogic.statusText(scheduleRepository.schedule?.examSchedule))
             // A repository publication updates automatic/pristine fields only;
@@ -861,7 +917,8 @@ class SettingsPage(
                 }
             }
         })
-        val values = preferences.courseReminderOffsets.map(Int::toString).toMutableList()
+        val values = (restoredDraft?.reminderOffsets ?: preferences.courseReminderOffsets.map(Int::toString)).toMutableList()
+        captureReminderOffsets = { values.toList() }
         val countLabel = TextView(activity).apply {
             id = R.id.settings_course_reminder_count
             textSize = 13f
@@ -1172,17 +1229,19 @@ class SettingsPage(
             })
         val customRow = featureSwitchLegendRow(
             label = "自定义日程源",
-            checked = preferences.customDeadlinesEnabled,
+            checked = restoredDraft?.customEnabled ?: preferences.customDeadlinesEnabled,
             switchID = R.id.settings_custom_deadlines_switch,
             dotID = R.id.settings_custom_deadlines_dot,
             color = Palette.customDeadline,
         ) { }
         val customEnabled = customRow.findViewById<Switch>(R.id.settings_custom_deadlines_switch)
+        captureCustomEnabled = { customEnabled.isChecked }
         addView(customRow)
         val customURL = field("自定义日程 HTTPS JSON 地址", preferences.customDeadlinesURL, false).apply {
             id = R.id.settings_custom_deadlines_url
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
         }
+        customURLField = customURL
         addView(customURL)
         addView(TextView(activity).apply {
             text = "只发送无凭据 GET；拒绝重定向、本机及私有/保留 IP，响应上限 2 MiB。"
@@ -1220,32 +1279,13 @@ class SettingsPage(
             }
             saveCustomButton.isEnabled = false
             saveCustomButton.text = activity.uiText("正在校验自定义日程…")
-            activity.validateCustomDeadlineFeed(validated) { result ->
-                if (saveCustomButton.isAttachedToWindow) {
-                    saveCustomButton.isEnabled = true
-                    saveCustomButton.text = activity.uiText("校验并保存自定义日程")
-                }
-                result.onSuccess { metadata ->
-                    preferences.customDeadlinesURL = validated
-                    preferences.customDeadlinesEnabled = customEnabled.isChecked
-                    customURL.setText(validated)
-                    activity.reloadDeadlineSettings()
-                    Toast.makeText(
-                        activity,
-                        activity.uiText(
-                            "自定义日程已保存：${metadata.sourceName}，${metadata.itemCount} 项",
-                        ),
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }.onFailure { error ->
-                    Toast.makeText(
-                        activity,
-                        activity.uiText(error.message ?: "自定义日程校验失败。"),
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            }
+            activity.validateAndSaveCustomDeadlineFeed(validated, customEnabled.isChecked)
         }.apply { id = R.id.settings_custom_deadlines_save }
+        customSaveButton = saveCustomButton
+        if (activity.isCustomValidationPending()) {
+            saveCustomButton.isEnabled = false
+            saveCustomButton.text = activity.uiText("正在校验自定义日程…")
+        }
         addView(saveCustomButton)
         addView(spacer(activity, compactGap))
         addView(settingsLinkButton(
@@ -1619,6 +1659,7 @@ class SettingsPage(
     }
 
     private fun field(hintText: String, value: String, secure: Boolean): EditText = EditText(activity).apply {
+        tag = "settings.field/$hintText"
         hint = hintText
         setText(value)
         textSize = 15f

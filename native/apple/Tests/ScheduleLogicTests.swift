@@ -858,13 +858,13 @@ final class ScheduleLogicTests: XCTestCase {
             languageRawValue: AppLanguage.english.rawValue
         )
 
-        XCTAssertNotEqual(chinese, english)
+        XCTAssertEqual(chinese, english, "Changing UI language must not replace tab page identities")
         XCTAssertEqual(
             chinese,
             AdaptiveLayoutPolicy.compactTabIdentity(
                 languageRawValue: AppLanguage.simplifiedChinese.rawValue
             ),
-            "Chinese -> English -> Chinese must recreate and then restore the same tab layout identity"
+            "Chinese -> English -> Chinese must preserve the same tab content identity"
         )
     }
 

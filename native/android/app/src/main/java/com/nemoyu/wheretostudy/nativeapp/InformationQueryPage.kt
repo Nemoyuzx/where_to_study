@@ -399,10 +399,12 @@ internal class InformationQueryPage(
                 shuttleRepository.addObserver(shuttleObserver)
                 holidayRepository?.addObserver(root, holidayObserver)
                 dailyInfoRepository.addObserver(root, deadlineObserver)
-                shuttleRepository.load()
-                holidayRepository?.ensure(Calendar.getInstance(shanghai).get(Calendar.YEAR))
-                holidayRepository?.ensureAuthoritative(Calendar.getInstance(shanghai).get(Calendar.YEAR))
-                dailyInfoRepository.loadImportantEvents()
+                if (activity.allowsAutomaticPageLoads()) {
+                    shuttleRepository.load()
+                    holidayRepository?.ensure(Calendar.getInstance(shanghai).get(Calendar.YEAR))
+                    holidayRepository?.ensureAuthoritative(Calendar.getInstance(shanghai).get(Calendar.YEAR))
+                    dailyInfoRepository.loadImportantEvents()
+                }
                 gradesRepository.addObserver(gradeObserver)
                 gradesRepository.reconcile()
             }
@@ -859,9 +861,7 @@ internal class InformationQueryPage(
     private fun examsContent(): LinearLayout = privateQueryContent {
         val exams = scheduleRepository.schedule?.examSchedule
         addView(gradeAction(if (scheduleRepository.isRefreshing) "正在获取…" else "刷新课表与考试") {
-            scheduleRepository.refresh { result ->
-                activity.scheduleDidRefresh(result.isSuccess, refreshOtherPages = false)
-            }
+            scheduleRepository.refresh(activity.scheduleCompletionCallback(refreshOtherPages = false))
             renderMode(animate = false)
         }.apply { id = R.id.information_query_exams_refresh; isEnabled = !scheduleRepository.isRefreshing })
         addView(statusCard(AcademicScheduleLogic.statusText(exams)))

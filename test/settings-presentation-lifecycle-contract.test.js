@@ -66,6 +66,28 @@ test('Harmony fixed draft seed is DEBUG review-only and physical IME test is opt
   assert.match(device, /describe\('SettingsKeyboardInputDevice'/)
 })
 
+test('Harmony language segments have stable IDs and local writes are serialized without account refresh', () => {
+  const settings = read(`${harmony}view/SettingsView.ets`)
+  const model = read(`${harmony}model/AppModel.ets`)
+  const device = read('native/harmony/entry/src/ohosTest/ets/test/SettingsPresentationDevice.test.ets')
+  assert.match(settings, /\}, \(label: string, index: number\) => idPrefix \+ '\.' \+ index\.toString\(\)\)/)
+  assert.match(settings, /Text\(idPrefix === 'settings\.language' \?\s*AppLanguageInfo\.label\(AppLanguageInfo\.all\[index\], this\.model\.resolvedLanguage\(\)\)/)
+  assert.match(settings, /idPrefix === 'settings\.campus' \? this\.model\.text\(index === 0 \? '西土城' : '沙河'\)/)
+  assert.match(settings, /Scroll\(this\.settingsScroller\)/)
+  assert.match(settings, /selectLanguageAtCurrentPosition\(target: AppLanguage\): void \{[\s\S]*?new SettingsLanguageAnchor\(revision, this\.languageCardGlobalY, offset\)/)
+  assert.match(settings, /preserveLanguageAnchorAfterLayout\(area: Area\): void \{[\s\S]*?this\.pendingLanguageAnchor = null;[\s\S]*?this\.settingsScroller\.scrollTo\(\{ xOffset: 0, yOffset: Math\.max\(0, offset \+ delta\), animation: false \}\)/)
+  assert.match(settings, /aboutToDisappear\(\): void \{[\s\S]*?this\.pendingLanguageAnchor = null;[\s\S]*?clearTimeout\(this\.languageAnchorCleanupTimer\)/)
+  assert.match(settings, /'settings\.language', true\)/)
+  assert.match(model, /private languagePreferenceWrite: Promise<void> = Promise\.resolve\(\)/)
+  assert.match(model, /setLanguageSetting\(value: AppLanguage\): Promise<void> \{[\s\S]*?if \(this\.isSampleMode\(\)\) \{ return; \}[\s\S]*?this\.languagePreferenceWrite\.catch\(\(\) => \{\}\)/)
+  assert.match(model, /await this\.languagePreferenceWrite\.catch\(\(\) => \{\}\);\s*await this\.preferences\.remove\('appLanguage'\)/)
+  assert.match(model, /languageGeneration === this\.languageClearGeneration &&\s*languageRevision === this\.languageSettingRevision && this\.localDataClearWork === null/)
+  assert.doesNotMatch(model.slice(model.indexOf('async setLanguageSetting('), model.indexOf('async setWidgetShowsTeacher(')), /refreshSchedule|fetchSchedule|loadClassrooms|credentialsForRequest/)
+  assert.match(device, /language_switch_keeps_the_visible_settings_anchor_in_place/)
+  assert.match(read('native/harmony/entry/src/test/LanguageSettingTransaction.test.ets'), /rapid_zh_en_zh_writes_are_serial/)
+  assert.match(read('native/harmony/entry/src/test/LanguageSettingTransaction.test.ets'), /clear_waits_for_pending_write_and_old_language_read_cannot_repopulate_it/)
+})
+
 test('Harmony favorites reject the 501st item before memory changes and render in pages', () => {
   const model = read(`${harmony}model/AppModel.ets`)
   const settings = read(`${harmony}view/SettingsView.ets`)
@@ -104,7 +126,7 @@ test('every Harmony favorite-add entry shows the specific limit reason in a toas
     assert.match(callback, /if \(!changed\) \{\s*showFeedback\(AppModel\.favoriteDeadlineLimitMessage\)/, entry)
     assert.match(callback, /\}, \(\): void => \{\s*this\.model\.statusMessage = '无法保存收藏';\s*showFeedback\('无法保存收藏'\)/, entry)
   }
-  assert.match(read(`${harmony}view/QueryView.ets`), /aboutToDisappear\(\): void \{\s*this\.tabMotionGeneration\+\+/)
+  assert.match(read(`${harmony}view/QueryView.ets`), /aboutToDisappear\(\): void \{\s*this\.saveCurrentTabScroll\(\);\s*this\.session\.detachView\(\);\s*this\.tabMotionGeneration\+\+/)
   assert.match(read(`${harmony}view/calendar/CalendarDailyInfoCards.ets`), /aboutToDisappear\(\): void \{\s*this\.favoriteFeedbackRevision\+\+/)
   assert.match(read(`${harmony}view/calendar/MobileTeachingCalendarView.ets`), /aboutToDisappear\(\): void \{[\s\S]*?this\.presentedDayMotionGeneration\+\+/)
   assert.match(read(`${harmony}view/calendar/ExpandedTeachingCalendarView.ets`), /aboutToDisappear\(\): void \{[\s\S]*?this\.yearPopupMotionRevision\+\+/)

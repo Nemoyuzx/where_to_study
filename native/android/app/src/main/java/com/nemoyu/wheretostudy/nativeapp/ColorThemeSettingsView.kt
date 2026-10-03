@@ -186,7 +186,11 @@ internal class ColorThemeSettingsView(
         fields.forEach { it.addTextChangedListener(watcher) }
         bindTheme("selection") {
             saved = store.load()
-            previewColors = ColorThemeLogic.palette(saved, isDark)
+            val draft = fields.takeIf { it.size == 3 }?.let {
+                ThemeSeeds(it[0].text.toString(), it[1].text.toString(), it[2].text.toString()).normalized()
+            }
+            previewColors = ColorThemeLogic.palette(if (draft != null && draft != saved.custom)
+                ColorThemeSelection("custom", draft) else saved, isDark)
             updateChoiceLabels()
         }
     }

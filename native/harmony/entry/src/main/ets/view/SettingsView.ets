@@ -38,6 +38,18 @@ class DisabledSettingsButtonContent implements ContentModifier<ButtonConfigurati
   }
 }
 
+class SettingsLanguageAnchor {
+  readonly revision: number;
+  readonly globalY: number;
+  readonly scrollOffsetY: number;
+
+  constructor(revision: number, globalY: number, scrollOffsetY: number) {
+    this.revision = revision;
+    this.globalY = globalY;
+    this.scrollOffsetY = scrollOffsetY;
+  }
+}
+
 @ComponentV2
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
@@ -48,6 +60,11 @@ export struct SettingsView {
   @Local contentWidth: number = 350;
   @Local requestedFavoriteCount: number = 20;
   private statusDismissRevision: number = 0;
+  private readonly settingsScroller: Scroller = new Scroller();
+  private languageCardGlobalY: number = Number.NaN;
+  private languageAnchorRevision: number = 0;
+  private pendingLanguageAnchor: SettingsLanguageAnchor | null = null;
+  private languageAnchorCleanupTimer: number = -1;
 
   private static readonly projectURL: string =
     'https://github.com/Nemoyuzx/where_to_study';
@@ -55,6 +72,15 @@ export struct SettingsView {
   aboutToAppear(): void {
     if (!this.favoriteManagerOnly) {
       this.session.syncCustomDeadlineURL(this.model.customDeadlinesURL);
+    }
+  }
+
+  aboutToDisappear(): void {
+    this.languageAnchorRevision++;
+    this.pendingLanguageAnchor = null;
+    if (this.languageAnchorCleanupTimer >= 0) {
+      clearTimeout(this.languageAnchorCleanupTimer);
+      this.languageAnchorCleanupTimer = -1;
     }
   }
 
@@ -80,6 +106,54 @@ export struct SettingsView {
     this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
       this.onFavoriteManagerVisibilityChanged(visible);
     });
+  }
+
+  private selectLanguageAtCurrentPosition(target: AppLanguage): void {
+    if (target === this.model.languageSetting() &&
+      AppLanguageInfo.systemLanguage() === this.model.systemLanguageID) { return; }
+    const revision: number = ++this.languageAnchorRevision;
+    this.pendingLanguageAnchor = null;
+    if (this.languageAnchorCleanupTimer >= 0) {
+      clearTimeout(this.languageAnchorCleanupTimer);
+      this.languageAnchorCleanupTimer = -1;
+    }
+    try {
+      const offset: number = this.settingsScroller.currentOffset().yOffset;
+      if (Number.isFinite(offset) && Number.isFinite(this.languageCardGlobalY)) {
+        this.pendingLanguageAnchor = new SettingsLanguageAnchor(revision, this.languageCardGlobalY, offset);
+        this.languageAnchorCleanupTimer = setTimeout(() => {
+          this.languageAnchorCleanupTimer = -1;
+          if (revision === this.languageAnchorRevision) { this.pendingLanguageAnchor = null; }
+        }, 900);
+      }
+    } catch (e) {
+      // Scroll 尚未绑定时继续切换语言，但不执行猜测性的位移补偿。
+    }
+    void this.model.setLanguageSetting(target);
+  }
+
+  private preserveLanguageAnchorAfterLayout(area: Area): void {
+    const globalY: number = Number(area.globalPosition.y);
+    this.languageCardGlobalY = globalY;
+    const pending: SettingsLanguageAnchor | null = this.pendingLanguageAnchor;
+    if (pending === null || pending.revision !== this.languageAnchorRevision || !Number.isFinite(globalY)) {
+      return;
+    }
+    const delta: number = globalY - pending.globalY;
+    if (Math.abs(delta) < 0.5) { return; }
+    // One-shot：先撤销 owner，再 scrollTo，避免自己的滚动触发下一次 onAreaChange 循环。
+    this.pendingLanguageAnchor = null;
+    if (this.languageAnchorCleanupTimer >= 0) {
+      clearTimeout(this.languageAnchorCleanupTimer);
+      this.languageAnchorCleanupTimer = -1;
+    }
+    try {
+      const current: number = this.settingsScroller.currentOffset().yOffset;
+      const offset: number = Number.isFinite(current) ? current : pending.scrollOffsetY;
+      this.settingsScroller.scrollTo({ xOffset: 0, yOffset: Math.max(0, offset + delta), animation: false });
+    } catch (e) {
+      // 已离开设置或组件卸载，旧语言回调不允许重设新页面的滚动。
+    }
   }
 
   private appendFavoritePage(endingIndex: number): void {
@@ -118,7 +192,7 @@ export struct SettingsView {
 
   @Builder
   settingsContent() {
-    Scroll() {
+    Scroll(this.settingsScroller) {
       Column({ space: 16 }) {
         this.settingsTitle()
         this.referenceNotice()
@@ -264,10 +338,15 @@ export struct SettingsView {
 
   @Builder
   segmentedOptions(labels: string[], selectedIndex: () => number,
-    onSelect: (index: number) => void, compactText: boolean = false) {
+    onSelect: (index: number) => void, idPrefix: string, compactText: boolean = false) {
     Row() {
       ForEach(labels, (label: string, index: number) => {
-        Text(label)
+        // V2 ForEach 在 key 稳定时复用子树；若只捕获 @Builder 传入的 label，
+        // 切换语言后字符串参数不会触发 Text 更新。直接读取响应式语言状态。
+        Text(idPrefix === 'settings.language' ?
+          AppLanguageInfo.label(AppLanguageInfo.all[index], this.model.resolvedLanguage()) :
+          (idPrefix === 'settings.campus' ? this.model.text(index === 0 ? '西土城' : '沙河') : label))
+          .id(idPrefix + '.' + index.toString())
           .fontSize(compactText ? 11 : 13.5)
           .fontWeight(selectedIndex() === index ? FontWeight.Bold : FontWeight.Regular)
           .fontColor(AppTheme.text())
@@ -285,7 +364,7 @@ export struct SettingsView {
             });
           })
       // 通过读取当前状态的回调更新选中样式，避免 Builder 的按值参数停留在首次构建。
-      }, (label: string, index: number) => 'segment.' + label + '.' + index.toString())
+      }, (label: string, index: number) => idPrefix + '.' + index.toString())
     }
     .width('100%')
     .height(38)
@@ -304,14 +383,17 @@ export struct SettingsView {
         AppLanguageInfo.label(AppLanguage.english, this.model.resolvedLanguage())
       ], () => AppLanguageInfo.all.indexOf(this.model.languageSetting()), (index: number): void => {
           const target: AppLanguage = AppLanguageInfo.all[Math.min(Math.max(index, 0), 2)];
-          this.model.setLanguageSetting(target);
-        }, true)
+          this.selectLanguageAtCurrentPosition(target);
+        }, 'settings.language', true)
     }
     .padding(16)
     .width('100%')
     .borderRadius(8)
     .backgroundColor(AppTheme.surface())
     .id('settings_language_surface')
+    .onAreaChange((oldArea: Area, newArea: Area) => {
+      this.preserveLanguageAnchorAfterLayout(newArea);
+    })
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -444,7 +526,7 @@ export struct SettingsView {
         () => this.model.campusID === '04' ? 1 : 0,
         (index: number): void => {
           this.model.campusID = index === 1 ? '04' : '01';
-        })
+        }, 'settings.campus')
 
       Blank().height(this.isCompact() ? 12 : 18)
       Button(this.model.text('保存设置'))
@@ -694,7 +776,7 @@ export struct SettingsView {
       this.segmentedOptions(['1', '2', '3', '4', '5', '6'],
         () => this.model.widgetCourseLimit - 1, (index: number): void => {
           this.model.setWidgetCourseLimit(index + 1);
-        }, true)
+        }, 'settings.widget-limit', true)
 
       Divider()
         .strokeWidth(1)
@@ -711,7 +793,7 @@ export struct SettingsView {
         () => this.session.previewDimension - 2,
         (index: number): void => {
           this.session.previewDimension = index + 2;
-        })
+        }, 'settings.widget-preview')
 
       this.widgetPreview()
     }

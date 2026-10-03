@@ -1138,6 +1138,7 @@ final class AppModel: ObservableObject {
     }
 
     func setAppLanguage(_ language: AppLanguage) {
+        guard appLanguage != language else { return }
         appLanguage = language
         defaults.set(language.rawValue, forKey: AppLocalization.defaultsKey)
         synchronizeWidgetSchedule()

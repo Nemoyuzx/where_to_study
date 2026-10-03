@@ -281,6 +281,7 @@ struct SettingsView: View {
             #endif
             #endif
             }
+            .modifier(SettingsLanguageScrollAnchor(state: session.languageScroll, language: model.appLanguage))
             #if DEBUG
             .overlay(alignment: .topLeading) {
                 SettingsLayoutMetricsProbe(columnCount: columnCount, width: proxy.size.width)
@@ -608,6 +609,9 @@ struct SettingsView: View {
                         get: { model.appLanguage },
                         set: { language in
                             AppHaptics.selection()
+                            if language != model.appLanguage {
+                                session.languageScroll.capture(beforeSwitchTo: language)
+                            }
                             model.setAppLanguage(language)
                         }
                     )
@@ -625,6 +629,7 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("settings.language")
+        .modifier(SettingsLanguageCardAnchor())
     }
 
     private var semesterSurface: some View {

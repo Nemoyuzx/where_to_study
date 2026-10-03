@@ -228,6 +228,8 @@ class HolidayRepository(
         observers.remove(owner)
     }
 
+    internal fun clearUiObservers() { observers.clear() }
+
     fun ensure(
         year: Int,
         force: Boolean = false,

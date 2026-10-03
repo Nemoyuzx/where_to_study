@@ -14,6 +14,7 @@ import { SettingsView } from './SettingsView';
 import { SettingsSession } from './SettingsSession';
 import { PrivacyPolicyView } from './PrivacyPolicyView';
 import { QueryView } from './QueryView';
+import { QuerySession } from './QuerySession';
 
 // 布局策略统一在 common/DeviceState.ets 中（含折叠屏半折叠降级规则），
 // 这里保留导出以兼容旧引用。
@@ -28,6 +29,7 @@ export struct RootView {
   @Local containerWidth: number = DeviceState.screenWidthVp();
   @Local settingsFavoriteManagerVisible: boolean = false;
   @Local settingsSession: SettingsSession = new SettingsSession();
+  @Local querySession: QuerySession = new QuerySession();
   @Local phoneNavigationBottomMargin: number = PhoneNavigationLayout.minimumBottomClearanceVp;
   private deadlineRefreshTimer: number = -1;
   private navigationWindow: window.Window | null = null;
@@ -56,6 +58,7 @@ export struct RootView {
 
   aboutToDisappear(): void {
     this.navigationAvoidanceActive = false;
+    this.querySession.dispose();
     this.detachPhoneNavigationAvoidance();
     if (this.deadlineRefreshTimer >= 0) {
       clearInterval(this.deadlineRefreshTimer);
@@ -232,7 +235,8 @@ export struct RootView {
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
         } else if (this.currentSection === AppSection.query) {
-          QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
+          QueryView({ session: this.querySession,
+            onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
             session: this.settingsSession,
@@ -318,7 +322,8 @@ export struct RootView {
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth })
         } else if (this.currentSection === AppSection.query) {
-          QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
+          QueryView({ session: this.querySession,
+            onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
             session: this.settingsSession,
@@ -381,7 +386,8 @@ export struct RootView {
     } else if (section === AppSection.calendar) {
       CalendarSectionView({ containerWidth: this.containerWidth })
     } else if (section === AppSection.query) {
-      QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
+      QueryView({ session: this.querySession,
+        onOpenSettings: () => this.selectSection(AppSection.settings) })
     } else {
       SettingsView({ session: this.settingsSession })
     }

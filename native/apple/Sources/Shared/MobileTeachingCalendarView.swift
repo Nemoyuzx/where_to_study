@@ -1072,7 +1072,7 @@ struct MobileTeachingCalendarView: View {
             .scrollDisabled(effectiveMonthPosition != .detailRaised)
             .accessibilityHidden(expansionProgress >= 0.25)
             .accessibilityIdentifier("calendar.mobile.month-day-summary")
-            .accessibilityValue(monthDetailsCanScrollBackward ? "已滚动" : "顶部")
+            .accessibilityValue(model.localized(monthDetailsCanScrollBackward ? "已滚动" : "顶部"))
             .background(Color.clear)
         } else {
             // Keep the viewport identity and geometry stable for UI semantics,
@@ -1086,7 +1086,7 @@ struct MobileTeachingCalendarView: View {
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
                 .accessibilityIdentifier("calendar.mobile.month-day-summary")
-                .accessibilityValue("顶部")
+                .accessibilityValue(model.localized("顶部"))
         }
     }
 
@@ -2701,9 +2701,9 @@ struct MobileTeachingCalendarView: View {
 
     private var monthAccessibilityValue: String {
         switch effectiveMonthPosition {
-        case .expanded: "已展开"
-        case .collapsed: "已收起"
-        case .detailRaised: "日程已展开"
+        case .expanded: model.localized("已展开")
+        case .collapsed: model.localized("已收起")
+        case .detailRaised: model.localized("日程已展开")
         }
     }
 

@@ -33,6 +33,7 @@ internal class AcademicGradesRepository(
 
     fun addObserver(observer: () -> Unit) { observers += observer }
     fun removeObserver(observer: () -> Unit) { observers -= observer }
+    internal fun clearUiObservers() { observers.clear() }
 
     fun reconcile() {
         val current = credentials()

@@ -7,6 +7,7 @@ import { DateParts, StrictDates } from '../common/StrictDates';
 import { DeadlineVisual } from '../common/DeadlineVisual';
 import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
+import { QuerySession } from './QuerySession';
 import { PageTitle } from './SharedComponents';
 import { ShuttleQueryLayout } from './ShuttleQueryLayout';
 import { GradeQueryView } from './GradeQueryView';
@@ -27,28 +28,18 @@ import {
 export struct QueryView {
   @Event onOpenSettings: () => void = () => {};
   @Consumer('appModel') model: AppModel = new AppModel();
-  @Local selectedTabRawValue: string = QueryPageTab.shuttle;
+  @Param session: QuerySession = new QuerySession();
   @Local tabContentOpacity: number = 1;
-  @Local eventFilterRawValue: string = ImportantEventFilter.all;
-  @Local eventCategory: string = '';
-  @Local showEndedEvents: boolean = false;
-  @Local searchText: string = '';
-  @Local requestedVisibleEventCount: number = ImportantEventQueryLogic.initialRequestedCount();
   @Local contentWidth: number = 390;
   @Local contentFontScale: number = 1;
   @Local tabPickerWidth: number = 358;
-  @Local shuttleSnapshot: ShuttleBusSnapshot | null = null;
-  @Local shuttleLoading: boolean = false;
-  @Local shuttleError: string = '';
   private readonly shuttleClient: ShuttleBusFetching = new ShuttleBusClient();
   private readonly eventScroller: Scroller = new Scroller();
   private readonly regularScroller: Scroller = new Scroller();
-  private readonly regularScrollOffsets: Map<string, number> = new Map<string, number>();
-  private eventFirstVisibleIndex: number = 0;
   private tabMotionGeneration: number = 0;
   private tabRestoreTimer: number = -1;
 
-  @Monitor('searchText', 'eventFilterRawValue', 'eventCategory', 'showEndedEvents',
+  @Monitor('session.searchText', 'session.eventFilterRawValue', 'session.eventCategory', 'session.showEndedEvents',
     'model.importantEventsCatalog', 'model.favoriteDeadlines')
   onEventQueryOrDataChange(monitor: IMonitor): void {
     this.resetEventRendering();
@@ -56,18 +47,32 @@ export struct QueryView {
 
   aboutToAppear(): void {
     this.updateFontScale();
-    this.loadShuttle();
+    this.session.attachView();
+    this.session.activateScope(this.model.isSampleMode());
+    if (this.selectedTab() === QueryPageTab.shuttle) { this.loadShuttle(); }
     this.model.ensureHolidays(StrictDates.todayParts().year, false);
     this.model.loadImportantEvents(false);
+    this.tabRestoreTimer = setTimeout(() => {
+      this.tabRestoreTimer = -1;
+      this.restoreSelectedTabScroll();
+    }, 16);
   }
 
   aboutToDisappear(): void {
+    this.saveCurrentTabScroll();
+    this.session.detachView();
     this.tabMotionGeneration++;
     if (this.tabRestoreTimer >= 0) {
       clearTimeout(this.tabRestoreTimer);
       this.tabRestoreTimer = -1;
     }
     this.tabContentOpacity = 1;
+  }
+
+  @Monitor('model.runtimeMode')
+  onRuntimeModeChange(): void {
+    this.session.activateScope(this.model.isSampleMode());
+    if (this.selectedTab() === QueryPageTab.shuttle) { this.loadShuttle(); }
   }
 
   private saveCurrentTabScroll(): void {
@@ -77,7 +82,7 @@ export struct QueryView {
     try {
       const offset: number = this.regularScroller.currentOffset().yOffset;
       if (Number.isFinite(offset)) {
-        this.regularScrollOffsets.set(this.selectedTab(), Math.max(0, offset));
+        this.session.regularScrollOffsets.set(this.selectedTab(), Math.max(0, offset));
       }
     } catch (e) {
       // 首帧或空页面尚未绑定 Scroller；保留此前记录的偏移量。
@@ -87,7 +92,7 @@ export struct QueryView {
   private restoreSelectedTabScroll(): void {
     if (this.selectedTab() === QueryPageTab.events) {
       try {
-        this.eventScroller.scrollToIndex(this.eventFirstVisibleIndex, false, ScrollAlign.START);
+        this.eventScroller.scrollToIndex(this.session.eventFirstVisibleIndex, false, ScrollAlign.START);
       } catch (e) {
         // 事件列表为空或尚未挂载，不覆盖筛选条件与分页状态。
       }
@@ -95,7 +100,7 @@ export struct QueryView {
     }
     try {
       this.regularScroller.scrollTo({ xOffset: 0,
-        yOffset: this.regularScrollOffsets.get(this.selectedTab()) ?? 0, animation: false });
+        yOffset: this.session.regularScrollOffsets.get(this.selectedTab()) ?? 0, animation: false });
     } catch (e) {
       // 刚切换到尚未挂载的查询页时，从顶部开始，不改变已有偏移记录。
     }
@@ -116,7 +121,8 @@ export struct QueryView {
         if (generation !== this.tabMotionGeneration) {
           return;
         }
-        this.selectedTabRawValue = tab;
+        this.session.selectedTabRawValue = tab;
+        if (tab === QueryPageTab.shuttle) { this.loadShuttle(); }
         this.tabRestoreTimer = setTimeout(() => {
           this.tabRestoreTimer = -1;
           if (generation !== this.tabMotionGeneration) {
@@ -183,15 +189,15 @@ export struct QueryView {
   }
 
   private selectedTab(): QueryPageTab {
-    if (this.selectedTabRawValue === QueryPageTab.assignments) { return QueryPageTab.assignments; }
-    if (this.selectedTabRawValue === QueryPageTab.exams) { return QueryPageTab.exams; }
-    if (this.selectedTabRawValue === QueryPageTab.grades) { return QueryPageTab.grades; }
-    return this.selectedTabRawValue === QueryPageTab.events ? QueryPageTab.events : QueryPageTab.shuttle;
+    if (this.session.selectedTabRawValue === QueryPageTab.assignments) { return QueryPageTab.assignments; }
+    if (this.session.selectedTabRawValue === QueryPageTab.exams) { return QueryPageTab.exams; }
+    if (this.session.selectedTabRawValue === QueryPageTab.grades) { return QueryPageTab.grades; }
+    return this.session.selectedTabRawValue === QueryPageTab.events ? QueryPageTab.events : QueryPageTab.shuttle;
   }
 
   private eventFilter(): ImportantEventFilter {
     for (const filter of this.availableEventFilters()) {
-      if (filter === this.eventFilterRawValue) {
+      if (filter === this.session.eventFilterRawValue) {
         return filter;
       }
     }
@@ -232,34 +238,23 @@ export struct QueryView {
     return QueryPageContract.iconOnlyTabs(this.tabPickerWidth, maximumWidth, this.compactTabs());
   }
 
-  private loadShuttle(): void {
-    if (this.shuttleLoading) {
-      return;
-    }
-    this.shuttleLoading = true;
-    this.shuttleError = '';
-    this.shuttleClient.fetch().then((snapshot: ShuttleBusSnapshot): void => {
-      this.shuttleSnapshot = snapshot;
-    }).catch((error: Error): void => {
-      this.shuttleError = error.message.length > 0 ? error.message : '班车信息暂时无法读取。';
-    }).finally((): void => {
-      this.shuttleLoading = false;
-    });
+  private loadShuttle(force: boolean = false): void {
+    void this.session.loadShuttle(this.shuttleClient, this.model.isSampleMode(), force);
   }
 
   private filteredEvents(): PublicDeadlineItem[] {
-    return ImportantEventQueryLogic.filter(this.eventCatalog(), this.searchText, this.eventFilter(),
-      this.effectiveEventCategory(), this.showEndedEvents);
+    return ImportantEventQueryLogic.filter(this.eventCatalog(), this.session.searchText, this.eventFilter(),
+      this.effectiveEventCategory(), this.session.showEndedEvents);
   }
 
   private visibleEvents(): PublicDeadlineItem[] {
     return ImportantEventQueryLogic.visiblePage(
-      this.filteredEvents(), this.requestedVisibleEventCount);
+      this.filteredEvents(), this.session.requestedVisibleEventCount);
   }
 
   private resetEventRendering(): void {
-    this.requestedVisibleEventCount = ImportantEventQueryLogic.initialRequestedCount();
-    this.eventFirstVisibleIndex = 0;
+    this.session.requestedVisibleEventCount = ImportantEventQueryLogic.initialRequestedCount();
+    this.session.eventFirstVisibleIndex = 0;
     try {
       this.eventScroller.scrollToIndex(0, false, ScrollAlign.START);
     } catch (e) {
@@ -270,12 +265,12 @@ export struct QueryView {
   private appendEventPage(endingIndex: number): void {
     const totalCount: number = this.filteredEvents().length;
     const visibleCount: number = ImportantEventQueryLogic.visibleCount(
-      totalCount, this.requestedVisibleEventCount);
+      totalCount, this.session.requestedVisibleEventCount);
     if (!ImportantEventQueryLogic.shouldAppend(endingIndex, visibleCount, totalCount)) {
       return;
     }
-    this.requestedVisibleEventCount = ImportantEventQueryLogic.nextRequestedCount(
-      this.requestedVisibleEventCount, totalCount);
+    this.session.requestedVisibleEventCount = ImportantEventQueryLogic.nextRequestedCount(
+      this.session.requestedVisibleEventCount, totalCount);
   }
 
   private eventCatalog(): PublicDeadlineItem[] {
@@ -290,12 +285,12 @@ export struct QueryView {
   private availableEventCategories(): string[] {
     return ImportantEventQueryLogic.availableCategories(
       this.eventCatalog(),
-      this.eventFilter(), this.showEndedEvents);
+      this.eventFilter(), this.session.showEndedEvents);
   }
 
   private effectiveEventCategory(): string {
-    return this.availableEventCategories().indexOf(this.eventCategory) >= 0 ?
-      this.eventCategory : '';
+    return this.availableEventCategories().indexOf(this.session.eventCategory) >= 0 ?
+      this.session.eventCategory : '';
   }
 
   private openURL(url: string | null): void {
@@ -453,12 +448,12 @@ export struct QueryView {
 
   @Builder
   shuttleContent() {
-    if (this.shuttleLoading && this.shuttleSnapshot === null) {
+    if (this.session.shuttleLoading && this.session.shuttleSnapshot === null) {
       this.shuttleMessage('正在读取最新班车信息', '正在读取后勤部最新通知与当前生效时刻表。', false)
-    } else if (this.shuttleSnapshot === null) {
-      this.shuttleMessage('班车信息暂不可用', this.shuttleError, true)
+    } else if (this.session.shuttleSnapshot === null) {
+      this.shuttleMessage('班车信息暂不可用', this.session.shuttleError, true)
     } else {
-      this.shuttleSnapshotContent(ShuttleBusLogic.dailyView(this.shuttleSnapshot as ShuttleBusSnapshot))
+      this.shuttleSnapshotContent(ShuttleBusLogic.dailyView(this.session.shuttleSnapshot as ShuttleBusSnapshot))
     }
   }
 
@@ -494,7 +489,7 @@ export struct QueryView {
           .fontColor(AppTheme.primary())
           .backgroundColor(AppTheme.surfaceVariant())
           .borderRadius(8)
-          .onClick(() => this.loadShuttle())
+          .onClick(() => this.loadShuttle(true))
       } else {
         LoadingProgress().width(22).height(22).color(AppTheme.primary())
       }
@@ -544,13 +539,29 @@ export struct QueryView {
         .backgroundColor(AppTheme.surfaceVariant())
         .id('query.reload')
         .accessibilityText(this.model.text('刷新班车信息'))
-        .enabled(!this.shuttleLoading)
-        .onClick(() => this.loadShuttle())
+        .enabled(!this.session.shuttleLoading)
+        .onClick(() => this.loadShuttle(true))
       }
       .width('100%')
       .alignItems(VerticalAlign.Top)
-      if (this.shuttleSnapshot?.status !== 'healthy') {
+      if (this.session.shuttleSnapshot?.status !== 'healthy') {
         Text(this.model.text('当前展示最近一次成功同步的缓存'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }
+      if (this.session.shuttleError.length > 0) {
+        Text(this.model.text('班车刷新失败，继续显示上次获取的数据。') + ' ' + this.session.shuttleError)
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }
+      Text(this.model.text('数据生成时间：') + (this.session.shuttleSnapshot?.generatedAt ?? ''))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+      if (this.session.shuttleFetchedAtMillis > 0) {
+        Text(this.model.text('本机获取时间：') + StrictDates.formatFetchedAt(this.session.shuttleFetchedAtMillis))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
@@ -864,7 +875,7 @@ export struct QueryView {
   @Builder
   eventsContent() {
     Column({ space: 10 }) {
-      TextInput({ placeholder: this.model.text('搜索名称、主办方、分类、地点或来源'), text: this.searchText })
+      TextInput({ placeholder: this.model.text('搜索名称、主办方、分类、地点或来源'), text: this.session.searchText })
         .id('query.events.search')
         .type(InputType.Normal)
         .fontSize(14)
@@ -878,7 +889,7 @@ export struct QueryView {
         .width('100%')
         .enableKeyboardOnFocus(true)
         .onChange((value: string) => {
-          this.searchText = value;
+          this.session.searchText = value;
         })
       Scroll() {
         Row({ space: 7 }) {
@@ -894,8 +905,8 @@ export struct QueryView {
               .backgroundColor(this.eventFilter() === filter ?
                 AppTheme.primaryFill() : AppTheme.surfaceVariant())
               .onClick(() => {
-                this.eventFilterRawValue = filter;
-                this.eventCategory = '';
+                this.session.eventFilterRawValue = filter;
+                this.session.eventCategory = '';
               })
           }, (filter: ImportantEventFilter) => 'query-filter.' + filter)
         }
@@ -920,7 +931,7 @@ export struct QueryView {
               .backgroundColor(this.effectiveEventCategory().length === 0 ?
                 AppTheme.primaryFill() : AppTheme.surface())
               .onClick(() => {
-                this.eventCategory = '';
+                this.session.eventCategory = '';
               })
             ForEach(this.availableEventCategories(), (category: string) => {
               Text(category)
@@ -936,7 +947,7 @@ export struct QueryView {
                 .backgroundColor(this.effectiveEventCategory() === category ?
                   AppTheme.primaryFill() : AppTheme.surface())
                 .onClick(() => {
-                  this.eventCategory = category;
+                  this.session.eventCategory = category;
                 })
             }, (category: string) => 'query-category.' + category)
           }
@@ -951,13 +962,13 @@ export struct QueryView {
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
           .layoutWeight(1)
-        Toggle({ type: ToggleType.Switch, isOn: this.showEndedEvents })
+        Toggle({ type: ToggleType.Switch, isOn: this.session.showEndedEvents })
           .id('query.events.show_ended')
           .selectedColor(AppTheme.primaryFill())
           .width(46)
           .height(26)
           .onChange((value: boolean) => {
-            this.showEndedEvents = value;
+            this.session.showEndedEvents = value;
           })
       }
       .width('100%')
@@ -997,7 +1008,7 @@ export struct QueryView {
         .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .onScrollIndex((start: number, end: number, center: number) => {
           if (this.tabContentOpacity >= 0.99) {
-            this.eventFirstVisibleIndex = start;
+            this.session.eventFirstVisibleIndex = start;
           }
           this.appendEventPage(end);
         })
@@ -1202,7 +1213,7 @@ export struct QueryView {
   private departureRowKey(rows: ShuttleBusRow[], daily: ShuttleBusDailyView): string {
     return rows.map((row: ShuttleBusRow): string =>
       row.departureTime + this.serviceLabel(row.services.get(daily.weekdayKey))).join('|') +
-      daily.date + (this.shuttleSnapshot?.generatedAt ?? '') + AppTheme.colorKey() +
+      daily.date + (this.session.shuttleSnapshot?.generatedAt ?? '') + AppTheme.colorKey() +
       this.model.languageSettingRawValue + this.contentFontScale.toString() + ':' +
       ShuttleQueryLayout.routeColumns(this.contentWidth, this.contentFontScale).toString() + ':' +
       ShuttleQueryLayout.departureColumns(this.contentWidth, this.contentFontScale).toString();

@@ -9,6 +9,7 @@ import android.os.LocaleList
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.EditText
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
@@ -643,7 +644,7 @@ object UiText {
 
     fun localizeTree(root: View) {
         if (root is TextView && root.getTag(R.id.preserve_raw_text) != true) {
-            root.text = resolve(root.context, root.text.toString())
+            if (root !is EditText) root.text = resolve(root.context, root.text.toString())
             root.hint = root.hint?.toString()?.let { resolve(root.context, it) }
         }
         root.contentDescription = root.contentDescription?.toString()?.let {

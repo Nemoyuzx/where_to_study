@@ -76,6 +76,11 @@ async function visibleSetting(driver: Driver, id: string): Promise<Component | n
   }
 }
 
+function boundsText(bounds: Rect): string {
+  return '[' + bounds.left.toString() + ',' + bounds.top.toString() + ',' +
+    bounds.right.toString() + ',' + bounds.bottom.toString() + ']';
+}
+
 async function safeSwipeStartFraction(driver: Driver, bounds: Rect, x: number): Promise<number> {
   // Swipe 的首触点会让 TextInput 获得焦点；即使只想滚动也可能弹出第三方 IME。
   // 依据真实控件边界选择卡片文字/间隙，避免所有当前可见的设置输入框。
@@ -276,9 +281,66 @@ export default function settingsPresentationDeviceTest() {
         }
       }
     });
+
+    it('language_switch_keeps_the_visible_settings_anchor_in_place', 0, async () => {
+      const driver: Driver = await launchReviewDemo(true);
+      try {
+        await openSettings(driver);
+        const english: Component = await scrollToSetting(driver, 'settings.language.2');
+        const before = await english.getBounds();
+        await english.click();
+        await driver.delayMs(220); // 分段控件的160ms选中动画完成。
+        const chineseEnglish: Component = await driver.findComponent(ON.id('settings.language.1'));
+        expect(await chineseEnglish.getText()).assertEqual('Simplified Chinese');
+        const afterEnglish: Component | null = await visibleSetting(driver, 'settings.language.2');
+        if (afterEnglish === null) { throw new Error('切为英文后语言卡不再位于原视口'); }
+        const englishBounds: Rect = await afterEnglish.getBounds();
+        const englishDelta: number = englishBounds.top - before.top;
+        const englishRowHeight: number = Math.max(before.bottom - before.top,
+          englishBounds.bottom - englishBounds.top);
+        if (Math.abs(englishDelta) > englishRowHeight) {
+          const viewport: Rect = await (await driver.findComponent(ON.id('settings_scroll'))).getBounds();
+          throw new Error('中→英语言锚点位移超过一个实测分段行高：delta=' + englishDelta.toString() +
+            ' rowHeight=' + englishRowHeight.toString() +
+            ' before=' + boundsText(before) + ' after=' + boundsText(englishBounds) +
+            ' scrollViewport=' + boundsText(viewport));
+        }
+        expect(await hasID(driver, 'settings_scroll')).assertTrue();
+
+        await chineseEnglish.click();
+        await driver.delayMs(220);
+        const chineseChinese: Component = await driver.findComponent(ON.id('settings.language.1'));
+        expect(await chineseChinese.getText()).assertEqual('简体中文');
+        const afterChinese: Component | null = await visibleSetting(driver, 'settings.language.2');
+        if (afterChinese === null) { throw new Error('切回中文后语言卡不再位于原视口'); }
+        const chineseBounds: Rect = await afterChinese.getBounds();
+        const chineseDelta: number = chineseBounds.top - before.top;
+        const chineseRowHeight: number = Math.max(before.bottom - before.top,
+          chineseBounds.bottom - chineseBounds.top);
+        if (Math.abs(chineseDelta) > chineseRowHeight) {
+          const viewport: Rect = await (await driver.findComponent(ON.id('settings_scroll'))).getBounds();
+          throw new Error('英→中语言锚点位移超过一个实测分段行高：delta=' + chineseDelta.toString() +
+            ' rowHeight=' + chineseRowHeight.toString() +
+            ' before=' + boundsText(before) + ' after=' + boundsText(chineseBounds) +
+            ' scrollViewport=' + boundsText(viewport));
+        }
+        console.info('SettingsLanguageAnchor before=' + boundsText(before) +
+          ' english=' + boundsText(englishBounds) + ' delta=' + englishDelta.toString() +
+          ' rowHeight=' + englishRowHeight.toString() + ' chinese=' + boundsText(chineseBounds) +
+          ' delta=' + chineseDelta.toString() + ' rowHeight=' + chineseRowHeight.toString());
+      } catch (e) {
+        throw await withFailureEvidence(driver, 'language-scroll', e);
+      } finally {
+        await AbilityDelegatorRegistry.getAbilityDelegator().startAbility({
+          bundleName: BUNDLE_NAME,
+          abilityName: 'EntryAbility',
+          parameters: { 'reviewDemo': true, 'privacyConsentAcceptedForTesting': true }
+        });
+      }
+    });
   });
 
-  // 单独显式授权后才注册真实输入用例；默认设备套件只有上述两个无 IME 用例。
+  // 单独显式授权后才注册真实输入用例；默认设备套件只有上述三个无 IME 用例。
   if (AbilityDelegatorRegistry.getArguments().parameters['runSettingsKeyboardInput'] === 'true') {
     describe('SettingsKeyboardInputDevice', () => {
       it('physical_keyboard_input_drafts_survive_real_phone_sidebar_rotation', 0, async () => {

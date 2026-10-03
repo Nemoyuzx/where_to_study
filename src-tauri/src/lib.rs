@@ -1372,6 +1372,8 @@ async fn fetch_schedule(
             course_deletions::load(&path, &account_scope).map_err(|error| error.message)
         })
         .map_err(LocalDataAccessError::message)?;
+    #[cfg(not(mobile))]
+    refresh_tray_courses(app.clone(), true);
     Ok(course_deletions::apply(&schedule, &rules))
 }
 
@@ -1840,8 +1842,9 @@ fn set_interface_language(app: tauri::AppHandle, payload: String) -> Result<(), 
     }
     #[cfg(not(mobile))]
     {
-        DESKTOP_INTERFACE_ENGLISH.store(payload == "en", Ordering::SeqCst);
-        refresh_tray_courses(app, true);
+        if DESKTOP_INTERFACE_ENGLISH.swap(payload == "en", Ordering::SeqCst) != (payload == "en") {
+            refresh_tray_courses(app, true);
+        }
     }
     #[cfg(mobile)]
     let _ = app;
@@ -2130,11 +2133,36 @@ fn truncate_menu_label(value: String, limit: usize) -> String {
 static DESKTOP_INTERFACE_ENGLISH: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(mobile))]
+static TRAY_REFRESH_REVISION: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(not(mobile))]
 fn desktop_text<'a>(chinese: &'a str, english: &'a str) -> &'a str {
     if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
         english
     } else {
         chinese
+    }
+}
+
+#[cfg(not(mobile))]
+fn localized_tray_message(message: &str, english: bool) -> &str {
+    if !english {
+        return message;
+    }
+    match message {
+        "暂无本地课表。" => "No local schedule.",
+        "暂无本地课表，请在应用中刷新个人课表。" => {
+            "No local schedule. Refresh it in the app."
+        }
+        "暂无本地课表，请先获取/刷新个人课表。" => {
+            "No local schedule. Please refresh your schedule."
+        }
+        "暂无本地课表，请先在设置中重新保存账号。" => {
+            "No local schedule. Save your account in Settings."
+        }
+        "第一周周一日期格式不正确。" => "Invalid first-Monday date.",
+        // Source/API errors remain raw; only known app chrome is translated.
+        _ => message,
     }
 }
 
@@ -2320,7 +2348,14 @@ fn build_tray_menu<M: Manager<tauri::Wry>>(
                 &menu,
                 app,
                 "course_message",
-                truncate_menu_label(message.clone(), 42),
+                truncate_menu_label(
+                    localized_tray_message(
+                        message,
+                        DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst),
+                    )
+                    .to_string(),
+                    42,
+                ),
                 true,
             )?;
         }
@@ -2425,14 +2460,16 @@ mod desktop_calendar_week_tests {
 async fn load_today_course_content(
     app: tauri::AppHandle,
     generation: LocalDataGeneration,
-    prefer_saved_schedule: bool,
+    local_only: bool,
+    requested_refresh_revision: u64,
 ) -> TrayCourseContent {
-    if prefer_saved_schedule {
-        match LOCAL_DATA.with_current_account(generation, || load_current_schedule(&app)) {
-            Ok(Some(schedule)) => return schedule_to_tray_content(schedule),
-            Ok(None) => {}
-            Err(error) => return TrayCourseContent::Message(error.message()),
-        }
+    if local_only {
+        // Locale/date/course-edit updates must not turn an empty cache into
+        // a network login. Startup schedule refresh is
+        // owned by the frontend's existing automatic-term single-flight gate.
+        return local_tray_course_content(
+            LOCAL_DATA.with_current_account(generation, || load_current_schedule(&app)),
+        );
     }
 
     let (request, account_scope, credential_revision, session_epoch) = match LOCAL_DATA
@@ -2473,13 +2510,77 @@ async fn load_today_course_content(
                     .map_err(|error| error.message)?
                     .ok_or_else(|| "无法读取已保存课表。".to_string())
             }) {
-                Ok(effective) => effective,
+                Ok(effective) => {
+                    // A language/date refresh may have superseded the remote
+                    // request while it was in flight. Publish its newly saved
+                    // schedule through a fresh local-only menu task, outside
+                    // the account lock, using the current locale and scope.
+                    if TRAY_REFRESH_REVISION.load(Ordering::SeqCst) != requested_refresh_revision {
+                        refresh_tray_courses(app.clone(), true);
+                    }
+                    effective
+                }
                 Err(error) => return TrayCourseContent::Message(error.message()),
             }
         }
         Err(error) => return TrayCourseContent::Message(error.message),
     };
     schedule_to_tray_content(schedule)
+}
+
+#[cfg(not(mobile))]
+fn local_tray_course_content(
+    cached: Result<Option<ScheduleResponse>, LocalDataAccessError>,
+) -> TrayCourseContent {
+    match cached {
+        Ok(Some(schedule)) => schedule_to_tray_content(schedule),
+        Ok(None) => {
+            TrayCourseContent::Message("暂无本地课表，请在应用中刷新个人课表。".to_string())
+        }
+        Err(error) => TrayCourseContent::Message(error.message()),
+    }
+}
+
+#[cfg(all(test, not(mobile)))]
+mod local_tray_refresh_tests {
+    use super::*;
+
+    #[test]
+    fn an_empty_local_cache_remains_a_local_message() {
+        let content = local_tray_course_content(Ok(None));
+        match content {
+            TrayCourseContent::Message(message) => {
+                assert_eq!(message, "暂无本地课表，请在应用中刷新个人课表。");
+                assert_eq!(
+                    localized_tray_message(&message, true),
+                    "No local schedule. Refresh it in the app."
+                );
+                assert_eq!(localized_tray_message(&message, false), message);
+            }
+            _ => panic!("An empty cache cannot become an implicit remote request."),
+        }
+    }
+
+    #[test]
+    fn local_access_failures_are_not_retried_as_network_fetches() {
+        for failure in [
+            LocalDataAccessError::Stale,
+            LocalDataAccessError::AccountAccessRevoked,
+        ] {
+            assert!(matches!(
+                local_tray_course_content(Err(failure)),
+                TrayCourseContent::Message(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn source_text_is_never_translated() {
+        assert_eq!(
+            localized_tray_message("竞赛服务返回的原始信息", true),
+            "竞赛服务返回的原始信息"
+        );
+    }
 }
 
 #[cfg(not(mobile))]
@@ -2519,8 +2620,9 @@ fn set_tray_menu(app: &tauri::AppHandle, content: TrayCourseContent) -> tauri::R
 }
 
 #[cfg(not(mobile))]
-fn refresh_tray_courses(app: tauri::AppHandle, prefer_saved_schedule: bool) {
+fn refresh_tray_courses(app: tauri::AppHandle, local_only: bool) {
     let generation = LOCAL_DATA.begin();
+    let refresh_revision = TRAY_REFRESH_REVISION.fetch_add(1, Ordering::SeqCst) + 1;
     let course_revision = COURSE_EDITS_REVISION.load(Ordering::SeqCst);
     if let Err(error) = LOCAL_DATA.with_current_account(generation, || {
         set_tray_menu(&app, TrayCourseContent::Loading).map_err(|error| error.to_string())
@@ -2540,8 +2642,12 @@ fn refresh_tray_courses(app: tauri::AppHandle, prefer_saved_schedule: bool) {
     }
     tauri::async_runtime::spawn(async move {
         let content =
-            load_today_course_content(app.clone(), generation, prefer_saved_schedule).await;
+            load_today_course_content(app.clone(), generation, local_only, refresh_revision).await;
         let _ = LOCAL_DATA.with_current_account(generation, || {
+            // A delayed refresh must not replace the newer locale/date menu.
+            if TRAY_REFRESH_REVISION.load(Ordering::SeqCst) != refresh_revision {
+                return Ok(());
+            }
             let content = if COURSE_EDITS_REVISION.load(Ordering::SeqCst) != course_revision {
                 match load_current_schedule(&app)? {
                     Some(effective) => schedule_to_tray_content(effective),

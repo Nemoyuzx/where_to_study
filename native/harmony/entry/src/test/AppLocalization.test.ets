@@ -13,6 +13,10 @@ export default function appLocalizationTest() {
         .assertEqual(AppLanguage.english);
       expect(AppLanguageInfo.resolved(AppLanguage.simplifiedChinese, 'en-US'))
         .assertEqual(AppLanguage.simplifiedChinese);
+      expect(AppLanguageInfo.label(AppLanguage.simplifiedChinese, AppLanguage.english))
+        .assertEqual('Simplified Chinese');
+      expect(AppLanguageInfo.label(AppLanguage.english, AppLanguage.english))
+        .assertEqual('English');
     });
 
     it('static_ui_translates_but_api_content_stays_verbatim', 0, () => {

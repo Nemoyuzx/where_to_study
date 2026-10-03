@@ -1018,6 +1018,8 @@ internal class CalendarDailyInfoRepository(
         observers.remove(owner)
     }
 
+    internal fun clearUiObservers() { observers.clear() }
+
     fun loadAlmanac(date: String, force: Boolean = false, onComplete: () -> Unit) {
         if (closed.get() || (!force && almanacByDate[date] != null) || !loadingAlmanac.add(date)) {
             return

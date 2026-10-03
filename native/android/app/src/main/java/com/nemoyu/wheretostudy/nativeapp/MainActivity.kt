@@ -60,46 +60,32 @@ class MainActivity : Activity() {
     private enum class SettingsRoute { MAIN, FAVORITES }
     private enum class CalendarImportKind { SCHEDULE, FAVORITES }
 
-    /** Configuration changes retain private query data in memory only, never in a Bundle or on disk. */
-    private data class RetainedInformationQuery(
-        val grades: AcademicGradesRepository,
-        val session: InformationQuerySessionState,
-    )
+    private val activitySession by lazy {
+        (lastNonConfigurationInstance as? ActivitySessionState) ?: ActivitySessionState(applicationContext)
+    }
 
     private lateinit var content: FrameLayout
     private lateinit var adaptiveRoot: FrameLayout
     private val navigationViews = mutableMapOf<Destination, TextView>()
     private var phoneNavigationBar: PhoneNavigationBar? = null
-    private val credentialStore by lazy { SecureCredentialStore(this) }
-    private val preferences by lazy { AppPreferences(this) }
+    private val credentialStore get() = activitySession.credentials
+    private val preferences get() = activitySession.preferences
     private val privacyConsentStore by lazy { PrivacyConsentStore(this) }
-    private val plannerQueryState by lazy { PlannerQueryState(preferences.campusID) }
+    private val plannerQueryState get() = activitySession.planner
     private lateinit var teachingCalendarSessionState: TeachingCalendarSessionState
     private lateinit var informationQuerySessionState: InformationQuerySessionState
     private var informationQueryPage: InformationQueryPage? = null
     private var settingsPage: SettingsPage? = null
-    private val scheduleRepository by lazy {
-        ScheduleRepository(this, credentialStore, preferences)
-    }
-    private val classroomRepository by lazy {
-        ClassroomRepository(this, credentialStore)
-    }
-    private val weatherRepository by lazy { WeatherRepository() }
-    private val shuttleBusRepository by lazy { ShuttleBusRepository() }
-    private val academicGradesRepository by lazy {
-        (lastNonConfigurationInstance as? RetainedInformationQuery)?.grades
-            ?: AcademicGradesRepository(SecureCredentialStore(applicationContext)::load)
-    }
-    private val calendarDailyInfoRepository by lazy {
-        CalendarDailyInfoRepository(
-            assignmentClient = UCloudAssignmentClient(credentialStore),
-            preferences = preferences,
-        )
-    }
-    private val holidayRepositoryDelegate = lazy {
-        HolidayRepository(this)
-    }
-    private val holidayRepository by holidayRepositoryDelegate
+    private var restoringUiState = false
+    private var uiRestoreRevision = 0
+    private var skipFirstResumeResourceLoads = false
+    private val scheduleRepository get() = activitySession.schedule
+    private val classroomRepository get() = activitySession.classrooms
+    private val weatherRepository get() = activitySession.weather
+    private val shuttleBusRepository get() = activitySession.shuttles
+    private val academicGradesRepository get() = activitySession.grades
+    private val calendarDailyInfoRepository get() = activitySession.dailyInfo
+    private val holidayRepository get() = activitySession.holidays
     private val systemCalendarImporterDelegate = lazy {
         SystemCalendarImporter(this)
     }
@@ -130,7 +116,9 @@ class MainActivity : Activity() {
     internal var controlHapticEventCount = 0
         private set
     private var currentFoldingFeature: FoldingFeature? = null
-    private var automaticScheduleLaunchRefreshKey: AutomaticScheduleLaunchRefreshKey? = null
+    private var automaticScheduleLaunchRefreshKey: AutomaticScheduleLaunchRefreshKey?
+        get() = activitySession.automaticRefreshKey
+        set(value) { activitySession.automaticRefreshKey = value }
     private var applicationContentStarted = false
     private var privacyConsentDialog: AlertDialog? = null
     private var windowLayoutListenerRegistered = false
@@ -154,6 +142,9 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         DailyCourseNotificationRuntimeMode.activateFrom(intent)
         super.onCreate(savedInstanceState)
+        activitySession.uiOwner.attach(this)
+        restoringUiState = lastNonConfigurationInstance is ActivitySessionState
+        skipFirstResumeResourceLoads = restoringUiState
         Palette.configure(this)
         bindWindowColorTheme(window)
         calendarPermissionRequestPending = savedInstanceState
@@ -185,7 +176,7 @@ class MainActivity : Activity() {
             ?.getString(SETTINGS_ROUTE_KEY)
             ?.let { saved -> SettingsRoute.entries.firstOrNull { it.name == saved } }
             ?: SettingsRoute.MAIN
-        teachingCalendarSessionState = TeachingCalendarSessionState(
+        teachingCalendarSessionState = activitySession.calendar ?: TeachingCalendarSessionState(
             selectedDateMillis = savedInstanceState
                 ?.getLong(TEACHING_CALENDAR_DATE_KEY, System.currentTimeMillis())
                 ?: System.currentTimeMillis(),
@@ -206,11 +197,11 @@ class MainActivity : Activity() {
             initialDayWeekAgendaExpanded = savedInstanceState
                 ?.getBoolean(TEACHING_CALENDAR_DAY_WEEK_AGENDA_EXPANDED_KEY, true)
                 ?: true,
-        )
-        informationQuerySessionState = (lastNonConfigurationInstance as? RetainedInformationQuery)?.session
+        ).also { activitySession.calendar = it }
+        informationQuerySessionState = activitySession.query
             ?: InformationQuerySessionState(
                 savedInstanceState?.getString(INFORMATION_QUERY_MODE_KEY),
-            )
+            ).also { activitySession.query = it }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
@@ -232,17 +223,23 @@ class MainActivity : Activity() {
     private fun startApplicationContent() {
         if (applicationContentStarted || isFinishing || isDestroyed) return
         applicationContentStarted = true
+        val firstSessionStart = !activitySession.applicationStarted
+        activitySession.applicationStarted = true
         installAdaptiveRoot()
         configureSystemBarIcons()
-        prewarmPublicDeadlinesIfEnabled()
-        calendarDailyInfoRepository.loadImportantEvents()
-        shuttleBusRepository.load()
+        if (firstSessionStart) {
+            prewarmPublicDeadlinesIfEnabled()
+            calendarDailyInfoRepository.loadImportantEvents()
+            shuttleBusRepository.load()
+        }
         updateAdaptiveLayout(force = true)
         DailyClassroomRefreshScheduler.ensureScheduled(this)
         DailyCourseSummaryScheduler.reconcile(this)
         CourseReminderScheduler.reconcile(this)
-        refreshScheduleAtStartup()
-        refreshClassroomsAtStartup()
+        if (firstSessionStart) {
+            refreshScheduleAtStartup()
+            refreshClassroomsAtStartup()
+        }
         if (calendarPermissionRequestPending && hasCalendarPermissions()) {
             resumeCalendarImportAfterRecreation()
         } else {
@@ -266,9 +263,11 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (!applicationContentStarted) return
-        prewarmPublicDeadlinesIfEnabled()
-        calendarDailyInfoRepository.loadImportantEvents()
-        shuttleBusRepository.load()
+        if (skipFirstResumeResourceLoads) skipFirstResumeResourceLoads = false else {
+            prewarmPublicDeadlinesIfEnabled()
+            calendarDailyInfoRepository.loadImportantEvents()
+            shuttleBusRepository.load()
+        }
         val settingChanged = DailyCourseSummaryScheduler.synchronizePermissionState(this)
         val courseReminderChanged = CourseReminderScheduler.synchronizePermissionState(this)
         val exactAccess = CourseReminderScheduler.hasExactAccess(this)
@@ -413,6 +412,7 @@ class MainActivity : Activity() {
         if (windowWidthDp <= 0) return
         val spec = resolveAdaptiveLayout(windowWidthDp, navigationRailCollapsed)
         if (!force && spec == currentLayoutSpec) return
+        captureUiSession()
 
         navigationRailAnimator?.cancel()
         navigationRailAnimator = null
@@ -700,6 +700,7 @@ class MainActivity : Activity() {
         (start + (end - start) * fraction).toInt()
 
     private fun navigate(destination: Destination) {
+        captureUiSession()
         val previousDestination = selectedDestination
         selectedDestination = destination
         if (destination == Destination.SETTINGS) prewarmPublicDeadlinesIfEnabled()
@@ -797,6 +798,7 @@ class MainActivity : Activity() {
                 classroomRepository,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
                 currentLayoutSpec?.usesBottomNavigation == true,
+                activitySession.settings,
             ).also { settingsPage = it }.build()
         }
         page.id = destination.pageViewID
@@ -810,6 +812,28 @@ class MainActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ),
         )
+        restoreUiAnchor(page)
+    }
+
+    private fun captureUiSession() {
+        if (restoringUiState) return
+        settingsPage?.let { activitySession.settings = it.captureDraft() }
+        if (!::content.isInitialized) return
+        uiDescendants(content).filterIsInstance<android.widget.ScrollView>().filter { it.isAttachedToWindow }
+            .forEach { scroll -> scroll.sessionKey()?.let { activitySession.scrollAnchors[it] = scroll.captureAnchor() } }
+    }
+
+    private fun restoreUiAnchor(page: View) {
+        val revision = ++uiRestoreRevision
+        restoringUiState = true
+        page.postOnAnimation { page.postOnAnimation restore@ {
+            if (revision != uiRestoreRevision) return@restore
+            if (!page.isAttachedToWindow) { restoringUiState = false; return@restore }
+            uiDescendants(page).filterIsInstance<android.widget.ScrollView>().forEach { scroll ->
+                scroll.sessionKey()?.let { activitySession.scrollAnchors[it] }?.let(scroll::restoreAnchor)
+            }
+            restoringUiState = false
+        } }
     }
 
     fun refreshCurrentPage() {
@@ -887,10 +911,15 @@ class MainActivity : Activity() {
     }
 
     fun updateAppLanguage(language: AppLanguage) {
+        if (!isCurrentUiOwner()) return
         if (preferences.languageCode == language.code) return
+        captureUiSession()
         preferences.languageCode = language.code
         recreate()
     }
+
+    internal fun isCurrentUiOwner(): Boolean = !isFinishing && !isDestroyed && activitySession.uiOwner.current() === this
+    internal fun allowsAutomaticPageLoads(): Boolean = !restoringUiState
 
     fun refreshPlannerIfVisible() {
         if (selectedDestination == Destination.PLANNER) plannerPage?.refreshClassroomsInPlace()
@@ -898,6 +927,35 @@ class MainActivity : Activity() {
 
     fun refreshPlannerWeatherIfVisible() {
         if (selectedDestination == Destination.PLANNER) plannerPage?.refreshWeatherInPlace()
+    }
+
+    internal fun weatherCompletionCallback(): () -> Unit {
+        val owner = activitySession.uiOwner
+        return { owner.current()?.refreshPlannerWeatherIfVisible() }
+    }
+
+    internal fun classroomCompletionCallback(userRequested: Boolean = false): (Result<ClassroomsCache>) -> Unit {
+        val owner = activitySession.uiOwner
+        return { result -> owner.current()?.let { current ->
+            current.refreshPlannerIfVisible()
+            if (userRequested) Toast.makeText(current, current.uiText(if (result.isSuccess)
+                "当天空教室已更新" else result.exceptionOrNull()?.message ?: "当天空教室获取失败"), Toast.LENGTH_LONG).show()
+        } }
+    }
+
+    internal fun scheduleCompletionCallback(userRequested: Boolean = false,
+        refreshOtherPages: Boolean = true): (Result<ScheduleSnapshot>) -> Unit {
+        val owner = activitySession.uiOwner
+        return { result -> owner.current()?.publishScheduleCompletion(result, userRequested, refreshOtherPages) }
+    }
+
+    private fun publishScheduleCompletion(result: Result<ScheduleSnapshot>, userRequested: Boolean,
+        refreshOtherPages: Boolean) {
+        if (result.isSuccess) reconcileDailyCourseNotifications()
+        if (userRequested) Toast.makeText(this, uiText(result.fold(
+            onSuccess = { "个人课表已更新，共 ${it.courses.size} 门课程" },
+            onFailure = { it.message ?: "个人课表获取失败" })), Toast.LENGTH_LONG).show()
+        scheduleDidRefresh(result.isSuccess, refreshOtherPages)
     }
 
     fun refreshCalendarIfVisible() {
@@ -916,6 +974,36 @@ class MainActivity : Activity() {
         onComplete: (Result<CustomDeadlineFeedMetadata>) -> Unit,
     ) {
         calendarDailyInfoRepository.validateCustomFeed(sourceURL, onComplete)
+    }
+
+    internal fun isCustomValidationPending() = activitySession.customValidationPending
+
+    internal fun validateAndSaveCustomDeadlineFeed(sourceURL: String, enabled: Boolean) {
+        val retained = activitySession
+        if (retained.customValidationPending) return
+        val token = ++retained.customValidationToken
+        val generation = LocalDataCoordinator.snapshot()
+        retained.customValidationPending = true
+        retained.dailyInfo.validateCustomFeed(sourceURL) { result ->
+            if (token != retained.customValidationToken) return@validateCustomFeed
+            retained.customValidationPending = false
+            if (!LocalDataCoordinator.isCurrent(generation)) return@validateCustomFeed
+            result.onSuccess {
+                retained.preferences.customDeadlinesURL = sourceURL
+                retained.preferences.customDeadlinesEnabled = enabled
+                retained.dailyInfo.reloadDeadlineSettings()
+                val key = "id/${R.id.settings_custom_deadlines_url}"
+                retained.settings?.let { draft -> draft.inputs[key]?.takeIf { it.text.trim() == sourceURL }?.let { input ->
+                    retained.settings = draft.copy(inputs = draft.inputs + (key to input.copy(text = sourceURL)))
+                } }
+            }
+            retained.uiOwner.current()?.let { current ->
+                current.settingsPage?.customValidationDidComplete(sourceURL, result)
+                Toast.makeText(current, current.uiText(result.fold(
+                    onSuccess = { "自定义日程已保存：${it.sourceName}，${it.itemCount} 项" },
+                    onFailure = { it.message ?: "自定义日程校验失败。" })), Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     fun reloadDeadlineSettings() {
@@ -1205,7 +1293,7 @@ class MainActivity : Activity() {
             clearItem("个人课表") { scheduleRepository.clearLocalDataCoordinated() }
             clearItem("空教室缓存") { classroomRepository.clearLocalDataCoordinated() }
             clearItem("节假日缓存") {
-                if (holidayRepositoryDelegate.isInitialized()) {
+                if (activitySession.holidayDelegate.isInitialized()) {
                     holidayRepository.clearLocalDataCoordinated()
                 } else {
                     HolidayStore(this).clear()
@@ -1220,6 +1308,11 @@ class MainActivity : Activity() {
             ThemeBindings.refreshAll(window.decorView)
             TodayCourseWidgetProvider.refresh(this)
         }
+        activitySession.settings = null
+        activitySession.customValidationToken++
+        activitySession.customValidationPending = false
+        activitySession.scrollAnchors.clear()
+        settingsPage = null
         runCatching(::refreshCurrentPage)
         return LocalDataClearResult(failures)
     }
@@ -1229,11 +1322,7 @@ class MainActivity : Activity() {
     }
 
     private fun refreshClassroomsAtStartup() {
-        classroomRepository.refresh(force = false) { result ->
-            if (result.isSuccess && selectedDestination == Destination.PLANNER) {
-                refreshCurrentPage()
-            }
-        }
+        classroomRepository.refresh(force = false, onComplete = classroomCompletionCallback())
     }
 
     private fun refreshScheduleAtStartup() {
@@ -1251,15 +1340,13 @@ class MainActivity : Activity() {
             currentTermID,
         ) ?: return
         automaticScheduleLaunchRefreshKey = key
+        val retained = activitySession
         val scheduled = scheduleRepository.refreshAutomatically { result ->
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, result.isSuccess)
-            if (automaticScheduleLaunchRefreshKey == key) {
-                automaticScheduleLaunchRefreshKey = null
+            if (retained.automaticRefreshKey == key) {
+                retained.automaticRefreshKey = null
             }
-            if (result.isSuccess) {
-                reconcileDailyCourseNotifications()
-            }
-            scheduleDidRefresh(result.isSuccess)
+            retained.uiOwner.current()?.publishScheduleCompletion(result, false, true)
         }
         if (!scheduled) {
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
@@ -1278,13 +1365,14 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onRetainNonConfigurationInstance(): Any? =
-        if (::informationQuerySessionState.isInitialized)
-            RetainedInformationQuery(academicGradesRepository, informationQuerySessionState)
-        else null
+    override fun onRetainNonConfigurationInstance(): Any {
+        captureUiSession()
+        activitySession.detachObservers()
+        return activitySession
+    }
 
     override fun onDestroy() {
-        automaticScheduleLaunchRefreshKey?.let { key ->
+        if (!isChangingConfigurations) automaticScheduleLaunchRefreshKey?.let { key ->
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
             automaticScheduleLaunchRefreshKey = null
         }
@@ -1292,15 +1380,9 @@ class MainActivity : Activity() {
         navigationRailAnimator?.cancel()
         pendingCalendarImport = null
         pendingNotificationPermissionCompletion = null
-        scheduleRepository.close()
-        if (!isChangingConfigurations) academicGradesRepository.close()
-        classroomRepository.close()
-        weatherRepository.close()
-        shuttleBusRepository.close()
-        calendarDailyInfoRepository.close()
-        if (holidayRepositoryDelegate.isInitialized()) {
-            holidayRepository.close()
-        }
+        activitySession.uiOwner.detach(this)
+        activitySession.detachObservers()
+        if (!isChangingConfigurations) activitySession.close()
         if (systemCalendarImporterDelegate.isInitialized()) {
             systemCalendarImporter.close()
         }

@@ -82,10 +82,8 @@ class PlannerPage(
             AppMetadata.slots.map(SlotMetadata::index),
             personalBusySlots,
         )
-        if (preferences.weatherEnabled) {
-            weatherRepository.load(queryState.campusID) {
-                activity.refreshPlannerWeatherIfVisible()
-            }
+        if (preferences.weatherEnabled && activity.allowsAutomaticPageLoads()) {
+            weatherRepository.load(queryState.campusID, onComplete = activity.weatherCompletionCallback())
         }
         return ScrollView(activity).apply {
             isFillViewport = true
@@ -335,9 +333,7 @@ class PlannerPage(
                             radius = 7)
                         setOnClickListener {
                             activity.performControlHaptic(it)
-                            weatherRepository.load(campusID, force = true) {
-                                activity.refreshPlannerWeatherIfVisible()
-                            }
+                            weatherRepository.load(campusID, force = true, onComplete = activity.weatherCompletionCallback())
                             refreshWeatherInPlace()
                         }
                     })
@@ -554,25 +550,7 @@ class PlannerPage(
             label.text = activity.uiText("正在获取当天空教室…")
             contentDescription = activity.uiText("正在获取当天空教室")
             isEnabled = false
-            classroomRepository.refresh(force = true) { result ->
-                result.onSuccess {
-                    Toast.makeText(
-                        activity,
-                        activity.uiText("当天空教室已更新"),
-                        Toast.LENGTH_SHORT,
-                    ).show()
-                    activity.refreshPlannerIfVisible()
-                }.onFailure { error ->
-                    label.text = activity.uiText("获取空教室信息")
-                    contentDescription = activity.uiText("获取空教室信息")
-                    isEnabled = true
-                    Toast.makeText(
-                        activity,
-                        activity.uiText(error.message ?: "当天空教室获取失败"),
-                        Toast.LENGTH_LONG,
-                    ).show()
-                }
-            }
+            classroomRepository.refresh(force = true, onComplete = activity.classroomCompletionCallback(userRequested = true))
         }
     }
 

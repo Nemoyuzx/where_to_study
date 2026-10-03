@@ -44,6 +44,17 @@ enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
 enum AppLocalization {
     static let defaultsKey = "appLanguage"
 
+    private static let localizedBundles: [String: Bundle] = {
+        var bundles = [String: Bundle]()
+        for name in ["zh-Hans", "en"] {
+            if let path = Bundle.main.path(forResource: name, ofType: "lproj"),
+               let bundle = Bundle(path: path) {
+                bundles[name] = bundle
+            }
+        }
+        return bundles
+    }()
+
     static func persistedLanguage(defaults: UserDefaults = .standard) -> AppLanguage {
         guard let rawValue = defaults.string(forKey: defaultsKey),
               let language = AppLanguage(rawValue: rawValue)
@@ -53,11 +64,7 @@ enum AppLocalization {
 
     static func string(_ key: String, language: AppLanguage) -> String {
         guard
-            let path = Bundle.main.path(
-                forResource: language.resolvedResourceName,
-                ofType: "lproj"
-            ),
-            let bundle = Bundle(path: path)
+            let bundle = localizedBundles[language.resolvedResourceName]
         else { return key }
         return bundle.localizedString(forKey: key, value: key, table: nil)
     }

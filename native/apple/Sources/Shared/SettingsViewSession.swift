@@ -9,6 +9,7 @@ final class SettingsViewSession {
     let favoritePresentation = InAppPresentationState()
     let reminderDraft = SettingsPreClassReminderDraft()
     let colorThemeDraft = SettingsColorThemeDraft()
+    let languageScroll = SettingsLanguageScrollState()
 
     func dismissPresentations() {
         if privacyPresentation.isPresented { privacyPresentation.isPresented = false }

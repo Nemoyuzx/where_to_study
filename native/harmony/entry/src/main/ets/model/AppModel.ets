@@ -312,6 +312,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private favoriteDeadlineClearGeneration: number = 0;
   private favoriteDeadlineClearInProgress: boolean = false;
   private localDataClearWork: Promise<void> | null = null;
+  private languagePreferenceWrite: Promise<void> = Promise.resolve();
+  private languageSettingRevision: number = 0;
+  private languageClearGeneration: number = 0;
+  private committedLanguageSetting: AppLanguage = AppLanguage.system;
   private statusMessageRevision: number = 0;
   private statusMessageDismissTimer: number | null = null;
   private savedCredentialAccount: string | null = null;
@@ -393,6 +397,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
       return;
     }
     this.launched = true;
+    const languageGeneration: number = this.languageClearGeneration;
+    const languageRevision: number = this.languageSettingRevision;
     // BUG-039 修复：UI 测试偏好域每次启动清空，避免跨测试残留状态。
     await this.prepareForLaunch();
     await this.restoreColorTheme();
@@ -431,8 +437,12 @@ export class AppModel implements CalendarViewportPreloadTarget {
     await this.restoreFavoriteDeadlines();
     this.publicDeadlinePreferencesLoaded = true;
     this.prewarmPublicDeadlines();
-    this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
-    this.systemLanguageID = AppLanguageInfo.systemLanguage();
+    if (languageGeneration === this.languageClearGeneration &&
+      languageRevision === this.languageSettingRevision && this.localDataClearWork === null) {
+      this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
+      this.committedLanguageSetting = this.languageSetting();
+      this.systemLanguageID = AppLanguageInfo.systemLanguage();
+    }
     if (this.automaticTermDetection) {
       const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
       this.termID = suggested.termID;
@@ -520,8 +530,13 @@ export class AppModel implements CalendarViewportPreloadTarget {
   refreshSystemLanguage(): void {
     const current: string = AppLanguageInfo.systemLanguage();
     if (current !== this.systemLanguageID) {
+      const previous: AppLanguage = this.resolvedLanguage();
       this.systemLanguageID = current;
-      this.synchronizeWidgetSchedule();
+      if (this.resolvedLanguage() !== previous) {
+        this.synchronizeWidgetSchedule();
+        this.dailyCourseNotificationDirty = true;
+        this.reconcileDailyCourseNotifications(false);
+      }
     }
   }
 
@@ -763,7 +778,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private async restorePersistedSettings(): Promise<void> {
     try {
+      const languageGeneration: number = this.languageClearGeneration;
+      const languageRevision: number = this.languageSettingRevision;
       await this.dailyCourseNotificationPreferenceWrite.catch(() => {});
+      await this.languagePreferenceWrite.catch(() => {});
       await this.restoreColorTheme();
       const savedTermID: string | null = await this.preferences.getString('termID');
       const savedTermStart: string | null = await this.preferences.getString('termStartDate');
@@ -798,8 +816,12 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.customDeadlinesEnabled = await this.preferences.getBool('customDeadlinesEnabled', false);
       this.customDeadlinesURL = (await this.preferences.getString('customDeadlinesURL') ?? '').trim();
       await this.restoreFavoriteDeadlines();
-      this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
-      this.systemLanguageID = AppLanguageInfo.systemLanguage();
+      if (languageGeneration === this.languageClearGeneration &&
+        languageRevision === this.languageSettingRevision && this.localDataClearWork === null) {
+        this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
+        this.committedLanguageSetting = this.languageSetting();
+        this.systemLanguageID = AppLanguageInfo.systemLanguage();
+      }
       if (this.automaticTermDetection) {
         const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
         this.termID = suggested.termID;
@@ -1004,12 +1026,46 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   async setLanguageSetting(value: AppLanguage): Promise<void> {
-    this.languageSettingRawValue = value;
-    this.systemLanguageID = AppLanguageInfo.systemLanguage();
-    await this.preferences.setString('appLanguage', value);
-    this.synchronizeWidgetSchedule();
-    this.dailyCourseNotificationDirty = true;
-    this.reconcileDailyCourseNotifications(false);
+    if (this.localDataClearWork !== null) { return; }
+    const next: AppLanguage = AppLanguageInfo.normalize(value);
+    const nextSystem: string = AppLanguageInfo.systemLanguage();
+    if (next === this.languageSetting() && nextSystem === this.systemLanguageID) { return; }
+    const previousResolved: AppLanguage = this.resolvedLanguage();
+    const revision: number = ++this.languageSettingRevision;
+    const generation: number = this.languageClearGeneration;
+    this.languageSettingRawValue = next;
+    this.systemLanguageID = nextSystem;
+    const resolved: AppLanguage = this.resolvedLanguage();
+    // review-demo 语言仅作用于本次内存页面，不能写用户偏好或重排真实小组件/提醒。
+    if (this.isSampleMode()) { return; }
+    const write: Promise<boolean> = this.languagePreferenceWrite.catch(() => {})
+      .then(async (): Promise<boolean> => {
+        if (generation !== this.languageClearGeneration) { return false; }
+        await this.preferences.setString('appLanguage', next);
+        return generation === this.languageClearGeneration;
+      });
+    this.languagePreferenceWrite = write.then((): void => {}, (): void => {});
+    try {
+      const current: boolean = await write;
+      if (!current) { return; }
+      this.committedLanguageSetting = next;
+      if (revision !== this.languageSettingRevision || resolved === previousResolved) { return; }
+      this.synchronizeWidgetSchedule();
+      this.dailyCourseNotificationDirty = true;
+      this.reconcileDailyCourseNotifications(false);
+    } catch (e) {
+      if (revision === this.languageSettingRevision && generation === this.languageClearGeneration) {
+        const beforeRollback: AppLanguage = this.resolvedLanguage();
+        this.languageSettingRawValue = this.committedLanguageSetting;
+        this.systemLanguageID = AppLanguageInfo.systemLanguage();
+        if (this.resolvedLanguage() !== beforeRollback) {
+          this.synchronizeWidgetSchedule();
+          this.dailyCourseNotificationDirty = true;
+          this.reconcileDailyCourseNotifications(false);
+        }
+        this.statusMessage = '无法保存语言设置';
+      }
+    }
   }
 
   async setWidgetShowsTeacher(value: boolean): Promise<void> {
@@ -1623,6 +1679,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
     this.favoriteDeadlineClearInProgress = true;
     this.favoriteDeadlineClearGeneration++;
+    this.languageClearGeneration++;
+    this.languageSettingRevision++;
     this.invalidatePendingOperations();
     const work: Promise<void> = this.clearLocalDataAfterFavoriteWrites();
     this.localDataClearWork = work;
@@ -1728,7 +1786,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
     await this.preferences.remove('hackathonDeadlinesEnabled');
     await this.preferences.remove('customDeadlinesEnabled');
     await this.preferences.remove('customDeadlinesURL');
+    await this.languagePreferenceWrite.catch(() => {});
     await this.preferences.remove('appLanguage');
+    this.committedLanguageSetting = AppLanguage.system;
+    this.languageSettingRawValue = AppLanguage.system;
+    this.systemLanguageID = AppLanguageInfo.systemLanguage();
     await this.colorThemeStore.save(new ColorThemeSelection(), false);
     WidgetSync.refreshTheme(this.colorTheme.selection);
     this.widgetShowsLocation = true;
@@ -1743,8 +1805,6 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.hackathonDeadlinesEnabled = true;
     this.customDeadlinesEnabled = false;
     this.customDeadlinesURL = '';
-    this.languageSettingRawValue = AppLanguage.system;
-    this.systemLanguageID = AppLanguageInfo.systemLanguage();
     this.campusID = '01';
     this.queryCampusID = '01';
     this.termID = ScheduleDefaults.termID;

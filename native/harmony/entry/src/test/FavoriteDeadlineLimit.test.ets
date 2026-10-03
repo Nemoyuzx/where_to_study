@@ -71,13 +71,14 @@ class FavoriteCalendarImporter implements CalendarImporting {
     throw new Error('synthetic calendar importer must not be called');
   }
 }
-class FavoriteReminderScheduler implements DailyCourseNotificationScheduling {
+export class FavoriteReminderScheduler implements DailyCourseNotificationScheduling {
+  cancelCount: number = 0;
   async authorizationStatus(timeoutMs: number): Promise<DailyCourseNotificationAuthorization> {
     return DailyCourseNotificationAuthorization.denied;
   }
   async requestAuthorization(timeoutMs: number): Promise<boolean> { return false; }
   async replacePending(requests: DailyCourseNotificationRequest[], revision: number): Promise<number> { return 0; }
-  async cancelPending(revision: number): Promise<void> {}
+  async cancelPending(revision: number): Promise<void> { this.cancelCount++; }
 }
 class FavoriteWeatherClient implements WeatherFetching {
   async fetchWeather(campusID: string): Promise<CampusWeather> {
@@ -118,7 +119,7 @@ class FavoriteWriteGate {
   release(): void { this.finish(); }
 }
 
-class RecordingFavoritePreferences extends PreferencesStore {
+export class RecordingFavoritePreferences extends PreferencesStore {
   savedFavorites: string[] = [];
   favoriteValue: string | null = null;
   favoriteRemovals: number = 0;
@@ -184,11 +185,12 @@ function favorite(index: number): PublicDeadlineItem {
     '2026-10-10T23:59:00+08:00', null, null);
 }
 
-function testModel(preferences: RecordingFavoritePreferences): AppModel {
+export function testModel(preferences: RecordingFavoritePreferences,
+  scheduler: DailyCourseNotificationScheduling = new FavoriteReminderScheduler()): AppModel {
   return new AppModel(AppRuntimeMode.live(), new FavoriteCredentials(), new FavoriteSchedules(),
     new FavoriteScheduleClient(), new FavoriteClassrooms(), new FavoriteClassroomClient(),
     new FavoriteHolidays(), new FavoriteHolidayClient(), new FavoriteCalendarImporter(),
-    new FavoriteReminderScheduler(), 'favorite-limit-tests', new FavoriteWeatherClient(),
+    scheduler, 'favorite-limit-tests', new FavoriteWeatherClient(),
     new FavoriteAssignmentClient(), preferences, new FavoriteCourseRemovals(),
     new FavoriteGradeClient(), new FavoriteExamClient());
 }

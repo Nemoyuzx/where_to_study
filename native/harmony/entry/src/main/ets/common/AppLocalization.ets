@@ -338,6 +338,10 @@ export class AppLocalization {
     '无法保存自定义日程地址': 'Unable to save the custom schedule URL',
     '无法保存自定义日程开关': 'Unable to save the custom schedule switch',
     '无法保存收藏': 'Unable to save favorite',
+    '无法保存语言设置': 'Unable to save the language setting',
+    '班车刷新失败，继续显示上次获取的数据。': 'The shuttle refresh failed. Showing the previously fetched data.',
+    '数据生成时间：': 'Source generated at: ',
+    '本机获取时间：': 'Fetched on this device: ',
     '无法删除收藏': 'Unable to remove favorite',
     '收藏已达 500 条上限，请先取消部分收藏。':
       'The 500-favorite limit has been reached. Remove a favorite before adding another.',

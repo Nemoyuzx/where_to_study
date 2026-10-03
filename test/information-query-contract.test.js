@@ -98,7 +98,8 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(androidQuery, /InformationQueryMode\.GRADES -> gradesContent\(\)/)
 
   assertOrdered(harmonySections, ['AppSection.planner', 'AppSection.calendar', 'AppSection.query', 'AppSection.settings'])
-  assert.match(harmonyRoot, /currentSection === AppSection\.query[\s\S]*QueryView\(\{\s*onOpenSettings:\s*\(\) => this\.selectSection\(AppSection\.settings\)\s*\}\)/)
+  assert.match(harmonyRoot, /currentSection === AppSection\.query[\s\S]{0,160}?QueryView\(\{\s*session: this\.querySession,\s*onOpenSettings:\s*\(\) => this\.selectSection\(AppSection\.settings\)\s*\}\)/)
+  assert.ok((harmonyRoot.match(/QueryView\(\{\s*session: this\.querySession,\s*onOpenSettings:\s*\(\) => this\.selectSection\(AppSection\.settings\)\s*\}\)/g) || []).length >= 2)
   assert.doesNotMatch(harmonyRoot, /queryVisible|setQueryVisible/)
   assert.doesNotMatch(harmonySettings, /onQueryVisibilityChanged|打开查询/)
   assert.doesNotMatch(harmonyCalendar, /onQueryVisibilityChanged|onQueryRequested/)

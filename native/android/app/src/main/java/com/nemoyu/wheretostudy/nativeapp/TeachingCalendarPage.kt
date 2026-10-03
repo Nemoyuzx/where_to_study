@@ -51,6 +51,7 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.atomic.AtomicBoolean
+import java.lang.ref.WeakReference
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -965,6 +966,7 @@ internal class TeachingCalendarPage(
         dates: List<Calendar>,
         includeAlmanac: Boolean = false,
     ) {
+        if (!activity.allowsAutomaticPageLoads()) return
         val selectedKey = contractDate().format(selectedDate.time)
         val dateKeys = dates
             .map { contractDate().format(it.time) }
@@ -4076,6 +4078,9 @@ internal class TeachingCalendarPage(
                     }
                     source.addOnAttachStateChangeListener(owner)
                     confirmation.setOnDismissListener { active.set(false); source.removeOnAttachStateChangeListener(owner) }
+                    val weakActivity = WeakReference(activity)
+                    val weakConfirmation = WeakReference(confirmation)
+                    val weakDetail = WeakReference(dialog)
                     confirmation.setOnShowListener {
                         val delete = confirmation.getButton(AlertDialog.BUTTON_POSITIVE)
                         delete.setOnClickListener confirmDeleteClick@ {
@@ -4088,18 +4093,20 @@ internal class TeachingCalendarPage(
                             confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = false
                             confirmation.setCancelable(false)
                             scheduleRepository.deleteCourseAsync(course, day, scope, displayedTermID, active::get) { result ->
-                                if (!confirmation.isShowing || !dialog.isShowing || activity.isFinishing || activity.isDestroyed) return@deleteCourseAsync
+                                val current = weakActivity.get() ?: return@deleteCourseAsync
+                                val confirm = weakConfirmation.get() ?: return@deleteCourseAsync
+                                val detail = weakDetail.get() ?: return@deleteCourseAsync
+                                if (!confirm.isShowing || !detail.isShowing || current.isFinishing || current.isDestroyed) return@deleteCourseAsync
                                 result.onSuccess {
-                                    confirmation.dismiss()
-                                    dialog.dismiss()
-                                    activity.personalScheduleWasEdited()
-                                    Toast.makeText(activity, activity.uiText("课程已删除，可在设置中恢复"), Toast.LENGTH_SHORT).show()
+                                    confirm.dismiss()
+                                    detail.dismiss()
+                                    current.personalScheduleWasEdited()
+                                    Toast.makeText(current, current.uiText("课程已删除，可在设置中恢复"), Toast.LENGTH_SHORT).show()
                                 }.onFailure { error ->
-                                    delete.isEnabled = true
-                                    delete.text = activity.uiText("删除")
-                                    confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
-                                    confirmation.setCancelable(true)
-                                    Toast.makeText(activity, activity.uiText(error.message ?: "无法保存课程删除记录"), Toast.LENGTH_LONG).show()
+                                    confirm.getButton(AlertDialog.BUTTON_POSITIVE).apply { isEnabled = true; text = current.uiText("删除") }
+                                    confirm.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
+                                    confirm.setCancelable(true)
+                                    Toast.makeText(current, current.uiText(error.message ?: "无法保存课程删除记录"), Toast.LENGTH_LONG).show()
                                 }
                             }
                         }

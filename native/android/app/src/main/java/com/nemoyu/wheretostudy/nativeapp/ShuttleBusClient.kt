@@ -410,6 +410,8 @@ internal class ShuttleBusRepository(
         observers.remove(observer)
     }
 
+    internal fun clearUiObservers() { observers.clear() }
+
     fun load(force: Boolean = false) {
         val nowMillis = System.nanoTime() / 1_000_000L
         val hasFreshSnapshot = snapshot != null &&

@@ -75,8 +75,8 @@ enum AdaptiveLayoutPolicy {
         width >= minimumTwoColumnWidth ? 2 : 1
     }
 
-    static func compactTabIdentity(languageRawValue: String) -> String {
-        "compact-tabs-\(languageRawValue)"
+    static func compactTabIdentity(languageRawValue _: String) -> String {
+        "compact-tabs"
     }
 }
 
@@ -473,7 +473,8 @@ struct RootView: View {
                         if isRegularSidebarExpanded {
                             Text(model.localized(section.titleKey))
                                 .font(.body.weight(selectedSection == section ? .semibold : .regular))
-                                .lineLimit(1)
+                                .lineLimit(2)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .transition(.opacity)
                         }
                     }
@@ -485,7 +486,7 @@ struct RootView: View {
                     )
                     .frame(
                         width: isRegularSidebarExpanded ? nil : 42,
-                        height: 42,
+                        height: isRegularSidebarExpanded ? nil : 42,
                         alignment: .center
                     )
                     .padding(.horizontal, isRegularSidebarExpanded ? 12 : 0)
@@ -526,12 +527,12 @@ struct RootView: View {
             }
         }
         .tint(theme.primary)
-        // UIKit can retain the intrinsic widths of translated tab items. A
-        // language-scoped identity rebuilds the compact tab bar so switching
-        // English -> Chinese (or back again) recenters the native capsule.
+        // Keep page/scroll/task identity; the native title probe refreshes the
+        // tab bar's measured labels without replacing any hosted controller.
         .id(AdaptiveLayoutPolicy.compactTabIdentity(
             languageRawValue: model.appLanguage.rawValue
         ))
+        .background(CompactTabLanguageLayout(language: model.appLanguage))
         .accessibilityIdentifier("layout.compact-tabs")
     }
 
