@@ -34,6 +34,7 @@ export struct PrivacyPolicyView {
       }
       .width('100%')
       .padding({ left: 8, top: 12, bottom: 12 })
+      .id('privacy_policy_close')
       .onClick(() => {
         this.onClose();
       })
@@ -124,6 +125,7 @@ export struct PrivacyPolicyView {
     .width('100%')
     .height('100%')
     .backgroundColor(AppTheme.background())
+    .id('privacy_policy_page')
   }
 
   @Builder

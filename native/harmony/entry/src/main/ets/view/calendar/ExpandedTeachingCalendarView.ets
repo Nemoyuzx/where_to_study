@@ -1461,9 +1461,26 @@ export struct ExpandedTeachingCalendarView {
                       this.model.isFavoriteDeadline(item.deadlineItem as PublicDeadlineItem) ?
                         '取消收藏' : '收藏'))
                     .onClick(() => {
+                      const ownerRevision: number = this.yearPopupMotionRevision;
+                      const uiContext = this.getUIContext();
+                      const showFeedback = (message: string): void => {
+                        if (ownerRevision !== this.yearPopupMotionRevision || this.presentedDay === null) {
+                          return;
+                        }
+                        try {
+                          uiContext.getPromptAction().showToast({ message: this.model.text(message) });
+                        } catch (e) {
+                          // 年视图弹层关闭后不让旧 UI 回调覆盖模型中的准确失败原因。
+                        }
+                      };
                       this.model.toggleFavoriteDeadline(item.deadlineItem as PublicDeadlineItem)
-                        .catch(() => {
+                        .then((changed: boolean): void => {
+                          if (!changed) {
+                            showFeedback(AppModel.favoriteDeadlineLimitMessage);
+                          }
+                        }, (): void => {
                           this.model.statusMessage = '无法保存收藏';
+                          showFeedback('无法保存收藏');
                         });
                     })
                   }

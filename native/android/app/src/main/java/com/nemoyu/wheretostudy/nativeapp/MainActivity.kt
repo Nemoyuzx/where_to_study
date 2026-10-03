@@ -77,6 +77,7 @@ class MainActivity : Activity() {
     private lateinit var teachingCalendarSessionState: TeachingCalendarSessionState
     private lateinit var informationQuerySessionState: InformationQuerySessionState
     private var informationQueryPage: InformationQueryPage? = null
+    private var settingsPage: SettingsPage? = null
     private val scheduleRepository by lazy {
         ScheduleRepository(this, credentialStore, preferences)
     }
@@ -123,6 +124,7 @@ class MainActivity : Activity() {
     private var navigationRailToggle: TextView? = null
     private var foldingFeatureSpacer: View? = null
     private var favoriteDeadlinesOverlay: View? = null
+    private var favoriteDeadlinesPage: FavoriteDeadlinesPage? = null
     private var navigationRailAnimator: ValueAnimator? = null
     private var plannerPage: PlannerPage? = null
     internal var controlHapticEventCount = 0
@@ -423,6 +425,7 @@ class MainActivity : Activity() {
         navigationRailToggle = null
         foldingFeatureSpacer = null
         favoriteDeadlinesOverlay = null
+        favoriteDeadlinesPage = null
         adaptiveRoot.removeAllViews()
         val layout = if (spec.usesBottomNavigation) {
             phoneLayout()
@@ -742,6 +745,7 @@ class MainActivity : Activity() {
         updatePhoneNavigationVisibility()
         plannerPage = null
         informationQueryPage = null
+        settingsPage = null
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(
                 this,
@@ -793,7 +797,7 @@ class MainActivity : Activity() {
                 classroomRepository,
                 currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
                 currentLayoutSpec?.usesBottomNavigation == true,
-            ).build()
+            ).also { settingsPage = it }.build()
         }
         page.id = destination.pageViewID
         UiText.localizeTree(page)
@@ -810,7 +814,7 @@ class MainActivity : Activity() {
 
     fun refreshCurrentPage() {
         if (settingsRoute == SettingsRoute.FAVORITES) {
-            showFavoriteManagementOverlay()
+            favoriteDeadlinesPage?.refresh() ?: showFavoriteManagementOverlay()
             return
         }
         navigate(selectedDestination)
@@ -834,7 +838,11 @@ class MainActivity : Activity() {
         settingsRoute = SettingsRoute.MAIN
         favoriteDeadlinesOverlay?.let(adaptiveRoot::removeView)
         favoriteDeadlinesOverlay = null
+        favoriteDeadlinesPage = null
+        settingsPage?.favoriteDeadlinesDidChange()
     }
+
+    internal fun favoriteDeadlinesDidChange() = settingsPage?.favoriteDeadlinesDidChange()
 
     private fun updatePhoneNavigationVisibility() {
         if (currentLayoutSpec?.usesBottomNavigation != true) return
@@ -844,12 +852,15 @@ class MainActivity : Activity() {
     private fun showFavoriteManagementOverlay() {
         if (!::adaptiveRoot.isInitialized || selectedDestination != Destination.SETTINGS) return
         favoriteDeadlinesOverlay?.let(adaptiveRoot::removeView)
-        val overlay = FavoriteDeadlinesPage(
+        val page = FavoriteDeadlinesPage(
             activity = this,
             preferences = preferences,
             availableWidthDp = currentWindowWidthDp(),
-        ).build().apply {
+        )
+        favoriteDeadlinesPage = page
+        val overlay = page.build().apply {
             elevation = dp(24).toFloat()
+            UiText.localizeTree(this)
         }
         favoriteDeadlinesOverlay = overlay
         adaptiveRoot.addView(
@@ -1005,7 +1016,8 @@ class MainActivity : Activity() {
         DailyCourseSummaryScheduler.reconcileAt(this, forceReschedule = true)
         CourseReminderNotificationRuntime.cancel(this)
         CourseReminderScheduler.reconcile(this, force = true)
-        refreshCurrentPage()
+        if (selectedDestination == Destination.SETTINGS) settingsPage?.scheduleDidRefresh()
+        else refreshCurrentPage()
     }
 
     fun importCachedScheduleToSystemCalendar(
@@ -1259,9 +1271,11 @@ class MainActivity : Activity() {
 
     internal fun scheduleDidRefresh(succeeded: Boolean = true, refreshOtherPages: Boolean = true) {
         if (!::content.isInitialized) return
-        if (selectedDestination == Destination.QUERY) {
-            informationQueryPage?.scheduleDidRefresh()
-        } else if (succeeded && refreshOtherPages) refreshCurrentPage()
+        when (selectedDestination) {
+            Destination.QUERY -> informationQueryPage?.scheduleDidRefresh()
+            Destination.SETTINGS -> settingsPage?.scheduleDidRefresh()
+            else -> if (succeeded && refreshOtherPages) refreshCurrentPage()
+        }
     }
 
     override fun onRetainNonConfigurationInstance(): Any? =

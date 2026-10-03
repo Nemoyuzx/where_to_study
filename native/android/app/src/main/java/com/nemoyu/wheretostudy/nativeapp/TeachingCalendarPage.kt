@@ -50,6 +50,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
@@ -4053,29 +4054,58 @@ internal class TeachingCalendarPage(
                 minimumHeight = activity.dp(44)
                 setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
                 background = themedRoundedBackground(activity, { Palette.dangerSurface }, radius = 8)
-                setOnClickListener {
+                setOnClickListener courseDeleteClick@ {
+                    if (!it.isAttachedToWindow || !dialog.isShowing || activity.isFinishing || activity.isDestroyed) return@courseDeleteClick
                     activity.performControlHaptic(it)
+                    val source = it
                     val detail = if (scope == CourseDeletionScope.SINGLE_OCCURRENCE) {
                         "${contractDate().format(day.time)} · ${course.timeRange}"
                     } else activity.uiText("本学期所有教学周和上课时段")
-                    AlertDialog.Builder(activity)
+                    val active = AtomicBoolean(source.isAttachedToWindow && !activity.isFinishing && !activity.isDestroyed)
+                    val confirmation = AlertDialog.Builder(activity)
                         .setTitle(activity.uiText(label))
                         .setMessage(course.name + "\n" + detail + "\n\n" + activity.uiText(
                             "仅从本机个人课表中删除，可在设置的已删除课程中恢复。不会修改学校课表或已导出的系统日历。",
                         ))
                         .setNegativeButton(activity.uiText("取消"), null)
-                        .setPositiveButton(activity.uiText("删除")) { _, _ ->
-                            runCatching {
-                                scheduleRepository.deleteCourse(course, day, scope, displayedTermID)
-                            }.onSuccess {
-                                dialog.dismiss()
-                                activity.personalScheduleWasEdited()
-                                Toast.makeText(activity, activity.uiText("课程已删除，可在设置中恢复"), Toast.LENGTH_SHORT).show()
-                            }.onFailure { error ->
-                                Toast.makeText(activity, activity.uiText(error.message ?: "无法保存课程删除记录"), Toast.LENGTH_LONG).show()
+                        .setPositiveButton(activity.uiText("删除"), null)
+                        .create()
+                    val owner = object : View.OnAttachStateChangeListener {
+                        override fun onViewAttachedToWindow(view: View) = Unit
+                        override fun onViewDetachedFromWindow(view: View) { active.set(false); confirmation.dismiss() }
+                    }
+                    source.addOnAttachStateChangeListener(owner)
+                    confirmation.setOnDismissListener { active.set(false); source.removeOnAttachStateChangeListener(owner) }
+                    confirmation.setOnShowListener {
+                        val delete = confirmation.getButton(AlertDialog.BUTTON_POSITIVE)
+                        delete.setOnClickListener confirmDeleteClick@ {
+                            if (!active.get() || !source.isAttachedToWindow || !dialog.isShowing || activity.isFinishing || activity.isDestroyed) {
+                                confirmation.dismiss()
+                                return@confirmDeleteClick
+                            }
+                            delete.isEnabled = false
+                            delete.text = activity.uiText("正在删除…")
+                            confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = false
+                            confirmation.setCancelable(false)
+                            scheduleRepository.deleteCourseAsync(course, day, scope, displayedTermID, active::get) { result ->
+                                if (!confirmation.isShowing || !dialog.isShowing || activity.isFinishing || activity.isDestroyed) return@deleteCourseAsync
+                                result.onSuccess {
+                                    confirmation.dismiss()
+                                    dialog.dismiss()
+                                    activity.personalScheduleWasEdited()
+                                    Toast.makeText(activity, activity.uiText("课程已删除，可在设置中恢复"), Toast.LENGTH_SHORT).show()
+                                }.onFailure { error ->
+                                    delete.isEnabled = true
+                                    delete.text = activity.uiText("删除")
+                                    confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
+                                    confirmation.setCancelable(true)
+                                    Toast.makeText(activity, activity.uiText(error.message ?: "无法保存课程删除记录"), Toast.LENGTH_LONG).show()
+                                }
                             }
                         }
-                        .show().also(UiText::localizeDialog)
+                    }
+                    confirmation.show()
+                    UiText.localizeDialog(confirmation)
                 }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 topMargin = activity.dp(10)

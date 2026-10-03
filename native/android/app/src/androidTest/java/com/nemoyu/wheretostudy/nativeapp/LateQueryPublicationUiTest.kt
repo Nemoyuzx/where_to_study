@@ -7,6 +7,8 @@ import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Switch
+import android.view.inputmethod.InputMethodManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -58,6 +60,18 @@ class LateQueryPublicationUiTest {
                     assertFalse("$source is still in flight", activity.findViewById<View>(R.id.information_query_exams_refresh).isEnabled)
                 }
                 request.finish(scenario)
+                // A completion during the 220ms incoming mode transition is
+                // published only after its end-action. Wait for that actual
+                // body publication rather than assuming two frames settle it.
+                val publicationDeadline = android.os.SystemClock.elapsedRealtime() + 5_000
+                var published = false
+                while (!published && android.os.SystemClock.elapsedRealtime() < publicationDeadline) {
+                    scenario.onActivity { activity ->
+                        published = activity.findViewById<FrameLayout>(R.id.information_query_content).getChildAt(0) !== shell.body
+                    }
+                    if (!published) android.os.SystemClock.sleep(10)
+                }
+                assertTrue("$source must publish its completed exam state after the mode transition", published)
                 scenario.onActivity { activity ->
                     shell.assertUnchanged(activity, R.id.information_query_exams_scroll)
                     val refresh = activity.findViewById<TextView>(R.id.information_query_exams_refresh)
@@ -86,30 +100,128 @@ class LateQueryPublicationUiTest {
             }
         }
 
-    @Test fun lateExamSuccessPreservesUnsavedSettingsFieldsAndFocus() =
-        delayedRequest(Source.EXAMS, fails = false) { scenario, request ->
-            lateinit var settings: View
-            lateinit var account: EditText
-            lateinit var password: EditText
-            scenario.onActivity { activity ->
-                activity.findViewById<View>(R.id.navigation_settings).performClick()
-                settings = activity.findViewById(R.id.page_settings)
-                val fields = descendants(settings).filterIsInstance<EditText>()
-                account = fields.first { it.hint.toString() == activity.uiText("教务账号") }
-                password = fields.first { it.hint.toString() == activity.uiText("教务密码") }
-                account.setText("unsaved-draft-only")
-                password.setText("synthetic-unsaved-password")
-                assertTrue(account.requestFocus())
+    @Test fun lateScheduleSuccessFromEveryEntryPreservesSettingsDraftFocusAndScroll() {
+        val preferences = AppPreferences(context)
+        val previousLanguage = preferences.languageCode
+        try {
+            listOf(AppLanguage.SIMPLIFIED_CHINESE, AppLanguage.ENGLISH).forEach { language ->
+                preferences.languageCode = language.code
+                Source.entries.filter { it != Source.CLASSROOMS }.forEach { source ->
+                    delayedRequest(source, fails = false) { scenario, request ->
+                        lateinit var settings: View
+                        lateinit var account: EditText
+                        lateinit var password: EditText
+                        lateinit var cloudPassword: EditText
+                        lateinit var scroll: ScrollView
+                        var oldScrollY = 0
+                        scenario.onActivity { activity ->
+                            activity.findViewById<View>(R.id.navigation_settings).performClick()
+                            settings = activity.findViewById(R.id.page_settings)
+                            scroll = settings as ScrollView
+                            val fields = descendants(settings).filterIsInstance<EditText>()
+                            account = fields.first { it.hint.toString() == activity.uiText("教务账号") }
+                            password = fields.first { it.hint.toString() == activity.uiText("教务密码") }
+                            cloudPassword = fields.first { it.hint.toString() == activity.uiText("教学云平台密码（可选）") }
+                            account.setText("unsaved-draft-only")
+                            password.setText("synthetic-unsaved-password")
+                            cloudPassword.setText("synthetic-unsaved-cloud-password")
+                            assertTrue(account.requestFocus())
+                            account.setSelection(3)
+                            (activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                                .showSoftInput(account, InputMethodManager.SHOW_IMPLICIT)
+                        }
+                        instrumentation.waitForIdleSync()
+                        scenario.onActivity { activity -> scroll.scrollTo(0, activity.dp(80)); oldScrollY = scroll.scrollY }
+                        request.finish(scenario)
+                        scenario.onActivity { activity ->
+                            assertSame("$source must not reconstruct Settings", settings,
+                                activity.findViewById(R.id.page_settings))
+                            assertEquals("unsaved-draft-only", account.text.toString())
+                            assertEquals("synthetic-unsaved-password", password.text.toString())
+                            assertEquals("synthetic-unsaved-cloud-password", cloudPassword.text.toString())
+                            assertTrue("The draft editor keeps keyboard focus", account.hasFocus())
+                            assertEquals(3, account.selectionStart)
+                            assertEquals(oldScrollY, scroll.scrollY)
+                            assertTrue((activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as InputMethodManager).isActive(account))
+                            val school = repository<ScheduleRepository>(activity, "getScheduleRepository").schedule!!
+                            assertEquals(school.termID, AppPreferences(activity).termID)
+                            assertEquals(school.termStartDate, AppPreferences(activity).termStartDate)
+                            val automaticTerm = descendants(settings).filterIsInstance<EditText>().first {
+                                it.hint.toString() == activity.uiText("学期编号")
+                            }
+                            assertEquals(school.termID, automaticTerm.text.toString())
+                            val manual = descendants(settings).filterIsInstance<Switch>().first {
+                                it.text.toString() == activity.uiText("自动检测当前学期")
+                            }
+                            val manualStart = descendants(settings).filterIsInstance<EditText>().first {
+                                it.hint.toString() == activity.uiText("第一周周一（YYYY-MM-DD）")
+                            }
+                            manual.isChecked = false
+                            automaticTerm.setText("2030-2031-1")
+                            manualStart.setText("2030-08-26")
+                            activity.personalScheduleWasEdited()
+                            assertSame(settings, activity.findViewById(R.id.page_settings))
+                            assertEquals("synthetic-unsaved-password", password.text.toString())
+                            assertTrue(account.hasFocus())
+                            assertFalse(manual.isChecked)
+                            assertEquals("2030-2031-1", automaticTerm.text.toString())
+                            assertEquals("2030-08-26", manualStart.text.toString())
+                            assertEquals(school.termID, AppPreferences(activity).termID)
+                        }
+                    }
+                }
             }
-            request.finish(scenario)
-            scenario.onActivity { activity ->
-                assertSame("An Exams request must not reconstruct Settings", settings,
-                    activity.findViewById(R.id.page_settings))
-                assertEquals("unsaved-draft-only", account.text.toString())
-                assertEquals("synthetic-unsaved-password", password.text.toString())
-                assertTrue("The draft editor keeps keyboard focus", account.hasFocus())
+        } finally { preferences.languageCode = previousLanguage }
+    }
+
+    @Test fun returningToSettingsDuringARefreshKeepsTheCurrentControlAndDraftAfterEitherResult() {
+        val preferences = AppPreferences(context)
+        val previousLanguage = preferences.languageCode
+        try {
+            listOf(AppLanguage.SIMPLIFIED_CHINESE, AppLanguage.ENGLISH).forEach { language ->
+                preferences.languageCode = language.code
+                listOf(false, true).forEach { fails ->
+                    delayedRequest(Source.SETTINGS_REFRESH, fails) { scenario, request ->
+                        lateinit var settings: View
+                        lateinit var refresh: TextView
+                        lateinit var account: EditText
+                        lateinit var password: EditText
+                        scenario.onActivity { activity ->
+                            activity.findViewById<View>(R.id.navigation_query).performClick()
+                            activity.findViewById<View>(R.id.navigation_settings).performClick()
+                            settings = activity.findViewById(R.id.page_settings)
+                            val loading = activity.uiText("正在获取…")
+                            val ready = activity.uiText("获取/刷新个人课表")
+                            refresh = descendants(settings).filterIsInstance<TextView>().single {
+                                it.isClickable && it.text.toString() in setOf(loading, ready)
+                            }
+                            assertEquals("A new Settings owner must show the in-flight request", loading, refresh.text.toString())
+                            assertFalse(refresh.isEnabled)
+                            val fields = descendants(settings).filterIsInstance<EditText>()
+                            account = fields.first { it.hint.toString() == activity.uiText("教务账号") }
+                            password = fields.first { it.hint.toString() == activity.uiText("教务密码") }
+                            val persisted = SecureCredentialStore(activity).load()
+                            account.setText("unsaved-return-draft")
+                            password.setText("synthetic-return-password")
+                            assertTrue(account.requestFocus())
+                            refresh.performClick()
+                            assertEquals("A duplicate busy click must not save drafts", persisted, SecureCredentialStore(activity).load())
+                            assertEquals("synthetic-return-password", password.text.toString())
+                        }
+                        request.finish(scenario)
+                        scenario.onActivity { activity ->
+                            assertSame(settings, activity.findViewById(R.id.page_settings))
+                            assertTrue("Both results must finish the current Settings loading control", refresh.isEnabled)
+                            assertEquals(activity.uiText("获取/刷新个人课表"), refresh.text.toString())
+                            assertEquals("unsaved-return-draft", account.text.toString())
+                            assertEquals("synthetic-return-password", password.text.toString())
+                            assertTrue(account.hasFocus())
+                        }
+                    }
+                }
             }
-        }
+        } finally { preferences.languageCode = previousLanguage }
+    }
 
     private class QueryShell(activity: MainActivity, scrollID: Int) {
         val page = activity.findViewById<ViewGroup>(R.id.information_query_page)
@@ -190,7 +302,7 @@ class LateQueryPublicationUiTest {
                         .set(schedule, SjdScheduleClient(api))
                     ClassroomRepository::class.java.getDeclaredField("client").apply { isAccessible = true }
                         .set(classrooms, SjdClassroomClient(api))
-                    credentials.save(Credentials("late-${source.name}-$fails", "synthetic-only"))
+                    credentials.save(Credentials("late-${source.name}-${System.nanoTime()}", "synthetic-only"))
                     preferences.automaticTermDetectionEnabled = true
                     when (source) {
                         Source.SETTINGS_SAVE, Source.SETTINGS_REFRESH -> {

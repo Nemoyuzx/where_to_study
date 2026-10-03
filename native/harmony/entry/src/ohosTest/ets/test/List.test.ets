@@ -4,6 +4,7 @@ import credentialStoreDeviceTest from './CredentialStoreDevice.test';
 import sjdNetworkDeviceTest from './SjdNetworkDevice.test';
 import jsonFileDeviceTest from './JsonFileDevice.test';
 import widgetSyncDeviceTest from './WidgetSyncDevice.test';
+import settingsPresentationDeviceTest from './SettingsPresentationDevice.test';
 
 export default function testsuite() {
   primaryNavigationSmokeTest();
@@ -11,4 +12,5 @@ export default function testsuite() {
   sjdNetworkDeviceTest();
   jsonFileDeviceTest();
   widgetSyncDeviceTest();
+  settingsPresentationDeviceTest();
 }

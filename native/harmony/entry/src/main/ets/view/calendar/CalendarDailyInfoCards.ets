@@ -15,6 +15,11 @@ import { AppLanguage } from '../../common/AppLocalization';
 export struct CalendarDailyInfoCards {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param day: DateParts = StrictDates.todayParts();
+  private favoriteFeedbackRevision: number = 0;
+
+  aboutToDisappear(): void {
+    this.favoriteFeedbackRevision++;
+  }
 
   private date(): string {
     return StrictDates.formatDateParts(this.day);
@@ -422,8 +427,26 @@ export struct CalendarDailyInfoCards {
       .backgroundColor(Color.Transparent)
       .accessibilityText(this.model.text(this.model.isFavoriteDeadline(item) ? '取消收藏' : '收藏'))
       .onClick(() => {
-        this.model.toggleFavoriteDeadline(item).catch(() => {
+        const ownerRevision: number = this.favoriteFeedbackRevision;
+        const ownerDate: string = this.date();
+        const uiContext = this.getUIContext();
+        const showFeedback = (message: string): void => {
+          if (ownerRevision !== this.favoriteFeedbackRevision || ownerDate !== this.date()) {
+            return;
+          }
+          try {
+            uiContext.getPromptAction().showToast({ message: this.model.text(message) });
+          } catch (e) {
+            // 卡片已卸载时，保留模型中的准确失败原因。
+          }
+        };
+        this.model.toggleFavoriteDeadline(item).then((changed: boolean): void => {
+          if (!changed) {
+            showFeedback(AppModel.favoriteDeadlineLimitMessage);
+          }
+        }, (): void => {
           this.model.statusMessage = '无法保存收藏';
+          showFeedback('无法保存收藏');
         });
       })
     }

@@ -2,6 +2,8 @@ package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Intent
 import android.view.View
+import android.view.ViewGroup
+import android.widget.EditText
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -11,6 +13,8 @@ import androidx.test.uiautomator.Until
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -92,6 +96,55 @@ class PrivacyConsentUiTest {
             }
         } finally {
             store.clear()
+        }
+    }
+
+    @Test
+    fun settingsPrivacyKeepsCurrentStartupDisclosureAndDraftAcrossRepeatedBilingualOpens() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val preferences = AppPreferences(context)
+        val previousLanguage = preferences.languageCode
+        val store = PrivacyConsentStore(context)
+        val previouslyAccepted = store.hasAcceptedCurrentPolicy
+        val device = UiDevice.getInstance(instrumentation)
+        ensurePrivacyConsentForUiTest()
+        try {
+            listOf(AppLanguage.SIMPLIFIED_CHINESE, AppLanguage.ENGLISH).forEach { language ->
+                preferences.languageCode = language.code
+                ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
+                    .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
+                    lateinit var settings: View
+                    lateinit var account: EditText
+                    scenario.onActivity { activity ->
+                        activity.findViewById<View>(R.id.navigation_settings).performClick()
+                        settings = activity.findViewById(R.id.page_settings)
+                        fun fields(view: View): List<EditText> = if (view is EditText) listOf(view) else
+                            if (view is ViewGroup) (0 until view.childCount).flatMap { fields(view.getChildAt(it)) } else emptyList()
+                        account = fields(settings).first { it.hint.toString() == activity.uiText("教务账号") }
+                        account.setText("synthetic-private-dialog-draft")
+                    }
+                    repeat(2) {
+                        scenario.onActivity { activity ->
+                            assertTrue(activity.findViewById<View>(R.id.account_privacy_policy_button).performClick())
+                        }
+                        val disclosure = if (language == AppLanguage.ENGLISH)
+                            "the app refreshes the personal schedule once at launch" else "启动时会自动刷新一次个人课表"
+                        assertTrue(device.wait(Until.hasObject(By.textContains(disclosure)), TIMEOUT_MILLIS))
+                        assertFalse("The current policy must not be replaced with the retired request-only disclosure",
+                            device.hasObject(By.textContains("used over HTTPS only when you request")))
+                        device.pressBack()
+                        instrumentation.waitForIdleSync()
+                        scenario.onActivity { activity ->
+                            assertSame(settings, activity.findViewById(R.id.page_settings))
+                            assertEquals("synthetic-private-dialog-draft", account.text.toString())
+                        }
+                    }
+                }
+            }
+        } finally {
+            preferences.languageCode = previousLanguage
+            if (!previouslyAccepted) store.clear()
         }
     }
 

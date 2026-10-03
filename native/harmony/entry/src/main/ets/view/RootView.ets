@@ -5,11 +5,14 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { AppModel } from '../model/AppModel';
+import { AppLaunchConfiguration } from '../model/LaunchSupport';
 import { AppSection, AppSectionInfo } from '../common/AppSection';
 import { AppTheme } from '../common/AppTheme';
 import { PlannerView } from './PlannerView';
 import { CalendarSectionView } from './CalendarSectionView';
 import { SettingsView } from './SettingsView';
+import { SettingsSession } from './SettingsSession';
+import { PrivacyPolicyView } from './PrivacyPolicyView';
 import { QueryView } from './QueryView';
 
 // 布局策略统一在 common/DeviceState.ets 中（含折叠屏半折叠降级规则），
@@ -24,6 +27,7 @@ export struct RootView {
   // 初始值按屏幕宽度预估，避免宽屏启动首帧闪 Tabs（BUG-022 修复）。
   @Local containerWidth: number = DeviceState.screenWidthVp();
   @Local settingsFavoriteManagerVisible: boolean = false;
+  @Local settingsSession: SettingsSession = new SettingsSession();
   @Local phoneNavigationBottomMargin: number = PhoneNavigationLayout.minimumBottomClearanceVp;
   private deadlineRefreshTimer: number = -1;
   private navigationWindow: window.Window | null = null;
@@ -35,6 +39,9 @@ export struct RootView {
   }
 
   aboutToAppear(): void {
+    if (AppLaunchConfiguration.consumeSettingsPresentationSeedForTesting()) {
+      this.settingsSession.seedReviewPresentationDraftsOnce();
+    }
     this.navigationAvoidanceActive = true;
     this.attachPhoneNavigationAvoidance();
     // 与 iOS 端 AppModel.init + RootView.onAppear 对应：引导加载后按需刷新当天教室。
@@ -159,6 +166,7 @@ export struct RootView {
 
       if (this.settingsFavoriteManagerVisible) {
         SettingsView({
+          session: this.settingsSession,
           favoriteManagerOnly: true,
           onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
             this.settingsFavoriteManagerVisible = visible;
@@ -167,6 +175,20 @@ export struct RootView {
           .width('100%')
           .height('100%')
           .zIndex(100)
+      }
+
+      // 隐私页由根布局持有，切换平板侧栏/手机底栏不会销毁它；
+      // 下层 SettingsView 仍保持挂载，返回时滚动位置与编辑状态不变。
+      if (this.settingsSession.showingPrivacyPolicy) {
+        PrivacyPolicyView({
+          onClose: (): void => {
+            this.setSettingsPrivacyPolicyVisible(false);
+          }
+        })
+          .width('100%')
+          .height('100%')
+          .zIndex(110)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
     }
     .width('100%')
@@ -213,6 +235,7 @@ export struct RootView {
           QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
+            session: this.settingsSession,
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
               this.settingsFavoriteManagerVisible = visible;
             }
@@ -225,6 +248,7 @@ export struct RootView {
     .width('100%')
     .height('100%')
     // 仅宽屏侧栏布局承接桌面快捷键；手机根节点保持普通容器，避免屏蔽输入控件焦点。
+    .id('root_sidebar_layout')
     .focusable(true)
     .defaultFocus(true)
     .onKeyEvent((event: KeyEvent): boolean => this.handleDesktopSectionKey(event))
@@ -297,6 +321,7 @@ export struct RootView {
           QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
+            session: this.settingsSession,
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
               this.settingsFavoriteManagerVisible = visible;
             }
@@ -358,7 +383,7 @@ export struct RootView {
     } else if (section === AppSection.query) {
       QueryView({ onOpenSettings: () => this.selectSection(AppSection.settings) })
     } else {
-      SettingsView()
+      SettingsView({ session: this.settingsSession })
     }
   }
 
@@ -367,8 +392,15 @@ export struct RootView {
     this.currentSection = section;
     if (section !== AppSection.settings) {
       this.settingsFavoriteManagerVisible = false;
+      this.settingsSession.showingPrivacyPolicy = false;
     }
     this.model.selectedSection = section;
+  }
+
+  private setSettingsPrivacyPolicyVisible(visible: boolean): void {
+    this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
+      this.settingsSession.showingPrivacyPolicy = visible;
+    });
   }
 
   private sectionIndexOf(section: AppSection): number {

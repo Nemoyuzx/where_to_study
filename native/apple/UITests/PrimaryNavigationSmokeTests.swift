@@ -100,6 +100,10 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         // activate the link or open an external mail application during tests.
         XCTAssertTrue(contactLink.isEnabled)
 
+        let lastQuestion = app.staticTexts[english ? "How do I clear local data?" : "如何清除本地数据？"]
+        revealByScrolling(visibleElement: lastQuestion, in: app)
+        XCTAssertTrue(lastQuestion.exists, "Lazy FAQ sections must remain reachable and translated")
+
         let dismiss = app.buttons["action.dismiss-app-support"].firstMatch
         XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
         XCTAssertTrue(dismiss.isHittable)

@@ -124,6 +124,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
     @StateObject private var calendarServices = CalendarDataServices()
+    @State private var settingsSession = SettingsViewSession()
     #if os(macOS)
     @State private var macSidebarVisibility: NavigationSplitViewVisibility = .all
     #endif
@@ -313,6 +314,9 @@ struct RootView: View {
             // vice versa) when the runtime mode changes.
             calendarServices.prewarmInformationQueries(sampleMode: sampleMode)
         }
+        .onChange(of: navigation.selectedSection) { section in
+            if section != .settings { settingsSession.dismissPresentations() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: AppKeyboardCommandNotification.name)) {
             notification in
             guard let action = AppKeyboardCommandNotification.action(from: notification) else { return }
@@ -328,6 +332,7 @@ struct RootView: View {
                 }
             }
         }
+        .background { SettingsPresentationHost(session: settingsSession) }
         .environmentObject(dailyInfo)
         .environmentObject(calendarDeadlines)
         .environment(\.appTheme, theme)
@@ -575,7 +580,7 @@ struct RootView: View {
                 shuttleStore: modeServices.shuttle,
                 eventQueryStore: modeServices.importantEvents
             )
-        case .settings: SettingsView()
+        case .settings: SettingsView(session: settingsSession)
         }
     }
 }

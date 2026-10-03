@@ -144,6 +144,10 @@ object UiText {
         "使用个人课表排除已有课程" to "Exclude periods occupied by my schedule",
         "获取空教室信息" to "Fetch Classroom Data",
         "正在获取…" to "Fetching…",
+        "正在恢复…" to "Restoring…",
+        "正在删除…" to "Deleting…",
+        "无法保存收藏日程。" to "Unable to save favorites.",
+        "本地数据已清除，本次后台结果未保存。" to "Local data was cleared; this background result was not saved.",
         "正在获取当天空教室…" to "Fetching classrooms for today…",
         "正在获取当天空教室" to "Fetching classrooms for today",
         "当天空教室已更新" to "Classrooms for today updated",
@@ -613,7 +617,7 @@ object UiText {
         source.startsWith("Where To Study 是用于查看") ->
             "Where To Study is an independent, unofficial client for viewing BUPT schedules, empty classrooms, and related study information. It is not operated by or affiliated with the university."
         source.startsWith("学号和密码保存在") ->
-            "Your student ID and password remain in protected operating-system storage. They are used over HTTPS only when you request schedules, classrooms, or assignments. The maintainer cannot read them, and Settings never returns the saved password."
+            "Credentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password."
         source.startsWith("密码仅通过 HTTPS 提交") ->
             "The password is sent only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. Browser cookies are not read, and tickets, cookies, tokens, and assignments are not written to disk; results may be reused in memory for up to 10 minutes."
         source.startsWith("课表、空教室、校区") ->

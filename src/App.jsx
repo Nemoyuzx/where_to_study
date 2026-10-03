@@ -531,10 +531,12 @@ const PRIVACY_SECTIONS = [
 function PrivacyPolicyDialog({ onClose }) {
   const closeButtonRef = useRef(null)
   const dialogRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
     const trapFocus = (event) => {
       // Keep keyboard focus inside the dialog (Windows Tab navigation).
@@ -560,7 +562,7 @@ function PrivacyPolicyDialog({ onClose }) {
       window.removeEventListener('keydown', closeOnEscape)
       window.removeEventListener('keydown', trapFocus)
     }
-  }, [onClose])
+  }, [])
 
   return (
     <div

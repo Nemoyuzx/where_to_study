@@ -1077,8 +1077,25 @@ export struct QueryView {
       .backgroundColor(Color.Transparent)
       .accessibilityText(this.model.text(this.model.isFavoriteDeadline(item) ? '取消收藏' : '收藏'))
       .onClick(() => {
-        this.model.toggleFavoriteDeadline(item).catch(() => {
+        const ownerGeneration: number = this.tabMotionGeneration;
+        const uiContext = this.getUIContext();
+        const showFeedback = (message: string): void => {
+          if (ownerGeneration !== this.tabMotionGeneration || this.selectedTab() !== QueryPageTab.events) {
+            return;
+          }
+          try {
+            uiContext.getPromptAction().showToast({ message: this.model.text(message) });
+          } catch (e) {
+            // 页面已离开时不覆盖模型中的准确失败原因。
+          }
+        };
+        this.model.toggleFavoriteDeadline(item).then((changed: boolean): void => {
+          if (!changed) {
+            showFeedback(AppModel.favoriteDeadlineLimitMessage);
+          }
+        }, (): void => {
           this.model.statusMessage = '无法保存收藏';
+          showFeedback('无法保存收藏');
         });
       })
     }

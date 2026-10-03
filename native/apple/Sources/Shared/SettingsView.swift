@@ -98,7 +98,7 @@ private struct FavoriteDeadlineManagementView: View {
 }
 
 #if os(iOS)
-private struct FavoriteDeadlineManagementPresentation: View {
+struct FavoriteDeadlineManagementPresentation: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -195,19 +195,28 @@ struct SettingsView: View {
 
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
+    let session: SettingsViewSession
     @State private var showingClearDataConfirmation = false
-    @State private var privacyPresentation = PrivacyPolicyPresentation()
-    @State private var showingAppSupport = false
-    @State private var showingFavoriteManagement = false
     @State private var widgetPreviewSize: WidgetPreviewSize = .medium
     @State private var customFeedValidationStatus = ""
     @State private var isValidatingCustomFeed = false
     @FocusState private var focusedAccountField: AccountField?
 
+    init(session: SettingsViewSession) {
+        self.session = session
+    }
+
+    private var privacyPresentation: PrivacyPolicyPresentation { session.privacyPresentation }
+    private var supportPresentation: InAppPresentationState { session.supportPresentation }
+    private var favoritePresentation: InAppPresentationState { session.favoritePresentation }
+    private var reminderDraft: SettingsPreClassReminderDraft { session.reminderDraft }
+    private var colorThemeDraft: SettingsColorThemeDraft { session.colorThemeDraft }
+
     var body: some View {
         NavigationStack {
             GeometryReader { proxy in
             let columnCount = AdaptiveLayoutPolicy.contentColumnCount(width: proxy.size.width)
+            Group {
             #if os(macOS)
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -272,19 +281,16 @@ struct SettingsView: View {
             #endif
             #endif
             }
+            #if DEBUG
+            .overlay(alignment: .topLeading) {
+                SettingsLayoutMetricsProbe(columnCount: columnCount, width: proxy.size.width)
+            }
+            #endif
+            }
             .background(theme.configuration.preset == .default ? Color.clear : theme.background)
         }
         .background(theme.background)
-        .background { PrivacyPolicyPresentationHost(presentation: privacyPresentation) }
         .accessibilityIdentifier("screen.settings")
-        .sheet(isPresented: $showingAppSupport) {
-            AppSupportView()
-        }
-        #if os(iOS)
-        .fullScreenCover(isPresented: $showingFavoriteManagement) {
-            FavoriteDeadlineManagementPresentation()
-        }
-        #endif
         .confirmationDialog(
             "清除本地数据？",
             isPresented: $showingClearDataConfirmation,
@@ -293,6 +299,8 @@ struct SettingsView: View {
             Button("清除本地数据", role: .destructive) {
                 AppHaptics.impact()
                 model.clearLocalData()
+                reminderDraft.reset(to: model.preClassNotificationOffsets)
+                colorThemeDraft.reset(to: model.colorTheme.custom)
             }
             Button("取消", role: .cancel) {
                 AppHaptics.impact()
@@ -323,7 +331,7 @@ struct SettingsView: View {
         case .widget:
             widgetSurface
         case .colorTheme:
-            ColorThemeSettingsSurface()
+            ColorThemeSettingsSurface(draft: colorThemeDraft)
         case .language:
             languageSurface
         case .aboutAndPrivacy:
@@ -387,9 +395,10 @@ struct SettingsView: View {
                 .accessibilityIdentifier("action.open-app-filing")
                 #endif
                 Button {
+                    guard !supportPresentation.isPresented else { return }
                     AppHaptics.impact()
                     dismissKeyboard()
-                    showingAppSupport = true
+                    supportPresentation.isPresented = true
                 } label: {
                     Label("帮助与支持", systemImage: "questionmark.circle")
                         .frame(maxWidth: .infinity)
@@ -716,7 +725,7 @@ struct SettingsView: View {
                         .foregroundStyle(theme.secondaryText)
                 }
                 Divider()
-                PreClassReminderSettingsView()
+                PreClassReminderSettingsView(draft: reminderDraft)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -827,7 +836,8 @@ struct SettingsView: View {
                 Group {
                     #if os(iOS)
                     Button {
-                        showingFavoriteManagement = true
+                        guard !favoritePresentation.isPresented else { return }
+                        favoritePresentation.isPresented = true
                     } label: {
                         Label("收藏管理", systemImage: "star")
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1089,3 +1099,24 @@ struct SettingsView: View {
         if focusedAccountField != nil { focusedAccountField = nil }
     }
 }
+
+#if DEBUG
+private struct SettingsLayoutMetricsProbe: View {
+    let columnCount: Int
+    let width: CGFloat
+
+    var body: some View {
+        if (AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isUITestingLive || AppLaunchConfiguration.isReviewDemo)
+            && ProcessInfo.processInfo.arguments.contains("--ui-test-settings-layout") {
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Settings layout metrics")
+                .accessibilityValue("\(columnCount)|\(width)")
+                .accessibilityIdentifier("settings.layout-metrics")
+                .accessibilityHidden(false)
+                .allowsHitTesting(false)
+        }
+    }
+}
+#endif

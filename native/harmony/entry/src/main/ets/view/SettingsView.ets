@@ -7,7 +7,7 @@ import { ControlMetrics } from '../common/ControlMetrics';
 import { AdaptiveLayoutPolicy, PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
-import { PrivacyPolicyView } from './PrivacyPolicyView';
+import { SettingsSession } from './SettingsSession';
 import { ColorThemeSettingsCard } from './ColorThemeSettingsCard';
 import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
@@ -41,35 +41,25 @@ class DisabledSettingsButtonContent implements ContentModifier<ButtonConfigurati
 @ComponentV2
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
+  @Param session: SettingsSession = new SettingsSession();
   @Param favoriteManagerOnly: boolean = false;
   @Event onFavoriteManagerVisibilityChanged: (visible: boolean) => void = () => {
   };
   @Local contentWidth: number = 350;
-  @Local showingPrivacyPolicy: boolean = false;
-  @Local customDeadlineURLDraft: string = '';
-  @Local editingPreClassReminders: boolean = false;
-  @Local preClassLeadDrafts: string[] = ['10'];
-  @Local preClassInputError: string = '';
-  // 与系统服务卡片 FormDimension 使用相同尺寸与容量规则。
-  @Local previewDimension: number = 3;
+  @Local requestedFavoriteCount: number = 20;
   private statusDismissRevision: number = 0;
 
   private static readonly projectURL: string =
     'https://github.com/Nemoyuzx/where_to_study';
 
   aboutToAppear(): void {
-    this.customDeadlineURLDraft = this.model.customDeadlinesURL;
+    if (!this.favoriteManagerOnly) {
+      this.session.syncCustomDeadlineURL(this.model.customDeadlinesURL);
+    }
   }
 
   build() {
-    if (this.showingPrivacyPolicy) {
-      PrivacyPolicyView({
-        onClose: (): void => {
-          this.setPrivacyPolicyVisible(false);
-        }
-      })
-        .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
-    } else if (this.favoriteManagerOnly) {
+    if (this.favoriteManagerOnly) {
       this.favoriteManagerView()
     } else {
       this.settingsContent()
@@ -82,7 +72,7 @@ export struct SettingsView {
 
   private setPrivacyPolicyVisible(visible: boolean): void {
     this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
-      this.showingPrivacyPolicy = visible;
+      this.session.showingPrivacyPolicy = visible;
     });
   }
 
@@ -90,6 +80,14 @@ export struct SettingsView {
     this.getUIContext().animateTo({ duration: 180, curve: Curve.EaseOut }, () => {
       this.onFavoriteManagerVisibilityChanged(visible);
     });
+  }
+
+  private appendFavoritePage(endingIndex: number): void {
+    const total: number = this.model.favoriteDeadlines.length;
+    if (this.requestedFavoriteCount >= total || endingIndex < this.requestedFavoriteCount - 5) {
+      return;
+    }
+    this.requestedFavoriteCount = Math.min(total, this.requestedFavoriteCount + 20);
   }
 
   private dismissStatusMessageAfter(message: string, delay: number = 1800): void {
@@ -139,7 +137,7 @@ export struct SettingsView {
               this.notificationSurface()
               this.dailyInfoSurface()
               this.widgetSurface()
-              ColorThemeSettingsCard()
+              ColorThemeSettingsCard({ seedOnlyScene: this.session.seedOnlyScene })
               this.languageSurface()
               this.aboutSurface()
               this.localDataSurface()
@@ -157,7 +155,7 @@ export struct SettingsView {
             this.notificationSurface()
             this.dailyInfoSurface()
             this.widgetSurface()
-            ColorThemeSettingsCard()
+            ColorThemeSettingsCard({ seedOnlyScene: this.session.seedOnlyScene })
             this.languageSurface()
             this.aboutSurface()
             this.localDataSurface()
@@ -184,6 +182,7 @@ export struct SettingsView {
     .backgroundColor(AppTheme.background())
     .align(Alignment.Top)
     .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+    .id('settings_scroll')
   }
 
   @Builder
@@ -546,7 +545,7 @@ export struct SettingsView {
   @Builder
   field(placeholder: string, value: string, inputType: InputType,
     onChangeValue: (value: string) => void, enabled: boolean = true,
-    accessibilityID: string = '') {
+    accessibilityID: string = '', allowsSampleDraft: boolean = false) {
     TextInput({ placeholder: this.model.text(placeholder), text: value })
       .id(accessibilityID)
       .type(inputType)
@@ -560,11 +559,11 @@ export struct SettingsView {
       .width('100%')
       .height(ControlMetrics.height)
       .showPasswordIcon(false)
-      .enabled(!this.model.isSampleMode() && enabled)
-      .opacity(this.model.isSampleMode() || !enabled ? 0.62 : 1)
+      .enabled(enabled && (!this.model.isSampleMode() || allowsSampleDraft))
+      .opacity(!enabled || (this.model.isSampleMode() && !allowsSampleDraft) ? 0.62 : 1)
       .focusable(true)
       .focusOnTouch(true)
-      .enableKeyboardOnFocus(true)
+      .enableKeyboardOnFocus(!(this.session.seedOnlyScene && accessibilityID === 'settings_custom_deadline_url'))
       .onChange((text: string) => {
         onChangeValue(text);
       })
@@ -709,9 +708,9 @@ export struct SettingsView {
         .width('100%')
       this.segmentedOptions(
         ['2×2', '2×4', '4×4'],
-        () => this.previewDimension - 2,
+        () => this.session.previewDimension - 2,
         (index: number): void => {
-          this.previewDimension = index + 2;
+          this.session.previewDimension = index + 2;
         })
 
       this.widgetPreview()
@@ -733,8 +732,8 @@ export struct SettingsView {
     }
     .padding(12)
     .margin({ top: 8 })
-    .width(this.previewDimension === 2 ? 160 : '100%')
-    .height(this.previewDimension === 4 ? 320 : 160)
+    .width(this.session.previewDimension === 2 ? 160 : '100%')
+    .height(this.session.previewDimension === 4 ? 320 : 160)
     .borderRadius(16)
     .backgroundColor(AppTheme.surface())
     .border({ width: 1, color: AppTheme.border() })
@@ -746,7 +745,7 @@ export struct SettingsView {
     const prefs: WidgetCoursePreferences = new WidgetCoursePreferences(
       this.model.widgetShowsLocation, this.model.widgetShowsTeacher,
       this.model.widgetCourseLimit, this.model.resolvedLanguage());
-    return TodayCourseWidgetData.previewBinding(prefs, this.previewDimension);
+    return TodayCourseWidgetData.previewBinding(prefs, this.session.previewDimension);
   }
 
   private previewString(key: string): string {
@@ -884,21 +883,22 @@ export struct SettingsView {
       Divider()
         .color(AppTheme.border())
         .margin({ top: 8, bottom: 8 })
-      this.field('自定义日程 HTTPS 地址', this.customDeadlineURLDraft, InputType.Normal,
+      this.field('自定义日程 HTTPS 地址', this.session.customDeadlineURLDraft, InputType.Normal,
         (value: string): void => {
-          this.customDeadlineURLDraft = value;
-        })
+          this.session.editCustomDeadlineURL(value);
+        }, true, 'settings_custom_deadline_url', true)
       Blank().height(7)
       this.linkButton('保存自定义日程地址', (): void => {
-        this.model.setCustomDeadlinesURL(this.customDeadlineURLDraft).then((saved: boolean): void => {
+        const submitted: string = this.session.customDeadlineURLDraft;
+        this.model.setCustomDeadlinesURL(submitted).then((saved: boolean): void => {
           if (saved) {
-            this.customDeadlineURLDraft = this.model.customDeadlinesURL;
+            this.session.savedCustomDeadlineURL(submitted, this.model.customDeadlinesURL);
             this.model.statusMessage = '自定义日程地址已保存';
           }
         }).catch(() => {
           this.model.statusMessage = '无法保存自定义日程地址';
         });
-      })
+      }, !this.model.isSampleMode())
       this.featureToggle('显示自定义日程', this.model.customDeadlinesEnabled,
         (value: boolean): void => {
           this.model.setCustomDeadlinesEnabled(value).catch(() => {
@@ -1002,16 +1002,16 @@ export struct SettingsView {
         .backgroundColor(AppTheme.surfaceVariant())
         .enabled(!this.model.isSampleMode() || this.model.isReviewDemo())
         .onClick(() => {
-          this.preClassLeadDrafts = this.model.preClassNotificationLeadMinutes.map((value: number) => value.toString());
-          this.preClassInputError = '';
-          this.editingPreClassReminders = true;
+          this.session.preClassLeadDrafts = this.model.preClassNotificationLeadMinutes.map((value: number) => value.toString());
+          this.session.preClassInputError = '';
+          this.session.editingPreClassReminders = true;
         })
     }
     .width('100%')
     .margin({ top: 4 })
-    if (this.editingPreClassReminders) {
+    if (this.session.editingPreClassReminders) {
       Row({ space: 8 }) {
-        Text(this.model.text('提醒次数') + '：' + this.preClassLeadDrafts.length.toString())
+        Text(this.model.text('提醒次数') + '：' + this.session.preClassLeadDrafts.length.toString())
           .fontSize(14)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
@@ -1020,23 +1020,23 @@ export struct SettingsView {
           .accessibilityText(this.model.text('减少提醒次数'))
           .width(ControlMetrics.height)
           .height(ControlMetrics.height)
-          .enabled(this.preClassLeadDrafts.length > 1)
-          .onClick(() => { this.preClassLeadDrafts = this.preClassLeadDrafts.slice(0, -1); })
+          .enabled(this.session.preClassLeadDrafts.length > 1)
+          .onClick(() => { this.session.preClassLeadDrafts = this.session.preClassLeadDrafts.slice(0, -1); })
         Button('+')
           .id('settings_pre_class_count_increase')
           .accessibilityText(this.model.text('增加提醒次数'))
           .width(ControlMetrics.height)
           .height(ControlMetrics.height)
-          .enabled(this.preClassLeadDrafts.length < PreClassNotificationSettings.maximumCount)
+          .enabled(this.session.preClassLeadDrafts.length < PreClassNotificationSettings.maximumCount)
           .onClick(() => {
             let next: number = 5;
-            while (this.preClassLeadDrafts.includes(next.toString())) { next += 5; }
-            this.preClassLeadDrafts = this.preClassLeadDrafts.concat([next.toString()]);
+            while (this.session.preClassLeadDrafts.includes(next.toString())) { next += 5; }
+            this.session.preClassLeadDrafts = this.session.preClassLeadDrafts.concat([next.toString()]);
           })
       }
       .width('100%')
       .margin({ top: 8 })
-      ForEach(this.preClassLeadDrafts, (value: string, index: number) => {
+      ForEach(this.session.preClassLeadDrafts, (value: string, index: number) => {
         Row({ space: 8 }) {
           Text(this.model.text('提醒') + ' ' + (index + 1).toString())
             .fontSize(14)
@@ -1049,11 +1049,12 @@ export struct SettingsView {
             .height(ControlMetrics.height)
             .width(104)
             .fontSize(14)
+            .enableKeyboardOnFocus(!this.session.seedOnlyScene)
             .onChange((text: string) => {
-              const drafts: string[] = this.preClassLeadDrafts.slice();
+              const drafts: string[] = this.session.preClassLeadDrafts.slice();
               drafts[index] = text;
-              this.preClassLeadDrafts = drafts;
-              this.preClassInputError = '';
+              this.session.preClassLeadDrafts = drafts;
+              this.session.preClassInputError = '';
             })
           Text(this.model.text('分钟'))
             .fontSize(14)
@@ -1065,23 +1066,23 @@ export struct SettingsView {
       Row({ space: 8 }) {
         Button(this.model.text('取消'))
           .height(ControlMetrics.height)
-          .onClick(() => { this.editingPreClassReminders = false; })
+          .onClick(() => { this.session.editingPreClassReminders = false; })
         Button(this.model.text('保存提醒'))
           .id('settings_pre_class_notification_save')
           .height(ControlMetrics.height)
           .onClick(() => {
-            const values: number[] | null = PreClassNotificationSettings.parseDrafts(this.preClassLeadDrafts);
+            const values: number[] | null = PreClassNotificationSettings.parseDrafts(this.session.preClassLeadDrafts);
             if (values === null || !this.model.setPreClassNotificationLeadMinutes(values)) {
-              this.preClassInputError = '请输入 1–5 个不重复的整数，每个为 1–1440 分钟。';
+              this.session.preClassInputError = '请输入 1–5 个不重复的整数，每个为 1–1440 分钟。';
               return;
             }
-            this.preClassInputError = '';
-            this.editingPreClassReminders = false;
+            this.session.preClassInputError = '';
+            this.session.editingPreClassReminders = false;
           })
       }
       .margin({ top: 8 })
-      if (this.preClassInputError.length > 0) {
-        Text(this.model.text(this.preClassInputError))
+      if (this.session.preClassInputError.length > 0) {
+        Text(this.model.text(this.session.preClassInputError))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
@@ -1211,6 +1212,7 @@ export struct SettingsView {
               action: () => {
                 const work: Promise<void> = this.model.clearLocalData();
                 work.then(() => {
+                  this.session.clearDrafts();
                   this.dismissStatusMessageAfter(this.model.statusMessage);
                 }).catch(() => {
                   // 错误说明已由 AppModel 写入状态消息。
@@ -1275,18 +1277,27 @@ export struct SettingsView {
         .borderRadius(8)
         .backgroundColor(AppTheme.surface())
       } else {
-        Scroll() {
-          Column({ space: 10 }) {
-            ForEach(this.model.favoriteDeadlines, (item: PublicDeadlineItem) => {
-              this.favoriteDeadlineRow(item)
+        List({ space: 10 }) {
+          ForEach(this.model.favoriteDeadlines.slice(0, this.requestedFavoriteCount),
+            (item: PublicDeadlineItem) => {
+              ListItem() {
+                this.favoriteDeadlineRow(item)
+              }
             }, (item: PublicDeadlineItem) => this.model.favoriteDeadlineKey(item))
-          }
-          .width('100%')
         }
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)
         .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+        .onScrollIndex((start: number, end: number, center: number) => {
+          this.appendFavoritePage(end);
+        })
+        if (this.requestedFavoriteCount < this.model.favoriteDeadlines.length) {
+          this.linkButton('加载更多', (): void => {
+            this.requestedFavoriteCount = Math.min(this.model.favoriteDeadlines.length,
+              this.requestedFavoriteCount + 20);
+          })
+        }
       }
     }
     .padding({ left: 20, right: 20, top: 18, bottom: 28 })
@@ -1387,7 +1398,7 @@ export struct SettingsView {
       Blank().height(7)
       this.linkButton('隐私说明', (): void => {
         this.setPrivacyPolicyVisible(true);
-      })
+      }, true, 'settings_privacy_policy')
     }
     .padding(16)
     .width('100%')
@@ -1398,7 +1409,7 @@ export struct SettingsView {
   }
 
   @Builder
-  linkButton(label: string, action: () => void, enabled: boolean = true) {
+  linkButton(label: string, action: () => void, enabled: boolean = true, accessibilityID: string = '') {
     Button(this.model.text(label))
       .type(ButtonType.Normal)
       .stateEffect(true)
@@ -1410,6 +1421,7 @@ export struct SettingsView {
       .backgroundColor(AppTheme.surface())
       .width('100%')
       .height(ControlMetrics.height)
+      .id(accessibilityID)
       .enabled(enabled)
       .contentModifier(enabled ? undefined : new DisabledSettingsButtonContent())
       .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })

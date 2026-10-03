@@ -1,6 +1,7 @@
 import { AbilityConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { KeyboardAvoidMode, window } from '@kit.ArkUI';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { AppContext } from '../store/AppContext';
 import { AppLaunchConfiguration } from '../model/LaunchSupport';
 import { DeviceState } from '../common/DeviceState';
@@ -9,6 +10,8 @@ const DOMAIN: number = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   private mainWindowStage: window.WindowStage | null = null;
+  private settingsTestOriginalOrientation: window.Orientation | null = null;
+  private settingsTestOrientationRevision: number = 0;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     AppContext.init(this.context);
@@ -27,7 +30,7 @@ export default class EntryAbility extends UIAbility {
     }
     AppLaunchConfiguration.applyFromWant(want);
     if (this.mainWindowStage !== null) {
-      this.loadRootContent(this.mainWindowStage);
+      this.loadRootContentWithSettingsTestOrientation(this.mainWindowStage);
     }
   }
 
@@ -60,7 +63,45 @@ export default class EntryAbility extends UIAbility {
     // 主窗口加载应用首页。状态从 windowStage.loadContent 传入的页面自行创建，
     // 与 iOS 端 @StateObject AppModel 的注入方式对应：页面树在 Index 根组件中
     // 创建唯一的 AppModel 并通过 @Provider/@Consumer 向下共享。
-    this.loadRootContent(windowStage);
+    this.loadRootContentWithSettingsTestOrientation(windowStage);
+  }
+
+  private loadRootContentWithSettingsTestOrientation(windowStage: window.WindowStage): void {
+    const seededTest: boolean = AppLaunchConfiguration.hasPendingSettingsPresentationSeedForTesting();
+    if (!seededTest && this.settingsTestOriginalOrientation === null) {
+      // 普通/Release 路径保持原来的同步 loadContent，不调用任何 orientation API。
+      this.loadRootContent(windowStage);
+      return;
+    }
+    const revision: number = ++this.settingsTestOrientationRevision;
+    let mainWindow: window.Window;
+    try {
+      mainWindow = windowStage.getMainWindowSync();
+    } catch (e) {
+      this.loadRootContent(windowStage);
+      return;
+    }
+    if (seededTest && this.settingsTestOriginalOrientation === null) {
+      try {
+        this.settingsTestOriginalOrientation = mainWindow.getPreferredOrientation();
+      } catch (e) {
+        // 不知道原值便不修改窗口方向；设备测试会如实报告没有跨过布局边界。
+        this.loadRootContent(windowStage);
+        return;
+      }
+    }
+    const requested: window.Orientation = seededTest ? window.Orientation.AUTO_ROTATION :
+      this.settingsTestOriginalOrientation as window.Orientation;
+    mainWindow.setPreferredOrientation(requested).then((): void => {
+      if (revision !== this.settingsTestOrientationRevision || this.mainWindowStage !== windowStage) { return; }
+      if (!seededTest) { this.settingsTestOriginalOrientation = null; }
+      this.loadRootContent(windowStage);
+    }, (e: BusinessError): void => {
+      hilog.warn(DOMAIN, 'WhereToStudy', 'Test-only preferred orientation unavailable: %{public}s', String(e));
+      if (revision === this.settingsTestOrientationRevision && this.mainWindowStage === windowStage) {
+        this.loadRootContent(windowStage);
+      }
+    });
   }
 
   private loadRootContent(windowStage: window.WindowStage): void {
@@ -74,6 +115,8 @@ export default class EntryAbility extends UIAbility {
   }
 
   onWindowStageDestroy(): void {
+    this.settingsTestOrientationRevision++;
+    this.settingsTestOriginalOrientation = null;
     this.mainWindowStage = null;
     hilog.info(DOMAIN, 'WhereToStudy', 'EntryAbility onWindowStageDestroy');
   }

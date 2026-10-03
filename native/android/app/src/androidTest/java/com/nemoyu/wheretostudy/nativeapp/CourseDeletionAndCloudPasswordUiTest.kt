@@ -3,6 +3,8 @@ package com.nemoyu.wheretostudy.nativeapp
 import android.content.Intent
 import android.graphics.Rect
 import android.os.Environment
+import android.os.Looper
+import android.util.AtomicFile
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -19,10 +21,18 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 /** Uses fictional credentials on a disposable emulator with network disabled. */
 @RunWith(AndroidJUnit4::class)
@@ -97,6 +107,174 @@ class CourseDeletionAndCloudPasswordUiTest {
         } finally {
             context.filesDir.setWritable(true, true)
             repository.close()
+        }
+    }
+
+    @Test
+    fun asynchronousCourseRecordIoKeepsAtomicFailuresScopeAndCanceledOwners() {
+        prepare(AppLanguage.SIMPLIFIED_CHINESE)
+        val credentials = SecureCredentialStore(context)
+        val repository = ScheduleRepository(context, credentials, AppPreferences(context))
+        val deletionStore = ScheduleRepository::class.java.getDeclaredField("deletionStore")
+            .apply { isAccessible = true }.get(repository) as CourseDeletionStore
+        val observed = ObservedAtomicFile(File(context.filesDir, "course_deletions_v1.json"))
+        CourseDeletionStore::class.java.getDeclaredField("file").apply { isAccessible = true }.set(deletionStore, observed)
+        val worker = ScheduleRepository::class.java.getDeclaredField("worker")
+            .apply { isAccessible = true }.get(repository) as ExecutorService
+        fun awaitOperation(start: ((Result<Unit>) -> Unit) -> Unit): Result<Unit> {
+            val complete = CountDownLatch(1)
+            val result = AtomicReference<Result<Unit>>()
+            instrumentation.runOnMainSync { start { value ->
+                assertEquals(Looper.getMainLooper(), Looper.myLooper())
+                result.set(value); complete.countDown()
+            } }
+            assertTrue("Local course operation must complete", complete.await(5, TimeUnit.SECONDS))
+            return result.get()
+        }
+        fun holdWorker(): CountDownLatch {
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            worker.execute { entered.countDown(); check(release.await(5, TimeUnit.SECONDS)) }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            return release
+        }
+        try {
+            assertTrue(awaitOperation { callback -> repository.deleteCourseAsync(snapshot.courses.first(), today,
+                CourseDeletionScope.SINGLE_OCCURRENCE, snapshot.termID, onComplete = callback) }.isSuccess)
+            assertTrue(observed.reads.get() > 0 && observed.writes.get() > 0)
+            assertFalse("Actual course record file reads/writes must run off main", observed.ioOnMain.get())
+            val record = deletionStore.load().single()
+            val readsBeforeLoad = observed.reads.get()
+            val loaded = AtomicReference<List<CourseDeletion>>()
+            val loadComplete = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                repository.loadDeletedCourses { result ->
+                    assertEquals(Looper.getMainLooper(), Looper.myLooper())
+                    loaded.set(result.getOrThrow()); loadComplete.countDown()
+                }
+            }
+            assertTrue(loadComplete.await(5, TimeUnit.SECONDS))
+            assertEquals(listOf(record), loaded.get())
+            assertTrue(observed.reads.get() > readsBeforeLoad)
+            assertFalse(observed.ioOnMain.get())
+            val effective = repository.schedule
+            val canceledCallbacks = AtomicInteger()
+            val active = AtomicBoolean(true)
+            val canceledRelease = holdWorker()
+            instrumentation.runOnMainSync {
+                repository.restoreCourseAsync(record.id, active::get) { canceledCallbacks.incrementAndGet() }
+            }
+            active.set(false)
+            canceledRelease.countDown()
+            worker.submit { }.get(5, TimeUnit.SECONDS)
+            instrumentation.waitForIdleSync()
+            assertEquals(0, canceledCallbacks.get())
+            assertEquals(listOf(record), deletionStore.load())
+
+            val invalidatedRelease = holdWorker()
+            val invalidated = AtomicReference<Result<Unit>>()
+            val invalidatedComplete = CountDownLatch(1)
+            instrumentation.runOnMainSync {
+                repository.restoreCourseAsync(record.id) { invalidated.set(it); invalidatedComplete.countDown() }
+            }
+            LocalDataCoordinator.clear { credentials.save(Credentials("another-fictional-account", "fictional")) }
+            invalidatedRelease.countDown()
+            assertTrue(invalidatedComplete.await(5, TimeUnit.SECONDS))
+            assertTrue(invalidated.get().exceptionOrNull() is LocalDataInvalidatedException)
+            assertEquals(listOf(record), deletionStore.load())
+            assertEquals("A queued restoration must not change the new account's effective schedule",
+                snapshot, loadUsableSchedule(context))
+            LocalDataCoordinator.clear { credentials.save(Credentials("course-cloud-test-only", "fictional-academic", "fictional-cloud")) }
+
+            assertTrue(context.filesDir.setWritable(false, true))
+            val failed = try {
+                awaitOperation { callback -> repository.restoreCourseAsync(record.id, onComplete = callback) }
+            } finally { assertTrue(context.filesDir.setWritable(true, true)) }
+            assertTrue("A failed durable write must be reported as failure", failed.isFailure)
+            assertEquals(effective, repository.schedule)
+            assertEquals(listOf(record), deletionStore.load())
+            assertTrue(awaitOperation { callback -> repository.restoreCourseAsync(record.id, onComplete = callback) }.isSuccess)
+            assertTrue(deletionStore.load().isEmpty())
+            assertEquals(snapshot, repository.schedule)
+            assertFalse(observed.ioOnMain.get())
+        } finally {
+            context.filesDir.setWritable(true, true)
+            repository.close()
+        }
+    }
+
+    @Test
+    fun closingCourseRecordLoadingDialogPreventsLateDialogPublication() {
+        prepare(AppLanguage.SIMPLIFIED_CHINESE)
+        launch().use { scenario ->
+            lateinit var repository: ScheduleRepository
+            lateinit var worker: ExecutorService
+            scenario.onActivity { activity ->
+                repository = MainActivity::class.java.getDeclaredMethod("getScheduleRepository")
+                    .apply { isAccessible = true }.invoke(activity) as ScheduleRepository
+                worker = ScheduleRepository::class.java.getDeclaredField("worker")
+                    .apply { isAccessible = true }.get(repository) as ExecutorService
+                activity.findViewById<View>(R.id.navigation_settings).performClick()
+            }
+            val entered = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            worker.execute { entered.countDown(); check(release.await(5, TimeUnit.SECONDS)) }
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            try {
+                scenario.onActivity { activity -> assertTrue(button(activity, "管理已删除课程").performClick()) }
+                assertTrue(device.wait(Until.hasObject(By.text("正在获取…")), 5_000))
+                device.pressBack()
+                scenario.onActivity { activity -> activity.findViewById<View>(R.id.navigation_planner).performClick() }
+                release.countDown()
+                worker.submit { }.get(5, TimeUnit.SECONDS)
+                instrumentation.waitForIdleSync()
+                assertFalse(device.hasObject(By.text("已删除课程")))
+                assertFalse(device.hasObject(By.text("当前账号、本学期暂无课程删除记录")))
+            } finally { release.countDown() }
+        }
+    }
+
+    @Test
+    fun loadedCourseRecordDialogsCloseWithTheirSettingsOwnerAndRejectStaleSelections() {
+        listOf(false, true).forEach { hasRecords ->
+            listOf(false, true).forEach { rebuildAdaptiveLayout ->
+                prepare(AppLanguage.SIMPLIFIED_CHINESE)
+                val records = if (hasRecords) listOf(CourseDeletionLogic.create(
+                    "course-cloud-test-only", snapshot, snapshot.courses.first(), today, CourseDeletionScope.WHOLE_COURSE,
+                )) else emptyList()
+                CourseDeletionStore(context).save(records)
+                launch().use { scenario ->
+                    lateinit var source: View
+                    scenario.onActivity { activity ->
+                        activity.findViewById<View>(R.id.navigation_settings).performClick()
+                        source = button(activity, "管理已删除课程")
+                        assertTrue(source.performClick())
+                    }
+                    val selector = if (hasRecords) By.textStartsWith("Course deletion fixture") else
+                        By.text("当前账号、本学期暂无课程删除记录")
+                    val oldItem = checkNotNull(device.wait(Until.findObject(selector), 5_000))
+                    scenario.onActivity { activity ->
+                        if (rebuildAdaptiveLayout) {
+                            // Exercise the same-Activity owner replacement used
+                            // by a new adaptive layout, without resizing the AVD.
+                            MainActivity::class.java.getDeclaredMethod("updateAdaptiveLayout", java.lang.Boolean.TYPE)
+                                .apply { isAccessible = true }.invoke(activity, true)
+                        } else activity.findViewById<View>(R.id.navigation_planner).performClick()
+                        assertFalse(source.isAttachedToWindow)
+                    }
+                    assertTrue("Loaded records/empty dialogs must close with their owner",
+                        device.wait(Until.gone(selector), 5_000))
+                    if (hasRecords) {
+                        // Accessibility can reject this cached node as stale;
+                        // a late selection must never start an old restoration.
+                        runCatching { oldItem.click() }
+                    }
+                    instrumentation.waitForIdleSync()
+                    assertFalse(device.hasObject(By.text("恢复课程")))
+                    assertFalse(device.hasObject(By.text("正在恢复…")))
+                    assertEquals(records, CourseDeletionStore(context).load())
+                }
+            }
         }
     }
 
@@ -239,5 +417,21 @@ class CourseDeletionAndCloudPasswordUiTest {
     private fun descendants(root: View): List<View> = buildList {
         add(root)
         if (root is ViewGroup) repeat(root.childCount) { addAll(descendants(root.getChildAt(it))) }
+    }
+
+    private class ObservedAtomicFile(file: File) : AtomicFile(file) {
+        val reads = AtomicInteger()
+        val writes = AtomicInteger()
+        val ioOnMain = AtomicBoolean(false)
+        override fun openRead(): FileInputStream {
+            reads.incrementAndGet()
+            if (Looper.myLooper() == Looper.getMainLooper()) ioOnMain.set(true)
+            return super.openRead()
+        }
+        override fun startWrite(): FileOutputStream {
+            writes.incrementAndGet()
+            if (Looper.myLooper() == Looper.getMainLooper()) ioOnMain.set(true)
+            return super.startWrite()
+        }
     }
 }

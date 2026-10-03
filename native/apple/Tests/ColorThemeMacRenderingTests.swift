@@ -86,7 +86,7 @@ final class ColorThemeMacRenderingTests: XCTestCase {
             } else { model.selectColorTheme(preset) }
             for dark in [false, true] {
                 let scheme: ColorScheme = dark ? .dark : .light
-                let settings = ColorThemeSettingsSurface()
+                let settings = ColorThemeSettingsSurface(draft: SettingsColorThemeDraft())
                     .environmentObject(model)
                     .environment(\.appTheme, AppTheme(configuration: model.colorTheme))
                     .environment(\.colorScheme, scheme)

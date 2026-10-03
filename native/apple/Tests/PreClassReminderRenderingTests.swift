@@ -15,7 +15,7 @@ final class PreClassReminderRenderingTests: XCTestCase {
         for language in [AppLanguage.simplifiedChinese, .english] {
             model.setAppLanguage(language)
             XCTAssertTrue(model.setPreClassNotificationOffsets([1, 5, 10, 30, 1440]))
-            let content = PreClassReminderSettingsView().environmentObject(model)
+            let content = PreClassReminderSettingsView(draft: SettingsPreClassReminderDraft()).environmentObject(model)
                 .environment(\.locale, language.locale).padding(16)
                 .frame(width: 360, height: 620, alignment: .top)
                 .background(AppTheme.surface)

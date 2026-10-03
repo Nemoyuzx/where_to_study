@@ -23,6 +23,8 @@ import shuttleQueryLayoutTest from './ShuttleQueryLayout.test';
 import queryLogicTest from './QueryLogic.test';
 import networkDiagnosticsTest from './NetworkDiagnostics.test';
 import privacyConsentTest from './PrivacyConsent.test';
+import settingsSessionTest from './SettingsSession.test';
+import favoriteDeadlineLimitTest from './FavoriteDeadlineLimit.test';
 import widgetFileQueueTest from './WidgetFileQueue.test';
 import academicQueryTest from './AcademicQuery.test';
 import authenticatedSessionTest from './AuthenticatedSession.test';
@@ -52,6 +54,8 @@ export default function testsuite() {
   queryLogicTest();
   networkDiagnosticsTest();
   privacyConsentTest();
+  settingsSessionTest();
+  favoriteDeadlineLimitTest();
   widgetFileQueueTest();
   academicQueryTest();
   authenticatedSessionTest();

@@ -67,7 +67,7 @@ class ScheduleRepository(
     private val closed = AtomicBoolean(false)
     private val deletionStore = CourseDeletionStore(appContext)
     private var activeRefreshToken: Long? = null
-    private var rawSchedule: ScheduleSnapshot? = null
+    @Volatile private var rawSchedule: ScheduleSnapshot? = null
 
     @Volatile
     var schedule: ScheduleSnapshot? = null
@@ -209,6 +209,69 @@ class ScheduleRepository(
         rawSchedule?.termID ?: preferences.termID,
         deletionStore.load(),
     )
+
+    internal fun loadDeletedCourses(
+        isActive: () -> Boolean = { true },
+        onComplete: (Result<List<CourseDeletion>>) -> Unit,
+    ): Boolean = runLocalCourseOperation(isActive, ::deletedCourses, onComplete)
+
+    internal fun restoreCourseAsync(
+        deletionID: String,
+        isActive: () -> Boolean = { true },
+        onComplete: (Result<Unit>) -> Unit,
+    ): Boolean = runLocalCourseOperation(isActive, { restoreCourse(deletionID) }, onComplete)
+
+    internal fun deleteCourseAsync(
+        course: Course,
+        date: Calendar,
+        scope: CourseDeletionScope,
+        expectedTermID: String,
+        isActive: () -> Boolean = { true },
+        onComplete: (Result<Unit>) -> Unit,
+    ): Boolean {
+        val requestedDate = date.clone() as Calendar
+        return runLocalCourseOperation(isActive, {
+            deleteCourse(course, requestedDate, scope, expectedTermID)
+        }, onComplete)
+    }
+
+    private fun <T> runLocalCourseOperation(
+        isActive: () -> Boolean,
+        operation: () -> T,
+        onComplete: (Result<T>) -> Unit,
+    ): Boolean {
+        val generation = LocalDataCoordinator.snapshot()
+        if (closed.get()) {
+            mainHandler.post {
+                if (isActive()) onComplete(Result.failure(ScheduleClientException("个人课表获取服务已关闭。")))
+            }
+            return false
+        }
+        return try {
+            worker.execute {
+                val result = runCatching {
+                    LocalDataCoordinator.withCurrent(generation) {
+                        check(!closed.get() && isActive()) { "操作已取消。" }
+                        operation()
+                    }
+                }
+                mainHandler.post {
+                    if (!closed.get() && isActive()) onComplete(
+                        if (LocalDataCoordinator.isCurrent(generation)) result
+                        else Result.failure(LocalDataInvalidatedException()),
+                    )
+                }
+            }
+            true
+        } catch (_: RejectedExecutionException) {
+            mainHandler.post {
+                if (!closed.get() && isActive()) onComplete(
+                    Result.failure(ScheduleClientException("个人课表获取服务已关闭。")),
+                )
+            }
+            false
+        }
+    }
 
     internal fun deleteCourse(
         course: Course,

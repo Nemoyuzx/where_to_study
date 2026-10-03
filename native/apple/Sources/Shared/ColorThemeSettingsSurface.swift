@@ -3,19 +3,20 @@ import SwiftUI
 struct ColorThemeSettingsSurface: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
-    @State private var primary = "#166B5D"
-    @State private var accent = "#E2BC62"
-    @State private var selectedDate = "#2563EB"
-    @State private var hasEdited = false
+    @ObservedObject var fields: SettingsColorThemeDraft
     @FocusState private var focusedField: String?
+
+    init(draft: SettingsColorThemeDraft) {
+        fields = draft
+    }
 
     private var english: Bool { model.appLanguage.resolvedResourceName == "en" }
     private func text(_ chinese: String, _ english: String) -> String { self.english ? english : chinese }
     private var draft: ColorThemeConfiguration? {
-        model.colorTheme.editing(primary: primary, accent: accent, selectedDate: selectedDate)
+        model.colorTheme.editing(primary: fields.primary, accent: fields.accent, selectedDate: fields.selectedDate)
     }
     private var previewTheme: AppTheme {
-        AppTheme(configuration: hasEdited ? (draft ?? model.colorTheme) : model.colorTheme)
+        AppTheme(configuration: fields.hasEdited ? (draft ?? model.colorTheme) : model.colorTheme)
     }
 
     var body: some View {
@@ -35,10 +36,10 @@ struct ColorThemeSettingsSurface: View {
                 Divider()
                 Text(text("自定义颜色", "Custom Colors"))
                     .font(.subheadline.weight(.semibold))
-                colorField(text("主色", "Primary"), id: "primary", value: $primary)
-                colorField(text("强调色", "Accent"), id: "accent", value: $accent)
-                colorField(text("选中日期", "Selected Date"), id: "selected-date", value: $selectedDate)
-                if hasEdited && draft == nil {
+                colorField(text("主色", "Primary"), id: "primary", value: $fields.primary)
+                colorField(text("强调色", "Accent"), id: "accent", value: $fields.accent)
+                colorField(text("选中日期", "Selected Date"), id: "selected-date", value: $fields.selectedDate)
+                if fields.hasEdited && draft == nil {
                     HStack(alignment: .top, spacing: 6) {
                         if theme.configuration.preset != .default {
                             Image(systemName: "exclamationmark.circle.fill")
@@ -53,8 +54,8 @@ struct ColorThemeSettingsSurface: View {
                     .font(.caption)
                 }
                 Button(text("应用自定义颜色", "Apply Custom Colors")) {
-                    hasEdited = true
-                    if model.setCustomColorTheme(primary: primary, accent: accent, selectedDate: selectedDate) {
+                    fields.hasEdited = true
+                    if model.setCustomColorTheme(primary: fields.primary, accent: fields.accent, selectedDate: fields.selectedDate) {
                         synchronizeFields()
                         focusedField = nil
                     }
@@ -80,8 +81,8 @@ struct ColorThemeSettingsSurface: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("theme.settings")
-        .onAppear { synchronizeFields() }
-        .onChange(of: model.colorTheme.custom) { _ in synchronizeFields() }
+        .onAppear { fields.synchronize(with: model.colorTheme.custom) }
+        .onChange(of: model.colorTheme.custom) { seeds in fields.synchronize(with: seeds) }
     }
 
     private func presetButton(_ preset: ColorThemePreset) -> some View {
@@ -133,7 +134,7 @@ struct ColorThemeSettingsSurface: View {
                     .accessibilityHidden(true)
                 TextField("#RRGGBB", text: Binding(get: { value.wrappedValue }, set: {
                     value.wrappedValue = $0
-                    hasEdited = true
+                    fields.hasEdited = true
                 }))
                 .font(.body.monospaced())
                 .textFieldStyle(ThemeTextFieldStyle())
@@ -163,10 +164,7 @@ struct ColorThemeSettingsSurface: View {
     }
 
     private func synchronizeFields() {
-        primary = model.colorTheme.custom.primary.hex
-        accent = model.colorTheme.custom.accent.hex
-        selectedDate = model.colorTheme.custom.selectedDate.hex
-        hasEdited = false
+        fields.reset(to: model.colorTheme.custom)
     }
 }
 

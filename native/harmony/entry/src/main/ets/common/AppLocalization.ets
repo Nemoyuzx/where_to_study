@@ -339,6 +339,8 @@ export class AppLocalization {
     '无法保存自定义日程开关': 'Unable to save the custom schedule switch',
     '无法保存收藏': 'Unable to save favorite',
     '无法删除收藏': 'Unable to remove favorite',
+    '收藏已达 500 条上限，请先取消部分收藏。':
+      'The 500-favorite limit has been reached. Remove a favorite before adding another.',
     '天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。':
       'Weather, almanac, and deadlines use public third-party services. Campus notices are script-extracted from public notices on an internal school website; each card identifies its source.',
     '课程提醒': 'Course Reminders',

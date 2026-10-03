@@ -3,9 +3,7 @@ import SwiftUI
 struct PreClassReminderSettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
-    @State private var minuteFields = ["10"]
-    @State private var validationFailed = false
-    @State private var saved = false
+    @ObservedObject var draft: SettingsPreClassReminderDraft
     @FocusState private var focusedRow: Int?
 
     var body: some View {
@@ -21,7 +19,7 @@ struct PreClassReminderSettingsView: View {
                 .font(.callout)
                 .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
-            ForEach(minuteFields.indices, id: \.self) { index in
+            ForEach(draft.minuteFields.indices, id: \.self) { index in
                 HStack(spacing: 8) {
                     Text(model.localizedFormat("提醒 %d", index + 1))
                         .font(.callout)
@@ -32,8 +30,8 @@ struct PreClassReminderSettingsView: View {
                         .font(.callout)
                     Button {
                         focusedRow = nil
-                        minuteFields.remove(at: index)
-                        saved = false
+                        draft.minuteFields.remove(at: index)
+                        draft.saved = false
                     } label: {
                         Image(systemName: "minus.circle")
                             .frame(width: 32, height: 32)
@@ -41,40 +39,39 @@ struct PreClassReminderSettingsView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(model.localizedFormat("移除提醒 %d", index + 1))
                     .accessibilityIdentifier("settings.pre-class.remove.\(index)")
-                    .disabled(minuteFields.count == 1)
+                    .disabled(draft.minuteFields.count == 1)
                 }
             }
             HStack {
                 Button {
-                    minuteFields.append("")
-                    saved = false
+                    draft.minuteFields.append("")
+                    draft.saved = false
                 } label: {
                     Label("添加提醒", systemImage: "plus")
                 }
-                .disabled(minuteFields.count >= PreClassNotificationSettings.maximumCount)
+                .disabled(draft.minuteFields.count >= PreClassNotificationSettings.maximumCount)
                 .accessibilityIdentifier("settings.pre-class.add")
                 Spacer(minLength: 8)
                 Button("保存提醒时间") {
                     focusedRow = nil
-                    guard let offsets = PreClassNotificationSettings.parse(minuteFields),
+                    guard let offsets = PreClassNotificationSettings.parse(draft.minuteFields),
                           model.setPreClassNotificationOffsets(offsets) else {
-                        validationFailed = true
-                        saved = false
+                        draft.validationFailed = true
+                        draft.saved = false
                         return
                     }
-                    minuteFields = offsets.map(String.init)
-                    validationFailed = false
-                    saved = true
+                    draft.reset(to: offsets)
+                    draft.saved = true
                 }
                 .accessibilityIdentifier("settings.pre-class.save")
             }
             .buttonStyle(.bordered)
-            if validationFailed {
+            if draft.validationFailed {
                 Text("请输入 1–5 个不重复的整数，每个为 1–1440 分钟。")
                     .font(.caption)
                     .foregroundStyle(.red)
                     .accessibilityIdentifier("settings.pre-class.validation")
-            } else if saved {
+            } else if draft.saved {
                 Text("课前提醒时间已保存")
                     .font(.caption)
                     .foregroundStyle(theme.secondaryText)
@@ -92,9 +89,9 @@ struct PreClassReminderSettingsView: View {
             }
         }
         .disabled(model.isSampleMode && !model.isReviewDemo)
-        .onAppear { minuteFields = model.preClassNotificationOffsets.map(String.init) }
+        .onAppear { draft.synchronize(with: model.preClassNotificationOffsets) }
         .onChange(of: model.preClassNotificationOffsets) { offsets in
-            minuteFields = offsets.map(String.init)
+            draft.synchronize(with: offsets)
         }
         #if os(iOS)
         .toolbar {
@@ -111,11 +108,11 @@ struct PreClassReminderSettingsView: View {
 
     private func minuteField(_ index: Int) -> some View {
         TextField("分钟", text: Binding(
-            get: { minuteFields.indices.contains(index) ? minuteFields[index] : "" },
+            get: { draft.minuteFields.indices.contains(index) ? draft.minuteFields[index] : "" },
             set: { value in
-                guard minuteFields.indices.contains(index), minuteFields[index] != value else { return }
-                minuteFields[index] = value
-                saved = false
+                guard draft.minuteFields.indices.contains(index), draft.minuteFields[index] != value else { return }
+                draft.minuteFields[index] = value
+                draft.saved = false
             }
         ))
             .textFieldStyle(.roundedBorder)

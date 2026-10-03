@@ -25,16 +25,25 @@ import { PrivacyConsentInfo } from '../store/PrivacyConsentStore';
 
 export { AppRuntimeMode };
 
+// 测试种子只能出现在 DEBUG 的显式 review-demo 中；正式构建和 live 测试均拒绝。
+export class SettingsPresentationSeedPolicy {
+  static allows(debugBuild: boolean, reviewDemo: boolean, requested: boolean, uiTestingLive: boolean = false): boolean {
+    return debugBuild && reviewDemo && requested && !uiTestingLive;
+  }
+}
+
 export class AppLaunchConfiguration {
   static readonly uiTestingArgument: string = '--ui-testing';
   static readonly uiTestingLiveArgument: string = '--ui-testing-live';
   static readonly reviewDemoArgument: string = '--review-demo';
   static readonly privacyConsentAcceptedForTestingArgument: string = '--privacy-consent-accepted-for-testing';
+  static readonly settingsPresentationSeedForTestingArgument: string = '--settings-presentation-seed-for-testing';
 
   static uiTesting: boolean = false;
   static uiTestingLive: boolean = false;
   static reviewDemo: boolean = false;
   static privacyConsentAcceptedForTesting: boolean = false;
+  private static settingsPresentationSeedPending: boolean = false;
 
   // EntryAbility.onCreate 时从 want.parameters 读取 UI 测试/演示模式标记。
   static applyFromWant(want: Want): void {
@@ -48,6 +57,10 @@ export class AppLaunchConfiguration {
     AppLaunchConfiguration.privacyConsentAcceptedForTesting = AppLaunchConfiguration.flag(
       params, 'privacyConsentAcceptedForTesting',
       AppLaunchConfiguration.privacyConsentAcceptedForTestingArgument);
+    AppLaunchConfiguration.settingsPresentationSeedPending = SettingsPresentationSeedPolicy.allows(
+      DEBUG, AppLaunchConfiguration.reviewDemo,
+      AppLaunchConfiguration.flag(params, 'settingsPresentationSeedForTesting',
+        AppLaunchConfiguration.settingsPresentationSeedForTestingArgument), AppLaunchConfiguration.uiTestingLive);
   }
 
   static hasExplicitRuntimeMode(want: Want): boolean {
@@ -74,6 +87,18 @@ export class AppLaunchConfiguration {
     return PrivacyConsentInfo.allowsTestingBypass(DEBUG,
       AppLaunchConfiguration.uiTesting || AppLaunchConfiguration.uiTestingLive || AppLaunchConfiguration.reviewDemo,
       AppLaunchConfiguration.privacyConsentAcceptedForTesting);
+  }
+
+  static consumeSettingsPresentationSeedForTesting(): boolean {
+    const pending: boolean = AppLaunchConfiguration.settingsPresentationSeedPending;
+    AppLaunchConfiguration.settingsPresentationSeedPending = false;
+    return pending;
+  }
+
+  // EntryAbility 在 loadContent 之前查询；RootView 随后一次性消费 UI 草稿种子。
+  // pending 只可能由 DEBUG + review-demo + 显式 flag 且非 live 测试设置。
+  static hasPendingSettingsPresentationSeedForTesting(): boolean {
+    return AppLaunchConfiguration.settingsPresentationSeedPending;
   }
 
   static makeModel(): AppModel {

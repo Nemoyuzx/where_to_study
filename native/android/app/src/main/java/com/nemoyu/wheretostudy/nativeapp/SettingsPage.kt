@@ -24,6 +24,7 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.TimePicker
+import java.util.concurrent.atomic.AtomicBoolean
 
 class SettingsPage(
     private val activity: MainActivity,
@@ -36,6 +37,26 @@ class SettingsPage(
 ) {
     private val toastHandler = Handler(Looper.getMainLooper())
     private var transientToast: Toast? = null
+    private var refreshSchedulePresentation: (() -> Unit)? = null
+    private var favoriteCountButton: TextView? = null
+    private var scheduleRefreshButton: TextView? = null
+
+    internal fun scheduleDidRefresh() {
+        refreshScheduleAction()
+        refreshSchedulePresentation?.invoke()
+    }
+
+    private fun refreshScheduleAction() {
+        scheduleRefreshButton?.let { button ->
+            val refreshing = scheduleRepository.isRefreshing
+            button.text = activity.uiText(if (refreshing) "正在获取…" else "获取/刷新个人课表")
+            button.isEnabled = !refreshing
+        }
+    }
+
+    internal fun favoriteDeadlinesDidChange() {
+        favoriteCountButton?.text = activity.uiText("收藏管理（${preferences.favoriteDeadlines.size}）")
+    }
 
     private fun showSavedToast() {
         transientToast?.cancel()
@@ -57,6 +78,7 @@ class SettingsPage(
             }
             activity.scheduleDidRefresh(result.isSuccess)
         }
+        refreshScheduleAction()
     }
 
     fun build(): ScrollView = ScrollView(activity).apply {
@@ -185,47 +207,122 @@ class SettingsPage(
             applyPhoneButtonStyle()
             setOnClickListener {
                 activity.performControlHaptic(it)
-                showDeletedCourses()
+                showDeletedCourses(it)
             }
         })
     }
 
-    private fun showDeletedCourses() {
-        runCatching { scheduleRepository.deletedCourses() }.onSuccess { records ->
-            if (records.isEmpty()) {
-                AlertDialog.Builder(activity)
-                    .setTitle(activity.uiText("已删除课程"))
-                    .setMessage(activity.uiText("当前账号、本学期暂无课程删除记录"))
-                    .setPositiveButton(activity.uiText("完成"), null)
-                    .show().also(UiText::localizeDialog)
-                return@onSuccess
-            }
-            val labels = records.map { record ->
-                val scope = if (record.scope == CourseDeletionScope.WHOLE_COURSE) {
-                    activity.uiText("本学期整门课程")
-                } else {
-                    "${record.date} · ${(record.startSlot ?: 0) + 1}-${(record.endSlot ?: 0) + 1} " + activity.uiText("节次")
-                }
-                "${record.courseName}\n${record.teacher} · $scope"
-            }
-            AlertDialog.Builder(activity)
+    private fun showDeletedCourses(source: View) {
+        if (!isCourseDialogOwnerValid(source)) return
+        val loading = AlertDialog.Builder(activity)
+            .setTitle(activity.uiText("已删除课程"))
+            .setMessage(activity.uiText("正在获取…"))
+            .setNegativeButton(activity.uiText("取消"), null)
+            .create()
+        source.isEnabled = false
+        val active = bindCourseDialogOwner(loading, source) { source.isEnabled = true }
+        loading.show()
+        UiText.localizeDialog(loading)
+        scheduleRepository.loadDeletedCourses(active::get) { result ->
+            if (!source.isAttachedToWindow || activity.isFinishing || activity.isDestroyed || !loading.isShowing) return@loadDeletedCourses
+            loading.dismiss()
+            result.onSuccess { records -> showDeletedCourseRecords(records, source) }
+                .onFailure(::showCourseDeletionError)
+        }
+    }
+
+    private fun showDeletedCourseRecords(records: List<CourseDeletion>, source: View) {
+        if (!isCourseDialogOwnerValid(source)) return
+        if (records.isEmpty()) {
+            val empty = AlertDialog.Builder(activity)
                 .setTitle(activity.uiText("已删除课程"))
-                .setItems(labels.toTypedArray()) { _, index ->
-                    val record = records[index]
-                    AlertDialog.Builder(activity)
-                        .setTitle(activity.uiText("恢复课程"))
-                        .setMessage(labels[index] + "\n\n" + activity.uiText("将移除此条删除记录；其他删除记录仍然有效。"))
-                        .setNegativeButton(activity.uiText("取消"), null)
-                        .setPositiveButton(activity.uiText("恢复")) { _, _ ->
-                            runCatching { scheduleRepository.restoreCourse(record.id) }.onSuccess {
+                .setMessage(activity.uiText("当前账号、本学期暂无课程删除记录"))
+                .setPositiveButton(activity.uiText("完成"), null)
+                .create()
+            bindCourseDialogOwner(empty, source)
+            empty.show()
+            UiText.localizeDialog(empty)
+            return
+        }
+        val labels = records.map { record ->
+            val scope = if (record.scope == CourseDeletionScope.WHOLE_COURSE) {
+                activity.uiText("本学期整门课程")
+            } else {
+                "${record.date} · ${(record.startSlot ?: 0) + 1}-${(record.endSlot ?: 0) + 1} " + activity.uiText("节次")
+            }
+            "${record.courseName}\n${record.teacher} · $scope"
+        }
+        val list = AlertDialog.Builder(activity)
+            .setTitle(activity.uiText("已删除课程"))
+            .setItems(labels.toTypedArray()) { shown, index ->
+                if (!isCourseDialogOwnerValid(source)) {
+                    shown.dismiss()
+                    return@setItems
+                }
+                val record = records[index]
+                val confirmation = AlertDialog.Builder(activity)
+                    .setTitle(activity.uiText("恢复课程"))
+                    .setMessage(labels[index] + "\n\n" + activity.uiText("将移除此条删除记录；其他删除记录仍然有效。"))
+                    .setNegativeButton(activity.uiText("取消"), null)
+                    .setPositiveButton(activity.uiText("恢复"), null)
+                    .create()
+                val active = bindCourseDialogOwner(confirmation, source)
+                confirmation.setOnShowListener {
+                    val restore = confirmation.getButton(AlertDialog.BUTTON_POSITIVE)
+                    restore.setOnClickListener restoreClick@ {
+                        if (!active.get() || !isCourseDialogOwnerValid(source)) {
+                            confirmation.dismiss()
+                            return@restoreClick
+                        }
+                        restore.isEnabled = false
+                        restore.text = activity.uiText("正在恢复…")
+                        confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = false
+                        confirmation.setCancelable(false)
+                        scheduleRepository.restoreCourseAsync(record.id, active::get) { result ->
+                            if (!source.isAttachedToWindow || activity.isFinishing || activity.isDestroyed || !confirmation.isShowing) return@restoreCourseAsync
+                            result.onSuccess {
+                                confirmation.dismiss()
                                 activity.personalScheduleWasEdited()
                                 Toast.makeText(activity, activity.uiText("课程删除记录已恢复"), Toast.LENGTH_SHORT).show()
-                            }.onFailure(::showCourseDeletionError)
-                        }.show().also(UiText::localizeDialog)
+                            }.onFailure { error ->
+                                restore.isEnabled = true
+                                restore.text = activity.uiText("恢复")
+                                confirmation.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
+                                confirmation.setCancelable(true)
+                                showCourseDeletionError(error)
+                            }
+                        }
+                    }
                 }
-                .setNegativeButton(activity.uiText("取消"), null)
-                .show().also(UiText::localizeDialog)
-        }.onFailure(::showCourseDeletionError)
+                confirmation.show()
+                UiText.localizeDialog(confirmation)
+            }
+            .setNegativeButton(activity.uiText("取消"), null)
+            .create()
+        bindCourseDialogOwner(list, source)
+        list.show()
+        UiText.localizeDialog(list)
+    }
+
+    private fun isCourseDialogOwnerValid(source: View): Boolean =
+        source.isAttachedToWindow && !activity.isFinishing && !activity.isDestroyed
+
+    private fun bindCourseDialogOwner(dialog: AlertDialog, source: View, onDismiss: () -> Unit = {}): AtomicBoolean {
+        val active = AtomicBoolean(isCourseDialogOwnerValid(source))
+        val listener = object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) = Unit
+            override fun onViewDetachedFromWindow(view: View) {
+                active.set(false)
+                dialog.dismiss()
+            }
+        }
+        source.addOnAttachStateChangeListener(listener)
+        dialog.setOnDismissListener {
+            active.set(false)
+            source.removeOnAttachStateChangeListener(listener)
+            onDismiss()
+        }
+        return active
     }
 
     private fun showCourseDeletionError(error: Throwable) {
@@ -473,7 +570,9 @@ class SettingsPage(
         })
         addView(spacer(activity, compactGap))
         addView(TextView(activity).apply {
-            text = "获取/刷新个人课表"
+            text = activity.uiText(if (scheduleRepository.isRefreshing) "正在获取…" else "获取/刷新个人课表")
+            scheduleRefreshButton = this
+            isEnabled = !scheduleRepository.isRefreshing
             textSize = 15f
             gravity = Gravity.CENTER
             setThemeTextColor { Palette.primaryText }
@@ -491,6 +590,10 @@ class SettingsPage(
             setOnClickListener {
                 activity.performControlHaptic(it)
                 val button = it as TextView
+                if (scheduleRepository.isRefreshing) {
+                    refreshScheduleAction()
+                    return@setOnClickListener
+                }
                 val saveResult = saveSettings()
                 if (saveResult.isFailure) {
                     Toast.makeText(
@@ -550,16 +653,19 @@ class SettingsPage(
     private fun semesterSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "学期设置", R.drawable.ic_nav_calendar))
-        addView(TextView(activity).apply {
+        val examStatus = TextView(activity).apply {
             text = AcademicScheduleLogic.statusText(scheduleRepository.schedule?.examSchedule)
             textSize = 13f; setThemeTextColor { Palette.primaryText }
             minimumHeight = activity.dp(48)
             setPadding(0, activity.dp(8), 0, activity.dp(8))
             isClickable = true; isFocusable = true
             setOnClickListener { showAcademicExamSchedule(activity, scheduleRepository.schedule?.examSchedule) }
-        })
+        }
+        addView(examStatus)
         val termID = field("学期编号", preferences.termID, false)
         val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
+        var displayedTermID = termID.text.toString()
+        var displayedStartDate = termStartDate.text.toString()
         val autoDetect = Switch(activity).apply {
             text = "自动检测当前学期"
             textSize = 15f
@@ -568,6 +674,19 @@ class SettingsPage(
             minHeight = activity.dp(UiMetrics.controlHeightDp)
             setPadding(0, 0, 0, 0)
             applyPhoneSwitchStyle()
+        }
+        refreshSchedulePresentation = {
+            examStatus.text = activity.uiText(AcademicScheduleLogic.statusText(scheduleRepository.schedule?.examSchedule))
+            // A repository publication updates automatic/pristine fields only;
+            // unsaved manual input and focused editors remain owned by this page.
+            if (autoDetect.isChecked && !termID.hasFocus() && termID.text.toString() == displayedTermID) {
+                displayedTermID = preferences.termID
+                if (termID.text.toString() != displayedTermID) termID.setText(displayedTermID)
+            }
+            if (autoDetect.isChecked && !termStartDate.hasFocus() && termStartDate.text.toString() == displayedStartDate) {
+                displayedStartDate = preferences.termStartDate
+                if (termStartDate.text.toString() != displayedStartDate) termStartDate.setText(displayedStartDate)
+            }
         }
         fun updateManualFields() {
             val enabled = !autoDetect.isChecked
@@ -619,6 +738,12 @@ class SettingsPage(
                 }
                 preferences.automaticTermDetectionEnabled = autoDetect.isChecked
             }.onSuccess {
+                if (autoDetect.isChecked) {
+                    termID.setText(preferences.termID)
+                    termStartDate.setText(preferences.termStartDate)
+                }
+                displayedTermID = termID.text.toString()
+                displayedStartDate = termStartDate.text.toString()
                 showSavedToast()
                 activity.reconcileDailyCourseNotifications()
                 if (autoDetect.isChecked) {
@@ -1127,6 +1252,7 @@ class SettingsPage(
             "收藏管理（${preferences.favoriteDeadlines.size}）",
         ) { activity.openFavoriteManagement() }.apply {
             id = R.id.settings_favorite_deadlines_button
+            favoriteCountButton = this
         })
         addView(TextView(activity).apply {
             text = "天气、黄历和 DDL 来自第三方公开服务；已收藏日程会保存完整快照，来源关闭、失败或删除后仍会显示，直到取消收藏。"
@@ -1693,7 +1819,10 @@ class SettingsPage(
         }
 
     private fun privacyParagraph(body: String): TextView = TextView(activity).apply {
-        text = body
+        text = if (AppLocale.isEnglish(activity)) body.substringAfter("\n\n", body) else body
+        // This disclosure already carries its current translation. Generic
+        // prefix fallbacks must not replace it with an older policy paragraph.
+        UiText.preserveRawText(this)
         textSize = 14f
         setThemeTextColor { Palette.muted }
         setLineSpacing(0f, 1.15f)

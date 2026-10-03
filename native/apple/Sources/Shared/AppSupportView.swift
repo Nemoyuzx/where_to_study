@@ -11,7 +11,7 @@ struct AppSupportView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                LazyVStack(alignment: .leading, spacing: 20) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("WHERE TO STUDY")
                             .font(.caption.bold())
@@ -96,12 +96,22 @@ struct AppSupportView: View {
     }
 
     private func supportSection(title: LocalizedStringKey, body: LocalizedStringKey) -> some View {
+        AppSupportSection(title: title, content: body)
+    }
+}
+
+private struct AppSupportSection: View {
+    @Environment(\.appTheme) private var theme
+    let title: LocalizedStringKey
+    let content: LocalizedStringKey
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
             Text(title)
                 .font(.headline)
                 .foregroundStyle(theme.text)
-            Text(body)
+            Text(content)
                 .font(.callout)
                 .foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

@@ -7,6 +7,7 @@ import { ColorThemes, ColorThemeSeed, ColorThemeSelection } from '../common/Colo
 @ComponentV2
 export struct ColorThemeSettingsCard {
   @Consumer('appModel') model: AppModel = new AppModel();
+  @Param seedOnlyScene: boolean = false;
   @Local primaryDraft: string = '#166B5D';
   @Local accentDraft: string = '#E2BC62';
   @Local selectedDateDraft: string = '#2563EB';
@@ -123,6 +124,7 @@ export struct ColorThemeSettingsCard {
         .borderRadius(8)
         .height(ControlMetrics.height)
         .width('100%')
+        .enableKeyboardOnFocus(!this.seedOnlyScene)
         .accessibilityText(this.text(chinese, english) + ' HEX RGB')
         .onChange((next: string) => {
           this.editingCustom = true;

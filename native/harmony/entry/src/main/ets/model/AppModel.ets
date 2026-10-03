@@ -182,6 +182,7 @@ class HolidayLoadState {
 
 @ObservedV2
 export class AppModel implements CalendarViewportPreloadTarget {
+  static readonly favoriteDeadlineLimitMessage: string = '收藏已达 500 条上限，请先取消部分收藏。';
   @Trace colorTheme: ColorThemeState = AppTheme.state;
   private readonly colorThemeStore: ColorThemeStore;
   @Trace selectedSection: AppSection = AppSection.planner;
@@ -307,6 +308,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private calendarImportToken: number = 0;
   private dailyCourseNotificationRevision: number = 0;
   private dailyCourseNotificationPreferenceWrite: Promise<void> = Promise.resolve();
+  private favoriteDeadlinePreferenceWrite: Promise<void> = Promise.resolve();
+  private favoriteDeadlineClearGeneration: number = 0;
+  private favoriteDeadlineClearInProgress: boolean = false;
+  private localDataClearWork: Promise<void> | null = null;
   private statusMessageRevision: number = 0;
   private statusMessageDismissTimer: number | null = null;
   private savedCredentialAccount: string | null = null;
@@ -423,8 +428,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       'hackathonDeadlinesEnabled', true);
     this.customDeadlinesEnabled = await this.preferences.getBool('customDeadlinesEnabled', false);
     this.customDeadlinesURL = (await this.preferences.getString('customDeadlinesURL') ?? '').trim();
-    this.favoriteDeadlines = FavoriteDeadlineCodec.decode(
-      await this.preferences.getString('favoriteDeadlinesV1'));
+    await this.restoreFavoriteDeadlines();
     this.publicDeadlinePreferencesLoaded = true;
     this.prewarmPublicDeadlines();
     this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
@@ -793,8 +797,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
         'hackathonDeadlinesEnabled', true);
       this.customDeadlinesEnabled = await this.preferences.getBool('customDeadlinesEnabled', false);
       this.customDeadlinesURL = (await this.preferences.getString('customDeadlinesURL') ?? '').trim();
-      this.favoriteDeadlines = FavoriteDeadlineCodec.decode(
-        await this.preferences.getString('favoriteDeadlinesV1'));
+      await this.restoreFavoriteDeadlines();
       this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
       this.systemLanguageID = AppLanguageInfo.systemLanguage();
       if (this.automaticTermDetection) {
@@ -1117,26 +1120,71 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.favoriteDeadlineKey(favorite) === key);
   }
 
-  async toggleFavoriteDeadline(item: PublicDeadlineItem): Promise<void> {
-    const key: string = this.favoriteDeadlineKey(item);
-    const next: PublicDeadlineItem[] = this.favoriteDeadlines.filter(
-      (favorite: PublicDeadlineItem): boolean => this.favoriteDeadlineKey(favorite) !== key);
-    if (next.length === this.favoriteDeadlines.length) {
-      next.push(item);
-    }
-    next.sort((left: PublicDeadlineItem, right: PublicDeadlineItem): number =>
-      left.deadline === right.deadline ?
-        (left.name < right.name ? -1 : (left.name > right.name ? 1 : 0)) :
-        (left.deadline < right.deadline ? -1 : 1));
-    this.favoriteDeadlines = next;
-    await this.preferences.setString('favoriteDeadlinesV1', FavoriteDeadlineCodec.encode(next));
+  async toggleFavoriteDeadline(item: PublicDeadlineItem): Promise<boolean> {
+    return this.enqueueFavoriteDeadlineUpdate(item, null);
   }
 
   async removeFavoriteDeadline(item: PublicDeadlineItem): Promise<void> {
-    if (!this.isFavoriteDeadline(item)) {
+    await this.enqueueFavoriteDeadlineUpdate(item, false);
+  }
+
+  private async restoreFavoriteDeadlines(): Promise<void> {
+    const generation: number = this.favoriteDeadlineClearGeneration;
+    if (this.favoriteDeadlineClearInProgress) {
       return;
     }
-    await this.toggleFavoriteDeadline(item);
+    const payload: string | null = await this.preferences.getString('favoriteDeadlinesV1');
+    if (this.favoriteDeadlineClearInProgress || generation !== this.favoriteDeadlineClearGeneration) {
+      // 旧读取即使在删除 key 后才返回，也不能回填已清除的收藏。
+      return;
+    }
+    this.favoriteDeadlines = FavoriteDeadlineCodec.decode(payload);
+  }
+
+  // null 表示切换；false 表示管理页的幂等“确保取消收藏”。
+  private async enqueueFavoriteDeadlineUpdate(item: PublicDeadlineItem,
+    desiredFavorite: boolean | null): Promise<boolean> {
+    if (this.favoriteDeadlineClearInProgress) {
+      throw new Error('收藏操作已取消');
+    }
+    // 收藏是跨教务账号保留的公开日程；仅“清除本地数据”使写入失效。
+    const generation: number = this.favoriteDeadlineClearGeneration;
+    const work: Promise<boolean> = this.favoriteDeadlinePreferenceWrite.catch(() => {})
+      .then(async (): Promise<boolean> => {
+        if (this.favoriteDeadlineClearInProgress || generation !== this.favoriteDeadlineClearGeneration) {
+          throw new Error('收藏操作已取消');
+        }
+        const key: string = this.favoriteDeadlineKey(item);
+        const current: PublicDeadlineItem[] = this.favoriteDeadlines;
+        const isFavorite: boolean = current.some((favorite: PublicDeadlineItem): boolean =>
+          this.favoriteDeadlineKey(favorite) === key);
+        const shouldFavorite: boolean = desiredFavorite === null ? !isFavorite : desiredFavorite;
+        if (shouldFavorite === isFavorite) {
+          return true;
+        }
+        const next: PublicDeadlineItem[] = current.filter(
+          (favorite: PublicDeadlineItem): boolean => this.favoriteDeadlineKey(favorite) !== key);
+        if (shouldFavorite) {
+          if (next.length >= FavoriteDeadlineCodec.maximumFavorites) {
+            this.setStatusMessage(AppModel.favoriteDeadlineLimitMessage, true);
+            return false;
+          }
+          next.push(item);
+        }
+        next.sort((left: PublicDeadlineItem, right: PublicDeadlineItem): number =>
+          left.deadline === right.deadline ?
+            (left.name < right.name ? -1 : (left.name > right.name ? 1 : 0)) :
+            (left.deadline < right.deadline ? -1 : 1));
+        await this.preferences.setString('favoriteDeadlinesV1', FavoriteDeadlineCodec.encode(next));
+        if (this.favoriteDeadlineClearInProgress || generation !== this.favoriteDeadlineClearGeneration) {
+          // 清除本地数据会等待本队列再删除偏好；过期写入不得回填 UI。
+          throw new Error('收藏操作已取消');
+        }
+        this.favoriteDeadlines = next;
+        return true;
+      });
+    this.favoriteDeadlinePreferenceWrite = work.then((): void => {}, (): void => {});
+    return work;
   }
 
   deadlineItems(date: string): PublicDeadlineItem[] {
@@ -1570,7 +1618,29 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.statusMessage = '示例模式不读写真实本地数据';
       return;
     }
+    if (this.localDataClearWork !== null) {
+      return this.localDataClearWork;
+    }
+    this.favoriteDeadlineClearInProgress = true;
+    this.favoriteDeadlineClearGeneration++;
     this.invalidatePendingOperations();
+    const work: Promise<void> = this.clearLocalDataAfterFavoriteWrites();
+    this.localDataClearWork = work;
+    try {
+      await work;
+    } finally {
+      if (this.localDataClearWork === work) {
+        this.localDataClearWork = null;
+        this.favoriteDeadlineClearInProgress = false;
+      }
+    }
+  }
+
+  private async clearLocalDataAfterFavoriteWrites(): Promise<void> {
+    // 先排空已开始的收藏写入，再删 key；旧 Promise 不可能在删除后重建它。
+    await this.favoriteDeadlinePreferenceWrite.catch(() => {});
+    await this.preferences.remove('favoriteDeadlinesV1');
+    this.favoriteDeadlines = [];
     this.dailyCourseNotificationsEnabled = false;
     this.dailyCourseNotificationMinutes = DailyCourseNotificationSettings.defaultMinutes;
     this.preClassNotificationsEnabled = false;
@@ -1658,7 +1728,6 @@ export class AppModel implements CalendarViewportPreloadTarget {
     await this.preferences.remove('hackathonDeadlinesEnabled');
     await this.preferences.remove('customDeadlinesEnabled');
     await this.preferences.remove('customDeadlinesURL');
-    await this.preferences.remove('favoriteDeadlinesV1');
     await this.preferences.remove('appLanguage');
     await this.colorThemeStore.save(new ColorThemeSelection(), false);
     WidgetSync.refreshTheme(this.colorTheme.selection);
@@ -1674,7 +1743,6 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.hackathonDeadlinesEnabled = true;
     this.customDeadlinesEnabled = false;
     this.customDeadlinesURL = '';
-    this.favoriteDeadlines = [];
     this.languageSettingRawValue = AppLanguage.system;
     this.systemLanguageID = AppLanguageInfo.systemLanguage();
     this.campusID = '01';

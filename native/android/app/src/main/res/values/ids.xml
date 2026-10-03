@@ -87,6 +87,7 @@
     <item name="favorite_deadlines_back" type="id" />
     <item name="favorite_deadlines_list" type="id" />
     <item name="favorite_deadlines_empty" type="id" />
+    <item name="favorite_deadlines_load_more" type="id" />
     <item name="favorite_deadline_item_key" type="id" />
     <item name="calendar_deadline_favorite" type="id" />
     <item name="settings_assignment_deadline_legend_row" type="id" />
