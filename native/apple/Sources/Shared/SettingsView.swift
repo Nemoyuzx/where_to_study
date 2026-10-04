@@ -195,6 +195,7 @@ struct SettingsView: View {
 
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: SettingsViewSession
     @State private var showingClearDataConfirmation = false
     @State private var widgetPreviewSize: WidgetPreviewSize = .medium
@@ -617,18 +618,7 @@ struct SettingsView: View {
                         get: { model.appLanguage },
                         set: { language in
                             AppHaptics.selection()
-                            if language != model.appLanguage {
-                                session.languageScroll.capture(beforeSwitchTo: language)
-                                #if DEBUG && os(iOS)
-                                if (AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isReviewDemo),
-                                   ProcessInfo.processInfo.arguments.contains("--ui-test-language-geometry") {
-                                    SettingsLanguageViewportMarker.prepareForLanguageSwitch()
-                                }
-                                #endif
-                            }
-                            var transaction = Transaction()
-                            transaction.disablesAnimations = true
-                            withTransaction(transaction) { model.setAppLanguage(language) }
+                            changeInterfaceLanguage(to: language)
                         }
                     )
                 ) {
@@ -646,6 +636,30 @@ struct SettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("settings.language")
         .modifier(SettingsLanguageCardAnchor())
+    }
+
+    private func changeInterfaceLanguage(to language: AppLanguage) {
+        let apply = { [model, session] in
+            session.languageScroll.capture(beforeSwitchTo: language)
+            #if DEBUG && os(iOS)
+            if (AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isReviewDemo),
+               ProcessInfo.processInfo.arguments.contains("--ui-test-language-geometry") {
+                SettingsLanguageViewportMarker.prepareForLanguageSwitch()
+            }
+            #endif
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { model.setAppLanguage(language) }
+        }
+        #if os(iOS)
+        session.languageTransition.request(
+            current: model.appLanguage, target: language,
+            label: model.localized("正在切换界面语言"), reduceMotion: reduceMotion, change: apply
+        )
+        #else
+        guard language != model.appLanguage else { return }
+        apply()
+        #endif
     }
 
     private var semesterSurface: some View {

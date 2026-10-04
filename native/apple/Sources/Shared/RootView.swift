@@ -297,6 +297,9 @@ struct RootView: View {
             )
         }
         .onChange(of: scenePhase) { phase in
+            #if os(iOS)
+            if phase != .active { settingsSession.languageTransition.finishImmediately() }
+            #endif
             if phase == .active {
                 model.refreshClassroomsIfNeeded()
                 model.refreshDailyCourseNotificationAuthorization()
@@ -528,7 +531,9 @@ struct RootView: View {
             ForEach(AppSection.allCases) { section in
                 compactTabSectionView(section)
                     .tabItem {
-                        Label(model.localized(section.titleKey), systemImage: section.systemImage)
+                        Label(CompactTabTitlePolicy.title(for: section, language: model.appLanguage),
+                              systemImage: section.systemImage)
+                            .accessibilityLabel(model.localized(section.titleKey))
                             .accessibilityIdentifier(section.accessibilityIdentifier)
                     }
                     .tag(section)

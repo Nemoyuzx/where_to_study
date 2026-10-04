@@ -10,8 +10,14 @@ final class SettingsViewSession {
     let reminderDraft = SettingsPreClassReminderDraft()
     let colorThemeDraft = SettingsColorThemeDraft()
     let languageScroll = SettingsLanguageScrollState()
+    #if os(iOS)
+    let languageTransition = LanguageChangeTransition()
+    #endif
 
     func dismissPresentations() {
+        #if os(iOS)
+        languageTransition.finishImmediately()
+        #endif
         if privacyPresentation.isPresented { privacyPresentation.isPresented = false }
         if supportPresentation.isPresented { supportPresentation.isPresented = false }
         if favoritePresentation.isPresented { favoritePresentation.isPresented = false }
@@ -23,6 +29,9 @@ struct SettingsPresentationHost: View {
 
     var body: some View {
         Color.clear
+            #if os(iOS)
+            .background { LanguageChangeTransitionHost(transition: session.languageTransition) }
+            #endif
             .background { PrivacyPolicyPresentationHost(presentation: session.privacyPresentation) }
             .background {
                 InAppSheetPresentationHost(presentation: session.supportPresentation) {

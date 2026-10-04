@@ -85,6 +85,8 @@ final class LanguageLayoutFrameProbeView: UIView {
     private var firstTimestamp: CFTimeInterval?
     private var pendingTimestamp: CFTimeInterval?
     private var viewportSamples = 0
+    private var transitionOverlaySamples = 0
+    private var transitionBlurSamples = 0
     private var baselineViewportReady = false
     private var samplingError: String?
     private var completedSample = false
@@ -119,6 +121,8 @@ final class LanguageLayoutFrameProbeView: UIView {
         firstTimestamp = nil
         pendingTimestamp = nil
         viewportSamples = 0
+        transitionOverlaySamples = 0
+        transitionBlurSamples = 0
         samplingError = nil
         maxima = [:]
         baseline = prepared ?? stable ?? capture()
@@ -175,6 +179,15 @@ final class LanguageLayoutFrameProbeView: UIView {
             record("viewportMaxDelta", frameDelta(before, after))
             viewportSamples += 1
         }
+        if let window, let cover = window.subviews.first(where: {
+            $0 is UIVisualEffectView && $0.accessibilityIdentifier == "overlay.language-transition"
+        }) {
+            transitionOverlaySamples += 1
+            record("transitionOverlayFrameDelta", frameDelta(window.bounds, cover.frame))
+            if let effect = cover as? UIVisualEffectView, effect.effect != nil {
+                transitionBlurSamples += 1
+            }
+        }
         if sampleCount >= 60 || link.timestamp - (firstTimestamp ?? link.timestamp) >= 0.7 {
             stop()
             stable = current
@@ -228,6 +241,9 @@ final class LanguageLayoutFrameProbeView: UIView {
         values["viewportReady"] = scroll?.window === window && scroll != nil
         values["baselineViewportReady"] = baselineViewportReady
         values["viewportSamples"] = viewportSamples
+        values["transitionOverlaySamples"] = transitionOverlaySamples
+        values["transitionBlurSamples"] = transitionBlurSamples
+        values["reduceMotion"] = UIAccessibility.isReduceMotionEnabled
         if let samplingError { values["samplingError"] = samplingError }
         if let data = try? JSONSerialization.data(withJSONObject: values, options: .sortedKeys) {
             accessibilityValue = String(decoding: data, as: UTF8.self)
