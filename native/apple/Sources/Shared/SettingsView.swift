@@ -278,6 +278,14 @@ struct SettingsView: View {
                 .padding(.bottom, pageMetrics.bottomPadding)
                 .frame(maxWidth: columnCount == 2 ? 1120 : 720)
                 .frame(maxWidth: .infinity)
+                #if DEBUG && os(iOS)
+                .background {
+                    if (AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isReviewDemo),
+                       ProcessInfo.processInfo.arguments.contains("--ui-test-language-geometry") {
+                        SettingsLanguageViewportMarker()
+                    }
+                }
+                #endif
             }
             #if os(iOS)
             .scrollDismissesKeyboard(.interactively)
@@ -616,6 +624,12 @@ struct SettingsView: View {
                             AppHaptics.selection()
                             if language != model.appLanguage {
                                 session.languageScroll.capture(beforeSwitchTo: language)
+                                #if DEBUG && os(iOS)
+                                if (AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isReviewDemo),
+                                   ProcessInfo.processInfo.arguments.contains("--ui-test-language-geometry") {
+                                    SettingsLanguageViewportMarker.prepareForLanguageSwitch()
+                                }
+                                #endif
                             }
                             var transaction = Transaction()
                             transaction.disablesAnimations = true

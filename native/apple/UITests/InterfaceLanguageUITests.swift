@@ -22,6 +22,10 @@ final class InterfaceLanguageUITests: XCTestCase {
         reveal(picker, app: app)
         let probe = app.descendants(matching: .any)["debug.language-layout.frames"].firstMatch
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "\"viewportReady\":true"), object: probe)
+        let readiness = XCTWaiter.wait(for: [ready], timeout: 5)
+        if readiness != .completed { attachGeometryFailure(app, value: probe.value) }
+        XCTAssertEqual(readiness, .completed, "An actual Settings scroll viewport must be registered before switching language")
         picker.buttons["English"].tap()
         assertFrameSamples(probe, language: "en", compact: compact, app: app)
         XCTAssertTrue(picker.isHittable, "The language card must remain reachable without another reveal")
@@ -42,6 +46,8 @@ final class InterfaceLanguageUITests: XCTestCase {
         }
         XCTAssertEqual(values["hasTabBar"] as? Bool, compact, "Phone tabs and iPad sidebar must be distinguished")
         XCTAssertGreaterThan((values["samples"] as? NSNumber)?.intValue ?? 0, 0)
+        XCTAssertEqual(values["baselineViewportReady"] as? Bool, true)
+        XCTAssertGreaterThan((values["viewportSamples"] as? NSNumber)?.intValue ?? 0, 0)
         for key in ["rootMaxDelta", "controllerMaxDelta", "safeAreaMaxDelta", "viewportMaxDelta"] + (compact ? ["barMaxDelta"] : []) {
             guard let delta = values[key] as? NSNumber else { XCTFail("Missing geometry field: \(key)"); continue }
             if delta.doubleValue > 1 { attachGeometryFailure(app, value: text) }

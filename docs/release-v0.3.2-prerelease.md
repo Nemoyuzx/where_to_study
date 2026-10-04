@@ -1,6 +1,26 @@
 # 0.3.2 预发布构建与上传记录
 
-## 当前进度（2026-10-03，同步最新修复）
+## 当前进度（2026-10-04，语言切换布局热修复）
+
+本轮功能源码为 `8709d5b56ea7ccd605ae00a51aa79e70190c89bb`，从 0.3.2 主线 `57375fd` 的独立工作树构建。包内版本仍为 **0.3.2**，构建号为 **Android 61 / Apple 102 / HarmonyOS 1002038**。0.4.0 的课程／QMplus、新语言和移动网络功能未混入；原开发目录与用户的 Apple 改动保留。
+
+修复 iPhone/iPad 切换语言时整个页面短暂跳动：语言更新不继承隐式布局动画，原生导航条与父容器在同一无动画事务完成布局。保留当前页面、滚动锚点、未保存草稿和数据所有者，不增加网络请求。鸿蒙只对语言选中底色及导航背景／图标颜色应用局部动画，不将翻译引起的文本重排放进整页动画。安卓除构建号外，运行代码、32dp 控件尺寸和导航几何相对基线均无变更。
+
+本轮验证与上传：
+
+- 本地 Xcode：iPhone16e 与 iPad Pro 13 英寸分别通过中→英→中的逐帧几何回归 **1/1**。实际注册设置滚动容器并在最多 60 帧／0.7 秒窗口采样，root、controller、viewport、安全区最大变化不超过 1pt；手机另测 tabBar，必须有实际采样，不把缺失视口记成零位移。此前手机草稿／位置及查询／日历状态 2 项、原生 Tab 身份单测通过；最终 macOS 设置生命周期 **4/4**，严格并发及警告门禁通过。iPad 首次失败是测试探针未找到真实视口，修正探针后重跑通过；没有放宽生产布局或断言。
+- Android：Release JVM **294/294**，Lint **0 errors / 73 warnings / 1 hint**，固定证书、v2/v3 签名、16KB ZIP 对齐、许可证与 HTTPS／端点门禁通过。APK **1,192,270 bytes**，SHA-256 `ef66914ce43fbe440d94e91b27c3de69d08cc74d987161a26f5a5bb18525d853`。AAB 仅本地保留。
+- 原生 macOS Universal DMG：**8,188,224 bytes**，SHA-256 `010a5cd27ee7921bf3791b44ed530dc4af99c9757c092f8c3effc7b71b499f6a`。app／Widget 签名、Universal 架构、隐私清单及 DMG checksum 通过；公共 DMG 仍为 ad-hoc、未公证，与 TestFlight 分发渠道分开。
+- **2026-10-04 10:15:35 +0800**：iOS **0.3.2（102）**返回 `Upload succeeded`、`EXPORT SUCCEEDED`；**10:17:30 +0800**：macOS **0.3.2（102）**返回同样成功回执。沿用 iOS Automatic／macOS Manual 现有签名配置；成功后停止，没有检查 App Store Connect 或提交正式审核。
+- HarmonyOS：**280/280** Hypium，Release APP/HAP、实际 `pack.info` **0.3.2（1002038）**及 SDK 独立 `verify-app` 通过。DevEco 打开隔离工作树、刷新项目、选择 Release，通过第二项“生成.app包并上传至AppGallery Connect进行测试”完成上传，**2026-10-04 10:19 +0800**结果页显示“云测试结果：通过”。没有提交正式审核；本轮未连接设备，不将主机测试或快速云测试等同于语言切换真机视觉验证。
+- DevEco 最终上传产物与此前 CLI 包字节不同，已重新核验实际最终包：HAP **2,163,377 bytes**／SHA-256 `723144879afd629f650fac531fa91db3abc3cb356ecedd0639d6f702ba5d5f5c`；APP **1,396,999 bytes**／`4b6f30f548485320b63d9a5f306cabd92f7a9d2d1c718b0b2a601eeb2d6bf179`。二者 versionCode 均为 1002038、release，独立验签成功；向导和 `pack.info` 的独立 build=1 不代替 versionCode。
+- Node **261 通过 / 1 项 Windows 宿主条件跳过 / 0 失败**；许可证、差异检查、Gitleaks 暂存扫描通过。DEBUG 几何测量仅在明确 UI 测试标志下开启，不进入 Release，也不采集用户输入。
+
+同一 GitHub 草稿 Release ID `401567537` 的 APK 与 DMG 已替换，API 名称、大小与 SHA-256 均匹配本地；没有回下载核验、上传 AAB／鸿蒙包／iOS 归档／ZIP／校验侧文件，也没有移动旧标签。仍保留 `draft=true`、`prerelease=true`。Windows／Linux／CLI／TUI 与完整标签门禁的构建限制保持下述记录，等用户通知恢复后再补齐，不创建定时任务、不修改服务器、不以旧包冒充新包。
+
+本轮日志在忽略目录 `release-artifacts/v0.3.2-language-hotfix/`。后续 0.4.0 使用新的构建号，不能覆盖或重传这次已成功的 102／61／1002038。
+
+## 历史进度（2026-10-03，同步修复）
 
 本轮构建源码为 `35e0a504c29336326b96843b497f8132bfce6594`，包含 `96c9091` 及此前全部动画、隐私页、收藏／设置生命周期、班车图标与中英切换修复。包内版本保持 **0.3.2**，构建号递增为 **Android 60 / Apple 101 / HarmonyOS 1002037**。下方 59／100／1002036 是历史回执，不能作为本轮最新版本的证明。
 
