@@ -333,6 +333,14 @@ struct RootView: View {
             }
         }
         .background { SettingsPresentationHost(session: settingsSession) }
+        #if DEBUG && os(iOS)
+        .background {
+            if (AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isReviewDemo),
+               ProcessInfo.processInfo.arguments.contains("--ui-test-language-geometry") {
+                LanguageLayoutFrameProbe(language: model.appLanguage)
+            }
+        }
+        #endif
         .environmentObject(dailyInfo)
         .environmentObject(calendarDeadlines)
         .environment(\.appTheme, theme)

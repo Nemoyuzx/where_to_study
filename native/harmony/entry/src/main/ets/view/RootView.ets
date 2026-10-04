@@ -358,22 +358,31 @@ export struct RootView {
 
   @Builder
   phoneNavigationItem(section: AppSection) {
-    Column({ space: 2 }) {
-      SymbolGlyph(AppSectionInfo.symbol(section))
-        .fontSize(22)
-        .fontColor([this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText()])
-      Text(this.model.text(AppSectionInfo.title(section)))
-        .fontSize(11)
-        .fontWeight(this.currentSection === section ? FontWeight.Bold : FontWeight.Regular)
-        .fontColor(this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText())
+    Stack() {
+      // 背景独立动画，翻译引起的文字宽度/换行不参与整列布局过渡。
+      Column() {}
+        .width('100%')
+        .height(50)
+        .borderRadius(26)
+        .backgroundColor(this.currentSection === section ? AppTheme.background() : Color.Transparent)
+        .animation({ duration: 160, curve: Curve.EaseOut })
+      Column({ space: 2 }) {
+        SymbolGlyph(AppSectionInfo.symbol(section))
+          .fontSize(22)
+          .fontColor([this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText()])
+          .animation({ duration: 160, curve: Curve.EaseOut })
+        Text(this.model.text(AppSectionInfo.title(section)))
+          .fontSize(11)
+          .fontWeight(this.currentSection === section ? FontWeight.Bold : FontWeight.Regular)
+          .fontColor(this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText())
+      }
+      .width('100%')
+      .height(50)
+      .justifyContent(FlexAlign.Center)
     }
     .layoutWeight(1)
     .height(50)
-    .justifyContent(FlexAlign.Center)
-    .borderRadius(26)
-    .backgroundColor(this.currentSection === section ? AppTheme.background() : Color.Transparent)
     .id(AppSectionInfo.accessibilityId(section))
-    .animation({ duration: 160, curve: Curve.EaseOut })
     .onClick(() => {
       this.selectSection(section);
     })

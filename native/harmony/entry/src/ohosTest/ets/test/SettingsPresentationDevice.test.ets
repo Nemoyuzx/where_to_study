@@ -81,6 +81,45 @@ function boundsText(bounds: Rect): string {
     bounds.right.toString() + ',' + bounds.bottom.toString() + ']';
 }
 
+async function observeLanguageAnchorUntilStable(driver: Driver, id: string,
+  translatedID: string, translatedText: string, before: Rect): Promise<Rect> {
+  const deadline: number = Date.now() + 1800;
+  let previousTop: number | null = null;
+  let stableSamples: number = 0;
+  let sampleCount: number = 0;
+  let maximumDelta: number = 0;
+  while (Date.now() < deadline) {
+    const target: Component | null = await visibleSetting(driver, id);
+    if (target === null) { throw new Error('语言切换期间选项离开设置视口'); }
+    const bounds: Rect = await target.getBounds();
+    const rowHeight: number = Math.max(before.bottom - before.top, bounds.bottom - bounds.top);
+    const delta: number = Math.abs(bounds.top - before.top);
+    maximumDelta = Math.max(maximumDelta, delta);
+    sampleCount++;
+    if (delta > rowHeight) {
+      throw new Error('语言切换中间样本位置越过一个实测行高：sample=' + sampleCount.toString() +
+        ' delta=' + delta.toString() + ' rowHeight=' + rowHeight.toString() +
+        ' before=' + boundsText(before) + ' observed=' + boundsText(bounds));
+    }
+    const translated: Component = await driver.findComponent(ON.id(translatedID));
+    if (await translated.getText() === translatedText) {
+      stableSamples = previousTop !== null && Math.abs(bounds.top - previousTop) <= 1 ?
+        stableSamples + 1 : 0;
+      if (stableSamples >= 1) {
+        console.info('SettingsLanguageMotion observedSamples=' + sampleCount.toString() +
+          ' maximumDelta=' + maximumDelta.toString() + ' settled=' + boundsText(bounds));
+        return bounds;
+      }
+    } else {
+      stableSamples = 0;
+    }
+    previousTop = bounds.top;
+    await driver.delayMs(16); // 按实际文字与位置收敛轮询，不用固定动画等待时间。
+  }
+  throw new Error('语言文字与位置未在有界时间内稳定：samples=' + sampleCount.toString() +
+    ' maximumDelta=' + maximumDelta.toString());
+}
+
 async function safeSwipeStartFraction(driver: Driver, bounds: Rect, x: number): Promise<number> {
   // Swipe 的首触点会让 TextInput 获得焦点；即使只想滚动也可能弹出第三方 IME。
   // 依据真实控件边界选择卡片文字/间隙，避免所有当前可见的设置输入框。
@@ -289,12 +328,12 @@ export default function settingsPresentationDeviceTest() {
         const english: Component = await scrollToSetting(driver, 'settings.language.2');
         const before = await english.getBounds();
         await english.click();
-        await driver.delayMs(220); // 分段控件的160ms选中动画完成。
+        const englishBounds: Rect = await observeLanguageAnchorUntilStable(
+          driver, 'settings.language.2', 'settings.language.1', 'Simplified Chinese', before);
         const chineseEnglish: Component = await driver.findComponent(ON.id('settings.language.1'));
         expect(await chineseEnglish.getText()).assertEqual('Simplified Chinese');
         const afterEnglish: Component | null = await visibleSetting(driver, 'settings.language.2');
         if (afterEnglish === null) { throw new Error('切为英文后语言卡不再位于原视口'); }
-        const englishBounds: Rect = await afterEnglish.getBounds();
         const englishDelta: number = englishBounds.top - before.top;
         const englishRowHeight: number = Math.max(before.bottom - before.top,
           englishBounds.bottom - englishBounds.top);
@@ -308,12 +347,12 @@ export default function settingsPresentationDeviceTest() {
         expect(await hasID(driver, 'settings_scroll')).assertTrue();
 
         await chineseEnglish.click();
-        await driver.delayMs(220);
+        const chineseBounds: Rect = await observeLanguageAnchorUntilStable(
+          driver, 'settings.language.2', 'settings.language.1', '简体中文', before);
         const chineseChinese: Component = await driver.findComponent(ON.id('settings.language.1'));
         expect(await chineseChinese.getText()).assertEqual('简体中文');
         const afterChinese: Component | null = await visibleSetting(driver, 'settings.language.2');
         if (afterChinese === null) { throw new Error('切回中文后语言卡不再位于原视口'); }
-        const chineseBounds: Rect = await afterChinese.getBounds();
         const chineseDelta: number = chineseBounds.top - before.top;
         const chineseRowHeight: number = Math.max(before.bottom - before.top,
           chineseBounds.bottom - chineseBounds.top);

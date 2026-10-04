@@ -3,6 +3,66 @@ import UIKit
 
 @MainActor
 final class InterfaceLanguageUITests: XCTestCase {
+    func testLanguageSwitchKeepsRootSafeAreaAndViewportGeometryDuringIntermediateFrames() {
+        continueAfterFailure = false
+        let app = application()
+        app.launchArguments.append("--ui-test-language-geometry")
+        app.launch()
+        defer { app.terminate() }
+        let tabs = app.tabBars.firstMatch
+        let compact = tabs.waitForExistence(timeout: 2)
+        if compact {
+            app.tabBars.buttons["设置"].tap()
+        } else {
+            let settings = app.descendants(matching: .any)["navigation.settings"].firstMatch
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            settings.tap()
+        }
+        let picker = app.segmentedControls["settings.language"].firstMatch
+        reveal(picker, app: app)
+        let probe = app.descendants(matching: .any)["debug.language-layout.frames"].firstMatch
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "\"viewportReady\":true"), object: probe)
+        let readiness = XCTWaiter.wait(for: [ready], timeout: 5)
+        if readiness != .completed { attachGeometryFailure(app, value: probe.value) }
+        XCTAssertEqual(readiness, .completed, "An actual Settings scroll viewport must be registered before switching language")
+        picker.buttons["English"].tap()
+        assertFrameSamples(probe, language: "en", compact: compact, app: app)
+        XCTAssertTrue(picker.isHittable, "The language card must remain reachable without another reveal")
+        picker.buttons["Simplified Chinese"].tap()
+        assertFrameSamples(probe, language: "zh-Hans", compact: compact, app: app)
+        XCTAssertTrue(picker.isHittable)
+    }
+
+    private func assertFrameSamples(_ probe: XCUIElement, language: String, compact: Bool, app: XCUIApplication) {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(
+            format: "value CONTAINS %@ AND value CONTAINS %@", "\"complete\":true", "\"language\":\"\(language)\""), object: probe)
+        let wait = XCTWaiter.wait(for: [expectation], timeout: 8)
+        if wait != .completed { attachGeometryFailure(app, value: probe.value) }
+        XCTAssertEqual(wait, .completed)
+        guard let text = probe.value as? String, let data = text.data(using: .utf8),
+              let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            XCTFail("Missing actual language layout samples"); return
+        }
+        XCTAssertEqual(values["hasTabBar"] as? Bool, compact, "Phone tabs and iPad sidebar must be distinguished")
+        XCTAssertGreaterThan((values["samples"] as? NSNumber)?.intValue ?? 0, 0)
+        XCTAssertEqual(values["baselineViewportReady"] as? Bool, true)
+        XCTAssertGreaterThan((values["viewportSamples"] as? NSNumber)?.intValue ?? 0, 0)
+        for key in ["rootMaxDelta", "controllerMaxDelta", "safeAreaMaxDelta", "viewportMaxDelta"] + (compact ? ["barMaxDelta"] : []) {
+            guard let delta = values[key] as? NSNumber else { XCTFail("Missing geometry field: \(key)"); continue }
+            if delta.doubleValue > 1 { attachGeometryFailure(app, value: text) }
+            XCTAssertLessThanOrEqual(delta.doubleValue, 1, "Intermediate layout changed: \(key)")
+        }
+    }
+
+    private func attachGeometryFailure(_ app: XCUIApplication, value: Any?) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "language-intermediate-geometry"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        print("LANGUAGE_INTERMEDIATE_GEOMETRY \(String(describing: value)) appFrame=\(app.frame)")
+    }
+
     func testLanguageRoundTripKeepsCurrentSettingsPositionAndUncommittedFields() {
         continueAfterFailure = false
         let app = application()

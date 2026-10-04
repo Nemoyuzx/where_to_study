@@ -374,17 +374,45 @@ export struct SettingsView {
   }
 
   @Builder
+  languageSegments() {
+    Row() {
+      ForEach(AppLanguageInfo.all, (language: AppLanguage, index: number) => {
+        Stack() {
+          // 只让独立底色节点过渡；切换语言引发的整页文字重排不进入 animateTo。
+          Column() {}
+            .width('100%')
+            .height(32)
+            .borderRadius(6)
+            .backgroundColor(this.model.languageSetting() === language ?
+              AppTheme.segmentedSelection() : Color.Transparent)
+            .animation({ duration: 160, curve: Curve.EaseOut })
+          Text(AppLanguageInfo.label(language, this.model.resolvedLanguage()))
+            .id('settings.language.' + index.toString())
+            .fontSize(11)
+            .fontWeight(this.model.languageSetting() === language ? FontWeight.Bold : FontWeight.Regular)
+            .fontColor(AppTheme.text())
+            .textAlign(TextAlign.Center)
+            .maxLines(1)
+            .width('100%')
+            .height(32)
+            .onClick(() => this.selectLanguageAtCurrentPosition(language))
+        }
+        .layoutWeight(1)
+        .height(32)
+      }, (language: AppLanguage) => language)
+    }
+    .width('100%')
+    .height(38)
+    .padding(3)
+    .borderRadius(9)
+    .backgroundColor(AppTheme.surfaceVariant())
+  }
+
+  @Builder
   languageSurface() {
     Column({ space: 8 }) {
       this.sectionTitle('语言')
-      this.segmentedOptions([
-        AppLanguageInfo.label(AppLanguage.system, this.model.resolvedLanguage()),
-        AppLanguageInfo.label(AppLanguage.simplifiedChinese, this.model.resolvedLanguage()),
-        AppLanguageInfo.label(AppLanguage.english, this.model.resolvedLanguage())
-      ], () => AppLanguageInfo.all.indexOf(this.model.languageSetting()), (index: number): void => {
-          const target: AppLanguage = AppLanguageInfo.all[Math.min(Math.max(index, 0), 2)];
-          this.selectLanguageAtCurrentPosition(target);
-        }, 'settings.language', true)
+      this.languageSegments()
     }
     .padding(16)
     .width('100%')
