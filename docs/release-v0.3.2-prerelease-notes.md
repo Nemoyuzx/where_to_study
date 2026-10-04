@@ -1,42 +1,118 @@
 # Where To Study v0.3.2-prerelease
 
-这是 0.3.2 预发布版，用于测试竞赛备份、完整班车时刻表，以及最新的动画、隐私弹窗和语言切换修复。GitHub 最新正式版仍为 0.3.1。
+0.3.2 为测试版本，最新正式版仍为 0.3.1。以下按平台列出改动和实际分发状态，未完成的安装包不会用旧包替代。
 
-当前 GitHub 预发布仍为草稿：Windows／Linux 等构建因账户账单锁定尚未运行，完整安装包未公开。请不要把旧构建当作包含全部修复的新版本。
+## iOS / iPadOS
 
-## 本次更新
+- 修复中英切换时整体界面跳动，保留滚动位置、未保存草稿、查询筛选和已加载数据，不重新登录或重复获取课表。
+- iPhone 英文底栏使用简洁标签，四项等距；横屏保持图标在文字上方，旋转返回后布局正常。页面及无障碍名称仍完整。
+- 切换语言增加全屏系统模糊过渡，等待目标布局就绪后淡出；支持减少动态效果，处理快速反向、离页和后台清理。
+- 修复手机日／周课程摘要、月／年翻页及视图切换的动画和迟到回调；减少隐私说明出现前的准备工作，保留原生弹窗动画。
+- 班车新增完整时刻表和法定节假日提醒，交通图标与主题提示色统一；明确教务／教学云平台密码用途，操作入口采用图标按钮。公开竞赛源增加镜像并自动择新。
 
-- 增加 `https://where-to-study.cn/contest-ddl/data/competitions.json` 作为公开竞赛镜像。客户端验证 Schema 1.4、时区和生成时间后，与 GitHub 主源比较；镜像更新时自动采用镜像，同时间优先 GitHub。两者都不可用时才使用原 `contest-events` API。教学日历、重要事件以及 CLI/TUI 的公开查询使用同一规则。
-- 竞赛整表响应上限提高到有界的 4 MiB，保留五分钟缓存；自定义日程上限仍为 2 MiB。卡片与隐私说明同步列出镜像来源。
-- 个人账户明确区分移动教务密码与教学云密码：前者可能与统一身份认证密码不同；教学云密码通常填写统一身份认证密码，选填，未设置时沿用教务密码。补充部分账号初始密码可能为 YYYYMMDD 的提示，以本人实际设置为准。
-- “改用教务密码”“前往个人账户”“打开教学云平台”采用带图标的按钮样式，补齐中英文与无障碍名称。
-- 班车内容使用公交、线路等专属图标；节假日、缓存和时段提示跟随主题次要文字色，避免与错误提示混淆。教学云平台入口在各端统一显示完整名称，英文为 “Open Teaching Cloud Platform”。
-- 班车查询在当日班次下增加完整时刻表，按运行时段、方向、周一至周日展示已解析班次。历史、未来和当前时段分别标注；最新通知未解析时明确显示上一份时刻表仅供对照。
-- 法定节假日显示班车提醒，普通节日名称和调休上班日不会误触发；假日当天不再强调计划表中的“下一班”。实际运行请以学校通知与放假安排为准。
-- 合入并修复依赖 PR #66、#70、#71；同步第三方许可证，避免引入已撤回的 `yoke-derive` 版本。
-- 修复日／周课程摘要、月／年视图及跨平台切换的动画与迟到回调；减少 Apple 隐私页出现前的准备工作，保留原生呈现动画。
-- 设置弹窗、收藏长列表与未保存草稿使用稳定的页面所有者；收藏按批次展示，离页后取消旧任务。
-- 切换中英界面时保留当前位置、输入草稿、查询筛选和已加载数据；修复导航条测量及鸿蒙局部文字刷新，原始 API 内容不自动翻译。
-- 修复 iPhone/iPad 切换语言过程中整个页面短暂跳动；鸿蒙语言及导航动画限于独立背景与图标，不让文本重排触发整页动画。保持安卓原控件尺寸不变。
-- iPhone 英文底栏使用简洁名称并保持四项等距，横屏也保留图标在文字上方；完整页面及无障碍名称不变。iPhone/iPad 切换语言增加短暂全屏系统模糊过渡，保留当前位置和草稿；尊重减少动态效果，并处理快速反向与离页清理。
-- 语言变化不触发额外登录或课表获取；公开班车快照复用有界缓存，过期或手动刷新仍会正常获取。
+**分发：** 0.3.2（103）已上传 TestFlight。上传成功后未检查 App Store Connect 处理状态，未提交正式审核。
 
-## 安装与渠道
+## macOS
 
-包内版本为 **0.3.2**：Android build **61**、Apple build **103**、HarmonyOS versionCode **1002038**。构建、测试与上传状态见[工程记录](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.2-prerelease.md)。
+- 保持设置弹窗与编辑状态的稳定所有者；隐私／帮助及收藏使用惰性列表排版，不将它描述成移动端的全屏收藏页面或分批加载。
+- 切换中英界面保留当前位置、输入草稿及查询／日历状态；减少隐私页准备工作，修复动画生命周期和迟到回调。
+- 班车显示完整时刻表、历史／未来时段及法定节假日提醒，图标和文字跟随主题；补齐账号密码说明、图标按钮及公开竞赛镜像。
+- 本轮全屏语言模糊过渡仅用于 iPhone/iPad，macOS 不冒称已增加该效果。
 
-公开前计划补齐 Windows 安装程序、Linux x86_64/arm64 的 DEB 与 AppImage、CLI/TUI、Android Universal APK 与原生 macOS Universal DMG。当前草稿附件和未完成项以工程记录为准。Apple 与鸿蒙测试上传不等于已经对所有测试者可安装；本轮不提交正式商店审核。
+**分发：** 0.3.2（103）已上传 TestFlight；GitHub 草稿中的原生 Universal DMG 已更新。公共 DMG 为 ad-hoc 签名、未公证，与 TestFlight 包不同。
 
-## English
+## Android
 
-- Added a fixed Contest DDL mirror. Valid generation timestamps determine whether the mirror is newer than GitHub; ties prefer GitHub, and the existing API remains the final fallback.
-- Bounded public contest payloads at 4 MiB while preserving the 2 MiB custom-feed limit and five-minute cache.
-- Clarified Mobile Academic Services versus Teaching Cloud passwords and added accessible icon buttons for account and cloud actions.
-- Added full shuttle timetables by operating period, direction, and weekday, with statutory-holiday notices and clear historical/fallback labels.
-- Updated reviewed dependencies and their bundled license notices.
-- Preserved scroll anchors, unsaved drafts, query filters and cached data across language changes, without extra authentication or schedule requests.
-- Prevented transient whole-page geometry jumps during iPhone/iPad language changes; HarmonyOS animates only isolated backgrounds and icons. Android control sizes remain unchanged.
-- Kept the four iPhone tabs evenly spaced with concise labels and full accessibility names, including landscape. Added a brief full-window native blur transition on iPhone/iPad, preserving position and drafts, respecting Reduce Motion, and canceling stale callbacks.
-- Fixed animation lifecycles, privacy-sheet preparation, native tab geometry and incremental favorites rendering.
+- 日／周顶部课程摘要加入连续展开、折叠动画，支持快速反向、空日期和切页取消，不改变原控件高度、字号或间距。
+- 切换中英界面保留设置草稿、滚动位置、日历／查询状态及缓存，避免恢复页面时重复获取数据。
+- 班车新增完整时刻表与法定节假日提醒；内容使用交通专属图标，缓存、时段与假日说明跟随主题文字色。
+- 明确教务／教学云平台密码的区别，补齐图标操作按钮；公开竞赛镜像更新时自动使用镜像数据。
 
-**The GitHub pre-release is still a draft while Windows/Linux builds are blocked by an account billing lock. 0.3.1 remains the stable version.** See the [build and upload record](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.2-prerelease.md) for the actual channel and asset status.
+**分发：** 0.3.2（61）签名 Universal APK 已放入 GitHub 草稿。AAB 不上传 GitHub；未提交本轮正式商店审核。
+
+## HarmonyOS
+
+- 语言及导航动画限于独立背景／图标，翻译引起的文字重排不再触发整页动画；保留可见位置、草稿和当前页面状态。
+- 修复月视图分页、日程开合、视图切换和离页后的迟到回调，保留原 32vp 控件及既有布局尺寸。
+- 班车补齐完整时刻表、法定假日提醒和主题交通图标；窄屏教学云平台操作按钮可换行，保留完整名称。
+- 明确两种账号密码用途，增加公开竞赛镜像择新，卡片和隐私说明标明来源。
+
+**分发：** 0.3.2（1002038）已通过 DevEco 上传 AppGallery Connect，仅用于测试，快速云测试通过。未提交正式审核，鸿蒙包不上传 GitHub。
+
+## Windows
+
+- Tauri 源码同步公开竞赛镜像择新、有界响应和缓存策略；镜像比 GitHub 主源更新时自动使用镜像。
+- 班车源码增加完整时刻表、法定假日提醒、历史／回退说明及主题交通图标。
+- 同步账号密码说明、图标按钮和“打开教学云平台”完整名称；语言切换保留页面、筛选、草稿及缓存，修复日历和设置／收藏的生命周期。
+
+**分发：源码已同步，新的 Windows 安装包尚未生成。** GitHub Actions 仍受账户构建限制，不用旧包充当更新。
+
+## Linux / Ubuntu
+
+- Tauri 源码同步竞赛镜像择新、完整班车表及法定假日提醒；提示和图标跟随主题。
+- 同步账号说明、图标操作按钮、语言状态及缓存保持，以及日历／设置／收藏的动画与迟到回调修复。
+
+**分发：源码已同步，新的 x86_64/arm64 DEB、AppImage 尚未生成。** 等待 GitHub 构建恢复，不用旧包替代。
+
+## CLI / TUI
+
+- 公开竞赛查询比较主源与镜像的实际生成时间，同时间优先 GitHub，两者失败才使用原备用 API。
+- 公开竞赛响应上限 4 MiB，保留有界缓存、严格数据验证和失败降级。
+
+**分发：** 新 CLI/TUI 文件尚未生成，等待 GitHub 构建恢复。
+
+## 工程与发布状态
+
+依赖 PR #66、#70、#71 已合入并修复，第三方许可证同步，避免引入被撤回的 `yoke-derive` 版本。
+
+**GitHub 预发布仍为草稿，尚未完整公开。** 当前只有上述 APK 与 DMG；Windows/Linux/CLI/TUI 及最终标签门禁待完成。测试上传不代表全部测试者已经可安装。详细回执见[构建与上传记录](https://github.com/Nemoyuzx/where_to_study/blob/main/docs/release-v0.3.2-prerelease.md)。
+
+## English — changes by platform
+
+### iOS / iPadOS
+
+- Preserved position, drafts, filters and cached data across language changes without reauthentication or timetable reloads.
+- Kept four iPhone tabs evenly spaced with concise labels and full accessibility names, including landscape and rotation back.
+- Added a brief full-window native blur transition, respecting Reduce Motion and canceling stale work. Improved calendar motion and privacy-sheet preparation.
+- Added full shuttle timetables, holiday notices, themed transport icons, clearer password guidance and a freshness-checked contest mirror.
+
+**Delivery:** 0.3.2 (103) uploaded to TestFlight; no post-upload processing check or formal review submission.
+
+### macOS
+
+- Preserved settings/editing owners, drafts, scroll and query/calendar state; improved lazy privacy/help/favorites layout and animation lifecycles.
+- Added shuttle timetables, holiday notices, themed icons, account guidance and the contest mirror. Mobile full-window blur and full-screen favorites are not macOS features.
+
+**Delivery:** 0.3.2 (103) uploaded to TestFlight; native Universal DMG replaced in the GitHub draft. Public DMG is ad-hoc signed and not notarized.
+
+### Android
+
+- Animated course-summary expansion with reversible motion and cancellation, keeping existing control sizes.
+- Preserved drafts, scroll, calendar/query state and cache; added themed shuttle timetables/notices, account action buttons and the contest mirror.
+
+**Delivery:** signed Universal APK 0.3.2 (61) in the GitHub draft; no public AAB or new formal store submission.
+
+### HarmonyOS
+
+- Limited language/navigation animation to backgrounds and icons, preserving position without whole-page text-layout animation.
+- Fixed calendar transition lifecycles; added themed shuttle timetables/notices, wrapping action buttons, account guidance and the contest mirror without changing control sizes.
+
+**Delivery:** 0.3.2 (1002038) uploaded through DevEco for testing; quick cloud test passed. No formal review submission or GitHub HarmonyOS package.
+
+### Windows
+
+- Source includes the contest mirror, full shuttle timetable/notices, themed icons, account guidance and language/lifecycle state preservation.
+
+**Delivery:** new Windows installer has not been built due to the GitHub account build restriction. Older files are not presented as the updated version.
+
+### Linux / Ubuntu
+
+- Source includes the contest mirror, full shuttle timetable/notices, themed icons, account guidance and state-preserving language and view transitions.
+
+**Delivery:** new x86_64/arm64 DEB and AppImage files await GitHub builds.
+
+### CLI / TUI
+
+- Public contest queries use freshness-checked mirrors, bounded payloads, caching and validated fallback behavior.
+
+**Delivery:** new binaries await GitHub builds. **The complete pre-release remains a draft; 0.3.1 remains stable.**
