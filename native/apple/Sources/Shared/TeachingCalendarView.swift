@@ -734,17 +734,17 @@ enum TeachingCalendarLogic {
     ) -> String {
         let year = calendar.component(.year, from: date)
         let month = calendar.component(.month, from: date)
-        if language.resolvedResourceName == "en" {
+        if !language.usesChineseDateFormatting {
             let formatter = DateFormatter()
             formatter.calendar = calendar
-            formatter.locale = Locale(identifier: "en")
+            formatter.locale = language.locale
             formatter.timeZone = calendar.timeZone
             switch modeRawValue {
             case CalendarMode.day.rawValue:
-                formatter.dateFormat = "MMMM d, yyyy"
+                formatter.dateFormat = language.dateFormat(chinese: "yyyy年M月d日", english: "MMMM d, yyyy")
                 return formatter.string(from: date)
             case CalendarMode.week.rawValue:
-                formatter.dateFormat = "MMMM yyyy"
+                formatter.dateFormat = language.dateFormat(chinese: "yyyy年M月", english: "MMMM yyyy")
                 let context = weekContext(
                     for: date,
                     teachingWeekNumber: teachingWeekNumber,
@@ -755,7 +755,7 @@ enum TeachingCalendarLogic {
             case CalendarMode.year.rawValue:
                 return "\(year)"
             default:
-                formatter.dateFormat = "MMMM yyyy"
+                formatter.dateFormat = language.dateFormat(chinese: "yyyy年M月", english: "MMMM yyyy")
                 return formatter.string(from: date)
             }
         }
@@ -792,21 +792,14 @@ enum TeachingCalendarLogic {
         compact: Bool = false
     ) -> String {
         let civilWeek = civilWeekNumber(on: date, calendar: calendar)
-        if language.resolvedResourceName == "en" {
-            if compact {
-                return teachingWeekNumber.map { "C\(civilWeek) · T\($0)" }
-                    ?? "C\(civilWeek) · Outside term"
-            }
-            return teachingWeekNumber.map {
-                "Calendar Week \(civilWeek) · Teaching Week \($0)"
-            } ?? "Calendar Week \(civilWeek) · Outside teaching weeks"
-        }
         if compact {
-            return teachingWeekNumber.map { "公\(civilWeek) · 教\($0)" }
-                ?? "公\(civilWeek) · 非教学周"
+            return teachingWeekNumber.map {
+                AppLocalization.format("公%d · 教%d", language: language, englishFallback: "C%d · T%d", arguments: [civilWeek, $0])
+            } ?? AppLocalization.format("公%d · 非教学周", language: language, englishFallback: "C%d · Outside term", arguments: [civilWeek])
         }
-        return teachingWeekNumber.map { "公历第 \(civilWeek) 周 · 第 \($0) 教学周" }
-            ?? "公历第 \(civilWeek) 周 · 非教学周"
+        return teachingWeekNumber.map {
+            AppLocalization.format("公历第 %d 周 · 第 %d 教学周", language: language, englishFallback: "Calendar Week %d · Teaching Week %d", arguments: [civilWeek, $0])
+        } ?? AppLocalization.format("公历第 %d 周 · 非教学周", language: language, englishFallback: "Calendar Week %d · Outside teaching weeks", arguments: [civilWeek])
     }
 
     static func movedDate(
@@ -1428,7 +1421,9 @@ struct TeachingCalendarView: View {
         case .day: dayView
         case .week: weekView
         case .month: monthView
+            .environment(\.layoutDirection, .leftToRight)
         case .year: yearView
+            .environment(\.layoutDirection, .leftToRight)
         }
     }
 
@@ -1454,6 +1449,7 @@ struct TeachingCalendarView: View {
                     )
                 }
             )
+            .environment(\.layoutDirection, .leftToRight)
         }
         .contentShape(Rectangle())
         .simultaneousGesture(periodSwipeGesture)
@@ -1492,6 +1488,7 @@ struct TeachingCalendarView: View {
                     )
                 }
             )
+            .environment(\.layoutDirection, .leftToRight)
         }
     }
 
@@ -1524,7 +1521,7 @@ struct TeachingCalendarView: View {
             ZStack {
                 LazyVGrid(columns: columns, spacing: 4) {
                     ForEach(Self.weekdayLabels, id: \.self) { label in
-                        Text(model.localized(label))
+                        Text(AppLocalization.weekdaySymbol(for: label, language: model.appLanguage))
                             .font(.caption.bold())
                             .foregroundStyle(theme.secondaryText)
                             .frame(maxWidth: .infinity)
@@ -1568,7 +1565,7 @@ struct TeachingCalendarView: View {
             VStack(spacing: 0) {
                 LazyVGrid(columns: columns, spacing: 0) {
                     ForEach(Self.weekdayLabels, id: \.self) { label in
-                        Text(model.localized("周") + model.localized(label))
+                        Text(AppLocalization.weekdaySymbol(for: label, language: model.appLanguage, prefixed: true))
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(theme.secondaryText)
                             .frame(maxWidth: .infinity, minHeight: weekdayHeight)
@@ -2145,7 +2142,7 @@ struct TeachingCalendarView: View {
             VStack(spacing: layout.gridSpacing) {
                 HStack(spacing: layout.gridSpacing) {
                     ForEach(Self.weekdayLabels, id: \.self) { label in
-                        Text(model.localized(label))
+                        Text(AppLocalization.weekdaySymbol(for: label, language: model.appLanguage))
                             .font(.system(size: layout.weekdayFontSize, weight: .semibold))
                             .foregroundStyle(theme.secondaryText)
                             .frame(
@@ -2350,7 +2347,7 @@ struct TeachingCalendarView: View {
             Text(title).font(.headline)
             LazyVGrid(columns: columns, spacing: 2) {
             ForEach(Self.weekdayLabels, id: \.self) { label in
-                    Text(model.localized(label))
+                    Text(AppLocalization.weekdaySymbol(for: label, language: model.appLanguage))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(theme.secondaryText)
                         .frame(maxWidth: .infinity)
@@ -3933,9 +3930,7 @@ struct TeachingCalendarView: View {
         chineseFormat: String,
         englishFormat: String
     ) -> DateFormatter {
-        let format = model.appLanguage.resolvedResourceName == "en"
-            ? englishFormat
-            : chineseFormat
+        let format = model.appLanguage.dateFormat(chinese: chineseFormat, english: englishFormat)
         return dateFormatterCache.formatter(format: format, locale: model.appLanguage.locale)
     }
 }

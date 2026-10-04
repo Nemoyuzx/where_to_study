@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Cliente de Where To Study para HarmonyOS" },
+    { "name": "EntryAbility_desc", "value": "Consulta aulas libres y tu horario personal" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "Clases de hoy" },
+    { "name": "widget_desc", "value": "Consulta las horas y aulas de las clases de hoy" },
+    { "name": "calendar_read_reason", "value": "Leer los eventos de clase importados para sincronizar tu horario" },
+    { "name": "calendar_write_reason", "value": "Añadir tu horario personal al calendario del sistema" }
+  ]
+}

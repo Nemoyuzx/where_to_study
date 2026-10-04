@@ -17,6 +17,8 @@ pub mod error;
 pub mod holidays;
 pub mod models;
 pub mod qmplus;
+pub mod qmplus_feature;
+pub mod qmplus_login;
 #[cfg(not(mobile))]
 mod recommender;
 pub mod schedule;
@@ -1155,6 +1157,7 @@ fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
+    qmplus_feature::set(&app, false)?;
     qmplus::disconnect_qmplus(app.clone(), app.state::<qmplus::QmState>());
     tauri::async_runtime::spawn_blocking(move || clear_local_data_sync(app))
         .await
@@ -1171,6 +1174,9 @@ fn clear_local_data_sync(app: tauri::AppHandle) -> Result<bool, String> {
             classrooms::clear_session();
             ACADEMIC_CREDENTIAL_REVISION.fetch_add(1, Ordering::AcqRel);
             let mut errors = Vec::new();
+            if let Err(error) = qmplus_login::clear(&app) {
+                errors.push(error);
+            }
             #[cfg(not(mobile))]
             if let Err(error) = desktop_notifications::clear(&app.config().identifier) {
                 errors.push(format!("课程通知清理失败：{error}"));
@@ -1868,12 +1874,16 @@ async fn fetch_assignment_calendar(
 
 #[tauri::command]
 fn set_interface_language(app: tauri::AppHandle, payload: String) -> Result<(), String> {
-    if !matches!(payload.as_str(), "zh-Hans" | "en") {
+    if !models::UI_LANGUAGES.contains(&payload.as_str()) {
         return Err("界面语言参数无效。".to_string());
     }
     #[cfg(not(mobile))]
     {
-        if DESKTOP_INTERFACE_ENGLISH.swap(payload == "en", Ordering::SeqCst) != (payload == "en") {
+        let locale = models::UI_LANGUAGES
+            .iter()
+            .position(|value| *value == payload)
+            .unwrap_or(0);
+        if DESKTOP_INTERFACE_LANGUAGE.swap(locale, Ordering::SeqCst) != locale {
             refresh_tray_courses(app, true);
         }
     }
@@ -2161,18 +2171,29 @@ fn truncate_menu_label(value: String, limit: usize) -> String {
 }
 
 #[cfg(not(mobile))]
-static DESKTOP_INTERFACE_ENGLISH: AtomicBool = AtomicBool::new(false);
+static DESKTOP_INTERFACE_LANGUAGE: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
 
 #[cfg(not(mobile))]
 static TRAY_REFRESH_REVISION: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(not(mobile))]
 fn desktop_text<'a>(chinese: &'a str, english: &'a str) -> &'a str {
-    if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
-        english
-    } else {
-        chinese
+    use std::{collections::HashMap, sync::OnceLock};
+    static CATALOG: OnceLock<HashMap<String, HashMap<String, String>>> = OnceLock::new();
+    let locale = models::UI_LANGUAGES[DESKTOP_INTERFACE_LANGUAGE.load(Ordering::SeqCst)];
+    if locale == "zh-Hans" {
+        return chinese;
     }
+    CATALOG
+        .get_or_init(|| {
+            serde_json::from_str(include_str!("../../src/ui-catalogs.generated.json"))
+                .expect("validated build-time UI catalog")
+        })
+        .get(locale)
+        .and_then(|values| values.get(chinese))
+        .map(String::as_str)
+        .unwrap_or(english)
 }
 
 #[cfg(not(mobile))]
@@ -2195,6 +2216,41 @@ fn localized_tray_message(message: &str, english: bool) -> &str {
         // Source/API errors remain raw; only known app chrome is translated.
         _ => message,
     }
+}
+
+#[cfg(not(mobile))]
+fn localized_known_tray_message(message: &str) -> &str {
+    let english = localized_tray_message(message, true);
+    // Never translate arbitrary service errors or course/API content.
+    if english == message {
+        message
+    } else {
+        desktop_text(message, english)
+    }
+}
+
+#[cfg(not(mobile))]
+fn desktop_week_label(number: i64, teaching: bool) -> String {
+    let locale = models::UI_LANGUAGES[DESKTOP_INTERFACE_LANGUAGE.load(Ordering::SeqCst)];
+    if teaching && number <= 0 {
+        return desktop_text("非教学周", "Outside teaching weeks").into();
+    }
+    let templates = match locale {
+        "zh-Hans" => ["公历第 {n} 周", "第 {n} 教学周"],
+        "zh-Hant" => ["公曆第 {n} 週", "第 {n} 教學週"],
+        "ja" => ["暦の第 {n} 週", "授業第 {n} 週"],
+        "es" => ["Semana del año {n}", "Semana lectiva {n}"],
+        "pt" => ["Semana do ano {n}", "Semana letiva {n}"],
+        "ar" => ["الأسبوع {n} من السنة", "الأسبوع الدراسي {n}"],
+        "ru" => ["Календарная неделя {n}", "Учебная неделя {n}"],
+        "tr" => ["Takvim haftası {n}", "Ders haftası {n}"],
+        "th" => ["สัปดาห์ที่ {n} ของปี", "สัปดาห์เรียนที่ {n}"],
+        "ms" => ["Minggu kalendar {n}", "Minggu pengajian {n}"],
+        "vi" => ["Tuần dương lịch {n}", "Tuần học {n}"],
+        "id" => ["Minggu kalender {n}", "Minggu perkuliahan {n}"],
+        _ => ["Calendar week {n}", "Teaching week {n}"],
+    };
+    templates[usize::from(teaching)].replace("{n}", &number.to_string())
 }
 
 #[cfg(not(mobile))]
@@ -2275,31 +2331,14 @@ fn append_course_section<M: Manager<tauri::Wry>>(
         menu,
         app,
         format!("{id_prefix}_title"),
-        if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
-            format!(
-                "{} courses · {} · Calendar week {} · {}",
-                day.label,
-                day.date,
-                day.calendar_week_number,
-                if day.week_number > 0 {
-                    format!("Teaching week {}", day.week_number)
-                } else {
-                    "Outside teaching weeks".to_string()
-                }
-            )
-        } else {
-            format!(
-                "{}课程 · {} · 公历第 {} 周 · {}",
-                day.label,
-                day.date,
-                day.calendar_week_number,
-                if day.week_number > 0 {
-                    format!("第 {} 教学周", day.week_number)
-                } else {
-                    "非教学周".to_string()
-                }
-            )
-        },
+        format!(
+            "{} · {} · {} · {} · {}",
+            day.label,
+            desktop_text("课程", "Courses"),
+            day.date,
+            desktop_week_label(day.calendar_week_number, false),
+            desktop_week_label(day.week_number, true)
+        ),
         true,
     )?;
     if day.courses.is_empty() {
@@ -2307,11 +2346,7 @@ fn append_course_section<M: Manager<tauri::Wry>>(
             menu,
             app,
             format!("{id_prefix}_empty"),
-            if DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst) {
-                format!("No courses {}", day.label.to_lowercase())
-            } else {
-                format!("{}暂无课程", day.label)
-            },
+            format!("{} · {}", day.label, desktop_text("暂无课程", "No courses")),
             true,
         )?;
     } else {
@@ -2379,14 +2414,7 @@ fn build_tray_menu<M: Manager<tauri::Wry>>(
                 &menu,
                 app,
                 "course_message",
-                truncate_menu_label(
-                    localized_tray_message(
-                        message,
-                        DESKTOP_INTERFACE_ENGLISH.load(Ordering::SeqCst),
-                    )
-                    .to_string(),
-                    42,
-                ),
+                truncate_menu_label(localized_known_tray_message(message).to_string(), 42),
                 true,
             )?;
         }
@@ -3867,7 +3895,7 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 
     #[cfg(not(mobile))]
     {
-        let settings = settings_store::load(app.app_handle())
+        let settings = settings_store::load_preferences(app.app_handle())
             .unwrap_or_else(|_| SavedSettings::with_defaults());
         *DESKTOP_NOTIFICATION_PREFERENCES
             .lock()
@@ -3936,9 +3964,17 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             qmplus::connect_qmplus,
+            qmplus::set_qmplus_enabled,
+            qmplus::begin_qmplus_sync,
             qmplus::load_qmplus,
+            qmplus::load_qmplus_connection_status,
             qmplus::disconnect_qmplus,
             qmplus::accept_qmplus_snapshot,
+            qmplus::accept_qmplus_auth,
+            qmplus_login::load_qmplus_login,
+            qmplus_login::save_qmplus_login,
+            qmplus_login::set_qmplus_autofill,
+            qmplus_login::clear_qmplus_login,
             get_metadata,
             load_saved_settings,
             save_saved_settings,

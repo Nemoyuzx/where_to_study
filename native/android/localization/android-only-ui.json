@@ -1,0 +1,2326 @@
+{
+  "counts": {
+    "total": 565,
+    "canonicalAppleKeys": 546,
+    "sharedExact": 179,
+    "androidOnly": 386
+  },
+  "entries": [
+    {
+      "id": "ui_chrome_ef5361019a28",
+      "zh": "当前课程",
+      "en": "Current Courses",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_e80149e50579",
+      "zh": "我的课程",
+      "en": "My Courses",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_526e4e0ee623",
+      "zh": "教学云平台当前课程接口格式不正确。",
+      "en": "The Teaching Cloud Platform current-course response has an unsupported format.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2ef2087f92e0",
+      "zh": "课程获取失败。",
+      "en": "Unable to load courses.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_313d609bd0f2",
+      "zh": "QMplus 同步失败；保留上次课程缓存。",
+      "en": "QMplus sync failed; the previous course cache is retained.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7b1061d6ad98",
+      "zh": "QMplus 同步或保存失败；保留上次课程缓存。",
+      "en": "QMplus sync or save failed; the previous course cache is retained.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_e26816ddf666",
+      "zh": "无法读取 QMplus 课程缓存。",
+      "en": "Unable to read the QMplus course cache.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d121d89a0b88",
+      "zh": "无法保存 QMplus 会话清除状态。",
+      "en": "Unable to save the QMplus session-clear status.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d92f3343aad4",
+      "zh": "QMplus 网页会话尚未清除；再次连接前会先清除旧会话。",
+      "en": "QMplus web session not cleared; it will be cleared before reconnecting.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d5326a3f3656",
+      "zh": "校区班车与重要事件",
+      "en": "Campus Shuttles and Important Events",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7d6d74c77326",
+      "zh": "班车与重要事件查询",
+      "en": "Shuttles & Important Events",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_4dca7fc93dbb",
+      "zh": "考试查询",
+      "en": "Exams",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a810ca2f4664",
+      "zh": "课程作业",
+      "en": "Assignments",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_dbba28b7d55c",
+      "zh": "刷新课程作业",
+      "en": "Refresh Assignments",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_53a103fc077c",
+      "zh": "刷新课表与考试",
+      "en": "Refresh Schedule and Exams",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_cc5081ba6124",
+      "zh": "教学云平台 · 课程作业",
+      "en": "Teaching Cloud Platform · Assignments",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_65efc2347ab9",
+      "zh": "暂无课程作业 DDL",
+      "en": "No assignment deadlines",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b21c111e6b2b",
+      "zh": "课程未标注",
+      "en": "Course not specified",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1eb157e2d951",
+      "zh": "点击刷新课程作业获取 DDL；使用设置中已保存的教学云平台密码。",
+      "en": "Refresh assignments to load deadlines using the Teaching Cloud Platform password saved in Settings.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b37d91846724",
+      "zh": "点击刷新成绩获取学校已公布的成绩。",
+      "en": "Refresh grades to load results published by the university.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_da41b98e3954",
+      "zh": "日期待定",
+      "en": "Date to be announced",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_42d6be3dd039",
+      "zh": "当前学期",
+      "en": "Current semester",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_522bedf98774",
+      "zh": "选择学期",
+      "en": "Select Semester",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_cdcfc181a641",
+      "zh": "刷新成绩",
+      "en": "Refresh Grades",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1cc0ffd3d2f4",
+      "zh": "前往账号设置",
+      "en": "Open Account Settings",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_3bb08d84d394",
+      "zh": "Contest DDL 较新镜像数据",
+      "en": "Newer Contest DDL mirror data",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_98a947f82049",
+      "zh": "Contest DDL 备用 API",
+      "en": "Contest DDL backup API",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7288b1812a43",
+      "zh": "第三方来源：Contest DDL 主源、较新镜像及备用 API；校内竞赛通知另行获取，不包含课程作业",
+      "en": "Third-party sources: Contest DDL primary, newer mirror, and backup API. Campus contest notices are fetched separately; assignments are excluded.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_91ee1616f11d",
+      "zh": "本次使用 Contest DDL 镜像数据",
+      "en": "Using Contest DDL mirror data",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b43190ff6687",
+      "zh": "本次使用备用 API",
+      "en": "Using backup API",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2ad7772464db",
+      "zh": "较新镜像数据",
+      "en": "Newer mirror data",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_932b4128d68e",
+      "zh": "请先在设置中保存教务账号和密码，再查询成绩。",
+      "en": "Save your academic account and password in Settings to view grades.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c04b5cc1e8e4",
+      "zh": "成绩来自学校教务系统，仅在本次使用期间保留。",
+      "en": "Grades come from the university system and remain in memory for this session only.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_36cd2c2dcf13",
+      "zh": "该学期暂无已公布成绩，可选择全部学期查看历史成绩。",
+      "en": "No grades have been published for this semester. Select All semesters to view past grades.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_43dfbbe2a548",
+      "zh": "暂无已公布成绩",
+      "en": "No grades have been published.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_6f1df5b20b56",
+      "zh": "成绩获取失败，请重试或检查账号设置。",
+      "en": "Unable to fetch grades. Retry or check account settings.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_13e2bb5c9701",
+      "zh": "成绩刷新失败，正在显示本次使用中已获取的成绩。",
+      "en": "Refresh failed. Showing grades fetched earlier in this session.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c54a782c1a97",
+      "zh": "本学期暂无考试安排",
+      "en": "No exams are currently scheduled for this semester.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_ae97b627dc74",
+      "zh": "部分考试日期或时间待定，请查看考试安排",
+      "en": "Some exam dates or times are pending. Open Exam Arrangements for details.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_f9d5f171ad96",
+      "zh": "考试安排已同步",
+      "en": "Exam arrangements are up to date.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b5ed6a78cbd9",
+      "zh": "考试安排刷新失败，正在显示本账号本学期的缓存",
+      "en": "Exam refresh failed. Showing this account's cached exams for this semester.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_3974c666d48f",
+      "zh": "考试安排获取失败，请重新刷新课表",
+      "en": "Unable to fetch exams. Refresh your schedule to retry.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_70ba0f1907ce",
+      "zh": "尚未获取考试安排，请刷新课表",
+      "en": "Exam arrangements have not been fetched. Refresh your schedule.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_572cf45ba436",
+      "zh": "返回",
+      "en": "Back",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_72d43fc16d53",
+      "zh": "正在恢复…",
+      "en": "Restoring…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_4fd4f40094d4",
+      "zh": "正在删除…",
+      "en": "Deleting…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c66a0a9232ec",
+      "zh": "无法保存收藏日程。",
+      "en": "Unable to save favorites.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_45c5b90eba80",
+      "zh": "本地数据已清除，本次后台结果未保存。",
+      "en": "Local data was cleared; this background result was not saved.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_55df8a5b1823",
+      "zh": "正在获取当天空教室",
+      "en": "Fetching classrooms for today",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_6cdd62aff2d1",
+      "zh": "当天空教室获取失败",
+      "en": "Unable to fetch classrooms for today",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_49db1229e422",
+      "zh": "未选择教学楼",
+      "en": "No building selected",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1193f4078326",
+      "zh": "未选择节次",
+      "en": "No periods selected",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_456baffc980b",
+      "zh": "今日与明日",
+      "en": "Today and Tomorrow",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_9482d0359c16",
+      "zh": "转",
+      "en": " to ",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_fe8e4567cb36",
+      "zh": "今日无课",
+      "en": "No courses today",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_f5e428d00822",
+      "zh": "今天可以自由安排",
+      "en": "No courses scheduled today",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_bec5be67d7c6",
+      "zh": "课程进行中",
+      "en": "Course in progress",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_dc9591e56d50",
+      "zh": "进行中",
+      "en": "In progress",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_426f5597e4bf",
+      "zh": "下一节",
+      "en": "Next",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_702df8ebc195",
+      "zh": "还有待上课程",
+      "en": "More courses later today",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d1adf68fb7c1",
+      "zh": "今日课程已结束",
+      "en": "Today's courses are finished",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_3c50e9a230a6",
+      "zh": "暂无天气数据",
+      "en": "No weather data",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b2da84cef6d8",
+      "zh": "校区天气，已展开，点击折叠",
+      "en": "Campus weather, expanded; tap to collapse",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_5e5bde5551a3",
+      "zh": "校区天气，已折叠，点击展开",
+      "en": "Campus weather, collapsed; tap to expand",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_00e86e6c0150",
+      "zh": "课程、节次与法定节假日",
+      "en": "Courses, periods, and public holidays",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_56451fdf19c2",
+      "zh": "星期一",
+      "en": "Monday",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_8621c00d3b2c",
+      "zh": "星期二",
+      "en": "Tuesday",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_23ae0a11ac5b",
+      "zh": "星期三",
+      "en": "Wednesday",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_478911d29ab8",
+      "zh": "星期四",
+      "en": "Thursday",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_6e5969e50e4d",
+      "zh": "星期五",
+      "en": "Friday",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7bb2f5ecaa1d",
+      "zh": "星期六",
+      "en": "Saturday",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7e06f3148f70",
+      "zh": "星期日",
+      "en": "Sunday",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_3761294f1ae3",
+      "zh": "今日时间轴",
+      "en": "Today's Timeline",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_ad749363f10b",
+      "zh": "本周时间轴",
+      "en": "This Week's Timeline",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_f10254d81050",
+      "zh": "课程与全天  ⌃",
+      "en": "Courses & All-day  ⌃",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c7f04de2b050",
+      "zh": "课程与全天  ⌄",
+      "en": "Courses & All-day  ⌄",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c36f1dc0c90c",
+      "zh": "收起课程与全天事项",
+      "en": "Collapse courses and all-day items",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_af1ecc881b02",
+      "zh": "展开课程与全天事项",
+      "en": "Expand courses and all-day items",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_13cbf0ed2625",
+      "zh": "收起当前日期课程",
+      "en": "Collapse courses for the selected date",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_82b4db0da138",
+      "zh": "展开当前日期课程",
+      "en": "Expand courses for the selected date",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1ce8e5e33ad4",
+      "zh": "当日课程",
+      "en": "Courses for This Day",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_569ac7a618e8",
+      "zh": "教师未标注",
+      "en": "Instructor not specified",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_feac81b818a5",
+      "zh": "暂无教学周信息",
+      "en": "Teaching week unavailable",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_3fd47edce45b",
+      "zh": "关闭",
+      "en": "Close",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_807f0cfc3155",
+      "zh": "导入手机日历",
+      "en": "Import to Device Calendar",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1685f34f05cf",
+      "zh": "将把当前收藏的完整日程快照同步到系统日历；重复导入会更新已有项。是否继续？",
+      "en": "Sync the complete snapshots of current favorites to the system calendar. Re-importing updates existing events. Continue?",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_5388aa2260e3",
+      "zh": "收藏日程导入失败。",
+      "en": "Favorite-event import failed.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1062e8597d13",
+      "zh": "更多日历操作",
+      "en": "More calendar actions",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_4a8d6841b402",
+      "zh": "确认导入",
+      "en": "Confirm Import",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_f33a3346326c",
+      "zh": "跳转到",
+      "en": "Open in",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_3033aa91bdfa",
+      "zh": "颜色越深表示当天课程越多，彩色边框表示作业与 DDL",
+      "en": "Darker colors indicate more courses; colored borders indicate assignments and DDLs",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7b7c2b9b5d9a",
+      "zh": "月视图日程",
+      "en": "Month Schedule",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_4af0a2f07ced",
+      "zh": "打开月视图全天日程",
+      "en": "Open month all-day schedule",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b745c0459440",
+      "zh": "周视图全天日程弹窗",
+      "en": "Week all-day schedule dialog",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_79ec685c582f",
+      "zh": "日视图全天日程弹窗",
+      "en": "Day all-day schedule dialog",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_419ab2712a4d",
+      "zh": "收起月历并显示当日日程",
+      "en": "Collapse month and show day details",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_88655ea4f0e5",
+      "zh": "显示完整月份",
+      "en": "Show full month",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d7bab473a2ae",
+      "zh": "月历，已展开",
+      "en": "Month, expanded",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b9a35e09bc09",
+      "zh": "月历与当日日程",
+      "en": "Month and day details",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b20554100b21",
+      "zh": "选中周与当日日程",
+      "en": "Selected week and day details",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d20ce5fbb5ab",
+      "zh": "当天暂无课程作业 DDL",
+      "en": "No assignment deadlines on this day",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_105666bd1cba",
+      "zh": "正在同步云课堂作业…",
+      "en": "Syncing UCloud assignments…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_bd975c4fb815",
+      "zh": "课程名称未标注",
+      "en": "Course name not specified",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_822bce993e4f",
+      "zh": "正在查询黄历…",
+      "en": "Loading almanac…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_635d024bc91a",
+      "zh": "正在同步作业与校内竞赛通知…",
+      "en": "Syncing assignments and campus contest notices…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_807d13ee88cb",
+      "zh": "正在同步作业与活动 DDL…",
+      "en": "Syncing assignments and event DDLs…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7ff9df9923a8",
+      "zh": "作",
+      "en": "HW",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_ae06002f9a0a",
+      "zh": "校",
+      "en": "Campus",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_9b67720a9243",
+      "zh": "公",
+      "en": "Public",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_30c036a903ff",
+      "zh": "赛",
+      "en": "Competition",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2e813d69fd73",
+      "zh": "营",
+      "en": "Camp",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_59650f41f74b",
+      "zh": "黑",
+      "en": "Hackathon",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_98f2a2e358cf",
+      "zh": "教务账号",
+      "en": "Academic Account",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_87a3167ae442",
+      "zh": "仅删除这一次",
+      "en": "Delete This Occurrence",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_bc46c97ba250",
+      "zh": "本学期所有教学周和上课时段",
+      "en": "All teaching weeks and sessions in this term",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_045df6f39568",
+      "zh": "仅从本机个人课表中删除，可在设置的已删除课程中恢复。不会修改学校课表或已导出的系统日历。",
+      "en": "Removes it from the personal timetable on this device. Restore it under Deleted Courses in Settings. The school timetable and previously exported system calendar stay unchanged.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_8767717aae43",
+      "zh": "课程已删除，可在设置中恢复",
+      "en": "Course deleted; restore it in Settings",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_67bf214f25d0",
+      "zh": "无法保存课程删除记录",
+      "en": "Unable to save the course deletion",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2ca27bf4f02e",
+      "zh": "已删除课程",
+      "en": "Deleted Courses",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2b9dc101179a",
+      "zh": "管理已删除课程",
+      "en": "Manage Deleted Courses",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_8677ffa2bb5a",
+      "zh": "管理当前账号、本学期的本地删除记录。恢复后立即重新显示课程。",
+      "en": "Manage local deletions for the current account and term. Restored courses reappear immediately.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_08808ba4c074",
+      "zh": "当前账号、本学期暂无课程删除记录",
+      "en": "No deleted courses for the current account and term",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d2dbe3e1dc03",
+      "zh": "恢复课程",
+      "en": "Restore Course",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2f9daa828907",
+      "zh": "删除",
+      "en": "Delete",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_5e9c99fbc7bb",
+      "zh": "将移除此条删除记录；其他删除记录仍然有效。",
+      "en": "Removes this deletion record. Other deletion records still apply.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d4702dc0edcb",
+      "zh": "无法读取或保存课程删除记录",
+      "en": "Unable to read or save course deletions",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_5f89c6231afe",
+      "zh": "课表已更新，请重新选择课程。",
+      "en": "The timetable changed. Please select the course again.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a8a9469be34e",
+      "zh": "课程删除记录已更新，请重试。",
+      "en": "Course deletions changed. Please try again.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_e1907004bb21",
+      "zh": "课表缺少学期编号，无法删除课程。",
+      "en": "Cannot delete a course without a term identifier.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_e0b60ea43754",
+      "zh": "课程删除记录格式不受支持。",
+      "en": "Unsupported course deletion record format.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_458c0f220726",
+      "zh": "无法清除课程删除记录。",
+      "en": "Unable to clear course deletions.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2f12df155f6e",
+      "zh": "教学云平台密码（可选）",
+      "en": "Teaching Cloud Platform Password (Optional)",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_76972a2d4b36",
+      "zh": "使用教务密码",
+      "en": "Use Academic Password",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_994813885c90",
+      "zh": "保存后使用独立教学云平台密码获取作业 DDL",
+      "en": "After saving, assignments use the separate Teaching Cloud Platform password",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2556a1009ff6",
+      "zh": "保存后使用教务密码获取作业 DDL",
+      "en": "After saving, assignments use the academic password",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7da0091aeb6d",
+      "zh": "教学云平台密码已安全保存，留空保持不变",
+      "en": "Teaching Cloud Platform password saved securely; leave blank to keep it",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_8075ddbf4b95",
+      "zh": "仅用于课程作业 DDL；未设置时使用教务密码",
+      "en": "Used only for assignment deadlines; defaults to the academic password",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a621ab606db2",
+      "zh": "密码",
+      "en": "Password",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_8cd865ad0f91",
+      "zh": "关闭自动检测后，将使用手动填写的学期信息。",
+      "en": "When automatic detection is off, the manually entered semester details are used.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_bc11b7a92404",
+      "zh": "每日课程摘要已开启",
+      "en": "Daily course summary enabled",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a390ff870e0a",
+      "zh": "每日课程摘要",
+      "en": "Daily Course Summary",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_142d115795cd",
+      "zh": "每天约 07:30 显示当天个人课程摘要",
+      "en": "Shows your course summary each day at about 07:30",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_07a2e7491db3",
+      "zh": "通知权限未开启，无法启用课程摘要",
+      "en": "Notification permission is required for the course summary",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_64f0ebfc51da",
+      "zh": "期刊专题 DDL",
+      "en": "Journal Special Issue DDL",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a4fe4c461b78",
+      "zh": "预推免 DDL",
+      "en": "Pre-admission DDL",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_26f077b9fadd",
+      "zh": "今日班车状态",
+      "en": "Today's Shuttle Status",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_f6814fea9925",
+      "zh": "当前生效",
+      "en": "Active now",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a25d65b4da6f",
+      "zh": "即将生效",
+      "en": "Upcoming",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_18acae02af0f",
+      "zh": "已结束时段",
+      "en": "Past period",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_e8e63b491945",
+      "zh": "时段待确认",
+      "en": "Period unconfirmed",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_52d9a7c19774",
+      "zh": "日期待确认",
+      "en": "Dates unconfirmed",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2df59604068d",
+      "zh": "截至",
+      "en": "Until",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_3f3ed24bab3f",
+      "zh": "起",
+      "en": "onward",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_6bbe89d234b8",
+      "zh": "法定节假日，班车安排以学校通知为准",
+      "en": "Public holiday: follow the university's shuttle notices",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_0fe30aae397c",
+      "zh": "无计划班次",
+      "en": "No scheduled departures",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_73c77be0d203",
+      "zh": "今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。",
+      "en": "Today is a public holiday. Shuttles may not run; follow the university's holiday schedule. There is no shuttle service during the holiday break.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b96f8afb1328",
+      "zh": "下一班",
+      "en": "Next departure",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_be4cdcbbdb06",
+      "zh": "候车地点",
+      "en": "Pickup Locations",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_af3b690f4387",
+      "zh": "乘车提示",
+      "en": "Rider Notes",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_704d8d72dcaa",
+      "zh": "未找到当前生效的班车时刻表",
+      "en": "No currently effective shuttle timetable found",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_fa5e2a8bd33f",
+      "zh": "今日暂无已安排班车",
+      "en": "No shuttle service scheduled today",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2440539471ef",
+      "zh": "今日班车已结束",
+      "en": "Today's shuttle service has ended",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c991bf678043",
+      "zh": "当前显示上一次有效缓存，服务正在恢复。",
+      "en": "Showing the last valid cache while the service recovers.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d48237e65e98",
+      "zh": "当前没有可安全展示的生效时刻表，请查看学校原通知。",
+      "en": "No verified active timetable is available; check the official notice.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_385b34c98527",
+      "zh": "今日该方向无班车",
+      "en": "No shuttle in this direction today",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_76ceba3092a4",
+      "zh": "正在获取今日班车与当前时刻表…",
+      "en": "Loading today's shuttle status and active timetable…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2747ab21c403",
+      "zh": "搜索名称、主办方或分类",
+      "en": "Search name, organizer, or category",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_515559957fd3",
+      "zh": "分类",
+      "en": "Category",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_123414928dee",
+      "zh": "适用对象",
+      "en": "Eligibility",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_daede9881787",
+      "zh": "备注",
+      "en": "Notes",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_82395d423099",
+      "zh": "已归档",
+      "en": "Archived",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_af90a08fec8e",
+      "zh": "加载更多",
+      "en": "Load More",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b3ae7ddabc50",
+      "zh": "暂无符合条件的重要事件",
+      "en": "No important events match these filters",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_325cb1f347f2",
+      "zh": "正在同步公开活动与校内竞赛通知…",
+      "en": "Syncing public events and campus contest notices…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_965fb250e5fd",
+      "zh": "点击重试",
+      "en": "Tap to retry",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7e812fcf5e41",
+      "zh": "第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业",
+      "en": "Third-party sources: Contest DDL and the public campus-notice API; assignments are excluded",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_6d9f938284f7",
+      "zh": "第三方来源：北京邮电大学后勤部公开通知；时刻表由脚本解析，仅供参考",
+      "en": "Third-party source: public BUPT Logistics notices; timetables are script-parsed and for reference only",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_4744126be2cb",
+      "zh": "自定义日程 HTTPS JSON 地址",
+      "en": "Custom schedule HTTPS JSON URL",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1c11fa3b2611",
+      "zh": "校验并保存自定义日程",
+      "en": "Validate & Save Custom Feed",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7d37e6a7b85b",
+      "zh": "正在校验自定义日程…",
+      "en": "Validating custom feed…",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_299999112e4a",
+      "zh": "自定义日程校验失败。",
+      "en": "Unable to validate the custom schedule feed.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d00bfe7c685c",
+      "zh": "返回设置",
+      "en": "Back to Settings",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_2d588d64cd2f",
+      "zh": "打开原文",
+      "en": "Open Original",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1fe94f0bf289",
+      "zh": "收藏快照在来源关闭、失效或删除后仍会保留",
+      "en": "Favorite snapshots remain after a source is disabled, unavailable, or removed",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7b10e83ae78e",
+      "zh": "只发送无凭据 GET；拒绝重定向、本机及私有/保留 IP，响应上限 2 MiB。",
+      "en": "Uses credential-free GET only; redirects, localhost, and private/reserved IPs are rejected; responses are limited to 2 MiB.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_0c21fbe7fd78",
+      "zh": "天气、黄历和 DDL 来自第三方公开服务；已收藏日程会保存完整快照，来源关闭、失败或删除后仍会显示，直到取消收藏。",
+      "en": "Weather, almanac, and DDL data comes from public third-party services. Favorite schedules retain complete snapshots and remain visible until removed, even if a source is disabled, unavailable, or deleted.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_e4df4c8882e7",
+      "zh": "GitHub 项目主页",
+      "en": "GitHub Project",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_08b2682b0fb8",
+      "zh": "在 GitHub 查看完整隐私声明",
+      "en": "View Full Privacy Policy on GitHub",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1c95da24b71d",
+      "zh": "在 GitHub 查看完整声明 / Full policy on GitHub ↗",
+      "en": "Full Policy on GitHub ↗",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a8d8715c8dbb",
+      "zh": "隐私声明 / Privacy Policy",
+      "en": "Privacy Policy",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_ec059f40cbd6",
+      "zh": "账户与教务请求 / Account and academic requests",
+      "en": "Account and Academic Requests",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_4145c279779a",
+      "zh": "云课堂作业 / UCloud assignments",
+      "en": "UCloud Assignments",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_06b6072a72bf",
+      "zh": "节假日数据 / Holiday data",
+      "en": "Holiday Data",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_74be7cb3d15e",
+      "zh": "天气、黄历与公开活动 / Weather, almanac, and public events",
+      "en": "Weather, Almanac, and Public Events",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c3e1453b6d26",
+      "zh": "系统日历、通知与小组件 / Calendar, notifications, and widgets",
+      "en": "Calendar, Notifications, and Widgets",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1f100f5d0caa",
+      "zh": "本地数据 / Local data",
+      "en": "Local Data",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_b5b86cbe1c9e",
+      "zh": "不收集的数据与第三方元数据 / Data not collected and third-party metadata",
+      "en": "Data Not Collected and Third-party Metadata",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c2600b85ff9d",
+      "zh": "保留与删除 / Retention and deletion",
+      "en": "Retention and Deletion",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_72077408d391",
+      "zh": "安全与联系 / Security and contact",
+      "en": "Security and Contact",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_5908a55ccaf6",
+      "zh": "个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。",
+      "en": "Your schedule, classroom and holiday caches, account, and preferences stay on this device.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1e99a0a5b6d9",
+      "zh": "样式预览 · 示例内容",
+      "en": "Style Preview · Sample Content",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_66a9bbc9bfff",
+      "zh": "小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；展开样式最多展示 6 门课程。预览使用虚构示例，不会写入课表。",
+      "en": "The widget shows the date, teaching week, current or next-course status, periods, locations, and instructors. Expanded mode shows up to six courses. Preview data is fictional and is never written to your schedule.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a1a42cd9b16e",
+      "zh": "应用设置",
+      "en": "App Settings",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_9f6fee1aba17",
+      "zh": "语言",
+      "en": "Language",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_182276b2d68a",
+      "zh": "更改语言后将立即重新加载界面。",
+      "en": "The interface reloads immediately after changing the language.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_6a6d311ae726",
+      "zh": "显示数据仅供参考，请以实际情况为准。",
+      "en": "Displayed data is for reference only; rely on official information.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_e462b8d36939",
+      "zh": "无法安全保存账户信息",
+      "en": "Unable to save account information securely",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_102490652212",
+      "zh": "个人课表获取失败",
+      "en": "Unable to fetch personal schedule",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_ef5b565f45ef",
+      "zh": "无法保存学期设置",
+      "en": "Unable to save semester settings",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_0661059bd662",
+      "zh": "清除全部本地数据？",
+      "en": "Clear all local data?",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_8271f0165688",
+      "zh": "将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。",
+      "en": "This removes the saved account, password, personal schedule, classroom cache, and settings. This cannot be undone.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_f0de9622f948",
+      "zh": "将删除保存的账号、密码、个人课表、空教室缓存、自定义日程地址、收藏和设置。此操作无法撤销。",
+      "en": "This removes the saved account, password, personal schedule, classroom cache, custom feed URL, favorites, and settings. This cannot be undone.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a5da1dd8fd92",
+      "zh": "确认清除",
+      "en": "Clear",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_c06647d5a0a8",
+      "zh": "系统日历导入失败。",
+      "en": "System calendar import failed.",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a1c5df2cdab3",
+      "zh": "密码已安全保存，留空保持不变",
+      "en": "Password saved securely; leave blank to keep it",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_1fe17d45e068",
+      "zh": "更换账号时请输入新密码",
+      "en": "Enter the new password when changing accounts",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_00bd3960fea8",
+      "zh": "展开",
+      "en": "Expanded",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_6bea77acefb3",
+      "zh": "标准",
+      "en": "Standard",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_5d63d587b0b0",
+      "zh": "紧凑",
+      "en": "Compact",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_78b78ec88c15",
+      "zh": "展开导航栏",
+      "en": "Expand Navigation",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_abdb2c04c865",
+      "zh": "收起导航栏",
+      "en": "Collapse Navigation",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_7d4e0ebe1e76",
+      "zh": "导航栏已展开",
+      "en": "Navigation expanded",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_a0083c8a9209",
+      "zh": "导航栏已收起",
+      "en": "Navigation collapsed",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_d079d4c5598c",
+      "zh": "无法打开链接",
+      "en": "Unable to open link",
+      "kind": "ui_chrome"
+    },
+    {
+      "id": "ui_chrome_ddb3b7159fd2",
+      "zh": "颜色主题",
+      "en": "Color Theme",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_aa5c949544cd",
+      "zh": "主色会同时调整页面、卡片和控件的底色。浅色与深色外观仍跟随系统。",
+      "en": "The primary color also shapes page, card and control backgrounds. Light and dark appearance still follows your system.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_136e42c8ec73",
+      "zh": "自定义 RGB 颜色",
+      "en": "Custom RGB Colors",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_11979c5c7acc",
+      "zh": "主色",
+      "en": "Primary",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_f84e05423960",
+      "zh": "强调色",
+      "en": "Accent",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_822eb432b858",
+      "zh": "选中日期",
+      "en": "Selected Date",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_9cd555d72f1b",
+      "zh": "输入 6 位十六进制颜色，可带 #。文字对比度会自动调整。",
+      "en": "Enter 6 hexadecimal digits, optionally starting with #. Text contrast adjusts automatically.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_41fa6af5de9e",
+      "zh": "配色预览",
+      "en": "Theme Preview",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_b364d8185174",
+      "zh": "今天的日程",
+      "en": "Today's Schedule",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_1a0be4bd6722",
+      "zh": "18 日 · 示例课程",
+      "en": "18 · Sample Course",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_63fb443d8deb",
+      "zh": "强调信息",
+      "en": "Highlighted Note",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_a2bb37329824",
+      "zh": "已选日期 · 18",
+      "en": "Selected Date · 18",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_5065fa9d9721",
+      "zh": "查看课表",
+      "en": "View Schedule",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_29f63f7b210e",
+      "zh": "应用自定义颜色",
+      "en": "Apply Custom Colors",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_ba2e93e73037",
+      "zh": "恢复默认",
+      "en": "Restore Default",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_437a23f5a691",
+      "zh": "请输入 6 位 RGB，例如 #166B5D",
+      "en": "Enter 6 RGB digits, e.g. #166B5D",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_1fd32f10122e",
+      "zh": "颜色主题保存失败，请重试。",
+      "en": "Could not save the color theme. Please try again.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_4ee8a755167e",
+      "zh": "默认青绿",
+      "en": "Classic Teal",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_dcdf1f46691c",
+      "zh": "海洋蓝",
+      "en": "Ocean Blue",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_c2f43ebe2000",
+      "zh": "鸢尾紫",
+      "en": "Iris Violet",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_aed843d1bd0b",
+      "zh": "暖琥珀",
+      "en": "Warm Amber",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_a6664df1efc8",
+      "zh": "玫瑰",
+      "en": "Rose",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_8e5c672defaa",
+      "zh": "学号和密码保存在操作系统的受保护凭据存储中。保存有效凭据且开启自动学期检测后，启动时会自动刷新一次个人课表，用于校验学期号和第一周周一。你主动请求课表、空教室或作业时也会按对应用途通过 HTTPS 使用凭据。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。",
+      "en": "Credentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_c0902fbc988c",
+      "zh": "课表、空教室、校区、学期、开关、自定义日程地址和最多 500 条收藏快照保存在设备上；课程小组件只读取本地课表。课程删除记录按账号和学期隔离，仅影响本机有效课表，可在设置中恢复。“清除本地数据”会一并移除这些内容。",
+      "en": "Schedules, classroom results, campus, term, switches, the custom feed URL, and up to 500 favorite snapshots stay locally. Course widgets read only the local schedule. Course deletions are isolated by account and term, affect only the effective timetable on this device, and can be restored in Settings. Clear local data removes all of these items.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_8387adc19d38",
+      "zh": "应用可能通过 unpkg 获取固定版本 holiday-calendar 数据；Android 在已有权限时也可能读取系统节假日日历。请求仅含 CN 与年份。iOS 只依据权威休息日数据显示“休”。",
+      "en": "The app may retrieve pinned holiday-calendar data through unpkg; Android may read the OS holiday calendar when permitted. Requests contain only CN and year. iOS marks rest days only from authoritative rest-day data.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_85e2f87b9f51",
+      "zh": "UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。公开活动优先读取 GitHub 上的 Contest DDL，where-to-study.cn 镜像仅在数据更新时间较新时使用，两者不可用时改用原有备用 API；校内竞赛通知另有来源。这些公开请求均不附带个人凭据。自定义日程只向用户填写的 HTTPS 地址发送无凭据 GET，拒绝重定向、本机和私有/保留 IP 字面量，响应上限 2 MiB。所有显示数据仅供参考。",
+      "en": "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Public events use Contest DDL on GitHub first; the where-to-study.cn mirror is selected only when its generated data is newer, and the existing API is a fallback if both fail. Campus contest notices have a separate source. These public requests carry no personal credentials. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_6c4174ecc9fd",
+      "zh": "密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。",
+      "en": "The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_4e62728c3d05",
+      "zh": "QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在独立的应用内 WebView 进程和 profile 打开 QMplus 官方网页，由用户直接完成 SSO／Microsoft MFA；应用没有 Microsoft 密码输入框，也不读取外部浏览器 Cookie。只读脚本返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器。业务快照保存在应用私有存储中；真正部分失败时保留并标注此前已知资料。断开连接或清除本地数据会清除应用管理的网页会话与快照；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息及网络元数据。",
+      "en": "QMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in a separate app-owned WebView process/profile, where you complete SSO/Microsoft MFA directly. The app has no Microsoft password field and reads no external-browser cookies. Its read-only script returns a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML; it never submits work, starts quizzes, or uses a third-party Worker or this project’s server. The snapshot is stored in app-private storage; genuine partial failures retain labelled known information. Disconnecting or clearing local data removes the app-managed web session and snapshot; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_fe6a96889808",
+      "zh": "QMplus 独立连接 / Independent QMplus connection",
+      "en": "Independent QMplus Connection",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_c3b3e760e0ee",
+      "zh": "日历写入和本地课程通知需要你的操作与权限；应用只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供，相关数据不上传。",
+      "en": "Calendar writes and local course notifications require your action and permission, and only marked events are managed. Widgets exist only on supported platforms. This data is not uploaded.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_9832e5677a6d",
+      "zh": "本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。",
+      "en": "The project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_1a9a3e51eed7",
+      "zh": "凭据与缓存保留在设备上，直到被替换、清除或随卸载移除；清除本地数据不会删除学校或第三方持有的记录。",
+      "en": "Credentials and caches stay on your device until replaced, cleared, or removed with the app. Clearing local data does not delete third-party records.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_chrome_52466d500ebc",
+      "zh": "请按 SECURITY.md 报告安全问题；隐私问题可在 GitHub 提交不含敏感信息的 Issue。请勿公开账号、密码、令牌或个人课表。",
+      "en": "Follow SECURITY.md for security reports. Open only non-sensitive privacy issues on GitHub, and never publish credentials, tokens, or personal schedules.",
+      "kind": "ui_extra"
+    },
+    {
+      "id": "ui_format_semester",
+      "zh": "学期：%1$s",
+      "en": "Semester: %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_gpa",
+      "zh": "平均学分绩点：%1$s",
+      "en": "Average grade point: %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_courses",
+      "zh": "%1$s 门课",
+      "en": "%1$s courses",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_course_count",
+      "zh": "%1$s 门",
+      "en": "%1$s courses",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_favorites",
+      "zh": "收藏管理（%1$s）",
+      "en": "Favorite Management (%1$s)",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_results",
+      "zh": "%1$s 条结果 · 按 DDL 时间升序",
+      "en": "%1$s results · sorted by deadline",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_departures",
+      "zh": "今日安排 %1$s 个发车时刻 · %2$s 辆车",
+      "en": "Today: %1$s departure times · %2$s vehicles",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_directions",
+      "zh": "今日共 %1$s 个方向、%2$s 个计划班次",
+      "en": "Today: %1$s directions, %2$s scheduled departures",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_notice",
+      "zh": "后勤部通知 · %1$s",
+      "en": "Logistics notice · %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_from",
+      "zh": "%1$s 起",
+      "en": "From %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_next_departure",
+      "zh": "下一班 %1$s · %2$s → %3$s",
+      "en": "Next %1$s · %2$s → %3$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_updated",
+      "zh": "数据更新时间：%1$s",
+      "en": "Updated: %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_feed_saved",
+      "zh": "自定义日程已保存：%1$s，%2$s 项",
+      "en": "Custom feed saved: %1$s, %2$s items",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_feed_source",
+      "zh": "自定义来源：%1$s",
+      "en": "Custom source: %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_period",
+      "zh": "第 %1$s 节",
+      "en": "Period %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_period_compact",
+      "zh": "第%1$s节",
+      "en": "Period %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_periods",
+      "zh": "第 %1$s-%2$s 节",
+      "en": "Periods %1$s–%2$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_week_compact",
+      "zh": "%1$s\n周",
+      "en": "W%1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_teaching_week_axis",
+      "zh": "教学\n第%1$s周",
+      "en": "Teaching\nWeek %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_teaching_week",
+      "zh": "第%1$s教学周",
+      "en": "Teaching Week %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_date_week",
+      "zh": "%1$s 第%2$s周",
+      "en": "%1$s · Week %2$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_date_teaching_week",
+      "zh": "%1$s 第%2$s教学周",
+      "en": "%1$s · Teaching Week %2$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_view_courses",
+      "zh": "查看全部 %1$s 门课程",
+      "en": "View all %1$s courses",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_day_courses",
+      "zh": "当日课程（%1$s）",
+      "en": "Courses for This Day (%1$s)",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_calendar_synced",
+      "zh": "已同步 %1$s 条课程到系统日历。",
+      "en": "Synced %1$s courses to the system calendar.",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_favorites_synced",
+      "zh": "已同步 %1$s 条收藏日程到「%2$s」",
+      "en": "Synced %1$s favorite events to \"%2$s\".",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_schedule_updated",
+      "zh": "个人课表已更新，共 %1$s 门课程",
+      "en": "Personal schedule updated: %1$s courses",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_today_courses",
+      "zh": "今日课程 · %1$s 门",
+      "en": "Today's Courses · %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_about",
+      "zh": "Where To Study  %1$s\n北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。",
+      "en": "Where To Study  %1$s\nIndependent unofficial BUPT schedule and classroom client; not operated by the university.",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_calendar_upsert",
+      "zh": "已同步 %1$s 条课程到「%2$s」（新增 %3$s，更新 %4$s）",
+      "en": "Synced %1$s courses to \"%2$s\" (%3$s added, %4$s updated).",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_weeks",
+      "zh": "%1$s 周",
+      "en": "%1$s weeks",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_ending",
+      "zh": "进行中 · %1$s 下课",
+      "en": "In progress · ends at %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_week_axis",
+      "zh": "公历 %1$s\n教学 %2$s",
+      "en": "Calendar %1$s\nTeaching %2$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_calendar_teaching_week",
+      "zh": "公历第%1$s周，第%2$s教学周",
+      "en": "Calendar week %1$s, teaching week %2$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_calendar_week_unknown",
+      "zh": "公历第%1$s周，暂无教学周信息",
+      "en": "Calendar week %1$s, teaching week unavailable",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_calendar_week",
+      "zh": "公历第%1$s周",
+      "en": "Calendar week %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_widget_teaching_week",
+      "zh": "教学第%1$s周",
+      "en": "Teaching week %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_ends_at",
+      "zh": "%1$s 下课",
+      "en": "Ends at %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "ui_format_week",
+      "zh": "第%1$s周",
+      "en": "Week %1$s",
+      "kind": "ui_formats"
+    },
+    {
+      "id": "app_name",
+      "zh": "Where To Study",
+      "en": "Where To Study",
+      "kind": "strings"
+    },
+    {
+      "id": "brand_eyebrow",
+      "zh": "BUPT",
+      "en": "BUPT",
+      "kind": "strings"
+    },
+    {
+      "id": "brand_name",
+      "zh": "Where To Study",
+      "en": "Where To Study",
+      "kind": "strings"
+    },
+    {
+      "id": "planner_eyebrow",
+      "zh": "Where To Study",
+      "en": "Where To Study",
+      "kind": "strings"
+    },
+    {
+      "id": "slot_format",
+      "zh": "第 %1$s 节\n%2$s-%3$s",
+      "en": "Period %1$s\n%2$s–%3$s",
+      "kind": "strings"
+    },
+    {
+      "id": "classroom_source_format",
+      "zh": "数据源：移动教务实时接口 · %1$s",
+      "en": "Source: live Academic Affairs API · %1$s",
+      "kind": "strings"
+    },
+    {
+      "id": "personal_schedule_state_format",
+      "zh": "个人课表 %1$s",
+      "en": "Personal schedule: %1$s",
+      "kind": "strings"
+    },
+    {
+      "id": "state_on",
+      "zh": "开",
+      "en": "On",
+      "kind": "strings"
+    },
+    {
+      "id": "state_off",
+      "zh": "关",
+      "en": "Off",
+      "kind": "strings"
+    },
+    {
+      "id": "holiday_item_format",
+      "zh": "%1$s %2$s",
+      "en": "%1$s %2$s",
+      "kind": "strings"
+    },
+    {
+      "id": "credential_security_note",
+      "zh": "账号和密码仅保存于本机，并由 Android Keystore 保护。",
+      "en": "Your account and password stay on this device and are protected by Android Keystore.",
+      "kind": "strings"
+    },
+    {
+      "id": "privacy_consent_title",
+      "zh": "隐私政策与个人信息保护",
+      "en": "Privacy Policy and Personal Information",
+      "kind": "strings"
+    },
+    {
+      "id": "privacy_consent_summary",
+      "zh": "欢迎使用 Where To Study。请在继续前阅读并理解隐私政策。应用会在你保存账号或请求课表、空教室、作业时，通过 HTTPS 向北京邮电大学相关服务提交必要信息；保存有效账号后，还可能按已启用的设置自动刷新课表与当天空教室。课表、账号与偏好保存在本机。点击“同意并继续”表示你已阅读并同意隐私政策；拒绝后将退出应用且无法使用主功能。",
+      "en": "Welcome to Where To Study. Please read and understand the Privacy Policy before continuing. When you save an account or request schedules, classrooms, or assignments, the app sends necessary information over HTTPS to relevant BUPT services. After valid credentials are saved, enabled settings may also refresh the schedule and today’s empty classrooms automatically. Schedules, credentials, and preferences stay on this device. By tapping “Agree and Continue,” you confirm that you have read and agree to the Privacy Policy. If you decline, the app exits and its main features remain unavailable.",
+      "kind": "strings"
+    },
+    {
+      "id": "privacy_consent_decline",
+      "zh": "拒绝并退出",
+      "en": "Decline and Exit",
+      "kind": "strings"
+    },
+    {
+      "id": "privacy_policy_open_failed",
+      "zh": "无法打开完整隐私政策，请稍后重试。",
+      "en": "Unable to open the full Privacy Policy. Please try again later.",
+      "kind": "strings"
+    },
+    {
+      "id": "privacy_consent_save_failed",
+      "zh": "无法保存同意状态，暂不能进入应用。",
+      "en": "Unable to save your consent, so the app cannot continue.",
+      "kind": "strings"
+    },
+    {
+      "id": "account_privacy_notice",
+      "zh": "保存教务账号前，请先阅读隐私政策，了解凭据用途、传输对象与本地保存方式。",
+      "en": "Before saving an academic account, read the Privacy Policy to understand how credentials are used, where they are sent, and how they are stored locally.",
+      "kind": "strings"
+    },
+    {
+      "id": "daily_course_notification_description",
+      "zh": "仅在当天有课时通知。按北京时间约在所选时间发送，系统节电可能延迟；修改时间后立即重排，当天最多通知一次。",
+      "en": "Only notifies on days with courses, around the chosen Beijing time. Battery saving may delay delivery. Time changes reschedule immediately; at most one summary per day.",
+      "kind": "strings"
+    },
+    {
+      "id": "daily_course_notification_time_format",
+      "zh": "提醒时间 · %1$s（北京时间）",
+      "en": "Reminder time · %1$s (Beijing time)",
+      "kind": "strings"
+    },
+    {
+      "id": "daily_course_notification_time_error",
+      "zh": "无法保存或重排提醒，请重新设置。",
+      "en": "Could not save or reschedule the reminder. Please try again.",
+      "kind": "strings"
+    },
+    {
+      "id": "daily_course_notification_channel_description",
+      "zh": "每天按所选北京时间显示当天个人课程摘要",
+      "en": "Shows today’s course summary at the selected Beijing time",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_toggle",
+      "zh": "开启课前提醒",
+      "en": "Enable before-class reminders",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_count",
+      "zh": "每次课程提醒 %1$d 次（最多 5 次）",
+      "en": "%1$d reminders per class (up to 5)",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_lead_label",
+      "zh": "第 %1$d 次提前",
+      "en": "Reminder %1$d:",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_offset_accessibility",
+      "zh": "第 %1$d 次提醒的提前分钟数",
+      "en": "Minutes before class for reminder %1$d",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_remove",
+      "zh": "删除第 %1$d 次提醒",
+      "en": "Remove reminder %1$d",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_add",
+      "zh": "添加一次提醒",
+      "en": "Add a reminder",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_save",
+      "zh": "保存课前提醒设置",
+      "en": "Save before-class reminders",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_input_error",
+      "zh": "请设置 1–5 次不重复的提醒，每次提前 1–1440 分钟。无法保存时请重试。",
+      "en": "Set 1–5 different reminder times, each 1–1440 minutes before class. Retry if saving fails.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_enable_error",
+      "zh": "无法启用课前提醒，请检查通知权限后重试。",
+      "en": "Could not enable reminders. Check notification permission and try again.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_notification_title",
+      "zh": "课前提醒 · 提前 %1$d 分钟",
+      "en": "Class reminder · %1$d minutes before",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_exact_description",
+      "zh": "使用本地课表，按北京时间提醒未来课程与已确定时间的考试，默认提前 10 分钟。已获得准时提醒权限；关闭设备或系统限制仍可能影响送达。每日摘要独立设置。设置仅保存在本机，不上传。",
+      "en": "Uses your local timetable for future classes and timed exams in Beijing time, 10 minutes before by default. Precise reminder access is granted; powering off or system restrictions may still affect delivery. Daily summaries are separate. Settings stay on this device and are not uploaded.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_inexact_description",
+      "zh": "使用本地课表，按北京时间提醒未来课程与已确定时间的考试，默认提前 10 分钟。目前为大致时间提醒，系统节电可能延迟或错过通知；不会补发已过时的提醒。每日摘要独立设置。设置仅保存在本机，不上传。",
+      "en": "Uses your local timetable for future classes and timed exams in Beijing time, 10 minutes before by default. Delivery is approximate: battery saving may delay or miss reminders. Expired reminders are not replayed. Daily summaries are separate. Settings stay on this device and are not uploaded.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_exact_access",
+      "zh": "闹钟和提醒权限（可选）",
+      "en": "Alarms & reminders (optional)",
+      "kind": "strings"
+    },
+    {
+      "id": "course_reminder_exact_access_error",
+      "zh": "无法打开准时提醒权限设置，将继续使用大致时间提醒。",
+      "en": "Could not open precise reminder settings. Approximate delivery remains available.",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_preview_description",
+      "zh": "小组件优先显示今日课程，剩余空间补充标有“明日”的课程，总数受课程上限限制。预览使用虚构示例，不会写入课表。",
+      "en": "Today’s courses appear first; spare space shows courses marked “Tomorrow”, within the course limit. This preview uses fictional data and does not change your schedule.",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_today_tomorrow_count_format",
+      "zh": "今日 %1$d · 明日 %2$d",
+      "en": "Today %1$d · Tomorrow %2$d",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_today_course_name",
+      "zh": "今日课程",
+      "en": "Today’s Courses",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_today_course_title",
+      "zh": "今日课程",
+      "en": "Today’s Courses",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_today_course_description",
+      "zh": "在桌面查看今天的课程、节次、教室、教师与上课状态。",
+      "en": "View today’s courses, periods, rooms, instructors, and status on your home screen.",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_empty_course_message",
+      "zh": "今日无课",
+      "en": "No courses today",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_course_count_format",
+      "zh": "%1$d 门",
+      "en": "%1$d courses",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_more_courses_format",
+      "zh": "另有 %1$d 门课程",
+      "en": "%1$d more courses",
+      "kind": "strings"
+    },
+    {
+      "id": "widget_preview_accessibility_format",
+      "zh": "今日课程小组件样式预览，%1$s，共 %2$d 门示例课程",
+      "en": "Today’s Courses widget preview, %1$s, with %2$d sample courses",
+      "kind": "strings"
+    },
+    {
+      "id": "current_courses_refresh",
+      "zh": "刷新当前课程",
+      "en": "Refresh Current Courses",
+      "kind": "strings"
+    },
+    {
+      "id": "current_courses_source",
+      "zh": "教学云平台 · 当前课程",
+      "en": "Teaching Cloud Platform · Current Courses",
+      "kind": "strings"
+    },
+    {
+      "id": "current_courses_empty",
+      "zh": "教学云平台当前暂无课程",
+      "en": "No current Teaching Cloud Platform courses",
+      "kind": "strings"
+    },
+    {
+      "id": "current_courses_hint",
+      "zh": "刷新当前课程；复用教学云平台会话，不提前获取所有课程作业。",
+      "en": "Refresh current courses using the existing Teaching Cloud Platform session, without fetching every assignment.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_disconnect",
+      "zh": "退出 QMplus 并清除会话",
+      "en": "Sign Out and Clear QMplus Session",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_connect_sync",
+      "zh": "连接 / 同步 QMplus",
+      "en": "Connect / Sync QMplus",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_sync",
+      "zh": "同步课程",
+      "en": "Sync Courses",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_syncing",
+      "zh": "正在只读同步课程与已发布的作业 / 测验…",
+      "en": "Syncing courses and published assignments / quizzes read-only…",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_loading",
+      "zh": "正在读取课程…",
+      "en": "Loading courses…",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_connected",
+      "zh": "已保存 QMplus 课程快照；刷新需在官方页面完成。",
+      "en": "QMplus course snapshot saved; refresh through the official page.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_not_connected",
+      "zh": "尚未连接 QMplus，请在设置中完成官方 SSO / MFA 登录后同步课程。",
+      "en": "QMplus not connected. Complete official SSO / MFA in Settings, then sync courses.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_connection_notice",
+      "zh": "在官方网页完成 SSO / MFA，不新增 Microsoft 密码字段，也不读取外部浏览器 Cookie。业务缓存仅保存课程与作业 / 测验时间，不含密码、会话 Cookie 或 sesskey。退出会清除本应用的 QMplus 网页会话与课程缓存。",
+      "en": "Complete SSO / MFA on the official page. No Microsoft password field is added and external browser cookies are not read. The business cache contains courses and assignment / quiz times, not passwords, session cookies or sesskey. Signing out clears this app’s QMplus web session and course cache.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_web_login_notice",
+      "zh": "在官方页面完成 SSO / MFA 后点击“同步课程”。仅同步课程及已发布的作业 / 测验，不会提交作业或开始测验。",
+      "en": "Complete official SSO / MFA, then select “Sync Courses”. Only courses and published assignments / quizzes are read; nothing is submitted and no quiz attempt is started.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_web_error",
+      "zh": "QMplus 同步未完成。请检查官方登录状态与网络后重试；原课程缓存不受影响。",
+      "en": "QMplus sync did not complete. Check the official login and network, then retry. The previous course cache is unaffected.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_web_unavailable",
+      "zh": "此设备无法打开官方 QMplus 登录网页。请检查系统 WebView 是否可用后重试；原课程缓存不受影响。",
+      "en": "This device cannot open the official QMplus login page. Check that System WebView is available, then retry. The previous course cache is unaffected.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_clear_failed",
+      "zh": "无法清除 QMplus 课程缓存，请重试。",
+      "en": "Unable to clear the QMplus course cache. Please retry.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_clearing_session",
+      "zh": "正在清除本应用的 QMplus 网页会话…",
+      "en": "Clearing this app’s QMplus web session…",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_local_data_clear_pending",
+      "zh": "本地业务数据已清除，QMplus 网页会话正在异步清除；完成前不能再次连接。",
+      "en": "Local business data cleared. The QMplus web session is clearing asynchronously; reconnect is disabled until it completes.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_partial",
+      "zh": "本次同步不完整，保留先前已知活动；未读到的活动不代表已完成或已删除。",
+      "en": "This sync is incomplete; previously known activities are retained. Missing activities are not assumed completed or deleted.",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_fetched_at",
+      "zh": "最近同步：%1$s",
+      "en": "Last sync: %1$s",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_no_courses",
+      "zh": "暂无当前学期 EBU 课程。",
+      "en": "No current-term EBU courses.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_source_teaching_cloud",
+      "zh": "教学云平台",
+      "en": "Teaching Cloud Platform",
+      "kind": "strings"
+    },
+    {
+      "id": "course_directory_count",
+      "zh": "%1$d 门",
+      "en": "%1$d courses",
+      "kind": "strings"
+    },
+    {
+      "id": "course_pending_count",
+      "zh": "待交 %1$d",
+      "en": "Pending %1$d",
+      "kind": "strings"
+    },
+    {
+      "id": "course_submitted_count",
+      "zh": "已交 %1$d",
+      "en": "Submitted %1$d",
+      "kind": "strings"
+    },
+    {
+      "id": "course_detail_back",
+      "zh": "返回",
+      "en": "Back",
+      "kind": "strings"
+    },
+    {
+      "id": "course_detail_assignments",
+      "zh": "已同步作业",
+      "en": "Synced Assignments",
+      "kind": "strings"
+    },
+    {
+      "id": "course_assignments_not_loaded",
+      "zh": "尚未获取课程作业；可在作业查询中主动刷新。",
+      "en": "Assignments not fetched yet. Refresh them explicitly in the assignments view.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_no_cached_assignments",
+      "zh": "当前缓存没有关联到这门课程的作业。",
+      "en": "No cached assignments linked to this course.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_no_cached_activities",
+      "zh": "当前快照没有这门课程的作业或测验。",
+      "en": "No assignments or quizzes for this course in the current snapshot.",
+      "kind": "strings"
+    },
+    {
+      "id": "course_open_assignments_query",
+      "zh": "前往作业查询",
+      "en": "Go to Assignments",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_show_other_courses",
+      "zh": "其他 / 学期未确认课程（%1$d） ⌄",
+      "en": "Other / unconfirmed-term courses (%1$d) ⌄",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_hide_other_courses",
+      "zh": "收起其他 / 学期未确认课程（%1$d） ⌃",
+      "en": "Hide other / unconfirmed-term courses (%1$d) ⌃",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_term_current",
+      "zh": "当前学期",
+      "en": "Current term",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_term_unknown",
+      "zh": "学期未确认，不自动归为当前学期",
+      "en": "Term unconfirmed; not automatically treated as current",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_open_course",
+      "zh": "打开官方课程",
+      "en": "Open Official Course",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_open_activity",
+      "zh": "打开官方活动",
+      "en": "Open Official Activity",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_assignment",
+      "zh": "Assignment · 作业",
+      "en": "Assignment",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_quiz",
+      "zh": "Quiz · 测验（开放区间不是固定考试时段）",
+      "en": "Quiz (availability is not a fixed exam time)",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_due",
+      "zh": "截止",
+      "en": "Due",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_opens",
+      "zh": "开放",
+      "en": "Opens",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_closes",
+      "zh": "关闭",
+      "en": "Closes",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_cutoff",
+      "zh": "最终截止",
+      "en": "Cut-off",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_not_published",
+      "zh": "未公布 / 尚未确认",
+      "en": "Not published / unconfirmed",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_time_limit",
+      "zh": "限时：%1$d 秒",
+      "en": "Time limit: %1$d seconds",
+      "kind": "strings"
+    },
+    {
+      "id": "qmplus_detail_unavailable",
+      "zh": "详情受限或未完整读取；未确认的时间不作推断。",
+      "en": "Detail restricted or incomplete; unconfirmed times are not inferred.",
+      "kind": "strings"
+    }
+  ]
+}

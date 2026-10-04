@@ -72,11 +72,15 @@ class HolidayClient(
     private val source: String = HolidayMetadata.source,
 ) {
     fun fetch(year: Int): HolidaysSnapshot {
+        return CellularAssist.readOnly { fetchOnRoute(year) }
+    }
+
+    private fun fetchOnRoute(year: Int): HolidaysSnapshot {
         if (year !in HolidayMetadata.minimumYear..HolidayMetadata.maximumYear) {
             throw HolidayClientException("节假日年份不在支持范围内。")
         }
         return try {
-            val connection = URI.create("$source/$year.json").toURL().openConnection() as HttpURLConnection
+            val connection = CellularAssist.openConnection(URI.create("$source/$year.json").toURL())
             try {
                 connection.requestMethod = "GET"
                 connection.connectTimeout = 15_000

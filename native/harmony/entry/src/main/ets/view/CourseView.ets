@@ -43,7 +43,13 @@ export struct CourseView {
     this.session.visibleQMActivities = 40;
   }
 
+  @Monitor('model.qmplusEnabled')
+  onQMplusEnabledChanged(monitor: IMonitor): void {
+    if (!this.model.qmplusEnabled && this.session.selectedCourseSource === 'qmplus') { this.closeCourse(); }
+  }
+
   aboutToAppear(): void {
+    if (!this.model.qmplusEnabled && this.session.selectedCourseSource === 'qmplus') { this.closeCourse(); }
     if (this.selectedTab() === CoursePageTab.current) {
       void this.model.loadCloudCourseDirectory(false);
     }
@@ -71,7 +77,8 @@ export struct CourseView {
   }
 
   private localized(chinese: string, english: string): string {
-    return this.model.resolvedLanguage() === AppLanguage.english ? english : chinese;
+    const translated: string = this.model.text(chinese);
+    return this.model.resolvedLanguage() === AppLanguage.english && translated === chinese ? english : translated;
   }
 
   private selectedCloudCourse(): UCloudCourse | undefined {
@@ -193,7 +200,7 @@ export struct CourseView {
       parts.push(this.localized('教学云 ', 'Teaching Cloud ') + this.model.cloudCourses.length.toString() +
         this.localized(' 门', ' courses'));
     }
-    if (this.qmPlusSession.snapshot !== null && !this.model.isSampleMode()) {
+    if (this.model.qmplusEnabled && this.qmPlusSession.snapshot !== null && !this.model.isSampleMode()) {
       parts.push('QMplus EBU ' + CourseQMPlusScope.courses(this.qmPlusSession.snapshot).length.toString() +
         this.localized(' 门', ' courses'));
     }
@@ -244,8 +251,10 @@ export struct CourseView {
             this.currentCoursesContent()
           } else if (this.selectedTab() === CoursePageTab.grades) {
             GradeQueryView({ onOpenSettings: this.onOpenSettings })
+              .direction(Direction.Ltr)
           } else if (this.selectedTab() === CoursePageTab.exams) {
             ExamQueryView({ onOpenSettings: this.onOpenSettings })
+              .direction(Direction.Ltr)
           } else {
             AssignmentQueryView({ onOpenSettings: this.onOpenSettings })
           }
@@ -334,7 +343,7 @@ export struct CourseView {
         Text(this.model.text('示例模式不展示或连接真实 QMplus 数据。'))
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
-      } else {
+      } else if (this.model.qmplusEnabled) {
         this.qmPlusSection()
       }
     }
@@ -799,11 +808,13 @@ export struct CourseView {
           if (item.kind === 'assignment') {
             if (item.dueAt !== null) {
               Text(this.model.text('截止时间：') + this.qmTime(item.dueAt))
+                .textDirection(TextDirection.LTR)
                 .fontSize(12)
                 .fontColor(AppTheme.secondaryText())
             }
             if (item.cutoffAt !== null) {
               Text(this.model.text('最终截止：') + this.qmTime(item.cutoffAt))
+                .textDirection(TextDirection.LTR)
                 .fontSize(12)
                 .fontColor(AppTheme.secondaryText())
             }
@@ -815,11 +826,13 @@ export struct CourseView {
           } else {
             if (item.opensAt !== null) {
               Text(this.model.text('开放时间：') + this.qmTime(item.opensAt))
+                .textDirection(TextDirection.LTR)
                 .fontSize(12)
                 .fontColor(AppTheme.secondaryText())
             }
             if (item.closesAt !== null) {
               Text(this.model.text('关闭时间：') + this.qmTime(item.closesAt))
+                .textDirection(TextDirection.LTR)
                 .fontSize(12)
                 .fontColor(AppTheme.secondaryText())
             }
@@ -831,6 +844,7 @@ export struct CourseView {
           }
           if (item.rawTimeText.length > 0) {
             Text(item.rawTimeText)
+              .textDirection(TextDirection.AUTO)
               .fontSize(12)
               .fontColor(AppTheme.secondaryText())
           }

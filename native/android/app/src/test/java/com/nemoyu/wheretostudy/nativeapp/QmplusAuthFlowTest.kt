@@ -1,0 +1,547 @@
+package com.nemoyu.wheretostudy.nativeapp
+
+import java.io.File
+import org.json.JSONObject
+import org.junit.Assert.*
+import org.junit.Test
+
+/** Production flow, fake transport/clock/secure-store callbacks. No browser or external requests. */
+class QmplusAuthFlowTest {
+    @Test fun ordinarySameDocumentSPAUsesCanonicalInstallAndEachStageOnceWithoutPasswordInUsername() {
+        val fixture = Fixture()
+        fixture.open(MS)
+        val install = fixture.renderer.take()
+        assertTrue(install.script.contains(fixture.helper))
+        assertEquals(0, fixture.credentials.accountReads)
+        install.reply("\"AUTH_INSTALLED\"")
+        val username = fixture.renderer.take()
+        fixture.replyStage(username, "username")
+        val next = fixture.renderer.take()
+        val usernameOptions = next.options()
+        assertEquals("username", usernameOptions.getString("stage"))
+        assertFalse(usernameOptions.has("password"))
+        assertEquals(0, fixture.credentials.passwordReads)
+        next.reply("\"USERNAME_SUBMITTED\"")
+        // No pageFinished callback: the real polling pipeline handles the SPA.
+        fixture.scheduler.advance(350)
+        val password = fixture.renderer.take()
+        fixture.replyStage(password, "password", match = true)
+        val signIn = fixture.renderer.take()
+        assertEquals("password", signIn.options().getString("stage"))
+        assertEquals(1, fixture.credentials.passwordReads)
+        assertTrue(checkNotNull(fixture.credentials.lastPassword).password.all { it == '\u0000' })
+        signIn.reply("\"PASSWORD_SUBMITTED\"")
+        fixture.open(QmplusPolicy.START_URL)
+        fixture.renderer.take().reply("true")
+        assertEquals(1, fixture.authenticated)
+        assertEquals(0, fixture.reveals)
+        assertTrue(fixture.phases.containsAll(listOf("installing", "username_submitted", "password_submitted", "authenticated")))
+        fixture.flow.close()
+    }
+
+    @Test fun defaultOffAndInstallationConflictNeverReadSavedSecretsOrSendCredentials() {
+        for (optIn in listOf(false, true)) {
+            val fixture = Fixture(optIn)
+            fixture.open(MS)
+            if (optIn) fixture.renderer.take().reply("\"AUTH_CONFLICT\"")
+            assertEquals(1, fixture.reveals)
+            assertEquals(0, fixture.credentials.accountReads)
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertFalse(fixture.renderer.pending.any { it.script.contains("fillAndSubmit(") })
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun approvedSSOEntryNavigatesFixedURLOnceAndCannotReplayAfterBackOrRevocation() {
+        val fixture = Fixture()
+        fixture.open("https://qmplus.qmul.ac.uk/login/index.php")
+        assertEquals(listOf(QmplusLoginPagePolicy.SSO_START_URL), fixture.renderer.navigations)
+        fixture.open(QmplusLoginPagePolicy.SSO_START_URL)
+        fixture.open(MS)
+        fixture.renderer.take().reply("\"AUTH_INSTALLED\"")
+        fixture.open("https://qmplus.qmul.ac.uk/login/index.php")
+        assertEquals(1, fixture.renderer.navigations.size)
+        assertEquals(1, fixture.reveals)
+        fixture.flow.close()
+        val revoked = Fixture()
+        revoked.credentials.allowed = false
+        revoked.open("https://qmplus.qmul.ac.uk/login/index.php")
+        assertTrue(revoked.renderer.navigations.isEmpty())
+        assertEquals(1, revoked.reveals)
+        revoked.flow.close()
+    }
+
+    @Test fun unknownFrameOriginPathAndManualVerificationNeverGetNativeFillOrPassword() {
+        val pages = listOf("https://qmplus.qmul.ac.uk.evil.invalid/login/index.php", "http://qmplus.qmul.ac.uk/login/index.php",
+            "https://login.microsoftonline.com/common/Consent", "https://qmplus.qmul.ac.uk/login/other.php")
+        pages.forEach { page ->
+            val fixture = Fixture(); fixture.open(page)
+            assertEquals(1, fixture.reveals)
+            assertEquals(0, fixture.credentials.accountReads)
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertTrue(fixture.renderer.pending.isEmpty()); fixture.flow.close()
+        }
+        listOf("ACCOUNT_CHOOSER", "INTERFERENCE", "FORM_UNTRUSTED", "ACCOUNT_MISMATCH", "UNSUPPORTED_PAGE").forEach { reason ->
+            val fixture = installed()
+            fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
+            if (reason == "FORM_UNTRUSTED") {
+                assertEquals(0, fixture.reveals)
+                repeat(8) {
+                    fixture.scheduler.advance(350)
+                    fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
+                }
+            }
+            assertEquals(1, fixture.reveals)
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertTrue(fixture.renderer.pending.isEmpty()); fixture.flow.close()
+        }
+    }
+
+    @Test fun firstLayoutMayWaitEightTimesThenSubmitOnlyTheKnownUsernameStageOnce() {
+        for (reason in listOf("FORM_UNTRUSTED", "KNOWN_FORM_ABSENT")) {
+            val fixture = installed()
+            repeat(8) { attempt ->
+                if (attempt > 0) fixture.scheduler.advance(350)
+                fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
+                assertEquals(0, fixture.reveals)
+                assertEquals(0, fixture.credentials.passwordReads)
+                assertTrue(fixture.renderer.pending.isEmpty())
+            }
+            fixture.scheduler.advance(350)
+            fixture.replyStage(fixture.renderer.take(), "username")
+            val submission = fixture.renderer.take().options()
+            assertEquals("username", submission.getString("stage"))
+            assertFalse(submission.has("password"))
+            assertEquals(0, fixture.credentials.passwordReads)
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun anUnknownInitialLayoutAlwaysStopsAfterEightPollsWithoutSubmittingOrReadingPassword() {
+        for (reason in listOf("FORM_UNTRUSTED", "KNOWN_FORM_ABSENT")) {
+            val fixture = installed()
+            fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
+            repeat(8) { attempt ->
+                assertEquals(0, fixture.reveals)
+                fixture.scheduler.advance(350)
+                fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
+                assertEquals(if (attempt == 7) 1 else 0, fixture.reveals)
+                assertTrue(fixture.renderer.pending.isEmpty())
+            }
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertFalse(fixture.phases.contains("username_submitted"))
+            fixture.scheduler.advance(25_000)
+            assertEquals(1, fixture.reveals)
+            assertTrue(fixture.renderer.pending.isEmpty())
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun absentOrUntrustedFormAfterUsernameSubmissionNeverUsesInitialLayoutRetries() {
+        for (reason in listOf("FORM_UNTRUSTED", "KNOWN_FORM_ABSENT")) {
+            val fixture = installed()
+            fixture.replyStage(fixture.renderer.take(), "username")
+            fixture.renderer.take().reply("\"USERNAME_SUBMITTED\"")
+            fixture.scheduler.advance(350)
+            fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
+            assertEquals(1, fixture.reveals)
+            assertEquals(0, fixture.credentials.passwordReads)
+            fixture.scheduler.advance(25_000)
+            assertEquals(1, fixture.reveals)
+            assertTrue(fixture.renderer.pending.isEmpty())
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun initialLayoutWaitCannotContinueAfterCredentialRevisionURLBackgroundOrCloseChanges() {
+        for (change in listOf("revision", "url", "background", "close")) {
+            val fixture = installed()
+            fixture.replyStage(fixture.renderer.take(), "manual", reason = "FORM_UNTRUSTED")
+            when (change) {
+                "revision" -> fixture.credentials.authorizedRevision = REVISION + 1
+                "url" -> fixture.renderer.currentURL = "https://example.invalid/unknown"
+                "background" -> fixture.flow.suspend()
+                "close" -> fixture.flow.close()
+            }
+            fixture.scheduler.advance(350)
+            assertEquals(if (change == "close") 0 else 1, fixture.reveals)
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertTrue(fixture.renderer.pending.isEmpty())
+            fixture.scheduler.advance(25_000)
+            assertEquals(if (change == "close") 0 else 1, fixture.reveals)
+            assertTrue(fixture.renderer.pending.isEmpty())
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun passwordNeedsMatchingAccountAndAcknowledgedUsernameInThisDocument() {
+        for (match in listOf(false, true)) {
+            val fixture = installed()
+            fixture.replyStage(fixture.renderer.take(), "password", match = match,
+                reason = if (match) "USERNAME_NOT_SUBMITTED" else "ACCOUNT_MISMATCH")
+            assertEquals(1, fixture.reveals)
+            assertEquals(0, fixture.credentials.passwordReads); fixture.flow.close()
+        }
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "username")
+        val next = fixture.renderer.take()
+        fixture.open(MS)
+        next.reply("\"USERNAME_SUBMITTED\"") // Late ACK from the old document.
+        fixture.renderer.take().reply("\"AUTH_INSTALLED\"")
+        fixture.replyStage(fixture.renderer.take(), "password", match = true, reason = "USERNAME_NOT_SUBMITTED")
+        assertEquals(0, fixture.credentials.passwordReads)
+        assertEquals(1, fixture.reveals); fixture.flow.close()
+    }
+
+    @Test fun failedUsernameSubmitIsNeverRetriedAndSPAWaitIsFinite() {
+        val failed = installed()
+        failed.replyStage(failed.renderer.take(), "username")
+        failed.renderer.take().reply("\"MANUAL_REQUIRED\"")
+        failed.scheduler.advance(25_000)
+        assertEquals(1, failed.reveals)
+        assertTrue(failed.renderer.pending.isEmpty())
+        assertEquals(0, failed.credentials.passwordReads); failed.flow.close()
+        val pending = installed()
+        pending.replyStage(pending.renderer.take(), "username")
+        pending.renderer.take().reply("\"USERNAME_SUBMITTED\"")
+        repeat(13) {
+            pending.scheduler.advance(350)
+            if (pending.renderer.pending.isNotEmpty()) pending.replyStage(pending.renderer.take(), "manual", reason = "ALREADY_ATTEMPTED")
+        }
+        assertEquals(1, pending.reveals)
+        assertEquals(0, pending.credentials.passwordReads); pending.flow.close()
+    }
+
+    @Test fun delayedAccountAndPasswordCallbacksCannotFillAfterURLChangeRevocationOrClose() {
+        val account = Fixture()
+        account.credentials.deferAccount = true
+        account.open(MS); account.renderer.take().reply("\"AUTH_INSTALLED\"")
+        account.renderer.currentURL = "https://example.invalid/unknown"
+        account.credentials.accountCallback?.invoke(ACCOUNT)
+        assertTrue(account.renderer.pending.isEmpty())
+        assertEquals(1, account.reveals); account.flow.close()
+        val password = installed()
+        password.replyStage(password.renderer.take(), "username")
+        password.renderer.take().reply("\"USERNAME_SUBMITTED\"")
+        password.credentials.deferPassword = true
+        password.scheduler.advance(350)
+        password.replyStage(password.renderer.take(), "password", match = true)
+        password.flow.close()
+        val late = QmplusSavedLogin(ACCOUNT, "synthetic-only".toCharArray(), REVISION)
+        password.credentials.passwordCallback?.invoke(late)
+        assertTrue(late.password.all { it == '\u0000' })
+        assertTrue(password.renderer.pending.isEmpty())
+        assertEquals(0, password.reveals)
+        assertTrue(password.credentials.closed)
+    }
+
+    @Test fun withdrawalBeforeStageExecutionStopsFillAndBackgroundCancelsQuietWork() {
+        val revoked = installed()
+        val inspect = revoked.renderer.take()
+        revoked.credentials.allowed = false
+        revoked.replyStage(inspect, "username")
+        assertTrue(revoked.renderer.pending.isEmpty())
+        assertEquals(1, revoked.reveals)
+        assertEquals(0, revoked.credentials.passwordReads); revoked.flow.close()
+        val background = installed()
+        val late = background.renderer.take()
+        background.flow.suspend()
+        background.replyStage(late, "username")
+        background.scheduler.advance(25_000)
+        assertEquals(1, background.reveals)
+        assertTrue(background.renderer.pending.isEmpty()); background.flow.close()
+    }
+
+    @Test fun malformedOrOversizedResultsNeverExportUnrecognizedPageData() {
+        val nonce = "syntheticNonce1"
+        val valid = JSONObject().put("v", 1).put("stage", "username").put("document", nonce).put("accountMatch", false).put("reason", "READY")
+        assertNotNull(QmplusAuthResultCodec.observation(valid.toString(), nonce))
+        assertNull(QmplusAuthResultCodec.observation(valid.put("password", "synthetic-only").toString(), nonce))
+        valid.remove("password")
+        assertNull(QmplusAuthResultCodec.observation(valid.put("accountMatch", "true").toString(), nonce))
+        assertNull(QmplusAuthResultCodec.observation("x".repeat(1025), nonce))
+        assertNull(QmplusAuthResultCodec.code("{\"account\":\"synthetic\"}"))
+        assertNull(QmplusAuthResultCodec.code("\"not-a-fixed-code\""))
+    }
+
+    @Test fun droppedRendererCompletionUsesFiniteManualCleanupAndLateCompletionDoesNotLoadAccount() {
+        val fixture = Fixture()
+        fixture.open(MS)
+        val dropped = fixture.renderer.take()
+        fixture.scheduler.advance(25_000)
+        assertEquals(1, fixture.reveals)
+        dropped.reply("\"AUTH_INSTALLED\"")
+        assertEquals(0, fixture.credentials.accountReads)
+        assertEquals(0, fixture.credentials.passwordReads)
+        assertTrue(fixture.renderer.pending.isEmpty())
+        fixture.flow.close()
+    }
+
+    @Test fun currentAuthorizationFailureBeforeInstallationNeverSendsEvenAccountHintToPage() {
+        val fixture = Fixture()
+        fixture.credentials.allowed = false
+        fixture.open(MS)
+        assertEquals(1, fixture.reveals)
+        assertTrue(fixture.renderer.pending.isEmpty())
+        assertEquals(0, fixture.credentials.accountReads)
+        assertEquals(0, fixture.credentials.passwordReads)
+        fixture.flow.close()
+    }
+
+    @Test fun explicitCourseOrModuleOpenKeepsVisibleTargetAndNeverFinishesByAutomaticSync() {
+        listOf("https://qmplus.qmul.ac.uk/course/view.php?id=1", "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=2",
+            "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=3").forEach { target ->
+            val alreadySignedIn = Fixture(quiet = false, target = target)
+            alreadySignedIn.open(target)
+            alreadySignedIn.renderer.take().reply("true")
+            assertEquals(0, alreadySignedIn.authenticated)
+            assertEquals(1, alreadySignedIn.reveals)
+            assertTrue(alreadySignedIn.renderer.navigations.isEmpty())
+            assertTrue(alreadySignedIn.phases.contains("detail_visible")); alreadySignedIn.flow.close()
+            val afterLogin = Fixture(quiet = false, target = target)
+            afterLogin.open(QmplusPolicy.START_URL)
+            afterLogin.renderer.take().reply("true")
+            assertEquals(listOf(target), afterLogin.renderer.navigations)
+            assertEquals(0, afterLogin.authenticated)
+            assertEquals(1, afterLogin.reveals)
+            afterLogin.open(target)
+            afterLogin.renderer.take().reply("true")
+            assertEquals(1, afterLogin.renderer.navigations.size)
+            assertEquals(0, afterLogin.authenticated); afterLogin.flow.close()
+        }
+    }
+
+    @Test fun interruptedAuthenticatedSyncMayResumeOnceWithoutReadingOrRetryingCredentials() {
+        val fixture = Fixture()
+        fixture.open(QmplusPolicy.START_URL)
+        fixture.renderer.take().reply("true")
+        assertEquals(1, fixture.authenticated)
+        // Activity cancels the in-flight renderer work on background and alone
+        // reports that interruption. Suspending does not renew credential claims.
+        fixture.flow.suspend()
+        fixture.flow.interruptedSync()
+        fixture.flow.pageReady(QmplusPolicy.START_URL)
+        fixture.renderer.take().reply("true")
+        assertEquals(2, fixture.authenticated)
+        fixture.flow.pageReady(QmplusPolicy.START_URL)
+        fixture.renderer.take().reply("true")
+        assertEquals(2, fixture.authenticated)
+        assertEquals(0, fixture.credentials.accountReads)
+        assertEquals(0, fixture.credentials.passwordReads)
+        fixture.open(MS)
+        assertTrue(fixture.renderer.pending.isEmpty())
+        fixture.flow.close()
+    }
+
+    @Test fun successfulOrFailedSyncIsNotAutomaticallyRetriedOnForegroundOrAnotherDocument() {
+        for (failed in listOf(false, true)) {
+            val fixture = Fixture()
+            fixture.open(QmplusPolicy.START_URL)
+            fixture.renderer.take().reply("true")
+            if (failed) fixture.flow.manualRequired()
+            fixture.flow.suspend()
+            fixture.flow.pageReady(QmplusPolicy.START_URL)
+            fixture.renderer.take().reply("true")
+            fixture.open(QmplusPolicy.START_URL)
+            fixture.renderer.take().reply("true")
+            assertEquals(1, fixture.authenticated)
+            assertEquals(0, fixture.credentials.accountReads)
+            assertEquals(0, fixture.credentials.passwordReads)
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun exactAccountSelectionSendsNoPasswordAndItsSameDocumentAckCanAuthorizeOneMatchingPassword() {
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "account", match = true)
+        val select = fixture.renderer.take()
+        assertEquals("account", select.options().getString("stage"))
+        assertFalse(select.options().has("password"))
+        assertEquals(0, fixture.credentials.passwordReads)
+        select.reply("\"ACCOUNT_SELECTED\"")
+        fixture.scheduler.advance(350)
+        fixture.replyStage(fixture.renderer.take(), "password", match = true)
+        val signIn = fixture.renderer.take()
+        assertEquals("password", signIn.options().getString("stage"))
+        assertEquals(1, fixture.credentials.passwordReads)
+        signIn.reply("\"PASSWORD_SUBMITTED\"")
+        fixture.open(QmplusPolicy.START_URL)
+        fixture.renderer.take().reply("true")
+        assertEquals(1, fixture.authenticated)
+        assertEquals(0, fixture.reveals)
+        assertTrue(fixture.phases.contains("account_selected"))
+        assertFalse(fixture.phases.contains("username_submitted"))
+        fixture.flow.close()
+    }
+
+    @Test fun accountSelectionDoesNotReplayAndUnknownOrUnmatchedTilesNeverReadPassword() {
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "account", match = true)
+        fixture.renderer.take().reply("\"ACCOUNT_SELECTED\"")
+        fixture.scheduler.advance(350)
+        fixture.replyStage(fixture.renderer.take(), "account", match = true)
+        assertEquals(1, fixture.reveals)
+        assertTrue(fixture.renderer.pending.isEmpty())
+        assertEquals(0, fixture.credentials.passwordReads)
+        fixture.flow.close()
+        for (reason in listOf("ACCOUNT_CHOOSER", "ACCOUNT_MISMATCH", "INTERFERENCE", "UNSUPPORTED_PAGE")) {
+            val manual = installed()
+            manual.replyStage(manual.renderer.take(), "account", match = false, reason = reason)
+            assertEquals(1, manual.reveals)
+            assertEquals(0, manual.credentials.passwordReads)
+            assertTrue(manual.renderer.pending.isEmpty())
+            manual.flow.close()
+        }
+    }
+
+    @Test fun selectedAccountCannotAuthorizePasswordAfterNavigationOrFreshCredentialRevocation() {
+        for (change in listOf("navigation", "revision")) {
+            val fixture = installed()
+            fixture.replyStage(fixture.renderer.take(), "account", match = true)
+            fixture.renderer.take().reply("\"ACCOUNT_SELECTED\"")
+            if (change == "navigation") {
+                fixture.open(MS)
+                fixture.renderer.take().reply("\"AUTH_INSTALLED\"")
+                fixture.replyStage(fixture.renderer.take(), "password", match = true, reason = "USERNAME_NOT_SUBMITTED")
+            } else {
+                fixture.credentials.authorizedRevision = REVISION + 1
+                fixture.scheduler.advance(350)
+            }
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertEquals(1, fixture.reveals)
+            assertTrue(fixture.renderer.pending.isEmpty())
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun featureOffThenOnCannotReviveAnOldAccountAckOrReadSecretsFromItsRetiredOwner() {
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "account", match = true)
+        val oldAck = fixture.renderer.take()
+        fixture.featureAllowed = false
+        fixture.flow.pageReady(MS)
+        fixture.featureAllowed = true
+        oldAck.reply("\"ACCOUNT_SELECTED\"")
+        fixture.flow.pageReady(MS)
+        fixture.flow.pageStarted(MS)
+        fixture.scheduler.advance(25_000)
+        assertTrue(fixture.credentials.closed)
+        assertEquals(0, fixture.credentials.passwordReads)
+        assertTrue(fixture.renderer.pending.isEmpty())
+        assertEquals(0, fixture.reveals)
+    }
+
+    @Test fun temporaryEmptyChooserAfterSelectedAckWaitsWithoutReselectingOrReadingPassword() {
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "account", match = true)
+        fixture.renderer.take().reply("\"ACCOUNT_SELECTED\"")
+        repeat(2) {
+            fixture.scheduler.advance(350)
+            fixture.replyStage(fixture.renderer.take(), "manual", reason = "ACCOUNT_CHOOSER")
+            assertEquals(0, fixture.reveals)
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertTrue(fixture.renderer.pending.isEmpty())
+        }
+        fixture.scheduler.advance(350)
+        fixture.replyStage(fixture.renderer.take(), "password", match = true)
+        assertEquals("password", fixture.renderer.take().options().getString("stage"))
+        assertEquals(1, fixture.credentials.passwordReads)
+        assertEquals(0, fixture.reveals)
+        fixture.flow.close()
+    }
+
+    @Test fun chooserSettlingIsFiniteAndCannotWaitAfterPasswordWasAttempted() {
+        val waiting = installed()
+        waiting.replyStage(waiting.renderer.take(), "account", match = true)
+        waiting.renderer.take().reply("\"ACCOUNT_SELECTED\"")
+        repeat(7) {
+            waiting.scheduler.advance(350)
+            waiting.replyStage(waiting.renderer.take(), "manual", reason = "ACCOUNT_CHOOSER")
+        }
+        assertEquals(1, waiting.reveals)
+        assertEquals(0, waiting.credentials.passwordReads)
+        assertTrue(waiting.renderer.pending.isEmpty())
+        waiting.flow.close()
+        val afterPassword = installed()
+        afterPassword.replyStage(afterPassword.renderer.take(), "account", match = true)
+        afterPassword.renderer.take().reply("\"ACCOUNT_SELECTED\"")
+        afterPassword.scheduler.advance(350)
+        afterPassword.replyStage(afterPassword.renderer.take(), "password", match = true)
+        afterPassword.renderer.take().reply("\"PASSWORD_SUBMITTED\"")
+        afterPassword.scheduler.advance(350)
+        afterPassword.replyStage(afterPassword.renderer.take(), "manual", reason = "ACCOUNT_CHOOSER")
+        assertEquals(1, afterPassword.reveals)
+        assertEquals(1, afterPassword.credentials.passwordReads)
+        assertTrue(afterPassword.renderer.pending.isEmpty())
+        afterPassword.flow.close()
+    }
+
+    private fun installed(): Fixture = Fixture().also { it.open(MS); it.renderer.take().reply("\"AUTH_INSTALLED\"") }
+
+    private class Request(val script: String, val reply: (String) -> Unit) {
+        fun nonce(): String = checkNotNull(Regex("WTSQmAuth\\.inspect\\(\"([A-Za-z0-9_-]+)\"").find(script)).groupValues[1]
+        fun options(): JSONObject = JSONObject(checkNotNull(Regex("WTSQmAuth\\.fillAndSubmit\\((\\{.*\\})\\)").find(script)).groupValues[1])
+    }
+    private class Renderer : QmplusAuthRenderer {
+        override var currentURL: String? = null
+        override var active = true
+        val pending = mutableListOf<Request>()
+        val navigations = mutableListOf<String>()
+        override fun evaluate(script: String, completion: (String) -> Unit) { pending += Request(script, completion) }
+        override fun navigateToOfficialSSO() { navigations += QmplusLoginPagePolicy.SSO_START_URL }
+        override fun openBusinessPage(value: String) { navigations += value }
+        fun take(): Request = pending.removeAt(0)
+    }
+    private class Credentials : QmplusAuthCredentials {
+        var allowed = true; var closed = false; var accountReads = 0; var passwordReads = 0
+        var authorizedRevision = REVISION
+        var deferAccount = false; var deferPassword = false
+        var accountCallback: ((String?) -> Unit)? = null
+        var passwordCallback: ((QmplusSavedLogin?) -> Unit)? = null
+        var lastPassword: QmplusSavedLogin? = null
+        override fun authorized(revision: Long, completion: (Boolean) -> Unit) { completion(allowed && revision == authorizedRevision) }
+        override fun account(revision: Long, completion: (String?) -> Unit) {
+            accountReads++; if (deferAccount) accountCallback = completion else completion(ACCOUNT)
+        }
+        override fun password(revision: Long, completion: (QmplusSavedLogin?) -> Unit) {
+            passwordReads++; if (deferPassword) passwordCallback = completion
+            else QmplusSavedLogin(ACCOUNT, "synthetic-only".toCharArray(), revision).also { lastPassword = it; completion(it) }
+        }
+        override fun close() { closed = true }
+    }
+    private class Scheduler : QmplusAuthScheduler {
+        private data class Task(val at: Long, val action: () -> Unit, var cancelled: Boolean = false)
+        private val tasks = mutableListOf<Task>()
+        private var now = 0L
+        override fun schedule(delayMillis: Long, action: () -> Unit): () -> Unit {
+            val task = Task(now + delayMillis, action); tasks += task
+            return { task.cancelled = true }
+        }
+        fun advance(millis: Long) {
+            now += millis
+            val due = tasks.filter { !it.cancelled && it.at <= now }.toList()
+            tasks.removeAll(due.toSet()); due.forEach { it.action() }
+        }
+    }
+    private class Fixture(optIn: Boolean = true, quiet: Boolean = true, target: String = QmplusPolicy.START_URL) {
+        val renderer = Renderer(); val credentials = Credentials(); val scheduler = Scheduler()
+        val helper = generateSequence(File(checkNotNull(System.getProperty("user.dir")))) { it.parentFile }
+            .map { File(it, "contracts/qmplus/qmplus-auth.js") }.first { it.isFile }.readText()
+        var reveals = 0; var authenticated = 0
+        var featureAllowed = true
+        val phases = mutableListOf<String>()
+        val flow = QmplusAuthFlow(renderer, credentials, scheduler, optIn, REVISION, helper,
+            reveal = { reveals++ }, authenticated = { authenticated++ }, reportPhase = { phases += it },
+            quietConnection = quiet, requestedTarget = target, featureEnabled = { featureAllowed })
+        fun open(value: String) { renderer.currentURL = value; flow.pageStarted(value); flow.pageReady(value) }
+        fun replyStage(request: Request, stage: String, match: Boolean = false, reason: String = "READY") {
+            request.reply(JSONObject().put("v", 1).put("stage", stage).put("document", request.nonce())
+                .put("accountMatch", match).put("reason", reason).toString())
+        }
+    }
+    private companion object {
+        const val MS = "https://login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/saml2?synthetic=1"
+        const val ACCOUNT = "synthetic@example.invalid"
+        const val REVISION = 7L
+    }
+}

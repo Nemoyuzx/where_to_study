@@ -30,6 +30,12 @@ export class PreferencesStore implements ColorThemePreferences {
     return typeof value === 'boolean' ? value as boolean : fallback;
   }
 
+  async getOptionalBool(key: string): Promise<boolean | null> {
+    const offFallback: boolean = await this.getBool(key, false);
+    const onFallback: boolean = await this.getBool(key, true);
+    return offFallback === onFallback ? offFallback : null;
+  }
+
   async getNumber(key: string, fallback: number): Promise<number> {
     const store: preferences.Preferences = await this.open();
     const value: preferences.ValueType = await store.get(key, fallback);

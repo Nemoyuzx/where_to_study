@@ -1,4 +1,4 @@
-import { QMPlusActivity, QMPlusCourse, QMPlusSnapshot } from '../net/QMPlusSnapshot';
+import { QMPlusActivity, QMPlusCourse, QMPlusSnapshot, QMPlusCourseworkPolicy } from '../net/QMPlusSnapshot';
 import { UCloudCourse } from '../net/UCloudAssignmentClient';
 import { AssignmentDeadlineItem } from '../net/CalendarDailyInfoClient';
 
@@ -85,7 +85,7 @@ export class CourseQMPlusScope {
     if (snapshot === null) { return []; }
     const currentIDs: Set<string> = new Set<string>(CourseQMPlusScope.currentCourses(snapshot)
       .map((course: QMPlusCourse): string => course.id));
-    return snapshot.activities.filter((item: QMPlusActivity): boolean =>
+    return QMPlusCourseworkPolicy.activities(snapshot.activities).filter((item: QMPlusActivity): boolean =>
       currentIDs.has(item.courseID) && (item.kind === 'assignment' || item.kind === 'quiz'));
   }
 }

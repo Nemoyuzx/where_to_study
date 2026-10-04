@@ -11,7 +11,7 @@ test('tray locale, date and local edits cannot implicitly fetch an academic sche
   assert.match(local, /load_current_schedule\(&app\)/)
   assert.doesNotMatch(local, /fetch_schedule|apply_saved_credentials|await|load_saved_credentials/)
   const language = rust.slice(rust.indexOf('fn set_interface_language('), rust.indexOf('fn show_main_window('))
-  assert.match(language, /DESKTOP_INTERFACE_ENGLISH\.swap/)
+  assert.match(language, /DESKTOP_INTERFACE_LANGUAGE\.swap/)
   assert.match(language, /refresh_tray_courses\(app, true\)/)
   const explicit = rust.slice(rust.indexOf('fn setup_tray('), rust.indexOf('static HIDE_TO_TRAY_NOTIFIED'))
   assert.match(explicit, /"refresh_today" => refresh_tray_courses\(app\.clone\(\), false\)/)

@@ -524,7 +524,7 @@ internal class InformationQueryPage(
 
     private fun modeSelectorLabel(mode: InformationQueryMode): String =
         if (isPhone || availableWidthDp < 560) {
-            if (AppLocale.isEnglish(activity)) mode.compactEnglishLabel else mode.compactLabel
+            if (AppLocale.isEnglish(activity)) mode.compactEnglishLabel else activity.uiText(mode.compactLabel)
         } else activity.uiText(mode.label)
 
     private fun modeSelector(): FrameLayout {
@@ -963,6 +963,7 @@ internal class InformationQueryPage(
             else -> addView(statusCard(activity.getString(R.string.current_courses_hint)))
         }
         val repository = qmplusRepository
+        if (repository?.isFeatureEnabled != true) { qmplusRows = emptyList(); return@privateQueryContent }
         val snapshot = repository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
         val current = snapshot?.courses?.filter { it.currentTermStatus == "current" }
         val others = snapshot?.courses?.filter { it.currentTermStatus != "current" }.orEmpty()
@@ -1100,7 +1101,7 @@ internal class InformationQueryPage(
 
     private fun courseDetailsBody(key: String): LinearLayout? {
         val cloud = dailyInfoRepository.currentTeachingCloudCourses()?.firstOrNull { "teaching-cloud.course.${it.id}" == key }
-        val snapshot = qmplusRepository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
         val qm = snapshot?.courses?.firstOrNull { "qmplus.course.${it.id}" == key }
         if (cloud == null && qm == null) return null
         return LinearLayout(activity).apply {
@@ -1196,6 +1197,7 @@ internal class InformationQueryPage(
 
     private fun qmplusContent(): LinearLayout = privateQueryContent {
         val repository = qmplusRepository
+        if (repository?.isFeatureEnabled != true) { qmplusRows = emptyList(); return@privateQueryContent }
         val snapshot = repository?.snapshot
         addView(gradeAction(activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() }
             .apply { id = R.id.course_qmplus_refresh

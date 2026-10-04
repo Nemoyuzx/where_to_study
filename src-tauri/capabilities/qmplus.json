@@ -3,7 +3,7 @@
   "identifier": "qmplus-business-snapshot",
   "description": "Only bounded business snapshot import from the official isolated QMplus view; no academic credentials or filesystem commands",
   "windows": ["qmplus"],
-  "remote": {"urls": ["https://qmplus.qmul.ac.uk/*"]},
+  "remote": {"urls": ["https://qmplus.qmul.ac.uk/*", "https://login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/*"]},
   "local": false,
-  "permissions": ["allow-accept-qmplus-snapshot"]
+  "permissions": ["allow-accept-qmplus-snapshot", "allow-accept-qmplus-auth", "allow-begin-qmplus-sync"]
 }

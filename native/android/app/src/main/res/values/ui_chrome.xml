@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_ecc11c8afea8" formatted="false">"空教室"</string>
+    <string name="ui_chrome_6bf489644beb" formatted="false">"教学日历"</string>
+    <string name="ui_chrome_df3d58c7d84b" formatted="false">"设置"</string>
+    <string name="ui_chrome_bcd6771e08ec" formatted="false">"查询"</string>
+    <string name="ui_chrome_60db1afb4022" formatted="false">"课程"</string>
+    <string name="ui_chrome_ef5361019a28" formatted="false">"当前课程"</string>
+    <string name="ui_chrome_e80149e50579" formatted="false">"我的课程"</string>
+    <string name="ui_chrome_526e4e0ee623" formatted="false">"教学云平台当前课程接口格式不正确。"</string>
+    <string name="ui_chrome_2ef2087f92e0" formatted="false">"课程获取失败。"</string>
+    <string name="ui_chrome_313d609bd0f2" formatted="false">"QMplus 同步失败；保留上次课程缓存。"</string>
+    <string name="ui_chrome_7b1061d6ad98" formatted="false">"QMplus 同步或保存失败；保留上次课程缓存。"</string>
+    <string name="ui_chrome_e26816ddf666" formatted="false">"无法读取 QMplus 课程缓存。"</string>
+    <string name="ui_chrome_d121d89a0b88" formatted="false">"无法保存 QMplus 会话清除状态。"</string>
+    <string name="ui_chrome_d92f3343aad4" formatted="false">"QMplus 网页会话尚未清除；再次连接前会先清除旧会话。"</string>
+    <string name="ui_chrome_d5326a3f3656" formatted="false">"校区班车与重要事件"</string>
+    <string name="ui_chrome_7d6d74c77326" formatted="false">"班车与重要事件查询"</string>
+    <string name="ui_chrome_99b4f3fa3356" formatted="false">"班车查询"</string>
+    <string name="ui_chrome_a43971f81aa4" formatted="false">"信息查询"</string>
+    <string name="ui_chrome_c4e1c146b776" formatted="false">"重要事件"</string>
+    <string name="ui_chrome_4d2ac58de08a" formatted="false">"成绩查询"</string>
+    <string name="ui_chrome_4dca7fc93dbb" formatted="false">"考试查询"</string>
+    <string name="ui_chrome_a810ca2f4664" formatted="false">"课程作业"</string>
+    <string name="ui_chrome_dbba28b7d55c" formatted="false">"刷新课程作业"</string>
+    <string name="ui_chrome_53a103fc077c" formatted="false">"刷新课表与考试"</string>
+    <string name="ui_chrome_cc5081ba6124" formatted="false">"教学云平台 · 课程作业"</string>
+    <string name="ui_chrome_65efc2347ab9" formatted="false">"暂无课程作业 DDL"</string>
+    <string name="ui_chrome_b21c111e6b2b" formatted="false">"课程未标注"</string>
+    <string name="ui_chrome_6922d0a81f2f" formatted="false">"正在获取课程作业…"</string>
+    <string name="ui_chrome_1eb157e2d951" formatted="false">"点击刷新课程作业获取 DDL；使用设置中已保存的教学云平台密码。"</string>
+    <string name="ui_chrome_b37d91846724" formatted="false">"点击刷新成绩获取学校已公布的成绩。"</string>
+    <string name="ui_chrome_fdcd1bd074c9" formatted="false">"成绩"</string>
+    <string name="ui_chrome_f9d072c4804c" formatted="false">"学分"</string>
+    <string name="ui_chrome_f5175272df3c" formatted="false">"未公布"</string>
+    <string name="ui_chrome_d26ef0190d6c" formatted="false">"考试"</string>
+    <string name="ui_chrome_88df420f8207" formatted="false">"考试安排"</string>
+    <string name="ui_chrome_da41b98e3954" formatted="false">"日期待定"</string>
+    <string name="ui_chrome_b10b29ca43f2" formatted="false">"时间待定"</string>
+    <string name="ui_chrome_fc74b5f7ba9d" formatted="false">"考试时间待定"</string>
+    <string name="ui_chrome_a0670d57e5bf" formatted="false">"全部学期"</string>
+    <string name="ui_chrome_42d6be3dd039" formatted="false">"当前学期"</string>
+    <string name="ui_chrome_522bedf98774" formatted="false">"选择学期"</string>
+    <string name="ui_chrome_926c7ca573d7" formatted="false">"最好成绩"</string>
+    <string name="ui_chrome_a5a8c4c21cfa" formatted="false">"首次成绩"</string>
+    <string name="ui_chrome_e42579208480" formatted="false">"全部记录"</string>
+    <string name="ui_chrome_5894610cae5b" formatted="false">"成绩记录"</string>
+    <string name="ui_chrome_cdcfc181a641" formatted="false">"刷新成绩"</string>
+    <string name="ui_chrome_b69433e0f5dc" formatted="false">"正在获取成绩…"</string>
+    <string name="ui_chrome_1cc0ffd3d2f4" formatted="false">"前往账号设置"</string>
+    <string name="ui_chrome_69e76ee6bdfe" formatted="false">"前往个人账户"</string>
+    <string name="ui_chrome_2a0556c6f2d4" formatted="false">"请先在个人账户中保存教务账号和密码。"</string>
+    <string name="ui_chrome_8471b32f81ca" formatted="false">"打开教学云平台"</string>
+    <string name="ui_chrome_3bb08d84d394" formatted="false">"Contest DDL 较新镜像数据"</string>
+    <string name="ui_chrome_98a947f82049" formatted="false">"Contest DDL 备用 API"</string>
+    <string name="ui_chrome_7288b1812a43" formatted="false">"第三方来源：Contest DDL 主源、较新镜像及备用 API；校内竞赛通知另行获取，不包含课程作业"</string>
+    <string name="ui_chrome_91ee1616f11d" formatted="false">"本次使用 Contest DDL 镜像数据"</string>
+    <string name="ui_chrome_b43190ff6687" formatted="false">"本次使用备用 API"</string>
+    <string name="ui_chrome_88ae1e62023b" formatted="false">"主数据：Contest DDL"</string>
+    <string name="ui_chrome_31da5b1e99ba" formatted="false">"备用 API"</string>
+    <string name="ui_chrome_2ad7772464db" formatted="false">"较新镜像数据"</string>
+    <string name="ui_chrome_932b4128d68e" formatted="false">"请先在设置中保存教务账号和密码，再查询成绩。"</string>
+    <string name="ui_chrome_c04b5cc1e8e4" formatted="false">"成绩来自学校教务系统，仅在本次使用期间保留。"</string>
+    <string name="ui_chrome_16b8124d569c" formatted="false">"该学期暂无已公布成绩"</string>
+    <string name="ui_chrome_36cd2c2dcf13" formatted="false">"该学期暂无已公布成绩，可选择全部学期查看历史成绩。"</string>
+    <string name="ui_chrome_43dfbbe2a548" formatted="false">"暂无已公布成绩"</string>
+    <string name="ui_chrome_6f1df5b20b56" formatted="false">"成绩获取失败，请重试或检查账号设置。"</string>
+    <string name="ui_chrome_13e2bb5c9701" formatted="false">"成绩刷新失败，正在显示本次使用中已获取的成绩。"</string>
+    <string name="ui_chrome_c54a782c1a97" formatted="false">"本学期暂无考试安排"</string>
+    <string name="ui_chrome_ae97b627dc74" formatted="false">"部分考试日期或时间待定，请查看考试安排"</string>
+    <string name="ui_chrome_f9d5f171ad96" formatted="false">"考试安排已同步"</string>
+    <string name="ui_chrome_b5ed6a78cbd9" formatted="false">"考试安排刷新失败，正在显示本账号本学期的缓存"</string>
+    <string name="ui_chrome_3974c666d48f" formatted="false">"考试安排获取失败，请重新刷新课表"</string>
+    <string name="ui_chrome_70ba0f1907ce" formatted="false">"尚未获取考试安排，请刷新课表"</string>
+    <string name="ui_chrome_572cf45ba436" formatted="false">"返回"</string>
+    <string name="ui_chrome_994015cac4a4" formatted="false">"联动查询"</string>
+    <string name="ui_chrome_648fdced0326" formatted="false">"查询条件"</string>
+    <string name="ui_chrome_fca459c72466" formatted="false">"查询概览"</string>
+    <string name="ui_chrome_0cfb7fc1c748" formatted="false">"空教室结果"</string>
+    <string name="ui_chrome_5c8d010fd9a3" formatted="false">"教学楼"</string>
+    <string name="ui_chrome_c97e3f7f89f3" formatted="false">"节次筛选"</string>
+    <string name="ui_chrome_b1216701aae7" formatted="false">"选中空闲"</string>
+    <string name="ui_chrome_1ef3de06b32e" formatted="false">"清空"</string>
+    <string name="ui_chrome_887e8f54899b" formatted="false">"个人空闲节次"</string>
+    <string name="ui_chrome_9508682d58a1" formatted="false">"使用个人课表排除已有课程"</string>
+    <string name="ui_chrome_307e6982e820" formatted="false">"获取空教室信息"</string>
+    <string name="ui_chrome_85ab30269d8f" formatted="false">"正在获取…"</string>
+    <string name="ui_chrome_72d43fc16d53" formatted="false">"正在恢复…"</string>
+    <string name="ui_chrome_4fd4f40094d4" formatted="false">"正在删除…"</string>
+    <string name="ui_chrome_c66a0a9232ec" formatted="false">"无法保存收藏日程。"</string>
+    <string name="ui_chrome_45c5b90eba80" formatted="false">"本地数据已清除，本次后台结果未保存。"</string>
+    <string name="ui_chrome_7d8c59a52e82" formatted="false">"正在获取当天空教室…"</string>
+    <string name="ui_chrome_55df8a5b1823" formatted="false">"正在获取当天空教室"</string>
+    <string name="ui_chrome_e18561a9964a" formatted="false">"当天空教室已更新"</string>
+    <string name="ui_chrome_6cdd62aff2d1" formatted="false">"当天空教室获取失败"</string>
+    <string name="ui_chrome_3cdfbfa8e668" formatted="false">"暂无本地空教室数据"</string>
+    <string name="ui_chrome_ee6e1b8d027b" formatted="false">"暂无教学楼，请先获取当天空教室"</string>
+    <string name="ui_chrome_49db1229e422" formatted="false">"未选择教学楼"</string>
+    <string name="ui_chrome_1193f4078326" formatted="false">"未选择节次"</string>
+    <string name="ui_chrome_5b877ca92cd2" formatted="false">"暂无匹配空教室"</string>
+    <string name="ui_chrome_54528e847bbb" formatted="false">"匹配教室"</string>
+    <string name="ui_chrome_456baffc980b" formatted="false">"今日与明日"</string>
+    <string name="ui_chrome_5c9cf5e0dd47" formatted="false">"今日"</string>
+    <string name="ui_chrome_6450d5f86685" formatted="false">"明日"</string>
+    <string name="ui_chrome_9482d0359c16" formatted="false">"转"</string>
+    <string name="ui_chrome_d5f5a7a01073" formatted="false">"今天"</string>
+    <string name="ui_chrome_fe8e4567cb36" formatted="false">"今日无课"</string>
+    <string name="ui_chrome_f5e428d00822" formatted="false">"今天可以自由安排"</string>
+    <string name="ui_chrome_bec5be67d7c6" formatted="false">"课程进行中"</string>
+    <string name="ui_chrome_dc9591e56d50" formatted="false">"进行中"</string>
+    <string name="ui_chrome_426f5597e4bf" formatted="false">"下一节"</string>
+    <string name="ui_chrome_702df8ebc195" formatted="false">"还有待上课程"</string>
+    <string name="ui_chrome_d1adf68fb7c1" formatted="false">"今日课程已结束"</string>
+    <string name="ui_chrome_c430f4c12eaa" formatted="false">"周一"</string>
+    <string name="ui_chrome_d1378a68e620" formatted="false">"周二"</string>
+    <string name="ui_chrome_2961168962be" formatted="false">"周三"</string>
+    <string name="ui_chrome_e9d3b01a5a00" formatted="false">"周四"</string>
+    <string name="ui_chrome_572388f3b096" formatted="false">"周五"</string>
+    <string name="ui_chrome_f9aa11dbb15c" formatted="false">"周六"</string>
+    <string name="ui_chrome_ee239f394329" formatted="false">"周日"</string>
+    <string name="ui_chrome_3c50e9a230a6" formatted="false">"暂无天气数据"</string>
+    <string name="ui_chrome_11d2777efd71" formatted="false">"正在更新今日与明日天气…"</string>
+    <string name="ui_chrome_b8fdb73a67cd" formatted="false">"校区天气"</string>
+    <string name="ui_chrome_b2da84cef6d8" formatted="false">"校区天气，已展开，点击折叠"</string>
+    <string name="ui_chrome_5e5bde5551a3" formatted="false">"校区天气，已折叠，点击展开"</string>
+    <string name="ui_chrome_00e86e6c0150" formatted="false">"课程、节次与法定节假日"</string>
+    <string name="ui_chrome_85217f7aff77" formatted="false">"日"</string>
+    <string name="ui_chrome_5c553ec3f6db" formatted="false">"周"</string>
+    <string name="ui_chrome_56451fdf19c2" formatted="false">"星期一"</string>
+    <string name="ui_chrome_8621c00d3b2c" formatted="false">"星期二"</string>
+    <string name="ui_chrome_23ae0a11ac5b" formatted="false">"星期三"</string>
+    <string name="ui_chrome_478911d29ab8" formatted="false">"星期四"</string>
+    <string name="ui_chrome_6e5969e50e4d" formatted="false">"星期五"</string>
+    <string name="ui_chrome_7bb2f5ecaa1d" formatted="false">"星期六"</string>
+    <string name="ui_chrome_7e06f3148f70" formatted="false">"星期日"</string>
+    <string name="ui_chrome_1625179badc0" formatted="false">"月"</string>
+    <string name="ui_chrome_62ef900a8f5d" formatted="false">"年"</string>
+    <string name="ui_chrome_3761294f1ae3" formatted="false">"今日时间轴"</string>
+    <string name="ui_chrome_ad749363f10b" formatted="false">"本周时间轴"</string>
+    <string name="ui_chrome_0b97c851e4a7" formatted="false">"全天"</string>
+    <string name="ui_chrome_f10254d81050" formatted="false">"课程与全天  ⌃"</string>
+    <string name="ui_chrome_c7f04de2b050" formatted="false">"课程与全天  ⌄"</string>
+    <string name="ui_chrome_c36f1dc0c90c" formatted="false">"收起课程与全天事项"</string>
+    <string name="ui_chrome_af1ecc881b02" formatted="false">"展开课程与全天事项"</string>
+    <string name="ui_chrome_13cbf0ed2625" formatted="false">"收起当前日期课程"</string>
+    <string name="ui_chrome_82b4db0da138" formatted="false">"展开当前日期课程"</string>
+    <string name="ui_chrome_1ce8e5e33ad4" formatted="false">"当日课程"</string>
+    <string name="ui_chrome_ad49ad5c96a9" formatted="false">"当日日程"</string>
+    <string name="ui_chrome_1f5350ec49f1" formatted="false">"暂无课程"</string>
+    <string name="ui_chrome_4bb00aeb879e" formatted="false">"无课"</string>
+    <string name="ui_chrome_927f8f51493b" formatted="false">"整点"</string>
+    <string name="ui_chrome_2c0d74e1d37c" formatted="false">"课程节次"</string>
+    <string name="ui_chrome_ee87ccbc3315" formatted="false">"地点未标注"</string>
+    <string name="ui_chrome_569ac7a618e8" formatted="false">"教师未标注"</string>
+    <string name="ui_chrome_22519a88484f" formatted="false">"课程详情"</string>
+    <string name="ui_chrome_70d0c1b33626" formatted="false">"日期"</string>
+    <string name="ui_chrome_ba40014ff496" formatted="false">"类型"</string>
+    <string name="ui_chrome_668e1436a937" formatted="false">"法定节假日"</string>
+    <string name="ui_chrome_3a8da1de2869" formatted="false">"调休工作日"</string>
+    <string name="ui_chrome_8b6ff498515b" formatted="false">"时间"</string>
+    <string name="ui_chrome_8950d5568dbb" formatted="false">"节次"</string>
+    <string name="ui_chrome_253ac66fb8e1" formatted="false">"地点"</string>
+    <string name="ui_chrome_a6654120cbec" formatted="false">"教师"</string>
+    <string name="ui_chrome_3cab37ff0f67" formatted="false">"教学周"</string>
+    <string name="ui_chrome_feac81b818a5" formatted="false">"暂无教学周信息"</string>
+    <string name="ui_chrome_97cdcdb8a9bc" formatted="false">"未标注"</string>
+    <string name="ui_chrome_3fd47edce45b" formatted="false">"关闭"</string>
+    <string name="ui_chrome_c0b3fbff51cc" formatted="false">"完成"</string>
+    <string name="ui_chrome_807f0cfc3155" formatted="false">"导入手机日历"</string>
+    <string name="ui_chrome_85514762bca3" formatted="false">"导入已收藏日程"</string>
+    <string name="ui_chrome_1685f34f05cf" formatted="false">"将把当前收藏的完整日程快照同步到系统日历；重复导入会更新已有项。是否继续？"</string>
+    <string name="ui_chrome_5388aa2260e3" formatted="false">"收藏日程导入失败。"</string>
+    <string name="ui_chrome_1062e8597d13" formatted="false">"更多日历操作"</string>
+    <string name="ui_chrome_f6dc1b164160" formatted="false">"正在导入…"</string>
+    <string name="ui_chrome_4a8d6841b402" formatted="false">"确认导入"</string>
+    <string name="ui_chrome_2cd0f3be8738" formatted="false">"取消"</string>
+    <string name="ui_chrome_f33a3346326c" formatted="false">"跳转到"</string>
+    <string name="ui_chrome_ff822671e1f2" formatted="false">"颜色越深表示当天课程越多"</string>
+    <string name="ui_chrome_3033aa91bdfa" formatted="false">"颜色越深表示当天课程越多，彩色边框表示作业与 DDL"</string>
+    <string name="ui_chrome_d61c0a8269f1" formatted="false">"全天日程"</string>
+    <string name="ui_chrome_7b7c2b9b5d9a" formatted="false">"月视图日程"</string>
+    <string name="ui_chrome_4af0a2f07ced" formatted="false">"打开月视图全天日程"</string>
+    <string name="ui_chrome_b745c0459440" formatted="false">"周视图全天日程弹窗"</string>
+    <string name="ui_chrome_79ec685c582f" formatted="false">"日视图全天日程弹窗"</string>
+    <string name="ui_chrome_419ab2712a4d" formatted="false">"收起月历并显示当日日程"</string>
+    <string name="ui_chrome_4fd61ab0c008" formatted="false">"展开月历"</string>
+    <string name="ui_chrome_88655ea4f0e5" formatted="false">"显示完整月份"</string>
+    <string name="ui_chrome_d7bab473a2ae" formatted="false">"月历，已展开"</string>
+    <string name="ui_chrome_b9a35e09bc09" formatted="false">"月历与当日日程"</string>
+    <string name="ui_chrome_b20554100b21" formatted="false">"选中周与当日日程"</string>
+    <string name="ui_chrome_fa34030e5cb3" formatted="false">"课程作业 DDL"</string>
+    <string name="ui_chrome_d20ce5fbb5ab" formatted="false">"当天暂无课程作业 DDL"</string>
+    <string name="ui_chrome_105666bd1cba" formatted="false">"正在同步云课堂作业…"</string>
+    <string name="ui_chrome_bd975c4fb815" formatted="false">"课程名称未标注"</string>
+    <string name="ui_chrome_6c447a7ec670" formatted="false">"打开作业列表"</string>
+    <string name="ui_chrome_ddfd11308e8b" formatted="false">"黄历信息"</string>
+    <string name="ui_chrome_822bce993e4f" formatted="false">"正在查询黄历…"</string>
+    <string name="ui_chrome_8c56f34b457b" formatted="false">"活动 DDL"</string>
+    <string name="ui_chrome_36394584d04e" formatted="false">"正在同步竞赛、夏令营与黑客松…"</string>
+    <string name="ui_chrome_ceaf34e5418b" formatted="false">"当天没有已收录的活动截止事项"</string>
+    <string name="ui_chrome_635d024bc91a" formatted="false">"正在同步作业与校内竞赛通知…"</string>
+    <string name="ui_chrome_807d13ee88cb" formatted="false">"正在同步作业与活动 DDL…"</string>
+    <string name="ui_chrome_7ff9df9923a8" formatted="false">"作"</string>
+    <string name="ui_chrome_ae06002f9a0a" formatted="false">"校"</string>
+    <string name="ui_chrome_9b67720a9243" formatted="false">"公"</string>
+    <string name="ui_chrome_30c036a903ff" formatted="false">"赛"</string>
+    <string name="ui_chrome_2e813d69fd73" formatted="false">"营"</string>
+    <string name="ui_chrome_59650f41f74b" formatted="false">"黑"</string>
+    <string name="ui_chrome_158000d7736c" formatted="false">"休"</string>
+    <string name="ui_chrome_12bd3e7d2bee" formatted="false">"班"</string>
+    <string name="ui_chrome_d0d15111b91d" formatted="false">"宜"</string>
+    <string name="ui_chrome_ab4820d27873" formatted="false">"忌"</string>
+    <string name="ui_chrome_6bcc35564f43" formatted="false">"个人账户"</string>
+    <string name="ui_chrome_98f2a2e358cf" formatted="false">"教务账号"</string>
+    <string name="ui_chrome_87a3167ae442" formatted="false">"仅删除这一次"</string>
+    <string name="ui_chrome_1331ba2f1f1d" formatted="false">"删除本学期整门课程"</string>
+    <string name="ui_chrome_bc46c97ba250" formatted="false">"本学期所有教学周和上课时段"</string>
+    <string name="ui_chrome_045df6f39568" formatted="false">"仅从本机个人课表中删除，可在设置的已删除课程中恢复。不会修改学校课表或已导出的系统日历。"</string>
+    <string name="ui_chrome_8767717aae43" formatted="false">"课程已删除，可在设置中恢复"</string>
+    <string name="ui_chrome_67bf214f25d0" formatted="false">"无法保存课程删除记录"</string>
+    <string name="ui_chrome_2ca27bf4f02e" formatted="false">"已删除课程"</string>
+    <string name="ui_chrome_2b9dc101179a" formatted="false">"管理已删除课程"</string>
+    <string name="ui_chrome_8677ffa2bb5a" formatted="false">"管理当前账号、本学期的本地删除记录。恢复后立即重新显示课程。"</string>
+    <string name="ui_chrome_08808ba4c074" formatted="false">"当前账号、本学期暂无课程删除记录"</string>
+    <string name="ui_chrome_0e7ad25771f9" formatted="false">"本学期整门课程"</string>
+    <string name="ui_chrome_d2dbe3e1dc03" formatted="false">"恢复课程"</string>
+    <string name="ui_chrome_e0534b8a4e46" formatted="false">"恢复"</string>
+    <string name="ui_chrome_2f9daa828907" formatted="false">"删除"</string>
+    <string name="ui_chrome_5e9c99fbc7bb" formatted="false">"将移除此条删除记录；其他删除记录仍然有效。"</string>
+    <string name="ui_chrome_bf292bd7555f" formatted="false">"课程删除记录已恢复"</string>
+    <string name="ui_chrome_d4702dc0edcb" formatted="false">"无法读取或保存课程删除记录"</string>
+    <string name="ui_chrome_5f89c6231afe" formatted="false">"课表已更新，请重新选择课程。"</string>
+    <string name="ui_chrome_a8a9469be34e" formatted="false">"课程删除记录已更新，请重试。"</string>
+    <string name="ui_chrome_e1907004bb21" formatted="false">"课表缺少学期编号，无法删除课程。"</string>
+    <string name="ui_chrome_e0b60ea43754" formatted="false">"课程删除记录格式不受支持。"</string>
+    <string name="ui_chrome_458c0f220726" formatted="false">"无法清除课程删除记录。"</string>
+    <string name="ui_chrome_f260e8901be5" formatted="false">"教务密码"</string>
+    <string name="ui_chrome_2f12df155f6e" formatted="false">"教学云平台密码（可选）"</string>
+    <string name="ui_chrome_76972a2d4b36" formatted="false">"使用教务密码"</string>
+    <string name="ui_chrome_89bede9f0763" formatted="false">"改用教务密码"</string>
+    <string name="ui_chrome_086b8c26db13" formatted="false">"用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。"</string>
+    <string name="ui_chrome_a1fe497bf6c6" formatted="false">"用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。"</string>
+    <string name="ui_chrome_994813885c90" formatted="false">"保存后使用独立教学云平台密码获取作业 DDL"</string>
+    <string name="ui_chrome_2556a1009ff6" formatted="false">"保存后使用教务密码获取作业 DDL"</string>
+    <string name="ui_chrome_7da0091aeb6d" formatted="false">"教学云平台密码已安全保存，留空保持不变"</string>
+    <string name="ui_chrome_8075ddbf4b95" formatted="false">"仅用于课程作业 DDL；未设置时使用教务密码"</string>
+    <string name="ui_chrome_a621ab606db2" formatted="false">"密码"</string>
+    <string name="ui_chrome_d2255e32cec3" formatted="false">"默认校区"</string>
+    <string name="ui_chrome_512ddcdd4241" formatted="false">"西土城"</string>
+    <string name="ui_chrome_85003ea7af20" formatted="false">"沙河"</string>
+    <string name="ui_chrome_c8550237ba70" formatted="false">"保存设置"</string>
+    <string name="ui_chrome_75553f4c0e8b" formatted="false">"学期设置"</string>
+    <string name="ui_chrome_bc1a09a9722e" formatted="false">"自动检测当前学期"</string>
+    <string name="ui_chrome_1de34269f323" formatted="false">"学期编号"</string>
+    <string name="ui_chrome_9526668e7dac" formatted="false">"第一周周一（YYYY-MM-DD）"</string>
+    <string name="ui_chrome_3cbafb4c6d7b" formatted="false">"保存学期设置"</string>
+    <string name="ui_chrome_e26e35f7d670" formatted="false">"启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。"</string>
+    <string name="ui_chrome_8cd865ad0f91" formatted="false">"关闭自动检测后，将使用手动填写的学期信息。"</string>
+    <string name="ui_chrome_df49f4739ac0" formatted="false">"获取/刷新个人课表"</string>
+    <string name="ui_chrome_740d5d54758c" formatted="false">"课程提醒"</string>
+    <string name="ui_chrome_bc11b7a92404" formatted="false">"每日课程摘要已开启"</string>
+    <string name="ui_chrome_111aa7b6039f" formatted="false">"每日课程摘要已关闭"</string>
+    <string name="ui_chrome_a390ff870e0a" formatted="false">"每日课程摘要"</string>
+    <string name="ui_chrome_142d115795cd" formatted="false">"每天约 07:30 显示当天个人课程摘要"</string>
+    <string name="ui_chrome_07a2e7491db3" formatted="false">"通知权限未开启，无法启用课程摘要"</string>
+    <string name="ui_chrome_28b0433b1b95" formatted="false">"桌面小组件"</string>
+    <string name="ui_chrome_de3c50f80256" formatted="false">"日期详情与生活信息"</string>
+    <string name="ui_chrome_6347da5b22d8" formatted="false">"黄历与宜忌"</string>
+    <string name="ui_chrome_c1263ed64161" formatted="false">"学科竞赛 DDL"</string>
+    <string name="ui_chrome_ab78018a39cb" formatted="false">"学科竞赛"</string>
+    <string name="ui_chrome_a0ec24279edd" formatted="false">"学术会议 DDL"</string>
+    <string name="ui_chrome_d9ff1fda1805" formatted="false">"学术会议"</string>
+    <string name="ui_chrome_64f0ebfc51da" formatted="false">"期刊专题 DDL"</string>
+    <string name="ui_chrome_001d9323e7fb" formatted="false">"期刊专题"</string>
+    <string name="ui_chrome_dd80049c9b38" formatted="false">"校内竞赛通知"</string>
+    <string name="ui_chrome_87a205e480a2" formatted="false">"夏令营 DDL"</string>
+    <string name="ui_chrome_3f5ffebb10f1" formatted="false">"夏令营"</string>
+    <string name="ui_chrome_99e5fc2e2db5" formatted="false">"黑客松 DDL"</string>
+    <string name="ui_chrome_66affc507e15" formatted="false">"黑客松"</string>
+    <string name="ui_chrome_a4fe4c461b78" formatted="false">"预推免 DDL"</string>
+    <string name="ui_chrome_952ef4e53cd4" formatted="false">"预推免"</string>
+    <string name="ui_chrome_26f077b9fadd" formatted="false">"今日班车状态"</string>
+    <string name="ui_chrome_6ca41aba5d32" formatted="false">"今日暂无生效班车时刻表"</string>
+    <string name="ui_chrome_ee3a8ff9b616" formatted="false">"今日没有计划班次"</string>
+    <string name="ui_chrome_fe22e2c61b28" formatted="false">"今日班车按时刻表运行"</string>
+    <string name="ui_chrome_f7818ef5f84a" formatted="false">"完整班车时刻表"</string>
+    <string name="ui_chrome_f6814fea9925" formatted="false">"当前生效"</string>
+    <string name="ui_chrome_a25d65b4da6f" formatted="false">"即将生效"</string>
+    <string name="ui_chrome_18acae02af0f" formatted="false">"已结束时段"</string>
+    <string name="ui_chrome_e8e63b491945" formatted="false">"时段待确认"</string>
+    <string name="ui_chrome_52d9a7c19774" formatted="false">"日期待确认"</string>
+    <string name="ui_chrome_2df59604068d" formatted="false">"截至"</string>
+    <string name="ui_chrome_3f3ed24bab3f" formatted="false">"起"</string>
+    <string name="ui_chrome_6bbe89d234b8" formatted="false">"法定节假日，班车安排以学校通知为准"</string>
+    <string name="ui_chrome_0fe30aae397c" formatted="false">"无计划班次"</string>
+    <string name="ui_chrome_73c77be0d203" formatted="false">"今日为法定节假日，班车不一定运行；请以学校放假安排为准，放假期间无班车。"</string>
+    <string name="ui_chrome_8f66a04aed2c" formatted="false">"当前展示最近一次成功同步的缓存"</string>
+    <string name="ui_chrome_1d0cfffe1dcb" formatted="false">"刷新班车信息"</string>
+    <string name="ui_chrome_c780b7f82ee6" formatted="false">"查看班车通知原文"</string>
+    <string name="ui_chrome_ed1c533f84d5" formatted="false">"查看数据来源"</string>
+    <string name="ui_chrome_32dfed23ff84" formatted="false">"第三方来源：北京邮电大学后勤部公开通知，由 Where To Study 服务解析整理，仅供参考，请以官方原文为准。"</string>
+    <string name="ui_chrome_b96f8afb1328" formatted="false">"下一班"</string>
+    <string name="ui_chrome_be4cdcbbdb06" formatted="false">"候车地点"</string>
+    <string name="ui_chrome_af3b690f4387" formatted="false">"乘车提示"</string>
+    <string name="ui_chrome_704d8d72dcaa" formatted="false">"未找到当前生效的班车时刻表"</string>
+    <string name="ui_chrome_fa5e2a8bd33f" formatted="false">"今日暂无已安排班车"</string>
+    <string name="ui_chrome_2440539471ef" formatted="false">"今日班车已结束"</string>
+    <string name="ui_chrome_c991bf678043" formatted="false">"当前显示上一次有效缓存，服务正在恢复。"</string>
+    <string name="ui_chrome_d48237e65e98" formatted="false">"当前没有可安全展示的生效时刻表，请查看学校原通知。"</string>
+    <string name="ui_chrome_385b34c98527" formatted="false">"今日该方向无班车"</string>
+    <string name="ui_chrome_76ceba3092a4" formatted="false">"正在获取今日班车与当前时刻表…"</string>
+    <string name="ui_chrome_2747ab21c403" formatted="false">"搜索名称、主办方或分类"</string>
+    <string name="ui_chrome_5c55a67935af" formatted="false">"全部"</string>
+    <string name="ui_chrome_6699d0be5ff8" formatted="false">"校内通知"</string>
+    <string name="ui_chrome_25b9a88a033c" formatted="false">"显示已结束"</string>
+    <string name="ui_chrome_515559957fd3" formatted="false">"分类"</string>
+    <string name="ui_chrome_a1054434857f" formatted="false">"全部分类"</string>
+    <string name="ui_chrome_123414928dee" formatted="false">"适用对象"</string>
+    <string name="ui_chrome_daede9881787" formatted="false">"备注"</string>
+    <string name="ui_chrome_82395d423099" formatted="false">"已归档"</string>
+    <string name="ui_chrome_af90a08fec8e" formatted="false">"加载更多"</string>
+    <string name="ui_chrome_b3ae7ddabc50" formatted="false">"暂无符合条件的重要事件"</string>
+    <string name="ui_chrome_325cb1f347f2" formatted="false">"正在同步公开活动与校内竞赛通知…"</string>
+    <string name="ui_chrome_965fb250e5fd" formatted="false">"点击重试"</string>
+    <string name="ui_chrome_7e812fcf5e41" formatted="false">"第三方来源：Contest DDL 与校内竞赛通知公开接口；不包含课程作业"</string>
+    <string name="ui_chrome_6d9f938284f7" formatted="false">"第三方来源：北京邮电大学后勤部公开通知；时刻表由脚本解析，仅供参考"</string>
+    <string name="ui_chrome_11218c2ddcc7" formatted="false">"自定义日程"</string>
+    <string name="ui_chrome_459354fdfc05" formatted="false">"自定义日程源"</string>
+    <string name="ui_chrome_4744126be2cb" formatted="false">"自定义日程 HTTPS JSON 地址"</string>
+    <string name="ui_chrome_1c11fa3b2611" formatted="false">"校验并保存自定义日程"</string>
+    <string name="ui_chrome_7d37e6a7b85b" formatted="false">"正在校验自定义日程…"</string>
+    <string name="ui_chrome_1af4e703d380" formatted="false">"请先填写自定义日程 HTTPS 地址。"</string>
+    <string name="ui_chrome_7fdec200c092" formatted="false">"自定义日程地址格式不正确。"</string>
+    <string name="ui_chrome_299999112e4a" formatted="false">"自定义日程校验失败。"</string>
+    <string name="ui_chrome_59dc4d671b02" formatted="false">"收藏管理"</string>
+    <string name="ui_chrome_e943dc3f38f8" formatted="false">"暂无收藏日程"</string>
+    <string name="ui_chrome_d00bfe7c685c" formatted="false">"返回设置"</string>
+    <string name="ui_chrome_33cef7b64878" formatted="false">"收藏日程"</string>
+    <string name="ui_chrome_dca60869e7d2" formatted="false">"取消收藏"</string>
+    <string name="ui_chrome_2d588d64cd2f" formatted="false">"打开原文"</string>
+    <string name="ui_chrome_1fe94f0bf289" formatted="false">"收藏快照在来源关闭、失效或删除后仍会保留"</string>
+    <string name="ui_chrome_7b10e83ae78e" formatted="false">"只发送无凭据 GET；拒绝重定向、本机及私有/保留 IP，响应上限 2 MiB。"</string>
+    <string name="ui_chrome_0c21fbe7fd78" formatted="false">"天气、黄历和 DDL 来自第三方公开服务；已收藏日程会保存完整快照，来源关闭、失败或删除后仍会显示，直到取消收藏。"</string>
+    <string name="ui_chrome_cb6c4f771fa9" formatted="false">"本地数据"</string>
+    <string name="ui_chrome_2561bad93fa8" formatted="false">"清除本地数据"</string>
+    <string name="ui_chrome_8a9f7093d410" formatted="false">"关于本应用"</string>
+    <string name="ui_chrome_afc3bdaeb85c" formatted="false">"APP 备案：琼ICP备2026012322号-2A"</string>
+    <string name="ui_chrome_9d06d61ee41f" formatted="false">"隐私说明"</string>
+    <string name="ui_chrome_e4df4c8882e7" formatted="false">"GitHub 项目主页"</string>
+    <string name="ui_chrome_08b2682b0fb8" formatted="false">"在 GitHub 查看完整隐私声明"</string>
+    <string name="ui_chrome_1c95da24b71d" formatted="false">"在 GitHub 查看完整声明 / Full policy on GitHub ↗"</string>
+    <string name="ui_chrome_a8d8715c8dbb" formatted="false">"隐私声明 / Privacy Policy"</string>
+    <string name="ui_chrome_ec059f40cbd6" formatted="false">"账户与教务请求 / Account and academic requests"</string>
+    <string name="ui_chrome_4145c279779a" formatted="false">"云课堂作业 / UCloud assignments"</string>
+    <string name="ui_chrome_06b6072a72bf" formatted="false">"节假日数据 / Holiday data"</string>
+    <string name="ui_chrome_74be7cb3d15e" formatted="false">"天气、黄历与公开活动 / Weather, almanac, and public events"</string>
+    <string name="ui_chrome_c3e1453b6d26" formatted="false">"系统日历、通知与小组件 / Calendar, notifications, and widgets"</string>
+    <string name="ui_chrome_1f100f5d0caa" formatted="false">"本地数据 / Local data"</string>
+    <string name="ui_chrome_b5b86cbe1c9e" formatted="false">"不收集的数据与第三方元数据 / Data not collected and third-party metadata"</string>
+    <string name="ui_chrome_c2600b85ff9d" formatted="false">"保留与删除 / Retention and deletion"</string>
+    <string name="ui_chrome_72077408d391" formatted="false">"安全与联系 / Security and contact"</string>
+    <string name="ui_chrome_5908a55ccaf6" formatted="false">"个人课表、空教室缓存、节假日缓存、账号与偏好均只保存在本机。"</string>
+    <string name="ui_chrome_b7bad22789a2" formatted="false">"显示课程地点"</string>
+    <string name="ui_chrome_e2b82c9ffa59" formatted="false">"显示任课教师"</string>
+    <string name="ui_chrome_1b7ff3614cc9" formatted="false">"最多显示课程"</string>
+    <string name="ui_chrome_1e99a0a5b6d9" formatted="false">"样式预览 · 示例内容"</string>
+    <string name="ui_chrome_66a9bbc9bfff" formatted="false">"小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；展开样式最多展示 6 门课程。预览使用虚构示例，不会写入课表。"</string>
+    <string name="ui_chrome_a1a42cd9b16e" formatted="false">"应用设置"</string>
+    <string name="ui_chrome_9f6fee1aba17" formatted="false">"语言"</string>
+    <string name="ui_chrome_217cfe7db1e3" formatted="false">"跟随系统"</string>
+    <string name="ui_chrome_9937e365aaf3" formatted="false">"简体中文"</string>
+    <string name="ui_chrome_182276b2d68a" formatted="false">"更改语言后将立即重新加载界面。"</string>
+    <string name="ui_chrome_6a6d311ae726" formatted="false">"显示数据仅供参考，请以实际情况为准。"</string>
+    <string name="ui_chrome_bd03c0aad701" formatted="false">"设置已保存"</string>
+    <string name="ui_chrome_e462b8d36939" formatted="false">"无法安全保存账户信息"</string>
+    <string name="ui_chrome_102490652212" formatted="false">"个人课表获取失败"</string>
+    <string name="ui_chrome_ef5b565f45ef" formatted="false">"无法保存学期设置"</string>
+    <string name="ui_chrome_fe3db45333ba" formatted="false">"本地数据已清除"</string>
+    <string name="ui_chrome_0661059bd662" formatted="false">"清除全部本地数据？"</string>
+    <string name="ui_chrome_8271f0165688" formatted="false">"将删除保存的账号、密码、个人课表、空教室缓存和设置。此操作无法撤销。"</string>
+    <string name="ui_chrome_f0de9622f948" formatted="false">"将删除保存的账号、密码、个人课表、空教室缓存、自定义日程地址、收藏和设置。此操作无法撤销。"</string>
+    <string name="ui_chrome_a5da1dd8fd92" formatted="false">"确认清除"</string>
+    <string name="ui_chrome_c06647d5a0a8" formatted="false">"系统日历导入失败。"</string>
+    <string name="ui_chrome_a1c5df2cdab3" formatted="false">"密码已安全保存，留空保持不变"</string>
+    <string name="ui_chrome_1fe17d45e068" formatted="false">"更换账号时请输入新密码"</string>
+    <string name="ui_chrome_1182c5454f11" formatted="false">"未选择"</string>
+    <string name="ui_chrome_00bd3960fea8" formatted="false">"展开"</string>
+    <string name="ui_chrome_6bea77acefb3" formatted="false">"标准"</string>
+    <string name="ui_chrome_5d63d587b0b0" formatted="false">"紧凑"</string>
+    <string name="ui_chrome_78b78ec88c15" formatted="false">"展开导航栏"</string>
+    <string name="ui_chrome_abdb2c04c865" formatted="false">"收起导航栏"</string>
+    <string name="ui_chrome_7d4e0ebe1e76" formatted="false">"导航栏已展开"</string>
+    <string name="ui_chrome_a0083c8a9209" formatted="false">"导航栏已收起"</string>
+    <string name="ui_chrome_d079d4c5598c" formatted="false">"无法打开链接"</string>
+    <string name="ui_chrome_cdea805ea041" formatted="false">"暂无本地课程，请在设置中获取/刷新个人课表"</string>
+</resources>

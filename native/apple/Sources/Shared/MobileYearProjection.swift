@@ -36,14 +36,12 @@ actor MobileYearProjectionWorker {
         dateFormatter.calendar = calendar
         dateFormatter.locale = input.language.locale
         dateFormatter.timeZone = calendar.timeZone
-        dateFormatter.dateFormat = input.language.resolvedResourceName == "en"
-            ? "EEEE, MMMM d, yyyy"
-            : "yyyy年M月d日 EEEE"
+        dateFormatter.dateFormat = input.language.dateFormat(chinese: "yyyy年M月d日 EEEE", english: "EEEE, MMMM d, yyyy")
         let monthFormatter = DateFormatter()
         monthFormatter.calendar = calendar
         monthFormatter.locale = input.language.locale
         monthFormatter.timeZone = calendar.timeZone
-        monthFormatter.dateFormat = input.language.resolvedResourceName == "en" ? "MMM" : "M月"
+        monthFormatter.dateFormat = input.language.dateFormat(chinese: "M月", english: "MMM")
         let todayKey = StrictContractDateParser.string(from: input.today, calendar: calendar)
         let todayLabel = AppLocalization.string("今天", language: input.language)
         let coursesByDate: [String: [Course]]

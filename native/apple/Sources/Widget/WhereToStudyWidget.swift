@@ -71,6 +71,8 @@ private struct TodayCourseWidgetView: View {
             language: entry.language,
             colorTheme: entry.colorTheme
         )
+        .environment(\.locale, entry.language.appLanguage.locale)
+        .environment(\.layoutDirection, entry.language.isRightToLeft ? .rightToLeft : .leftToRight)
     }
 }
 

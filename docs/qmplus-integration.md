@@ -7,10 +7,20 @@ QMplus, BUPT Mobile Academic Services, and BUPT Teaching Cloud use separate data
 ## 如何连接 / Connecting
 
 1. 在“设置 → 连接 QMplus”或课程页选择连接，应用会打开自己的[官方 QMplus 页面](https://qmplus.qmul.ac.uk/my/)。仅在该网页完成学校 SSO／Microsoft MFA；不要把 Microsoft 密码填入应用的北邮“教务账号”或“教学云密码”输入框。
-2. 登录成功后，用户可在官方网页同步课程。原生业务层只取得经验证的课程与活动快照，不接收或保存 Microsoft 密码、网页 Cookie、Moodle `sesskey`、认证令牌或完整 HTML。官方网页及同源脚本仍在隔离 WebView 内使用自己的登录会话；不读取系统浏览器会话，也不会把北邮学号与密码提交给 QMplus。
+2. 登录成功后自动只读同步课程；仅经验证的课程和活动进入业务快照，不包含密码、Cookie、Moodle `sesskey`、认证令牌或完整 HTML。官方网页及同源脚本在隔离 WebView 内使用自己的登录会话，不读取系统浏览器会话，也不会把北邮凭据提交给 QMplus。
 3. 断开 QMplus 或清除本地数据，会撤销应用持有的 QMplus 会话并删除其业务快照；这不会删除 QMplus／Microsoft 服务端的账户或学习记录。更换北邮账号、密码或学期不会自动更换独立的 QMplus 身份。
 
-Open Connect QMplus in Settings or Courses, then complete SSO/MFA on the official page in the app's own web view. Never enter a Microsoft password in the BUPT academic or Teaching Cloud fields. The native business layer receives only a validated course/activity snapshot, not the Microsoft password, webpage cookies, Moodle session key, authentication tokens, or full HTML. The official page and same-origin script use their own sign-in session inside the isolated web view; no system-browser session is imported and no BUPT credentials are submitted to QMplus. Disconnecting or clearing local data revokes the app-owned session and snapshot, not records held by QMplus or Microsoft. Changing BUPT account settings does not switch the independent QMplus identity.
+Open Connect QMplus in Settings or Courses and complete SSO/MFA in the app-owned official web view. Never enter a Microsoft password in BUPT academic or Teaching Cloud fields. A validated sign-in automatically starts read-only synchronization; only validated course/activity information enters the business snapshot, never passwords, webpage cookies, Moodle session keys, authentication tokens or full HTML. No system-browser session is imported and no BUPT credentials are submitted to QMplus. Disconnect-and-clear or clearing local data revokes the app-owned session and snapshot, not records held by QMplus or Microsoft. BUPT settings do not switch the independent QMplus identity.
+
+### 可选安全保存与自动填写 / Optional secure saving and autofill
+
+默认关闭。在独立 QMplus 设置保存账号和密码，再明确授权本机自动填写。密码使用各平台系统安全存储，与北邮凭据分开，不进入普通设置文件。有效会话优先同步；需要登录时仅在已核验的官方 Microsoft 主文档表单提交普通 Next／Sign in 各一次。精确匹配已保存账号的已核验账户选择页可自动选择一次。验证码、MFA、未匹配的账号选择、保持登录、风险、协议或未知页面显露同一个官方窗口，必须用户处理；不会自动重试密码或绕过验证。网页改版、跨文档步骤或系统限制可能需要完整手动登录，不能保证所有分支静默完成。[辅助契约](../contracts/qmplus/AUTH.md)
+
+Off by default. Save separate QMplus credentials and explicitly authorize local autofill in QMplus settings. Passwords use OS secure storage separate from BUPT credentials, not ordinary settings files. Valid sessions synchronize first; verified official Microsoft main-document forms may receive one ordinary Next and Sign in submission each. A verified account chooser may select an exact match for the saved account once. CAPTCHA, MFA, unmatched account choices, staying signed in, risk, terms or unknown pages reveal the same official window for user action, with no automatic password retries or verification bypass. Changed pages, cross-document steps or OS restrictions may require fully manual sign-in; silence cannot be guaranteed for every branch. [Helper contract](../contracts/qmplus/AUTH.md)
+
+关闭“启用 QMplus”只暂停连接和同步，保留登录资料、官方网页会话与课程缓存；它不执行删除。关闭自动填写会撤销自动填写授权；Apple 的“关闭自动填写并删除 QMplus 登录信息”为组合删除操作。删除登录资料、退出并清除数据或清除本地数据，会按所选操作移除对应记录。
+
+Turning off “Enable QMplus” only pauses connection and sync, retaining saved credentials, the official web session and the course cache. It does not delete data. Turning autofill off revokes autofill authorization; Apple’s “Disable autofill and delete QMplus sign-in details” combines this with credential deletion. Deleting credentials, disconnecting and clearing data, or clearing local data removes the corresponding records.
 
 ## 读取范围与时间 / Read-only scope and dates
 

@@ -443,8 +443,15 @@ internal class UCloudAssignmentClient internal constructor(
         expectedHost: String,
         acceptedStatus: IntRange,
     ): HTTPResult {
+        return CellularAssist.readOnly(method) {
+            executeOnRoute(uri, method, headers, body, maximumBytes, expectedHost, acceptedStatus)
+        }
+    }
+
+    private fun executeOnRoute(uri: URI, method: String, headers: Map<String, String>, body: String?,
+        maximumBytes: Int, expectedHost: String, acceptedStatus: IntRange): HTTPResult {
         requireTrustedHTTPS(uri, expectedHost)
-        val connection = uri.toURL().openConnection() as HttpURLConnection
+        val connection = CellularAssist.openConnection(uri.toURL())
         try {
             connection.requestMethod = method
             connection.connectTimeout = 8_000

@@ -6,9 +6,10 @@ import {
   CalendarGestureAxis, CalendarMode, CalendarModeInfo, CalendarPageRequest,
   CalendarPageTransitionOffsets, CalendarPageTransitionQueue,
   CalendarPopoverPosition, CalendarTimelineLogic,
-  CalendarYearDeadlinePriority, TeachingCalendarLogic
+  CalendarYearDeadlinePriority, CalendarFormatters, TeachingCalendarLogic
 } from '../main/ets/view/calendar/CalendarLogic';
 import { AppSection, AppSectionInfo } from '../main/ets/common/AppSection';
+import { AppLanguage } from '../main/ets/common/AppLocalization';
 import {
   CalendarViewportPreloadController, CalendarViewportPreloadPlan,
   CalendarViewportPreloadPlanner, CalendarViewportPreloadTarget
@@ -132,6 +133,12 @@ export default function teachingCalendarLogicTest() {
         .assertEqual('2026年8月');
       expect(TeachingCalendarLogic.periodTitle(date, CalendarMode.year))
         .assertEqual('2026年');
+      const japanese: string = TeachingCalendarLogic.periodTitle(date, CalendarMode.day, AppLanguage.japanese);
+      expect(japanese.includes('2026')).assertTrue();
+      expect(japanese.includes('14')).assertTrue();
+      const arabic: string = CalendarFormatters.fullDate(date, AppLanguage.arabic);
+      expect(arabic.length > 0).assertTrue();
+      expect(arabic === CalendarFormatters.fullDate(date, false)).assertFalse();
     });
 
     it('moved_date_steps_by_visible_period', 0, () => {
@@ -324,6 +331,8 @@ export default function teachingCalendarLogicTest() {
         .assertEqual('周视图 · 全天');
       expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.week, true))
         .assertEqual('Week View · All-day');
+      expect(TeachingCalendarLogic.allDayDialogTitle(CalendarMode.week, AppLanguage.traditionalChinese))
+        .assertEqual('週視圖 · 全天');
       expect(TeachingCalendarLogic.supportsAllDayDialog(CalendarMode.day)).assertTrue();
       expect(TeachingCalendarLogic.supportsAllDayDialog(CalendarMode.week)).assertTrue();
       expect(TeachingCalendarLogic.supportsAllDayDialog(CalendarMode.month)).assertFalse();

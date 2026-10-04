@@ -1,6 +1,7 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
@@ -12,7 +13,7 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
 
-internal data class QmplusConnection(val generation: Long, val token: String)
+internal data class QmplusConnection(val generation: Long, val token: String, val featureRevision: Long = 0)
 internal data class QmplusCookieClearAttempt(val generation: Long, val token: Long)
 
 /** Application-owned business cache only. WebView cookies stay in its separate process/profile. */
@@ -22,6 +23,9 @@ internal class QmplusRepository(context: Context,
     private val beforeSavePublication: (() -> Unit)? = null,
     private val afterSavePublication: (() -> Unit)? = null,
     private val cookieClearDeadlineMillis: Long = 10_000,
+    credentialStoreOverride: QmplusCredentialStore? = null,
+    featureStoreOverride: QmplusFeatureStore? = null,
+    stopFeatureOwnerOverride: ((String?, Long?) -> Unit)? = null,
 ) {
     private val appContext = context.applicationContext
     private val prefs by lazy { preferencesOverride ?: appContext.getSharedPreferences("qmplus_business_cache", Context.MODE_PRIVATE) }
@@ -29,6 +33,14 @@ internal class QmplusRepository(context: Context,
     private val handler = Handler(Looper.getMainLooper())
     private val stateLock = Any()
     private val closed = AtomicBoolean(false)
+    private val savedLoginStore = credentialStoreOverride ?: if (preferencesOverride == null) QmplusCredentialStore(appContext) else null
+    private val featureStore = featureStoreOverride ?: if (preferencesOverride == null) QmplusFeatureStore(appContext.noBackupFilesDir) else null
+    private val stopFeatureOwner = stopFeatureOwnerOverride
+    private var featureRecord: QmplusFeatureRecord? = null
+    private var featureMutationRevision = 0L
+    private var restoringSnapshot = true
+    @Volatile var isFeatureEnabled = preferencesOverride != null
+        private set
     private var revision = 0L
     @Volatile var generation = 0L
         private set
@@ -46,28 +58,51 @@ internal class QmplusRepository(context: Context,
         private set
     @Volatile var pendingCookieClearAttempt: QmplusCookieClearAttempt? = null
         private set
+    @Volatile var savedLoginStatus = QmplusCredentialStatus()
+        private set
+    @Volatile var isSavingLogin = false
+        private set
     private var cookieClearDeadline: Runnable? = null
+    private var pendingLoginPassword: CharArray? = null
     private val observers = ConcurrentHashMap<Any, () -> Unit>()
 
     init {
         val readRevision = revision
+        val readFeatureRevision = featureMutationRevision
         worker.execute {
             val result = runCatching {
+                // A broken optional saved-login record must not erase readable course data.
+                val loginStatus = runCatching { savedLoginStore?.status() }.getOrNull() ?: QmplusCredentialStatus()
                 val raw = synchronized(prefs) { Triple(prefs.getLong(GENERATION, 0),
                     prefs.getBoolean(COOKIE_CLEAR_PENDING, false), prefs.getString(SNAPSHOT, null)) }
                 val cached = raw.third?.toByteArray(StandardCharsets.UTF_8)
                     ?.let(QmplusSnapshotCodec::decode)
-                Triple(raw.first, raw.second, cached)
+                Pair(Triple(raw.first, raw.second, cached), loginStatus)
             }
             beforeReadPublication?.invoke()
             synchronized(stateLock) {
                 if (closed.get() || revision != readRevision) return@execute
-                result.onSuccess { (storedGeneration, pendingClear, cached) ->
+                result.onSuccess { (business, loginStatus) ->
+                    val (storedGeneration, pendingClear, cached) = business
                     val latest = prefs.getLong(GENERATION, 0)
                     generation = latest
                     cookiesNeedClearing = if (latest == storedGeneration) pendingClear else prefs.getBoolean(COOKIE_CLEAR_PENDING, false)
                     snapshot = cached.takeIf { latest == storedGeneration }
+                    savedLoginStatus = loginStatus
+                    if (preferencesOverride == null && featureMutationRevision == readFeatureRevision) {
+                        val featureResult = runCatching {
+                            val appPreferences = AppPreferences(appContext)
+                            val mirror = checkNotNull(featureStore).status()
+                            val enabled = QmplusFeatureMigrationPolicy.resolve(mirror, cached != null, loginStatus.enabled,
+                                appPreferences::resolveQMplusMigration)
+                            featureStore.setEnabled(enabled)
+                        }
+                        featureRecord = featureResult.getOrNull()
+                        isFeatureEnabled = featureRecord?.enabled == true
+                        if (featureResult.isFailure) error = "QMplus 同步失败；保留上次课程缓存。"
+                    }
                 }.onFailure { error = "无法读取 QMplus 课程缓存。" }
+                restoringSnapshot = false
                 isLoading = false
             }
             notifyObservers()
@@ -78,8 +113,44 @@ internal class QmplusRepository(context: Context,
     fun removeObserver(owner: Any) { observers.remove(owner) }
     fun clearUiObservers() { observers.clear() }
 
+    fun setFeatureEnabled(enabled: Boolean): Boolean {
+        var retiredToken: String? = null
+        var retiredRevision: Long? = null
+        val result = synchronized(stateLock) {
+            if (closed.get()) return false
+            featureMutationRevision++
+            retiredToken = connection?.token
+            retiredRevision = featureRecord?.revision ?: runCatching { featureStore?.status()?.revision }.getOrNull()
+            val persisted = runCatching { featureStore?.setEnabled(enabled, renewOwner = enabled && !isFeatureEnabled)
+                ?: QmplusFeatureRecord(featureMutationRevision, enabled) }
+            featureRecord = persisted.getOrNull()
+            isFeatureEnabled = persisted.isSuccess && enabled
+            if (!isFeatureEnabled) {
+                connection = null
+                // Startup cache restoration is independent of network publication.
+                if (!restoringSnapshot) { revision++; isLoading = false }
+            }
+            if (persisted.isFailure) error = "QMplus 同步失败；保留上次课程缓存。"
+            persisted.isSuccess
+        }
+        if (!enabled || !result) {
+            if (stopFeatureOwner != null) stopFeatureOwner.invoke(retiredToken, retiredRevision)
+            else if (preferencesOverride == null) runCatching {
+                appContext.startService(Intent(appContext, QmplusClearService::class.java)
+                    .putExtra(QmplusClearService.EXTRA_STOP_ONLY, true)
+                    .putExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN, retiredToken)
+                    .putExtra(QmplusActivity.EXTRA_FEATURE_REVISION, retiredRevision ?: -1))
+            }
+        }
+        notifyObservers()
+        return result
+    }
+
+    private fun featureIsCurrentLocked(): Boolean = isFeatureEnabled &&
+        (featureStore == null || featureRecord?.let(featureStore::isCurrent) == true)
+
     fun beginConnection(): QmplusConnection? = synchronized(stateLock) {
-        if (closed.get() || isLoading || isClearingSession || connection != null) return null
+        if (closed.get() || !featureIsCurrentLocked() || isLoading || isSavingLogin || isClearingSession || connection != null) return null
         // A second app Activity may have explicitly disconnected the shared QM profile.
         val storedGeneration = prefs.getLong(GENERATION, 0)
         if (storedGeneration != generation) {
@@ -87,7 +158,7 @@ internal class QmplusRepository(context: Context,
             revision++; generation = storedGeneration; snapshot = null
             cookiesNeedClearing = prefs.getBoolean(COOKIE_CLEAR_PENDING, false)
         }
-        QmplusConnection(generation, UUID.randomUUID().toString()).also { connection = it; notifyObservers() }
+        QmplusConnection(generation, UUID.randomUUID().toString(), featureRecord?.revision ?: 0).also { connection = it; notifyObservers() }
     }
 
     fun finishConnection(token: String?): Boolean = synchronized(stateLock) {
@@ -96,9 +167,52 @@ internal class QmplusRepository(context: Context,
         connection = null; notifyObservers(); true
     }
 
+    /** Explicit save only. Invalidate the old QM identity before publishing a new saved login. */
+    fun saveLogin(account: String, password: CharArray, explicitOptIn: Boolean, onComplete: (Result<Unit>) -> Unit) {
+        val ownedPassword = password.copyOf()
+        val token = synchronized(stateLock) {
+            if (closed.get() || isLoading || isSavingLogin || isClearingSession || connection != null || !explicitOptIn ||
+                !QmplusCredentialLimits.valid(account, ownedPassword) || savedLoginStore == null) {
+                ownedPassword.fill('\u0000')
+                if (!closed.get()) handler.post { if (!closed.get()) onComplete(Result.failure(IllegalStateException("QM saved-login request is unavailable."))) }
+                return
+            }
+            isSavingLogin = true; pendingLoginPassword = ownedPassword
+            Pair(revision, savedLoginStatus.revision)
+        }
+        notifyObservers()
+        try {
+            worker.execute {
+                val result: Result<QmplusCredentialStatus> = try {
+                    runCatching {
+                        beforeSavePublication?.invoke()
+                        synchronized(stateLock) {
+                            check(!closed.get() && revision == token.first && savedLoginStore?.status()?.revision == token.second)
+                            clearInternal(preservingPendingLogin = true)
+                            val savedStatus = checkNotNull(savedLoginStore).save(account, ownedPassword, true, savedLoginStatus.revision)
+                            savedLoginStatus = savedStatus
+                            savedStatus
+                        }
+                    }
+                } finally { ownedPassword.fill('\u0000') }
+                synchronized(stateLock) { isSavingLogin = false; if (pendingLoginPassword === ownedPassword) pendingLoginPassword = null }
+                notifyObservers()
+                if (!closed.get()) handler.post {
+                    if (!closed.get()) {
+                        val current = synchronized(stateLock) { result.isFailure || result.getOrNull() == savedLoginStatus }
+                        onComplete(if (current) result.map { Unit } else Result.failure(IllegalStateException("QM saved-login result was invalidated.")))
+                    }
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+            ownedPassword.fill('\u0000')
+            synchronized(stateLock) { isSavingLogin = false; if (pendingLoginPassword === ownedPassword) pendingLoginPassword = null }
+        }
+    }
+
     fun accept(bytes: ByteArray, expectedGeneration: Long) {
         val token = synchronized(stateLock) {
-            if (closed.get() || isLoading || isClearingSession || generation != expectedGeneration ||
+            if (closed.get() || !featureIsCurrentLocked() || isLoading || isClearingSession || generation != expectedGeneration ||
                 bytes.size > QmplusPolicy.MAXIMUM_SNAPSHOT_BYTES) return
             isLoading = true; error = null; revision
         }
@@ -110,17 +224,21 @@ internal class QmplusRepository(context: Context,
                     beforeSavePublication?.invoke()
                     val parsed = QmplusSnapshotCodec.preservingKnownActivities(incoming, snapshot)
                     val canonical = String(QmplusSnapshotCodec.encode(parsed), StandardCharsets.UTF_8)
-                    synchronized(stateLock) { synchronized(prefs) {
-                            check(!closed.get() && token == revision && expectedGeneration == generation &&
+                    synchronized(stateLock) {
+                        val publish = { synchronized(prefs) {
+                            check(!closed.get() && isFeatureEnabled && token == revision && expectedGeneration == generation &&
                                 prefs.getLong(GENERATION, 0) == expectedGeneration)
                             check(prefs.edit().putString(SNAPSHOT, canonical).putLong(GENERATION, generation)
                                 .putBoolean(COOKIE_CLEAR_PENDING, false).commit()) { "QMplus cache save failed." }
                             snapshot = parsed; cookiesNeedClearing = false
                             cancelCookieClearDeadlineLocked()
-                    } }
+                        } }
+                        if (featureStore != null) featureStore.whileCurrent(checkNotNull(featureRecord), publish)
+                        else publish()
+                    }
                 }
                 val published = synchronized(stateLock) {
-                    if (closed.get() || token != revision || expectedGeneration != generation) false else {
+                    if (closed.get() || !featureIsCurrentLocked() || token != revision || expectedGeneration != generation) false else {
                         error = result.exceptionOrNull()?.let { "QMplus 同步或保存失败；保留上次课程缓存。" }
                         isLoading = false
                         true
@@ -136,8 +254,16 @@ internal class QmplusRepository(context: Context,
 
     fun synchronizationFailed(expectedGeneration: Long) {
         synchronized(stateLock) {
-            if (closed.get() || generation != expectedGeneration) return
+            if (closed.get() || !featureIsCurrentLocked() || generation != expectedGeneration) return
             error = "QMplus 同步失败；保留上次课程缓存。"
+        }
+        notifyObservers()
+    }
+
+    fun connectionExpired(expectedGeneration: Long = generation) {
+        synchronized(stateLock) {
+            if (closed.get() || !featureIsCurrentLocked() || generation != expectedGeneration || connection != null) return
+            error = "QMplus 会话已过期，请重新登录。"
         }
         notifyObservers()
     }
@@ -170,22 +296,31 @@ internal class QmplusRepository(context: Context,
     }
 
     /** Full clear already uses the coordinator; invalidate before the durable removal. */
-    fun clear() = synchronized(stateLock) { synchronized(prefs) {
+    fun clear() = clearInternal(preservingPendingLogin = false)
+
+    private fun clearInternal(preservingPendingLogin: Boolean) = synchronized(stateLock) { synchronized(prefs) {
         cancelCookieClearDeadlineLocked()
         revision++
         connection = null
+        if (!preservingPendingLogin) { pendingLoginPassword?.fill('\u0000'); pendingLoginPassword = null }
+        // Separate encrypted domain; a durable tombstone invalidates in-flight
+        // decrypt/fill requests in the private WebView process as well.
+        val loginClear = runCatching { savedLoginStore?.clear() ?: QmplusCredentialStatus(savedLoginStatus.revision + 1) }
+        savedLoginStatus = loginClear.getOrNull() ?: QmplusCredentialStatus(savedLoginStatus.revision, false)
         generation = maxOf(generation, prefs.getLong(GENERATION, 0)) + 1
         snapshot = null; isLoading = false; error = null; cookiesNeedClearing = true; isClearingSession = true
         armCookieClearDeadlineLocked()
         check(prefs.edit().remove(SNAPSHOT).putLong(GENERATION, generation)
             .putBoolean(COOKIE_CLEAR_PENDING, true).commit()) { "QMplus cache clear failed." }
         notifyObservers()
+        check(loginClear.isSuccess) { "QM saved-login clear failed." }
     } }
 
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         synchronized(stateLock) {
-            revision++; snapshot = null; connection = null; isClearingSession = false
+            revision++; snapshot = null; connection = null; isClearingSession = false; isSavingLogin = false
+            pendingLoginPassword?.fill('\u0000'); pendingLoginPassword = null
             cancelCookieClearDeadlineLocked()
         }
         observers.clear(); handler.removeCallbacksAndMessages(null); worker.shutdownNow()

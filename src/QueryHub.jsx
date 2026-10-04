@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 
 import { calendarDeadlineVisualKind, shanghaiDateString } from './planner-domain.js'
+import { uiDateLocale } from './ui-languages.js'
+import { uiText } from './ui-text.js'
 import {
   buildShuttleDayView,
   buildShuttleTimetable,
@@ -42,7 +44,8 @@ const EVENT_TYPE_LABELS = Object.freeze({
 function formatDeadline(value, language) {
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) return value || ''
-  return new Intl.DateTimeFormat(language === 'en' ? 'en-US' : 'zh-CN', {
+  return new Intl.DateTimeFormat(uiDateLocale(language), {
+    calendar: 'gregory',
     timeZone: 'Asia/Shanghai',
     year: 'numeric',
     month: '2-digit',
@@ -56,11 +59,9 @@ function formatDeadline(value, language) {
 function periodLabel(period, language) {
   if (!period) return ''
   if (period.start_date && period.end_date) {
-    return language === 'en'
-      ? `${period.start_date} – ${period.end_date}`
-      : `${period.start_date} 至 ${period.end_date}`
+    return `${period.start_date} – ${period.end_date}`
   }
-  if (period.start_date) return language === 'en' ? `From ${period.start_date}` : `${period.start_date} 起`
+  if (period.start_date) return uiText(language, '自 {date} 起', 'From {date}', {date:period.start_date})
   return period.label
 }
 
@@ -99,6 +100,10 @@ export default function QueryHub({
   holidayItems = [],
   t,
 }) {
+  const text = (zh, english) => uiText(language, zh, english)
+  const weekdays = useMemo(() => Object.fromEntries(SHUTTLE_WEEKDAYS.map((day,index) =>
+    [day.key, new Intl.DateTimeFormat(uiDateLocale(language), {weekday:'short',timeZone:'UTC'})
+      .format(new Date(Date.UTC(2026,0,5+index)))])), [language])
   const [tab, setTab] = useState('shuttle')
   const [shuttle, setShuttle] = useState(null)
   const [shuttleLoading, setShuttleLoading] = useState(true)
@@ -289,10 +294,9 @@ export default function QueryHub({
               {isPublicHoliday ? <aside className="shuttle-holiday-notice" role="note">
                 <BusFront size={18} aria-hidden="true" />
                 <div>
-                  <strong>{language === 'en' ? 'Public holiday shuttle notice' : '节假日班车提示'}</strong>
-                  <p>{language === 'en'
-                    ? 'Today is a public holiday; shuttle service may be unavailable. Follow the university holiday arrangements. Shuttle buses do not run during the holiday closure.'
-                    : '今日为法定节假日，不一定有班车。请以学校放假安排为准，放假期间无班车。'}</p>
+                  <strong>{text('节假日班车提示', 'Public holiday shuttle notice')}</strong>
+                  <p>{text('今日为法定节假日，不一定有班车。请以学校放假安排为准，放假期间无班车。',
+                    'Today is a public holiday; shuttle service may be unavailable. Follow the university holiday arrangements. Shuttle buses do not run during the holiday closure.')}</p>
                   {shuttleTimetable.holidayNotice?.source?.source_url ? (
                     <a href={shuttleTimetable.holidayNotice.source.source_url} target="_blank" rel="noreferrer">
                       {t('后勤部原文')}<ExternalLink size={13} />
@@ -314,7 +318,7 @@ export default function QueryHub({
               <div className="shuttle-weekday-options" aria-label={t('选择星期')}>
                 {SHUTTLE_WEEKDAYS.map((weekday) => (
                   <button type="button" className={selectedWeekday === weekday.key ? 'active' : ''} onClick={() => setWeekdaySelection({ key: weekday.key, date: today })} key={weekday.key}>
-                    {language === 'en' ? weekday.english : weekday.label}
+                    {weekdays[weekday.key]}
                     {currentWeekday === weekday.key ? <small>{t('今')}</small> : null}
                   </button>
                 ))}
@@ -339,13 +343,12 @@ export default function QueryHub({
                 )}</p>}
               </div>
 
-              <section className="shuttle-full-timetable" aria-label={language === 'en' ? 'Full shuttle timetable' : '完整班车时刻表'}>
+              <section className="shuttle-full-timetable" aria-label={text('完整班车时刻表', 'Full shuttle timetable')}>
                 <header className="shuttle-full-heading">
                   <div>
-                    <h3>{language === 'en' ? 'Full shuttle timetable' : '完整班车时刻表'}</h3>
-                    <p>{language === 'en'
-                      ? 'Scheduled departures by service period, direction, and weekday. Holiday and temporary changes follow the official notice.'
-                      : '按运行时段、方向和星期查看计划班次；节假日及临时调整以官方通知为准。'}</p>
+                    <h3>{text('完整班车时刻表', 'Full shuttle timetable')}</h3>
+                    <p>{text('按运行时段、方向和星期查看计划班次；节假日及临时调整以官方通知为准。',
+                      'Scheduled departures by service period, direction, and weekday. Holiday and temporary changes follow the official notice.')}</p>
                   </div>
                   {shuttleTimetable.notice?.source_url ? (
                     <a href={shuttleTimetable.notice.source_url} target="_blank" rel="noreferrer">
@@ -354,9 +357,8 @@ export default function QueryHub({
                   ) : null}
                 </header>
                 {shuttleTimetable.usingFallback ? (
-                  <p className="shuttle-full-fallback">{language === 'en'
-                    ? 'The newest notice has no verified timetable; the tables below come from the previous parsed notice for reference.'
-                    : '最新通知暂无已核实的结构化时刻表，以下为上一份已解析通知的班次，仅供对照。'}</p>
+                  <p className="shuttle-full-fallback">{text('最新通知暂无已核实的结构化时刻表，以下为上一份已解析通知的班次，仅供对照。',
+                    'The newest notice has no verified timetable; the tables below come from the previous parsed notice for reference.')}</p>
                 ) : null}
                 {shuttleTimetable.periods.length ? shuttleTimetable.periods.map(({ key, period, state, routes }) => (
                   <div className={`shuttle-full-period ${state}`} key={key}>
@@ -374,9 +376,9 @@ export default function QueryHub({
                           <div className="shuttle-full-table-scroll" role="region" aria-label={`${route.from} → ${route.to}`} tabIndex={0}>
                             <table className="shuttle-full-table">
                               <thead><tr>
-                                <th scope="col">{language === 'en' ? 'Departure' : '发车'}</th>
+                                <th scope="col">{text('发车', 'Departure')}</th>
                                 {SHUTTLE_WEEKDAYS.map((weekday) => (
-                                  <th scope="col" key={weekday.key}>{language === 'en' ? weekday.english : weekday.label}</th>
+                                  <th scope="col" key={weekday.key}>{weekdays[weekday.key]}</th>
                                 ))}
                               </tr></thead>
                               <tbody>
@@ -397,9 +399,8 @@ export default function QueryHub({
                     </div>
                   </div>
                 )) : (
-                  <p className="query-empty">{language === 'en'
-                    ? 'No verified full timetable is available. Please check the source notice.'
-                    : '暂无可安全展示的完整时刻表，请查看通知原文。'}</p>
+                  <p className="query-empty">{text('暂无可安全展示的完整时刻表，请查看通知原文。',
+                    'No verified full timetable is available. Please check the source notice.')}</p>
                 )}
               </section>
 

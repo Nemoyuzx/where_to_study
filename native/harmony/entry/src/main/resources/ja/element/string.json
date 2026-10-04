@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Where To Study HarmonyOS クライアント" },
+    { "name": "EntryAbility_desc", "value": "空き教室と個人の時間割を確認" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "今日の授業" },
+    { "name": "widget_desc", "value": "今日の授業時間と教室を確認" },
+    { "name": "calendar_read_reason", "value": "取り込んだ授業予定を読み取り、時間割を同期するため" },
+    { "name": "calendar_write_reason", "value": "個人の時間割をシステムカレンダーに追加するため" }
+  ]
+}

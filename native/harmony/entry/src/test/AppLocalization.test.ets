@@ -7,21 +7,47 @@ import { AppMeta } from '../main/ets/common/AppMeta';
 export default function appLocalizationTest() {
   describe('AppLocalizationTest', () => {
     it('system_language_resolves_to_supported_language', 0, () => {
+      expect(AppLanguageInfo.all.length).assertEqual(14);
       expect(AppLanguageInfo.resolved(AppLanguage.system, 'zh-Hans-CN'))
         .assertEqual(AppLanguage.simplifiedChinese);
+      expect(AppLanguageInfo.resolved(AppLanguage.system, 'zh-Hant-HK'))
+        .assertEqual(AppLanguage.traditionalChinese);
+      expect(AppLanguageInfo.resolved(AppLanguage.system, 'zh-TW'))
+        .assertEqual(AppLanguage.traditionalChinese);
       expect(AppLanguageInfo.resolved(AppLanguage.system, 'en-US'))
         .assertEqual(AppLanguage.english);
+      expect(AppLanguageInfo.resolved(AppLanguage.system, 'ja-JP'))
+        .assertEqual(AppLanguage.japanese);
+      expect(AppLanguageInfo.resolved(AppLanguage.system, 'ar-SA'))
+        .assertEqual(AppLanguage.arabic);
+      expect(AppLanguageInfo.resolved(AppLanguage.system, 'pt-BR'))
+        .assertEqual(AppLanguage.portuguese);
+      expect(AppLanguageInfo.resolved(AppLanguage.system, 'vi_VN'))
+        .assertEqual(AppLanguage.vietnamese);
+      expect(AppLanguageInfo.resolved(AppLanguage.system, 'zz-ZZ'))
+        .assertEqual(AppLanguage.english);
+      expect(AppLanguageInfo.normalize('zh-Hant')).assertEqual(AppLanguage.traditionalChinese);
+      expect(AppLanguageInfo.normalize('ar')).assertEqual(AppLanguage.arabic);
+      expect(AppLanguageInfo.normalize('unsupported')).assertEqual(AppLanguage.system);
+      expect(AppLanguageInfo.isRightToLeft(AppLanguage.arabic)).assertTrue();
+      expect(AppLanguageInfo.isRightToLeft(AppLanguage.english)).assertFalse();
       expect(AppLanguageInfo.resolved(AppLanguage.simplifiedChinese, 'en-US'))
         .assertEqual(AppLanguage.simplifiedChinese);
       expect(AppLanguageInfo.label(AppLanguage.simplifiedChinese, AppLanguage.english))
-        .assertEqual('Simplified Chinese');
+        .assertEqual('简体中文');
       expect(AppLanguageInfo.label(AppLanguage.english, AppLanguage.english))
         .assertEqual('English');
+      expect(AppLanguageInfo.label(AppLanguage.traditionalChinese, AppLanguage.english))
+        .assertEqual('繁體中文');
+      expect(AppLanguageInfo.label(AppLanguage.arabic, AppLanguage.arabic))
+        .assertEqual('العربية');
     });
 
     it('static_ui_translates_but_api_content_stays_verbatim', 0, () => {
       expect(AppLocalization.text('教学日历', AppLanguage.english, 'zh-Hans'))
         .assertEqual('Calendar');
+      expect(AppLocalization.text('教学日历', AppLanguage.traditionalChinese, 'zh-Hans'))
+        .assertEqual('教學日曆');
       expect(AppLocalization.text('ICPC Asia Regional 2026', AppLanguage.english, 'en-US'))
         .assertEqual('ICPC Asia Regional 2026');
       expect(AppLocalization.text('教学日历', AppLanguage.simplifiedChinese, 'en-US'))

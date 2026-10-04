@@ -1,4 +1,7 @@
 {
+  "启用 QMplus": "Enable QMplus",
+  "仅适用国院": "International School only",
+  "无法保存本地偏好。": "Unable to save local preferences.",
   " 秒": " sec",
   " 起": " onward",
   " 门": " courses",
@@ -1525,5 +1528,7 @@
   "默认关闭。登录信息仅保存在本机系统 Keychain，与北邮密码独立，不上传或同步。": "Off by default. Sign-in details stay in this device's Keychain, separate from your BUPT password, and are not uploaded or synchronized.",
   "默认提前 10 分钟；可添加多次提醒，与每日摘要分别开关。": "Defaults to 10 minutes before class. Add multiple reminders independently of the daily summary.",
   "默认校区": "Default campus",
-  "默认青绿": "Classic Teal"
+  "默认青绿": "Classic Teal",
+  "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Only verified official sign-in pages may select the exact saved account and fill the username and password, with each step attempted at most once. Unmatched account choices, MFA, CAPTCHA, staying signed in, risk and terms confirmations still require your action.",
+  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Turning off “Enable QMplus” only pauses connection and sync; saved credentials, the session and course cache are retained. Use the separate controls to turn off autofill, delete credentials, or disconnect and clear data."
 }

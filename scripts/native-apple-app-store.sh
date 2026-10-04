@@ -416,7 +416,7 @@ archive_platform() {
     SWIFT_STRICT_CONCURRENCY=complete
     SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
     SWIFT_SERIALIZE_DEBUGGING_OPTIONS=NO
-    "OTHER_SWIFT_FLAGS=-debug-prefix-map $ROOT_DIR=. -file-prefix-map $ROOT_DIR=."
+    "OTHER_SWIFT_FLAGS=-j${NATIVE_BUILD_JOBS:-2} -debug-prefix-map $ROOT_DIR=. -file-prefix-map $ROOT_DIR=."
   )
   if [[ "$signing_style" == "Manual" ]]; then
     command+=(

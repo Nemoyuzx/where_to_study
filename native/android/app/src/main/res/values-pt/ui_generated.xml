@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"Carregando o aviso mais recente do Departamento de Serviços Gerais e o horário vigente."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"A raiz da agenda personalizada deve ser um objeto."</string>
     <string name="ui_generated_ff93bd2c081d35">"Abrir no navegador a lista de tarefas da plataforma de ensino na nuvem"</string>
+    <string name="ui_generated_1a78803a506cc4">"Ativar QMplus"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"Apenas para a Escola Internacional"</string>
+    <string name="ui_generated_dba3ae91be2408">"Não foi possível guardar as preferências locais."</string>
     <string name="ui_generated_c51e74da2b9b1b">"No macOS, você pode selecionar uma rede disponível ou um Acesso Pessoal nas configurações do sistema. Este aplicativo não oferece um interruptor para forçar dados celulares ou o uso de duas redes ao mesmo tempo."</string>
     <string name="ui_generated_a8cb7a7cb858cf">"O preenchimento automático do QMplus foi interrompido. Complete o login ou a verificação manualmente no site oficial."</string>
     <string name="ui_generated_8ff421866994b1">"O preenchimento automático do QMplus está indisponível. Entre manualmente."</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"Preenchendo a conta do login oficial do QMplus…"</string>
     <string name="ui_generated_1a61edb546454e">"Abrindo o login SSO oficial do QMplus…"</string>
     <string name="ui_generated_a16987f886401d">"Assistência de rede do sistema"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"Somente páginas oficiais de login verificadas podem selecionar automaticamente uma conta que corresponda exatamente à conta salva e preencher usuário e senha, com no máximo uma tentativa por etapa. Contas sem correspondência, MFA, CAPTCHA, manter a sessão e confirmações de riscos ou termos exigem sua intervenção."</string>
+    <string name="ui_generated_fd4480c6c08ea3">"Desativar “Ativar QMplus” apenas pausa a conexão e a sincronização; os dados de login salvos, a sessão e o cache de cursos são mantidos. Use os controles correspondentes para desativar o preenchimento automático, excluir dados de login ou desconectar e limpar dados."</string>
 </resources>

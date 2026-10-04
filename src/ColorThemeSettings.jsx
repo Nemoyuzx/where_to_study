@@ -1,3 +1,4 @@
+import { uiText } from './ui-text.js'
 import { useEffect, useLayoutEffect, useState } from 'react'
 import { Check, Palette, RotateCcw } from 'lucide-react'
 import {
@@ -40,8 +41,7 @@ export function useColorTheme() {
 
 export default function ColorThemeSettings({ controller, language }) {
   const { theme, dark } = controller
-  const english = language === 'en'
-  const text = (zh, en) => english ? en : zh
+  const text = (zh, en) => uiText(language, zh, en)
   const [draft, setDraft] = useState(theme)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
@@ -75,7 +75,7 @@ export default function ColorThemeSettings({ controller, language }) {
             <span className="theme-preset-dots" aria-hidden="true">
               {[preset.primary, preset.accent, preset.selectedDate].map((color, index) => <i key={index} style={{ backgroundColor: color }} />)}
             </span>
-            <span>{english ? preset.nameEn : preset.nameZh}</span>
+            <span>{text(preset.nameZh, preset.nameEn)}</span>
             {theme.preset === preset.id && <Check size={16} aria-hidden="true" />}
           </button>
         ))}

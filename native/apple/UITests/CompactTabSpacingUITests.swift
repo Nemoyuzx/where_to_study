@@ -16,13 +16,13 @@ final class CompactTabSpacingUITests: XCTestCase {
         waitForPortrait(app)
         let initialFrames = assertEqualItemGeometry(titles: chineseTitles, app: app, phase: "initial-chinese")
         assertDestinationsAreClickable(titles: chineseTitles, app: app)
-        let picker = app.segmentedControls["settings.language"].firstMatch
+        let picker = app.buttons["settings.language"].firstMatch
         reveal(picker, app: app)
-        picker.buttons["English"].tap()
+        LanguageMenuTestSupport.select("en", nativeName: "English", in: app)
         assertEqualItemGeometry(titles: englishTitles, app: app, phase: "english")
         assertDestinationsAreClickable(titles: englishTitles, app: app)
         XCTAssertTrue(picker.isHittable, "The existing language-card position must survive native title updates")
-        picker.buttons["Simplified Chinese"].tap()
+        LanguageMenuTestSupport.select("zh-Hans", nativeName: "简体中文", in: app)
         let restoredFrames = assertEqualItemGeometry(titles: chineseTitles, app: app, phase: "restored-chinese")
         XCTAssertEqual(restoredFrames.count, initialFrames.count)
         for (initial, restored) in zip(initialFrames, restoredFrames) {

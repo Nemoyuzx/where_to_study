@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"Son İdari İşler duyurusu ve geçerli çizelge okunuyor."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"Özel takvimin kökü nesne olmalıdır."</string>
     <string name="ui_generated_ff93bd2c081d35">"Teaching Cloud Platform ödev listesini tarayıcıda aç."</string>
+    <string name="ui_generated_1a78803a506cc4">"QMplus’ı etkinleştir"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"Yalnızca Uluslararası Okul için"</string>
+    <string name="ui_generated_dba3ae91be2408">"Yerel tercihler kaydedilemedi."</string>
     <string name="ui_generated_c51e74da2b9b1b">"macOS\'te sistem ayarlarından kullanılabilir ağ veya Kişisel Erişim Noktası seçin. Uygulamada hücresel veriyi veya iki ağı zorlayan anahtar yoktur."</string>
     <string name="ui_generated_a8cb7a7cb858cf">"QMplus otomatik doldurma durdu. Resmi sitede girişi veya doğrulamayı elle tamamlayın."</string>
     <string name="ui_generated_8ff421866994b1">"QMplus otomatik doldurma kullanılamıyor. Elle giriş yapın."</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"Resmi QMplus giriş hesabı dolduruluyor…"</string>
     <string name="ui_generated_1a61edb546454e">"Resmi QMplus SSO girişi açılıyor…"</string>
     <string name="ui_generated_a16987f886401d">"Sistem ağ yardımı"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"Yalnızca doğrulanmış resmi giriş sayfalarında kayıtlı hesapla tam eşleşen hesap otomatik seçilir, kullanıcı adı ve parola doldurulur; her adım en fazla bir kez denenir. Eşleşmeyen hesap seçimi, MFA, CAPTCHA, oturumu açık tutma, risk ve koşul onayları sizin işleminizi gerektirir."</string>
+    <string name="ui_generated_fd4480c6c08ea3">"“QMplus’ı etkinleştir” seçeneğini kapatmak yalnızca bağlantı ve eşitlemeyi duraklatır; kayıtlı giriş bilgileri, oturum ve ders önbelleği korunur. Otomatik doldurmayı kapatmak, giriş bilgilerini silmek veya bağlantıyı kesip verileri temizlemek için ilgili kontrolleri kullanın."</string>
 </resources>

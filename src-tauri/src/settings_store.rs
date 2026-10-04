@@ -131,11 +131,65 @@ pub fn clear_account_access_revoked(app: &AppHandle) -> ServiceResult<()> {
 }
 
 pub fn load(app: &AppHandle) -> ServiceResult<SavedSettings> {
-    load_from_path(
+    let mut settings = load_from_path(
         &settings_path(app)?,
         credential_store::load,
         credential_store::save,
-    )
+    )?;
+    settings.qmplus_enabled = crate::qmplus_feature::enabled(app).unwrap_or(false);
+    Ok(settings)
+}
+
+// Window/tray setup needs only public preferences. A potentially interactive
+// OS credential read must not block the native main thread before its window exists.
+pub fn load_preferences(app: &AppHandle) -> ServiceResult<SavedSettings> {
+    let mut settings = load_preferences_from_path(&settings_path(app)?)?;
+    settings.qmplus_enabled = crate::qmplus_feature::enabled(app).unwrap_or(false);
+    Ok(settings)
+}
+
+fn load_preferences_from_path(path: &Path) -> ServiceResult<SavedSettings> {
+    if !path.exists() {
+        return Ok(SavedSettings::with_defaults());
+    }
+    let bytes =
+        Zeroizing::new(fs::read(path).map_err(|_| ServiceError::new("无法读取本地偏好。"))?);
+    if bytes.is_empty() {
+        return Ok(SavedSettings::with_defaults());
+    }
+    let file: SettingsFile =
+        serde_json::from_slice(&bytes).map_err(|_| ServiceError::new("本地偏好格式不正确。"))?;
+    Ok(public_settings(&file))
+}
+
+fn public_settings(file: &SettingsFile) -> SavedSettings {
+    let mut settings = SavedSettings {
+        qmplus_enabled: false,
+        account: String::new(),
+        has_saved_password: false,
+        has_saved_teaching_cloud_password: false,
+        term_id: file.term_id.clone(),
+        term_start_date: file.term_start_date.clone(),
+        campus_id: file.campus_id.clone(),
+        default_min_seats: file.default_min_seats,
+        ui_language: file.ui_language.clone(),
+        daily_course_notifications_enabled: file.daily_course_notifications_enabled,
+        daily_course_notification_minutes: file.daily_course_notification_minutes,
+        course_reminders_enabled: file.course_reminders_enabled,
+        course_reminder_minutes: file.course_reminder_minutes.clone(),
+        automatic_term_detection_enabled: file.automatic_term_detection_enabled,
+        weather_enabled: file.weather_enabled,
+        almanac_enabled: file.almanac_enabled,
+        competition_deadlines_enabled: file.competition_deadlines_enabled,
+        conference_deadlines_enabled: file.conference_deadlines_enabled,
+        school_contest_notices_enabled: file.school_contest_notices_enabled,
+        summer_camp_deadlines_enabled: file.summer_camp_deadlines_enabled,
+        hackathon_deadlines_enabled: file.hackathon_deadlines_enabled,
+        custom_deadlines_enabled: file.custom_deadlines_enabled,
+        custom_deadlines_url: file.custom_deadlines_url.clone(),
+    };
+    settings.apply_defaults();
+    settings
 }
 
 pub struct SettingsSavePlan {
@@ -172,7 +226,9 @@ pub fn prepare_save(request: SaveSettingsRequest) -> ServiceResult<SettingsSaveP
 }
 
 pub fn commit_save(app: &AppHandle, plan: SettingsSavePlan) -> ServiceResult<SavedSettings> {
-    commit_save_to_path(&settings_path(app)?, plan, credential_store::save)
+    let mut settings = commit_save_to_path(&settings_path(app)?, plan, credential_store::save)?;
+    settings.qmplus_enabled = crate::qmplus_feature::enabled(app).unwrap_or(false);
+    Ok(settings)
 }
 
 pub fn clear_local_files_preserving_revocation(app: &AppHandle) -> ServiceResult<()> {
@@ -236,31 +292,7 @@ where
             ));
         }
     };
-    let mut settings = SavedSettings {
-        account: String::new(),
-        has_saved_password: false,
-        has_saved_teaching_cloud_password: false,
-        term_id: file.term_id.clone(),
-        term_start_date: file.term_start_date.clone(),
-        campus_id: file.campus_id.clone(),
-        default_min_seats: file.default_min_seats,
-        ui_language: file.ui_language.clone(),
-        daily_course_notifications_enabled: file.daily_course_notifications_enabled,
-        daily_course_notification_minutes: file.daily_course_notification_minutes,
-        course_reminders_enabled: file.course_reminders_enabled,
-        course_reminder_minutes: file.course_reminder_minutes.clone(),
-        automatic_term_detection_enabled: file.automatic_term_detection_enabled,
-        weather_enabled: file.weather_enabled,
-        almanac_enabled: file.almanac_enabled,
-        competition_deadlines_enabled: file.competition_deadlines_enabled,
-        conference_deadlines_enabled: file.conference_deadlines_enabled,
-        school_contest_notices_enabled: file.school_contest_notices_enabled,
-        summer_camp_deadlines_enabled: file.summer_camp_deadlines_enabled,
-        hackathon_deadlines_enabled: file.hackathon_deadlines_enabled,
-        custom_deadlines_enabled: file.custom_deadlines_enabled,
-        custom_deadlines_url: file.custom_deadlines_url.clone(),
-    };
-    settings.apply_defaults();
+    let settings = public_settings(&file);
 
     if !file.account.is_empty() || !file.password.is_empty() {
         let credentials = Credentials {
@@ -385,6 +417,7 @@ where
         account_scope,
     };
     let settings = SavedSettings {
+        qmplus_enabled: false,
         account: credentials.account.clone(),
         has_saved_password: !credentials.password.is_empty(),
         has_saved_teaching_cloud_password: credentials
@@ -625,7 +658,9 @@ fn clear_directory_preserving_revocation(directory: &Path) -> ServiceResult<()> 
     for entry in entries {
         let entry =
             entry.map_err(|error| ServiceError::new(format!("无法读取本地数据项目：{error}")))?;
-        if entry.file_name() == ACCOUNT_ACCESS_REVOKED_FILE_NAME {
+        if entry.file_name() == ACCOUNT_ACCESS_REVOKED_FILE_NAME
+            || entry.file_name() == crate::qmplus_feature::FILE_NAME
+        {
             continue;
         }
         let file_type = entry
@@ -678,6 +713,22 @@ fn fail_closed_after_redaction_error(path: &Path, write_error: ServiceError) -> 
 mod tests {
     use super::*;
     use std::cell::{Cell, RefCell};
+
+    #[test]
+    fn native_window_setup_reads_only_public_preferences_without_migrating_or_touching_credentials()
+    {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.json");
+        let fixture = r#"{"account":"synthetic-account","password":"synthetic-password","ui_language":"en","daily_course_notifications_enabled":true,"daily_course_notification_minutes":480}"#;
+        std::fs::write(&path, fixture).unwrap();
+        let preferences = load_preferences_from_path(&path).unwrap();
+        assert_eq!(preferences.ui_language, "en");
+        assert_eq!(preferences.daily_course_notification_minutes, 480);
+        assert!(preferences.daily_course_notifications_enabled);
+        assert!(preferences.account.is_empty());
+        assert!(!preferences.has_saved_password);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), fixture);
+    }
 
     const FIXTURE_SCOPE: &str =
         "opaque-v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -818,6 +869,7 @@ mod tests {
 
     fn fixture_settings() -> SavedSettings {
         SavedSettings {
+            qmplus_enabled: false,
             account: "fixture-account".to_string(),
             has_saved_password: true,
             has_saved_teaching_cloud_password: false,

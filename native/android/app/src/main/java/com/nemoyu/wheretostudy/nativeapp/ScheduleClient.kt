@@ -188,12 +188,17 @@ class SjdApiClient internal constructor(
         form: Map<String, String>,
         token: String?,
     ): JSONObject {
+        return CellularAssist.readOnly(method) { requestOnRoute(method, path, referer, form, token) }
+    }
+
+    private fun requestOnRoute(method: String, path: String, referer: String,
+        form: Map<String, String>, token: String?): JSONObject {
         var target = URI.create("$ORIGIN$path")
         var requestMethod = method
         var requestForm = form
         var redirectsFollowed = 0
         while (true) {
-            val connection = target.toURL().openConnection() as HttpURLConnection
+            val connection = CellularAssist.openConnection(target.toURL())
             try {
                 connection.requestMethod = requestMethod
                 connection.connectTimeout = 20_000

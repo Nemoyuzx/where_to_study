@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-course-deletions"
+description = "Enables the load_course_deletions command without any pre-configured scope."
+commands.allow = ["load_course_deletions"]
+
+[[permission]]
+identifier = "deny-load-course-deletions"
+description = "Denies the load_course_deletions command without any pre-configured scope."
+commands.deny = ["load_course_deletions"]

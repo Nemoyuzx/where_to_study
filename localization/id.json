@@ -1,4 +1,7 @@
 {
+  "启用 QMplus": "Aktifkan QMplus",
+  "仅适用国院": "Hanya untuk Fakultas Internasional",
+  "无法保存本地偏好。": "Tidak dapat menyimpan preferensi lokal.",
   " 秒": " detik",
   " 起": " dan seterusnya",
   " 门": " mata kuliah",
@@ -1525,5 +1528,7 @@
   "默认关闭。登录信息仅保存在本机系统 Keychain，与北邮密码独立，不上传或同步。": "Nonaktif secara bawaan. Detail masuk hanya disimpan di Keychain perangkat ini, terpisah dari kata sandi BUPT, dan tidak diunggah atau disinkronkan.",
   "默认提前 10 分钟；可添加多次提醒，与每日摘要分别开关。": "Bawaan: 10 menit sebelum kelas. Tambahkan beberapa pengingat dengan sakelar terpisah dari ringkasan harian.",
   "默认校区": "Kampus bawaan",
-  "默认青绿": "Hijau kebiruan klasik"
+  "默认青绿": "Hijau kebiruan klasik",
+  "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Hanya pada laman masuk resmi yang telah diverifikasi, aplikasi dapat memilih akun yang cocok persis dengan akun tersimpan dan mengisi nama pengguna serta kata sandi, dengan paling banyak satu upaya per langkah. Pemilihan akun yang tidak cocok, MFA, CAPTCHA, tetap masuk, serta konfirmasi risiko dan ketentuan tetap memerlukan tindakan Anda.",
+  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Menonaktifkan “Aktifkan QMplus” hanya menjeda koneksi dan sinkronisasi; informasi masuk tersimpan, sesi, dan cache mata kuliah tetap disimpan. Gunakan kontrol terpisah untuk mematikan isi otomatis, menghapus informasi masuk, atau memutus koneksi dan menghapus data."
 }

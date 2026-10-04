@@ -43,6 +43,8 @@ struct TodayCourseWidgetCard: View {
             background: widgetBackground,
             usesWidgetContainer: usesWidgetContainer
         )
+        .environment(\.locale, language.appLanguage.locale)
+        .environment(\.layoutDirection, language.isRightToLeft ? .rightToLeft : .leftToRight)
     }
 
     private var contentPadding: CGFloat {
@@ -101,10 +103,7 @@ struct TodayCourseWidgetCard: View {
                         courseRow(course, isToday: true)
                     }
                     if courses.count > visibleTodayCount {
-                        Text(language.text(
-                            chinese: "另有 \(courses.count - visibleTodayCount) 门课程",
-                            english: "\(courses.count - visibleTodayCount) more courses"
-                        ))
+                        Text(language.format(chinese: "另有 %d 门课程", english: "%d more courses", courses.count - visibleTodayCount))
                             .font(.caption2)
                             .foregroundStyle(widgetSecondaryText)
                             .lineLimit(1)
@@ -135,10 +134,7 @@ struct TodayCourseWidgetCard: View {
                 .foregroundStyle(widgetText)
                 .lineLimit(1)
             Spacer(minLength: 4)
-            Text(courses.isEmpty ? "" : language.text(
-                chinese: "\(courses.count) 门",
-                english: family == .systemSmall ? "\(courses.count)" : "\(courses.count) courses"
-            ))
+            Text(courses.isEmpty ? "" : language.format(chinese: "%d 门", english: family == .systemSmall ? "%d" : "%d courses", courses.count))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(widgetSecondaryText)
                 .lineLimit(1)
@@ -302,16 +298,10 @@ struct TodayCourseWidgetCard: View {
             values.append(sectionText)
         }
         if preferences.showsLocation, !course.room.isEmpty {
-            values.append(language.text(
-                chinese: "地点：\(course.room)",
-                english: "Room: \(course.room)"
-            ))
+            values.append(language.format(chinese: "地点：%@", english: "Room: %@", course.room))
         }
         if preferences.showsTeacher, let teacher = nonempty(course.teacher) {
-            values.append(language.text(
-                chinese: "教师：\(teacher)",
-                english: "Teacher: \(teacher)"
-            ))
+            values.append(language.format(chinese: "教师：%@", english: "Teacher: %@", teacher))
         }
         return values.filter { !$0.isEmpty }.joined(separator: " · ")
     }

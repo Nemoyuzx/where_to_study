@@ -52,6 +52,7 @@ class SettingsPage internal constructor(
     private var captureReminderOffsets: () -> List<String>? = { null }
     private var pendingLanguageCommit: Runnable? = null
     private var pendingLanguageSource: WeakReference<View>? = null
+    private var languagePickerDialog: AlertDialog? = null
     private var languageRevision = 0
 
     internal fun captureDraft(): SettingsPageDraft = SettingsPageDraft(
@@ -143,6 +144,8 @@ class SettingsPage internal constructor(
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(ColorThemeSettingsView(activity, isCompact, availableWidthDp))
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                        addView(appSettingsSurface())
+                        addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(languageSurface())
                         addView(spacer(activity, UiMetrics.sectionSpacingDp))
                         addView(aboutSurface())
@@ -171,6 +174,8 @@ class SettingsPage internal constructor(
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(ColorThemeSettingsView(activity, isCompact, availableWidthDp))
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
+                addView(appSettingsSurface())
+                addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(languageSurface())
                 addView(spacer(activity, UiMetrics.sectionSpacingDp))
                 addView(aboutSurface())
@@ -193,6 +198,34 @@ class SettingsPage internal constructor(
         }
     }
 
+    private fun appSettingsSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
+        applyCompactSurfacePadding()
+        addView(sectionTitle(activity, "应用设置", R.drawable.ic_settings_language))
+        val toggle = featureSwitch(activity.getString(R.string.cellular_assist_title), preferences.cellularAssistEnabled) {}
+            .apply { id = R.id.settings_cellular_assist }
+        var restoring = false
+        toggle.setOnCheckedChangeListener { button, enabled ->
+            if (restoring) return@setOnCheckedChangeListener
+            activity.performControlHaptic(button)
+            try {
+                preferences.cellularAssistEnabled = enabled
+            } catch (_: Exception) {
+                // The transport's session-off fence is owned by its preference
+                // setter; reflect the effective preference without recursing.
+                restoring = true
+                toggle.isChecked = preferences.cellularAssistEnabled
+                restoring = false
+                Toast.makeText(activity, activity.getString(R.string.cellular_assist_save_failed), Toast.LENGTH_LONG).show()
+            }
+        }
+        addView(toggle)
+        addView(TextView(activity).apply {
+            text = activity.getString(R.string.cellular_assist_description)
+            textSize = 12f; setThemeTextColor { Palette.muted }; setLineSpacing(0f, 1.1f)
+            setPadding(0, activity.dp(7), 0, 0)
+        })
+    }
+
     private fun languageSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.settings_language_section
         applyCompactSurfacePadding()
@@ -200,13 +233,16 @@ class SettingsPage internal constructor(
         val languages = AppLanguage.entries
         val current = languages.indexOfFirst { it.code == preferences.languageCode }
             .coerceAtLeast(0)
-        val languageControl = segmentedControl(
-            labels = languages.map { AppLocale.displayName(activity, it) },
-            initialIndex = current,
-            viewID = R.id.settings_language_selector,
-        ) { position, source ->
+        val languageControl = settingsActionButton(AppLocale.displayName(activity, languages[current]), false) {}
+            .apply {
+                id = R.id.settings_language_selector; UiText.preserveRawText(this)
+                contentDescription = activity.uiText("语言") + ": " + text
+            }
+        fun selectLanguage(position: Int, source: View) {
             val selectedLanguage = languages[position]
             cancelPendingLanguageCommit()
+            languageControl.text = AppLocale.displayName(activity, selectedLanguage)
+            languageControl.contentDescription = activity.uiText("语言") + ": " + languageControl.text
             if (selectedLanguage.code != preferences.languageCode) {
                 activity.performControlHaptic(source)
                 val revision = languageRevision
@@ -225,12 +261,36 @@ class SettingsPage internal constructor(
                 pendingLanguageCommit = action
                 pendingLanguageSource = weakSource
                 source.postDelayed(action, SEGMENT_SELECTION_COMMIT_DELAY_MILLIS)
+            } else if(activity.languageTransitionPhase() != "idle") {
+                activity.updateAppLanguage(selectedLanguage)
             }
         }
         val weakPage = WeakReference(this@SettingsPage)
+        languageControl.setOnClickListener { source ->
+            if (!source.isAttachedToWindow || !activity.isCurrentUiOwner()) return@setOnClickListener
+            activity.performControlHaptic(source)
+            languagePickerDialog?.dismiss()
+            val selected = languages.indexOfFirst { it.code == preferences.languageCode }.coerceAtLeast(0)
+            val dialog = AlertDialog.Builder(activity)
+                .setTitle(activity.uiText("语言"))
+                .setSingleChoiceItems(languages.map { AppLocale.displayName(activity, it) }.toTypedArray(), selected) { picker, position ->
+                    if (source.isAttachedToWindow && activity.isCurrentUiOwner()) selectLanguage(position, source)
+                    picker.dismiss()
+                }
+                .setNegativeButton(activity.uiText("取消"), null)
+                .create()
+            languagePickerDialog = dialog
+            dialog.setOnDismissListener {
+                weakPage.get()?.let { page -> if (page.languagePickerDialog === dialog) page.languagePickerDialog = null }
+            }
+            dialog.show()
+            dialog.window?.let { bindWindowColorTheme(it, modal = true) }
+        }
         languageControl.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) = Unit
-            override fun onViewDetachedFromWindow(view: View) { weakPage.get()?.cancelPendingLanguageCommit() }
+            override fun onViewDetachedFromWindow(view: View) {
+                weakPage.get()?.let { page -> page.cancelPendingLanguageCommit(); page.languagePickerDialog?.dismiss() }
+            }
         })
         addView(languageControl)
         addView(TextView(activity).apply {
@@ -244,31 +304,60 @@ class SettingsPage internal constructor(
     private fun qmplusSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.settings_qmplus_section
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "QMplus", R.drawable.ic_section_check))
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            addView(sectionTitle(activity, "QMplus", R.drawable.ic_section_check))
+            addView(TextView(activity).apply {
+                text = activity.uiText("仅适用国院"); textSize = 12f; setThemeTextColor { Palette.muted }
+                setPadding(activity.dp(8), 0, 0, activity.dp(12))
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        })
         addView(TextView(activity).apply {
             text = activity.getString(R.string.qmplus_connection_notice); textSize = 12f
             setThemeTextColor { Palette.muted }; setLineSpacing(0f, 1.1f)
             setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
         })
         val repository = activity.qmplusState()
+        var restoringFeatureSwitch = false
+        val enabledSwitch = featureSwitch(activity.uiText("启用 QMplus"), repository.isFeatureEnabled) {}
+        enabledSwitch.id = R.id.settings_qmplus_enabled
+        enabledSwitch.contentDescription = activity.uiText("启用 QMplus")
+        enabledSwitch.setOnCheckedChangeListener { button, enabled ->
+            if (!restoringFeatureSwitch) {
+                activity.performControlHaptic(button)
+                activity.setQMplusEnabled(enabled)
+                restoringFeatureSwitch = true
+                enabledSwitch.isChecked = repository.isFeatureEnabled
+                restoringFeatureSwitch = false
+            }
+        }
         val stateText = TextView(activity).apply { textSize = 13f; setThemeTextColor { Palette.muted } }
         val connect = settingsActionButton(activity.getString(R.string.qmplus_connect), false) { activity.connectQmplus() }
             .apply { id = R.id.settings_qmplus_connect }
         val disconnect = settingsActionButton(activity.getString(R.string.qmplus_disconnect), false) { activity.disconnectQmplus() }
             .apply { id = R.id.settings_qmplus_disconnect }
+        val savedLogin = settingsActionButton(activity.getString(R.string.qmplus_saved_login_title), false) {
+            QmplusSavedLoginDialog.show(activity, this)
+        }.apply { id = R.id.settings_qmplus_saved_login }
         fun update() {
+            restoringFeatureSwitch = true
+            enabledSwitch.isChecked = repository.isFeatureEnabled
+            restoringFeatureSwitch = false
+            enabledSwitch.isEnabled = !repository.isLoading
             stateText.text = activity.getString(when {
                 repository.isClearingSession -> R.string.qmplus_clearing_session
                 repository.isLoading -> R.string.qmplus_loading
                 repository.snapshot != null -> R.string.qmplus_connected
                 else -> R.string.qmplus_not_connected
             })
-            connect.isEnabled = !repository.isLoading && !repository.isClearingSession && repository.connection == null
+            connect.isEnabled = repository.isFeatureEnabled && !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession && repository.connection == null
             disconnect.isEnabled = !repository.isClearingSession
+            savedLogin.isEnabled = !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession && repository.connection == null
         }
         update()
-        addView(stateText); addView(spacer(activity, 8)); addView(connect)
+        addView(enabledSwitch); addView(stateText); addView(spacer(activity, 8)); addView(connect)
         addView(spacer(activity, 8)); addView(disconnect)
+        addView(spacer(activity, 8)); addView(savedLogin)
         addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
                 repository.addObserver(view) { if (view.isAttachedToWindow) update() }
@@ -1904,7 +1993,11 @@ class SettingsPage internal constructor(
         }
 
     private fun privacyParagraph(body: String): TextView = TextView(activity).apply {
-        text = if (AppLocale.isEnglish(activity)) body.substringAfter("\n\n", body) else body
+        text = when (AppLocale.resolvedLanguage(activity)) {
+            AppLanguage.ENGLISH -> body.substringAfter("\n\n", body)
+            AppLanguage.SIMPLIFIED_CHINESE -> body
+            else -> activity.uiText(body.substringBefore("\n\n"))
+        }
         // This disclosure already carries its current translation. Generic
         // prefix fallbacks must not replace it with an older policy paragraph.
         UiText.preserveRawText(this)
@@ -1930,8 +2023,8 @@ class SettingsPage internal constructor(
             ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\n" +
                 "The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."),
         "QMplus 独立连接 / Independent QMplus connection" to
-            ("QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在独立的应用内 WebView 进程和 profile 打开 QMplus 官方网页，由用户直接完成 SSO／Microsoft MFA；应用没有 Microsoft 密码输入框，也不读取外部浏览器 Cookie。只读脚本返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器。业务快照保存在应用私有存储中；真正部分失败时保留并标注此前已知资料。断开连接或清除本地数据会清除应用管理的网页会话与快照；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息及网络元数据。\n\n" +
-                "QMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in a separate app-owned WebView process/profile, where you complete SSO/Microsoft MFA directly. The app has no Microsoft password field and reads no external-browser cookies. Its read-only script returns a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML; it never submits work, starts quizzes, or uses a third-party Worker or this project’s server. The snapshot is stored in app-private storage; genuine partial failures retain labelled known information. Disconnecting or clearing local data removes the app-managed web session and snapshot; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies."),
+            ("QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在独立的应用内 WebView 进程和 profile 打开 QMplus 官方网页。有效会话可不显示登录窗口直接同步；登录信息默认不保存，只有用户明确选择并保存，才在本机独立的 Keystore 域加密保存 QMplus 账号和密码，用于已验证官方登录表单的用户名／密码各一次填写与普通登录提交。验证码、MFA、账号选择、风险确认、新条款或未知页面会显示官方窗口，由用户本人完成；应用不绕过验证，不复用北邮密码，也不读取外部浏览器 Cookie。只读脚本返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器。业务快照保存在应用私有存储中；真正部分失败时保留并标注此前已知资料。断开连接或清除本地数据会清除应用管理的网页会话、快照及已保存登录信息；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息及网络元数据。\n\n" +
+                "QMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in a separate app-owned WebView process/profile. A valid session can sync without showing a sign-in window. Sign-in details are off by default; only an explicit choice and save encrypts the QMplus account and password locally in a separate Keystore domain, for one username/password fill and ordinary sign-in submission per verified official form. CAPTCHA, MFA, account selection, risk confirmation, new terms, or unknown pages show the official window for you to complete. The app never bypasses verification, reuses BUPT passwords, or reads external-browser cookies. Its read-only script returns a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML; it never submits work, starts quizzes, or uses a third-party Worker or this project’s server. The snapshot is stored in app-private storage; genuine partial failures retain labelled known information. Disconnecting or clearing local data removes the app-managed web session, snapshot, and saved sign-in details; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies."),
         "系统日历、通知与小组件 / Calendar, notifications, and widgets" to
             ("日历写入和本地课程通知需要你的操作与权限；应用只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供，相关数据不上传。\n\n" +
                 "Calendar writes and local course notifications require your action and permission, and only marked events are managed. Widgets exist only on supported platforms. This data is not uploaded."),

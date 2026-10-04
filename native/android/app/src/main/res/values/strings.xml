@@ -64,8 +64,8 @@
     <string name="qmplus_loading">正在读取课程…</string>
     <string name="qmplus_connected">已保存 QMplus 课程快照；刷新需在官方页面完成。</string>
     <string name="qmplus_not_connected">尚未连接 QMplus，请在设置中完成官方 SSO / MFA 登录后同步课程。</string>
-    <string name="qmplus_connection_notice">在官方网页完成 SSO / MFA，不新增 Microsoft 密码字段，也不读取外部浏览器 Cookie。业务缓存仅保存课程与作业 / 测验时间，不含密码、会话 Cookie 或 sesskey。退出会清除本应用的 QMplus 网页会话与课程缓存。</string>
-    <string name="qmplus_web_login_notice">在官方页面完成 SSO / MFA 后点击“同步课程”。仅同步课程及已发布的作业 / 测验，不会提交作业或开始测验。</string>
+    <string name="qmplus_connection_notice">有效的应用内会话可直接同步。登录信息默认不保存；只有你明确选择并保存，才在本机独立加密，用于受信官方登录网页的一次自动填写。验证码 / MFA 和其它验证仍由你完成，不读取外部浏览器 Cookie。业务快照不含密码、Cookie 或 sesskey；断开会清除本应用的会话、快照及已保存登录信息。</string>
+    <string name="qmplus_web_login_notice">在官方页面完成所需验证，随后自动同步课程；也可点击“同步课程”。仅同步课程及已发布的作业 / 测验，不会提交作业或开始测验。</string>
     <string name="qmplus_web_error">QMplus 同步未完成。请检查官方登录状态与网络后重试；原课程缓存不受影响。</string>
     <string name="qmplus_web_unavailable">此设备无法打开官方 QMplus 登录网页。请检查系统 WebView 是否可用后重试；原课程缓存不受影响。</string>
     <string name="qmplus_clear_failed">无法清除 QMplus 课程缓存，请重试。</string>
@@ -100,4 +100,7 @@
     <string name="qmplus_not_published">未公布 / 尚未确认</string>
     <string name="qmplus_time_limit">限时：%1$d 秒</string>
     <string name="qmplus_detail_unavailable">详情受限或未完整读取；未确认的时间不作推断。</string>
+    <string name="cellular_assist_title">使用移动网络改善数据获取</string>
+    <string name="cellular_assist_description">Wi-Fi 请求失败时尝试移动网络，可能产生流量费用。仅对可安全重试的只读请求回退一次；不会重发登录密码，QMplus 网页仍由系统处理。</string>
+    <string name="cellular_assist_save_failed">无法保存移动网络设置，请重试。关闭失败时，本次会话仍停止移动网络回退。</string>
 </resources>

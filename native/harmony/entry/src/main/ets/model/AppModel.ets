@@ -26,6 +26,7 @@ import { ScheduleFetching, SJDScheduleClient } from '../net/SjdScheduleClient';
 import { ClassroomFetching, SJDClassroomClient } from '../net/SjdClassroomClient';
 import { HolidayFetching, HolidayClient } from '../net/HolidayClient';
 import { CampusWeather, WeatherFetching, UAPIWeatherClient } from '../net/DailyInfoClient';
+import { CellularAssist } from '../net/CellularAssist';
 import {
   AlmanacInfo, AssignmentDeadlineItem, CalendarDailyInfoClient, CalendarDailyInfoFetching,
   CustomDeadlineURLPolicy, FavoriteDeadlineCodec, PublicDeadlineItem, PublicDeadlineKind,
@@ -203,6 +204,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
   @Trace widgetCourseLimit: number = WidgetCoursePreferences.defaultLimit;
   // 日期详情与生活信息开关：与 Apple/Android/Tauri 默认值保持一致。
   @Trace weatherEnabled: boolean = true;
+  @Trace qmplusEnabled: boolean = false;
+  @Trace cellularAssistEnabled: boolean = false;
   @Trace almanacEnabled: boolean = true;
   @Trace competitionDeadlinesEnabled: boolean = true;
   @Trace conferenceDeadlinesEnabled: boolean = true;
@@ -319,6 +322,15 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private favoriteDeadlineClearInProgress: boolean = false;
   private localDataClearWork: Promise<void> | null = null;
   private languagePreferenceWrite: Promise<void> = Promise.resolve();
+  private cellularAssistPreferenceWrite: Promise<void> = Promise.resolve();
+  private qmplusPreferenceWrite: Promise<void> = Promise.resolve();
+  private qmplusPreferenceRevision: number = 0;
+  private qmplusClearGeneration: number = 0;
+  private qmplusOffSafetyLatch: boolean = false;
+  private cellularAssistRevision: number = 0;
+  private cellularAssistClearGeneration: number = 0;
+  private committedCellularAssistEnabled: boolean = false;
+  private cellularAssistOffSafetyLatch: boolean = false;
   private languageSettingRevision: number = 0;
   private languageClearGeneration: number = 0;
   private committedLanguageSetting: AppLanguage = AppLanguage.system;
@@ -405,9 +417,14 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.launched = true;
     const languageGeneration: number = this.languageClearGeneration;
     const languageRevision: number = this.languageSettingRevision;
+    const cellularGeneration: number = this.cellularAssistClearGeneration;
+    const cellularRevision: number = this.cellularAssistRevision;
+    const qmplusGeneration: number = this.qmplusClearGeneration;
+    const qmplusRevision: number = this.qmplusPreferenceRevision;
     // BUG-039 修复：UI 测试偏好域每次启动清空，避免跨测试残留状态。
     await this.prepareForLaunch();
     await this.restoreColorTheme();
+    if (!this.isSampleMode()) { await this.restoreQMplusPreference(qmplusGeneration, qmplusRevision); }
     const savedTermID: string | null = await this.preferences.getString('termID');
     const savedTermStart: string | null = await this.preferences.getString('termStartDate');
     const savedCampusID: string | null = await this.preferences.getString('campusID');
@@ -427,6 +444,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
       1), WidgetCoursePreferences.maximumLimit);
     this.weatherEnabled = await this.preferences.getBool('weatherEnabled', true);
+    const savedCellularAssist: boolean = await this.preferences.getBool(CellularAssist.preferenceKey, false);
     this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
     this.competitionDeadlinesEnabled = await this.preferences.getBool(
       'competitionDeadlinesEnabled', true);
@@ -448,6 +466,13 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
       this.committedLanguageSetting = this.languageSetting();
       this.systemLanguageID = AppLanguageInfo.systemLanguage();
+    }
+    if (cellularGeneration === this.cellularAssistClearGeneration &&
+      cellularRevision === this.cellularAssistRevision && this.localDataClearWork === null &&
+      !this.cellularAssistOffSafetyLatch) {
+      this.cellularAssistEnabled = savedCellularAssist;
+      this.committedCellularAssistEnabled = savedCellularAssist;
+      CellularAssist.enabled = savedCellularAssist;
     }
     if (this.automaticTermDetection) {
       const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
@@ -722,6 +747,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.invalidatePendingOperations();
     this.cancelDailyCourseNotifications().catch(() => {});
     this.runtimeMode = AppRuntimeMode.sample(true);
+    this.qmplusPreferenceRevision++;
+    this.qmplusEnabled = false;
 
     this.account = '';
     this.password = '';
@@ -786,9 +813,15 @@ export class AppModel implements CalendarViewportPreloadTarget {
     try {
       const languageGeneration: number = this.languageClearGeneration;
       const languageRevision: number = this.languageSettingRevision;
+      const cellularGeneration: number = this.cellularAssistClearGeneration;
+      const cellularRevision: number = this.cellularAssistRevision;
+      const qmplusGeneration: number = this.qmplusClearGeneration;
+      const qmplusRevision: number = this.qmplusPreferenceRevision;
       await this.dailyCourseNotificationPreferenceWrite.catch(() => {});
       await this.languagePreferenceWrite.catch(() => {});
+      await this.cellularAssistPreferenceWrite.catch(() => {});
       await this.restoreColorTheme();
+      await this.restoreQMplusPreference(qmplusGeneration, qmplusRevision);
       const savedTermID: string | null = await this.preferences.getString('termID');
       const savedTermStart: string | null = await this.preferences.getString('termStartDate');
       const savedCampusID: string | null = await this.preferences.getString('campusID');
@@ -808,6 +841,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
         await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
         1), WidgetCoursePreferences.maximumLimit);
       this.weatherEnabled = await this.preferences.getBool('weatherEnabled', true);
+      const savedCellularAssist: boolean = await this.preferences.getBool(CellularAssist.preferenceKey, false);
       this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
       this.competitionDeadlinesEnabled = await this.preferences.getBool(
         'competitionDeadlinesEnabled', true);
@@ -827,6 +861,13 @@ export class AppModel implements CalendarViewportPreloadTarget {
         this.languageSettingRawValue = AppLanguageInfo.normalize(savedLanguage);
         this.committedLanguageSetting = this.languageSetting();
         this.systemLanguageID = AppLanguageInfo.systemLanguage();
+      }
+      if (cellularGeneration === this.cellularAssistClearGeneration &&
+        cellularRevision === this.cellularAssistRevision && this.localDataClearWork === null &&
+        !this.cellularAssistOffSafetyLatch) {
+        this.cellularAssistEnabled = savedCellularAssist;
+        this.committedCellularAssistEnabled = savedCellularAssist;
+        CellularAssist.enabled = savedCellularAssist;
       }
       if (this.automaticTermDetection) {
         const suggested: SemesterSuggestion = SemesterLogic.suggestCurrentPeriod();
@@ -1095,6 +1136,94 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.loadWeather(this.queryCampusID);
     } else {
       this.resetWeatherState();
+    }
+  }
+
+  async setCellularAssistEnabled(value: boolean): Promise<boolean> {
+    if (this.localDataClearWork !== null) { return false; }
+    if (value === this.cellularAssistEnabled && !(this.cellularAssistOffSafetyLatch && !value)) { return true; }
+    const revision: number = ++this.cellularAssistRevision;
+    const generation: number = this.cellularAssistClearGeneration;
+    // 关闭立即生效；开启须等偏好写入成功，失败的关闭绝不回滚启用并产生流量费。
+    this.cellularAssistEnabled = value;
+    if (!value) { CellularAssist.enabled = false; }
+    const write: Promise<boolean> = this.cellularAssistPreferenceWrite.catch(() => {})
+      .then(async (): Promise<boolean> => {
+        if (generation !== this.cellularAssistClearGeneration || this.localDataClearWork !== null) { return false; }
+        await this.preferences.setBool(CellularAssist.preferenceKey, value);
+        if (generation !== this.cellularAssistClearGeneration || this.localDataClearWork !== null) { return false; }
+        this.committedCellularAssistEnabled = value;
+        if (revision === this.cellularAssistRevision) {
+          this.cellularAssistOffSafetyLatch = false;
+          CellularAssist.enabled = value;
+        }
+        return true;
+      });
+    this.cellularAssistPreferenceWrite = write.then((): void => {}, (): void => {});
+    try {
+      return await write;
+    } catch (e) {
+      if (revision === this.cellularAssistRevision && generation === this.cellularAssistClearGeneration) {
+        if (!value || this.cellularAssistOffSafetyLatch) {
+          this.cellularAssistOffSafetyLatch = true;
+          this.cellularAssistEnabled = false;
+          CellularAssist.enabled = false;
+          this.statusMessage = '移动网络辅助已在本次会话中关闭，但设置未保存；下次启动请检查开关。';
+        } else {
+          this.cellularAssistEnabled = this.committedCellularAssistEnabled;
+          CellularAssist.enabled = this.committedCellularAssistEnabled;
+          this.statusMessage = '无法保存移动网络设置，请重试。';
+        }
+      }
+      return false;
+    }
+  }
+
+  private async restoreQMplusPreference(generation: number, revision: number): Promise<void> {
+    const work: Promise<void> = this.qmplusPreferenceWrite.catch(() => {})
+      .then(async (): Promise<void> => {
+        if (generation !== this.qmplusClearGeneration || revision !== this.qmplusPreferenceRevision ||
+          this.localDataClearWork !== null || this.isSampleMode() || this.qmplusOffSafetyLatch) { return; }
+        const saved: boolean | null = await this.preferences.getOptionalBool('qmplusEnabled');
+        // Only the non-secret consent nonce is needed for upgrade migration.
+        const enabled: boolean = saved ?? (await this.preferences.getString('qmplusAutoFillAuthorizedRecordID') ?? '').length > 0;
+        if (generation !== this.qmplusClearGeneration || revision !== this.qmplusPreferenceRevision ||
+          this.localDataClearWork !== null || this.isSampleMode()) { return; }
+        if (saved === null) { await this.preferences.setBool('qmplusEnabled', enabled); }
+        if (generation === this.qmplusClearGeneration && revision === this.qmplusPreferenceRevision &&
+          this.localDataClearWork === null && !this.isSampleMode()) { this.qmplusEnabled = enabled; }
+      });
+    this.qmplusPreferenceWrite = work.catch(() => {});
+    try { await work; } catch (e) {
+      if (generation === this.qmplusClearGeneration && revision === this.qmplusPreferenceRevision) {
+        this.qmplusEnabled = false;
+      }
+    }
+  }
+
+  async setQMplusEnabled(value: boolean): Promise<boolean> {
+    if (this.isSampleMode() || this.localDataClearWork !== null) { return false; }
+    const revision: number = ++this.qmplusPreferenceRevision;
+    const generation: number = this.qmplusClearGeneration;
+    // Off immediately retires the UI/Web owner; On waits for a durable preference.
+    if (!value) { this.qmplusEnabled = false; this.qmplusOffSafetyLatch = true; }
+    const work: Promise<boolean> = this.qmplusPreferenceWrite.catch(() => {})
+      .then(async (): Promise<boolean> => {
+        if (generation !== this.qmplusClearGeneration || this.localDataClearWork !== null) { return false; }
+        await this.preferences.setBool('qmplusEnabled', value);
+        if (generation !== this.qmplusClearGeneration || this.localDataClearWork !== null) { return false; }
+        if (revision === this.qmplusPreferenceRevision && !this.isSampleMode()) {
+          this.qmplusEnabled = value;
+          this.qmplusOffSafetyLatch = false;
+        }
+        return true;
+      });
+    this.qmplusPreferenceWrite = work.then((): void => {}, (): void => {});
+    try { return await work; } catch (e) {
+      if (revision === this.qmplusPreferenceRevision && generation === this.qmplusClearGeneration) {
+        this.statusMessage = '无法保存本地偏好。';
+      }
+      return false;
     }
   }
 
@@ -1527,7 +1656,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.dailyCourseNotificationStatusMessage = '正在确认通知权限…';
     const coordinator: DailyCourseNotificationCoordinator = new DailyCourseNotificationCoordinator(
       this.dailyCourseNotificationScheduler, this.dailyCourseNotificationAuthorizationTimeoutMs,
-      this.resolvedLanguage() === AppLanguage.english);
+      this.resolvedLanguage());
     const work: Promise<void> = (async (): Promise<void> => {
       try {
         const result = await coordinator.reconcile(
@@ -1687,6 +1816,15 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.favoriteDeadlineClearGeneration++;
     this.languageClearGeneration++;
     this.languageSettingRevision++;
+    this.qmplusClearGeneration++;
+    this.qmplusPreferenceRevision++;
+    this.qmplusEnabled = false;
+    this.qmplusOffSafetyLatch = true;
+    this.cellularAssistClearGeneration++;
+    this.cellularAssistRevision++;
+    this.cellularAssistOffSafetyLatch = true;
+    this.cellularAssistEnabled = false;
+    CellularAssist.enabled = false;
     this.invalidatePendingOperations();
     const work: Promise<void> = this.clearLocalDataAfterFavoriteWrites();
     this.localDataClearWork = work;
@@ -1703,6 +1841,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private async clearLocalDataAfterFavoriteWrites(): Promise<void> {
     // 先排空已开始的收藏写入，再删 key；旧 Promise 不可能在删除后重建它。
     await this.favoriteDeadlinePreferenceWrite.catch(() => {});
+    await this.qmplusPreferenceWrite.catch(() => {});
+    await this.preferences.setBool('qmplusEnabled', false);
+    this.qmplusOffSafetyLatch = false;
     await this.preferences.remove('favoriteDeadlinesV1');
     this.favoriteDeadlines = [];
     this.dailyCourseNotificationsEnabled = false;
@@ -1784,6 +1925,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
     await this.preferences.remove('widgetShowsTeacher');
     await this.preferences.remove('widgetCourseLimit');
     await this.preferences.remove('weatherEnabled');
+    await this.cellularAssistPreferenceWrite.catch(() => {});
+    await this.preferences.remove(CellularAssist.preferenceKey);
+    this.committedCellularAssistEnabled = false;
+    this.cellularAssistOffSafetyLatch = false;
     await this.preferences.remove('almanacEnabled');
     await this.preferences.remove('competitionDeadlinesEnabled');
     await this.preferences.remove('conferenceDeadlinesEnabled');

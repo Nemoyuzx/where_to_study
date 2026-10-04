@@ -18,6 +18,7 @@ private fun courseTintText(): Int = ColorThemeLogic.readableText(Palette.primary
 internal fun courseDirectoryRow(context: MainActivity, key: String, name: String, teachers: List<String>,
     counts: CourseSubmissionCounts, termLabel: String? = null, onOpen: () -> Unit): View = LinearLayout(context).apply {
     tag = key
+    UiText.preserveRawText(this)
     orientation = LinearLayout.VERTICAL
     isClickable = true; isFocusable = true
     contentDescription = (listOf(name) + teachers + listOfNotNull(termLabel,

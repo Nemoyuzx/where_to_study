@@ -3,6 +3,7 @@
 // 仅向 auth.bupt.edu.cn 提交账号密码；不读取浏览器 Cookie/令牌，
 // 不持久化 CAS Cookie、ticket 或 UCloud token。
 import { http } from '@kit.NetworkKit';
+import { CellularAssist } from './CellularAssist';
 import { util } from '@kit.ArkTS';
 import { AppMeta } from '../common/AppMeta';
 import { JsonUtil } from '../common/JsonUtil';
@@ -423,7 +424,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     }
     const client: http.HttpRequest = http.createHttp();
     try {
-      const response: http.HttpResponse = await client.request(url, {
+      const response: http.HttpResponse = await CellularAssist.request(client, url, {
         method: method,
         header: headers,
         extraData: body,

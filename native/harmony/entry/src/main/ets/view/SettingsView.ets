@@ -61,6 +61,10 @@ export struct SettingsView {
   };
   @Local contentWidth: number = 350;
   @Local requestedFavoriteCount: number = 20;
+  @Local qmPlusAccountDraft: string = '';
+  @Local qmPlusPasswordDraft: string = '';
+  @Local qmplusFeatureSwitchValue: boolean = false;
+  @Local qmplusFeatureSaving: boolean = false;
   private statusDismissRevision: number = 0;
   private readonly settingsScroller: Scroller = new Scroller();
   private languageCardGlobalY: number = Number.NaN;
@@ -72,12 +76,41 @@ export struct SettingsView {
     'https://github.com/Nemoyuzx/where_to_study';
 
   aboutToAppear(): void {
+    this.qmplusFeatureSwitchValue = this.model.qmplusEnabled;
     if (!this.favoriteManagerOnly) {
       this.session.syncCustomDeadlineURL(this.model.customDeadlinesURL);
+      this.applyPendingLanguageRequest();
+      if (!this.model.isSampleMode()) { void this.qmPlusSession.restoreSavedLoginStatus(); }
     }
   }
 
+  @Monitor('session.requestedLanguageRawValue')
+  onLanguagePickerSelection(monitor: IMonitor): void {
+    if (!this.favoriteManagerOnly) { this.applyPendingLanguageRequest(); }
+  }
+
+  @Monitor('model.runtimeMode')
+  onQMPlusRuntimeScopeChanged(): void {
+    if (this.model.isSampleMode()) {
+      this.qmPlusAccountDraft = '';
+      this.qmPlusPasswordDraft = '';
+    } else if (!this.favoriteManagerOnly) {
+      void this.qmPlusSession.restoreSavedLoginStatus();
+    }
+  }
+
+  @Monitor('model.qmplusEnabled')
+  onQMplusFeatureChanged(monitor: IMonitor): void {
+    this.qmplusFeatureSwitchValue = this.model.qmplusEnabled;
+  }
+
+  private applyPendingLanguageRequest(): void {
+    const requested: AppLanguage | null = this.session.takeLanguageRequest();
+    if (requested !== null) { this.selectLanguageAtCurrentPosition(requested); }
+  }
+
   aboutToDisappear(): void {
+    this.qmPlusPasswordDraft = '';
     this.languageAnchorRevision++;
     this.pendingLanguageAnchor = null;
     if (this.languageAnchorCleanupTimer >= 0) {
@@ -213,6 +246,7 @@ export struct SettingsView {
             Column({ space: 16 }) {
               this.notificationSurface()
               this.dailyInfoSurface()
+              this.networkSurface()
               this.widgetSurface()
               ColorThemeSettingsCard({ seedOnlyScene: this.session.seedOnlyScene })
               this.languageSurface()
@@ -232,6 +266,7 @@ export struct SettingsView {
             this.semesterSurface()
             this.notificationSurface()
             this.dailyInfoSurface()
+            this.networkSurface()
             this.widgetSurface()
             ColorThemeSettingsCard({ seedOnlyScene: this.session.seedOnlyScene })
             this.languageSurface()
@@ -345,11 +380,8 @@ export struct SettingsView {
     onSelect: (index: number) => void, idPrefix: string, compactText: boolean = false) {
     Row() {
       ForEach(labels, (label: string, index: number) => {
-        // V2 ForEach 在 key 稳定时复用子树；若只捕获 @Builder 传入的 label，
-        // 切换语言后字符串参数不会触发 Text 更新。直接读取响应式语言状态。
-        Text(idPrefix === 'settings.language' ?
-          AppLanguageInfo.label(AppLanguageInfo.all[index], this.model.resolvedLanguage()) :
-          (idPrefix === 'settings.campus' ? this.model.text(index === 0 ? '西土城' : '沙河') : label))
+        // V2 ForEach 的稳定 key 会复用子树；校区标签直接读取响应式语言状态。
+        Text(idPrefix === 'settings.campus' ? this.model.text(index === 0 ? '西土城' : '沙河') : label)
           .id(idPrefix + '.' + index.toString())
           .fontSize(compactText ? 11 : 13.5)
           .fontWeight(selectedIndex() === index ? FontWeight.Bold : FontWeight.Regular)
@@ -378,45 +410,38 @@ export struct SettingsView {
   }
 
   @Builder
-  languageSegments() {
-    Row() {
-      ForEach(AppLanguageInfo.all, (language: AppLanguage, index: number) => {
-        Stack() {
-          // 只让这个独立底色节点过渡；语言改变导致的整页文字重排不进 animateTo。
-          Column() {}
-            .width('100%')
-            .height(32)
-            .borderRadius(6)
-            .backgroundColor(this.model.languageSetting() === language ?
-              AppTheme.segmentedSelection() : Color.Transparent)
-            .animation({ duration: 160, curve: Curve.EaseOut })
-          Text(AppLanguageInfo.label(language, this.model.resolvedLanguage()))
-            .id('settings.language.' + index.toString())
-            .fontSize(11)
-            .fontWeight(this.model.languageSetting() === language ? FontWeight.Bold : FontWeight.Regular)
-            .fontColor(AppTheme.text())
-            .textAlign(TextAlign.Center)
-            .maxLines(1)
-            .width('100%')
-            .height(32)
-            .onClick(() => this.selectLanguageAtCurrentPosition(language))
-        }
-        .layoutWeight(1)
-        .height(32)
-      }, (language: AppLanguage) => language)
-    }
-    .width('100%')
-    .height(38)
-    .padding(3)
-    .borderRadius(9)
-    .backgroundColor(AppTheme.surfaceVariant())
-  }
-
-  @Builder
   languageSurface() {
     Column({ space: 8 }) {
       this.sectionTitle('语言')
-      this.languageSegments()
+      Button() {
+        Row({ space: 8 }) {
+          Column() {
+            Text(AppLanguageInfo.label(this.model.languageSetting(), this.model.resolvedLanguage()))
+              .id('settings.language.current')
+              .fontSize(14)
+              .fontColor(AppTheme.text())
+              .textDirection(TextDirection.AUTO)
+              .maxLines(2)
+              .width('100%')
+          }
+          .id('settings.language.current.target.' + this.model.languageSetting())
+          .layoutWeight(1)
+          SymbolGlyph($r('sys.symbol.chevron_right'))
+            .fontSize(14)
+            .fontColor([AppTheme.secondaryText()])
+        }
+        .width('100%')
+      }
+      .type(ButtonType.Normal)
+      .width('100%')
+      .constraintSize({ minHeight: 38 })
+      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+      .borderRadius(9)
+      .backgroundColor(AppTheme.surfaceVariant())
+      .id('settings.language.open')
+      .accessibilityText(this.model.text('选择语言') + '：' +
+        AppLanguageInfo.label(this.model.languageSetting(), this.model.resolvedLanguage()))
+      .onClick(() => { this.session.showingLanguagePicker = true; })
     }
     .padding(16)
     .width('100%')
@@ -478,8 +503,31 @@ export struct SettingsView {
   @Builder
   qmPlusConnectionSurface() {
     Column({ space: 9 }) {
-      this.sectionTitle('连接 QMplus')
-      Text(this.model.text('在独立的官方网页完成 QMplus SSO/MFA；不向本应用输入或保存 Microsoft 密码。'))
+      Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Baseline }) {
+        Text(this.model.text('连接 QMplus'))
+          .fontSize(17).fontWeight(FontWeight.Bold).fontColor(AppTheme.text())
+        Text(this.model.text('仅适用国院'))
+          .fontSize(12).fontColor(AppTheme.secondaryText()).margin({ left: 8 })
+      }
+      .width('100%')
+      Row({ space: 10 }) {
+        Text(this.model.text('启用 QMplus')).fontSize(15).fontColor(AppTheme.text()).layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.qmplusFeatureSwitchValue })
+          .enabled(!this.model.isSampleMode() && !this.qmplusFeatureSaving)
+          .id('settings.qmplus.enabled')
+          .onChange((enabled: boolean): void => {
+            if (this.qmplusFeatureSaving || enabled === this.model.qmplusEnabled) { return; }
+            this.qmplusFeatureSwitchValue = enabled;
+            this.qmplusFeatureSaving = true;
+            if (!enabled) { this.qmPlusSession.setFeatureEnabled(false); }
+            void this.model.setQMplusEnabled(enabled).then((): void => {
+              this.qmplusFeatureSwitchValue = this.model.qmplusEnabled;
+              this.qmplusFeatureSaving = false;
+            });
+          })
+      }
+      .width('100%')
+      Text(this.model.text('QMplus 使用独立的官方网页；仅在您主动保存时，Microsoft 登录资料才进入本机安全存储。MFA 仍须本人完成。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
@@ -508,6 +556,74 @@ export struct SettingsView {
           .fontColor(AppTheme.danger())
           .width('100%')
       }
+      if (!this.model.isSampleMode()) {
+        Text(this.model.text(this.qmPlusSession.savedLoginAvailable ?
+          '已在本机安全保存 QMplus 登录资料。' : '尚未保存 QMplus 登录资料。'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+        this.field('QMplus Microsoft 登录邮箱', this.qmPlusAccountDraft, InputType.Normal,
+          (value: string): void => { this.qmPlusAccountDraft = value; },
+          !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.account')
+        this.field('QMplus 密码（仅在本机安全保存）', this.qmPlusPasswordDraft, InputType.Password,
+          (value: string): void => { this.qmPlusPasswordDraft = value; },
+          !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.password')
+        Button(this.model.text('安全保存 QMplus 登录资料'))
+          .type(ButtonType.Normal)
+          .height(ControlMetrics.height)
+          .width('100%')
+          .borderRadius(6)
+          .backgroundColor(AppTheme.surfaceVariant())
+          .fontColor(AppTheme.primary())
+          .enabled(!this.qmPlusSession.loginSettingsBusy &&
+            this.qmPlusAccountDraft.trim().length > 0 && this.qmPlusPasswordDraft.length > 0)
+          .id('settings.qmplus.save-login')
+          .onClick(() => {
+            const account: string = this.qmPlusAccountDraft;
+            const password: string = this.qmPlusPasswordDraft;
+            this.qmPlusPasswordDraft = '';
+            void this.qmPlusSession.saveSavedLogin(account, password);
+          })
+        Row({ space: 8 }) {
+          Text(this.model.text('允许官方登录页自动填写（默认关闭）'))
+            .fontSize(13)
+            .fontColor(AppTheme.text())
+            .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.qmPlusSession.autoFillEnabled })
+            .selectedColor(AppTheme.primaryFill())
+            .width(48)
+            .enabled(this.qmPlusSession.savedLoginAvailable && !this.qmPlusSession.loginSettingsBusy)
+            .id('settings.qmplus.autofill')
+            .onChange((enabled: boolean): void => {
+              void this.qmPlusSession.setAutoFillEnabled(enabled);
+            })
+        }
+        .width('100%')
+        Text(this.model.text('关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。'))
+          .fontSize(11)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+        Text(this.model.text('仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+        if (this.qmPlusSession.loginSettingsError.length > 0) {
+          Text(this.model.text(this.qmPlusSession.loginSettingsError))
+            .fontSize(12)
+            .fontColor(AppTheme.danger())
+            .width('100%')
+        }
+        Button(this.model.text('删除已保存的 QMplus 登录资料'))
+          .type(ButtonType.Normal)
+          .height(ControlMetrics.height)
+          .width('100%')
+          .borderRadius(6)
+          .backgroundColor(AppTheme.surfaceVariant())
+          .fontColor(AppTheme.danger())
+          .enabled(this.qmPlusSession.savedLoginAvailable && !this.qmPlusSession.loginSettingsBusy)
+          .id('settings.qmplus.delete-login')
+          .onClick(() => { void this.qmPlusSession.deleteSavedLogin(); })
+      }
       Button(this.model.text(this.qmPlusSession.snapshot === null ? '连接 QMplus' : '重新同步 QMplus'))
         .type(ButtonType.Normal)
         .height(ControlMetrics.height)
@@ -516,9 +632,9 @@ export struct SettingsView {
         .backgroundColor(AppTheme.surfaceVariant())
         .fontColor(AppTheme.primary())
         .id('settings.qmplus.connect')
-        .enabled(!this.model.isSampleMode())
+        .enabled(!this.model.isSampleMode() && this.model.qmplusEnabled)
         .onClick(() => this.qmPlusSession.openLogin())
-      Button(this.model.text('退出并清除 QMplus 会话'))
+      Button(this.model.text('退出并清除 QMplus 会话及已保存登录资料'))
         .type(ButtonType.Normal)
         .height(ControlMetrics.height)
         .width('100%')
@@ -526,7 +642,12 @@ export struct SettingsView {
         .backgroundColor(AppTheme.surfaceVariant())
         .fontColor(AppTheme.danger())
         .id('settings.qmplus.logout')
-        .onClick(() => { this.qmPlusSession.logout(); })
+        .enabled(!this.model.isSampleMode())
+        .onClick(() => {
+          this.qmPlusAccountDraft = '';
+          this.qmPlusPasswordDraft = '';
+          void this.qmPlusSession.disconnectAndDeleteSavedLogin();
+        })
     }
     .padding(16)
     .width('100%')
@@ -1020,6 +1141,43 @@ export struct SettingsView {
   }
 
   @Builder
+  networkSurface() {
+    Column({ space: 8 }) {
+      this.sectionTitle('网络与流量')
+      Row({ space: 8 }) {
+        Text(this.model.text('使用移动网络改善数据获取'))
+          .fontSize(15)
+          .fontColor(AppTheme.text())
+          .layoutWeight(1)
+        Toggle({ type: ToggleType.Switch, isOn: this.model.cellularAssistEnabled })
+          .id('settings_cellular_assist_toggle')
+          .selectedColor(AppTheme.primaryFill())
+          .width(48)
+          .height(28)
+          .enabled(!this.model.isSampleMode())
+          .onChange((value: boolean): void => { void this.model.setCellularAssistEnabled(value); })
+      }
+      .width('100%')
+      .constraintSize({ minHeight: ControlMetrics.height })
+      .alignItems(VerticalAlign.Center)
+      Text(this.model.text('默认关闭。Wi-Fi 读取失败时，仅对可安全重试的只读请求尝试一次移动网络；可能产生流量费用。'))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+      Text(this.model.text('不会通过移动网络重发密码或修改请求；QMplus 官方登录网页不在此功能范围内。'))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+    .id('settings_cellular_assist_surface')
+  }
+
+  @Builder
   dailyInfoSurface() {
     Column() {
       this.sectionTitle('日期详情与生活信息')
@@ -1374,7 +1532,7 @@ export struct SettingsView {
         .onClick(() => {
           this.getUIContext().showAlertDialog({
             title: this.model.text('清除全部本地数据？'),
-            message: this.model.text('将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏、QMplus 会话和其它设置。此操作无法撤销。'),
+            message: this.model.text('将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏、QMplus 会话和独立保存的登录资料及其它设置。此操作无法撤销。'),
             primaryButton: {
               value: this.model.text('取消'),
               action: () => {
@@ -1384,17 +1542,20 @@ export struct SettingsView {
               value: this.model.text('确认清除'),
               fontColor: AppTheme.danger(),
               action: () => {
-                const qmPlusCleared: boolean = this.qmPlusSession.logout();
-                const work: Promise<void> = this.model.clearLocalData();
-                work.then(() => {
-                  this.session.clearDrafts();
-                  if (!qmPlusCleared) {
-                    this.model.statusMessage = this.qmPlusSession.error;
-                  } else {
-                    this.dismissStatusMessageAfter(this.model.statusMessage);
-                  }
-                }).catch(() => {
-                  // 错误说明已由 AppModel 写入状态消息。
+                this.qmPlusAccountDraft = '';
+                this.qmPlusPasswordDraft = '';
+                void this.qmPlusSession.disconnectAndDeleteSavedLogin().then((qmPlusCleared: boolean) => {
+                  return this.model.clearLocalData().then((): void => {
+                    this.session.clearDrafts();
+                    if (!qmPlusCleared) {
+                      this.model.statusMessage = this.qmPlusSession.loginSettingsError.length > 0 ?
+                        this.qmPlusSession.loginSettingsError : this.qmPlusSession.error;
+                    } else {
+                      this.dismissStatusMessageAfter(this.model.statusMessage);
+                    }
+                  });
+                }).catch((): void => {
+                  // 错误说明已由 AppModel 或 QMPlusSession 写入状态消息。
                 });
               }
             }

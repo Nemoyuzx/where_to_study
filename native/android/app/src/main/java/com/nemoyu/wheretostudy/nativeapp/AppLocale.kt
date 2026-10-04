@@ -15,10 +15,38 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 
-enum class AppLanguage(val code: String) {
-    SYSTEM("system"),
-    SIMPLIFIED_CHINESE("zh-Hans"),
-    ENGLISH("en"),
+enum class AppLanguage(val code: String, val nativeName: String) {
+    SYSTEM("system", "跟随系统"),
+    SIMPLIFIED_CHINESE("zh-Hans", "简体中文"),
+    TRADITIONAL_CHINESE("zh-Hant", "繁體中文"),
+    ENGLISH("en", "English"),
+    JAPANESE("ja", "日本語"),
+    SPANISH("es", "Español"),
+    PORTUGUESE("pt", "Português"),
+    ARABIC("ar", "العربية"),
+    RUSSIAN("ru", "Русский"),
+    TURKISH("tr", "Türkçe"),
+    THAI("th", "ไทย"),
+    MALAY("ms", "Bahasa Melayu"),
+    VIETNAMESE("vi", "Tiếng Việt"),
+    INDONESIAN("id", "Bahasa Indonesia");
+
+    companion object {
+        fun fromCode(value: String): AppLanguage? =
+            if (value.equals(SYSTEM.code, ignoreCase = true)) SYSTEM
+            else fromLocale(Locale.forLanguageTag(value.replace('_', '-')))
+
+        fun fromLocale(locale: Locale): AppLanguage? = when (locale.language.lowercase(Locale.ROOT)) {
+            "zh" -> when {
+                locale.script.equals("Hans", ignoreCase = true) -> SIMPLIFIED_CHINESE
+                locale.script.equals("Hant", ignoreCase = true) -> TRADITIONAL_CHINESE
+                locale.country.uppercase(Locale.ROOT) in setOf("TW", "HK", "MO") -> TRADITIONAL_CHINESE
+                else -> SIMPLIFIED_CHINESE
+            }
+            "in", "id" -> INDONESIAN
+            else -> entries.firstOrNull { it != SYSTEM && it.code == locale.language }
+        }
+    }
 }
 
 object AppTypography {
@@ -30,10 +58,12 @@ object AppTypography {
 
 object AppLocale {
     fun wrap(base: Context, languageCode: String): Context {
-        val language = AppLanguage.entries.firstOrNull { it.code == languageCode }
-            ?: AppLanguage.SYSTEM
-        val locale = resolvedLocale(language)
-        Locale.setDefault(locale)
+        val language = AppLanguage.fromCode(languageCode) ?: AppLanguage.SYSTEM
+        val systemLocales = Resources.getSystem().configuration.locales
+        val systemLocale = preferredSupportedLocale((0 until systemLocales.size()).map(systemLocales::get))
+        val locale = resolvedLocale(language, systemLocale)
+        // Localize the resource Context, not the process-wide default used by
+        // unrelated API/data code. Contract dates and numbers remain unchanged.
         val configuration = Configuration(base.resources.configuration).apply {
             setLocale(locale)
             setLocales(LocaleList(locale))
@@ -43,22 +73,49 @@ object AppLocale {
     }
 
     fun isEnglish(context: Context): Boolean {
-        return context.resources.configuration.locales[0].language != Locale.CHINESE.language
+        return resolvedLanguage(context) == AppLanguage.ENGLISH
     }
 
-    fun displayName(context: Context, language: AppLanguage): String = when (language) {
-        AppLanguage.SYSTEM -> UiText.resolve(context, "跟随系统")
-        AppLanguage.SIMPLIFIED_CHINESE -> UiText.resolve(context, "简体中文")
-        AppLanguage.ENGLISH -> "English"
+    fun resolvedLanguage(context: Context): AppLanguage =
+        AppLanguage.fromLocale(context.resources.configuration.locales[0]) ?: AppLanguage.ENGLISH
+
+    fun displayLocale(context: Context): Locale = context.resources.configuration.locales[0]
+
+    fun calendarLocale(context: Context): Locale = Locale.Builder().setLocale(displayLocale(context))
+        .setUnicodeLocaleKeyword("ca", "gregory").build()
+
+    fun weekdayLabels(context: Context): List<String> {
+        val symbols = android.icu.text.DateFormatSymbols(calendarLocale(context))
+            .getWeekdays(android.icu.text.DateFormatSymbols.FORMAT, android.icu.text.DateFormatSymbols.NARROW)
+        return listOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY,
+            Calendar.FRIDAY, Calendar.SATURDAY, Calendar.SUNDAY).map { symbols[it] }
     }
 
-    private fun resolvedLocale(language: AppLanguage): Locale = when (language) {
-        AppLanguage.SIMPLIFIED_CHINESE -> Locale.SIMPLIFIED_CHINESE
+    fun monthDayPattern(context: Context, includesWeekday: Boolean = false): String = when {
+        isChinese(context) -> if (includesWeekday) "M月d日 EEEE" else "M月d日"
+        isEnglish(context) -> if (includesWeekday) "MMM d, EEEE" else "MMM d"
+        else -> android.text.format.DateFormat.getBestDateTimePattern(calendarLocale(context),
+            if (includesWeekday) "MMMEd" else "MMMd")
+    }
+
+    fun isChinese(context: Context): Boolean = resolvedLanguage(context) in
+        setOf(AppLanguage.SIMPLIFIED_CHINESE, AppLanguage.TRADITIONAL_CHINESE)
+
+    fun displayName(context: Context, language: AppLanguage): String =
+        if (language == AppLanguage.SYSTEM) UiText.resolve(context, "跟随系统") else language.nativeName
+
+    fun preferredSupportedLocale(locales: List<Locale>): Locale =
+        locales.firstOrNull { AppLanguage.fromLocale(it) != null } ?: Locale.US
+
+    fun resolvedLocale(language: AppLanguage, systemLocale: Locale): Locale = when (language) {
         AppLanguage.ENGLISH -> Locale.US
-        AppLanguage.SYSTEM -> Resources.getSystem().configuration.locales[0]
-            .takeIf { it.language == Locale.CHINESE.language }
-            ?.let { Locale.SIMPLIFIED_CHINESE }
-            ?: Locale.US
+        AppLanguage.SYSTEM -> AppLanguage.fromLocale(systemLocale)?.let { supported ->
+            Locale.Builder().setLocale(systemLocale).apply {
+                if (supported == AppLanguage.SIMPLIFIED_CHINESE) setScript("Hans")
+                if (supported == AppLanguage.TRADITIONAL_CHINESE) setScript("Hant")
+            }.build()
+        } ?: Locale.US
+        else -> Locale.forLanguageTag(language.code)
     }
 }
 
@@ -476,7 +533,11 @@ object UiText {
     )
 
     fun resolve(context: Context, source: String): String {
-        if (!AppLocale.isEnglish(context) || source.isEmpty()) return source
+        if (source.isEmpty()) return source
+        NativeUiTextCatalog.resolve(context, source)?.let { return it }
+        if (AppLocale.resolvedLanguage(context) == AppLanguage.SIMPLIFIED_CHINESE) return source
+        NativeUiFormats.resolve(context, source)?.let { return it }
+        if (!AppLocale.isEnglish(context)) return dateText(context, source) ?: source
         exactEnglish[source]?.let { return it }
         Regex("^学期：(.+)$").matchEntire(source)?.let { return "Semester: ${resolve(context, it.groupValues[1])}" }
         Regex("^平均学分绩点：(.+)$").matchEntire(source)?.let { return "Average grade point: ${it.groupValues[1]}" }
@@ -593,7 +654,7 @@ object UiText {
             return englishStatusFallback(source.removeSuffix("，点击重试")) +
                 ", tap to retry"
         }
-        dateText(source)?.let { return it }
+        dateText(context, source)?.let { return it }
         if (source.contains("；")) {
             return source.replace("；", "; ")
         }
@@ -653,45 +714,39 @@ object UiText {
     }
 
     fun localizeTree(root: View) {
-        if (root is TextView && root.getTag(R.id.preserve_raw_text) != true) {
+        val preservesBusinessText = root.getTag(R.id.preserve_raw_text) == true
+        if (root is TextView && !preservesBusinessText) {
             if (root !is EditText) root.text = resolve(root.context, root.text.toString())
             root.hint = root.hint?.toString()?.let { resolve(root.context, it) }
         }
-        root.contentDescription = root.contentDescription?.toString()?.let {
+        if (!preservesBusinessText) root.contentDescription = root.contentDescription?.toString()?.let {
             resolve(root.context, it)
         }
+        if (root is EditText &&
+            (root.inputType and android.text.InputType.TYPE_MASK_CLASS) == android.text.InputType.TYPE_CLASS_TEXT &&
+            (root.inputType and android.text.InputType.TYPE_MASK_VARIATION) == android.text.InputType.TYPE_TEXT_VARIATION_URI
+        ) root.textDirection = View.TEXT_DIRECTION_LTR
         if (root is ViewGroup) {
             repeat(root.childCount) { index -> localizeTree(root.getChildAt(index)) }
         }
     }
 
-    fun preserveRawText(view: TextView) {
+    fun preserveRawText(view: View) {
         view.setTag(R.id.preserve_raw_text, true)
     }
 
     fun widgetContext(context: Context, source: String): String {
-        if (!AppLocale.isEnglish(context)) return source
-        return source.split(" · ").joinToString(" · ") { part ->
-            exactEnglish[part] ?: dateText(part) ?:
-                Regex("^公历第(\\d+)周$").matchEntire(part)?.let {
-                    "Calendar week ${it.groupValues[1]}"
-                } ?: Regex("^教学第(\\d+)周$").matchEntire(part)?.let {
-                    "Teaching week ${it.groupValues[1]}"
-                } ?: Regex("^(\\d{2}:\\d{2}) 下课$").matchEntire(part)?.let {
-                    "Ends at ${it.groupValues[1]}"
-                } ?: part
-        }
+        return source.split(" · ").joinToString(" · ") { resolve(context, it) }
     }
 
     fun widgetCourseTitle(context: Context, source: String): String {
-        if (!AppLocale.isEnglish(context)) return source
         return when {
             source.startsWith("进行中 · ") ->
-                "In progress · ${source.removePrefix("进行中 · ")}"
+                "${resolve(context, "进行中")} · ${source.removePrefix("进行中 · ")}"
             source.startsWith("下一节 · ") ->
-                "Next · ${source.removePrefix("下一节 · ")}"
+                "${resolve(context, "下一节")} · ${source.removePrefix("下一节 · ")}"
             source.startsWith("明日 · ") ->
-                "Tomorrow · ${source.removePrefix("明日 · ")}"
+                "${resolve(context, "明日")} · ${source.removePrefix("明日 · ")}"
             else -> source
         }
     }
@@ -712,31 +767,37 @@ object UiText {
         dialog.window?.decorView?.refreshColorTheme()
     }
 
-    private fun dateText(source: String): String? {
-        val locale = Locale.US
+    internal fun dateText(context: Context, source: String): String? {
+        val locale = AppLocale.calendarLocale(context)
         val zone = TimeZone.getTimeZone("Asia/Shanghai")
         Regex("^(\\d{4})年(\\d{1,2})月(\\d{1,2})日(?: (.+))?$").matchEntire(source)?.let {
-            val calendar = Calendar.getInstance(zone).apply {
+            val calendar = Calendar.getInstance(zone, Locale.US).apply {
                 set(it.groupValues[1].toInt(), it.groupValues[2].toInt() - 1, it.groupValues[3].toInt())
             }
-            val date = SimpleDateFormat("MMM d, yyyy", locale).apply { timeZone = zone }
+            val pattern = if (AppLocale.isEnglish(context)) "MMM d, yyyy"
+                else android.text.format.DateFormat.getBestDateTimePattern(locale, "yMMMd")
+            val date = SimpleDateFormat(pattern, locale).apply { timeZone = zone }
                 .format(calendar.time)
-            val weekday = exactEnglish[it.groupValues.getOrElse(4) { "" }]
+            val weekday = it.groupValues.getOrElse(4) { "" }.takeIf(String::isNotBlank)?.let {
+                NativeUiTextCatalog.resolve(context, it) ?: it
+            }
             return listOfNotNull(date, weekday).joinToString(" ")
         }
         Regex("^(\\d{4})年(\\d{1,2})月$").matchEntire(source)?.let {
-            val calendar = Calendar.getInstance(zone).apply {
+            val calendar = Calendar.getInstance(zone, Locale.US).apply {
                 set(it.groupValues[1].toInt(), it.groupValues[2].toInt() - 1, 1)
             }
-            return SimpleDateFormat("MMMM yyyy", locale).apply { timeZone = zone }
+            val pattern = if (AppLocale.isEnglish(context)) "MMMM yyyy"
+                else android.text.format.DateFormat.getBestDateTimePattern(locale, "yMMMM")
+            return SimpleDateFormat(pattern, locale).apply { timeZone = zone }
                 .format(calendar.time)
         }
         Regex("^(\\d{4})年$").matchEntire(source)?.let { return it.groupValues[1] }
         Regex("^(\\d{1,2})月(\\d{1,2})日$").matchEntire(source)?.let {
-            val calendar = Calendar.getInstance(zone).apply {
+            val calendar = Calendar.getInstance(zone, Locale.US).apply {
                 set(2000, it.groupValues[1].toInt() - 1, it.groupValues[2].toInt())
             }
-            return SimpleDateFormat("MMM d", locale).apply { timeZone = zone }.format(calendar.time)
+            return SimpleDateFormat(AppLocale.monthDayPattern(context), locale).apply { timeZone = zone }.format(calendar.time)
         }
         Regex("^第(\\d+)周$").matchEntire(source)?.let { return "Week ${it.groupValues[1]}" }
         return null

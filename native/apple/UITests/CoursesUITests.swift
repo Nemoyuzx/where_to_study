@@ -12,6 +12,13 @@ final class CoursesUITests: XCTestCase {
             assertPrimaryNavigation(in: app, language: language)
             navigate("courses", title: language == "en" ? "Courses" : "课程", in: app)
             XCTAssertTrue(app.descendants(matching: .any)["screen.courses"].waitForExistence(timeout: 5))
+            let pageTitle = app.descendants(matching: .any)["courses.page-title"].firstMatch
+            XCTAssertTrue(pageTitle.waitForExistence(timeout: 5))
+            XCTAssertTrue(pageTitle.isHittable)
+            #if os(iOS)
+            // The page owns its single heading; no second system large title.
+            XCTAssertEqual(app.navigationBars.count, 0)
+            #endif
             let modes = app.segmentedControls["courses.mode"]
             let names = language == "en" ? ["Current Courses", "Assignment Deadlines", "Grades", "Exams"]
                 : ["本学期课程", "课程作业 DDL", "成绩查询", "考试安排"]

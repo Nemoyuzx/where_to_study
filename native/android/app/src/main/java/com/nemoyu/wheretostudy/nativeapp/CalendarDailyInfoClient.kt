@@ -862,6 +862,10 @@ class CalendarDailyInfoClient internal constructor(
 
 internal object FixedPublicJsonTransport {
     fun fetch(uri: URI, scheme: String, host: String, maximumBytes: Int): String {
+        return CellularAssist.readOnly { fetchOnRoute(uri, scheme, host, maximumBytes) }
+    }
+
+    private fun fetchOnRoute(uri: URI, scheme: String, host: String, maximumBytes: Int): String {
         val defaultPort = if (scheme == "https") 443 else 80
         val effectivePort = if (uri.port == -1) defaultPort else uri.port
         if (!uri.scheme.equals(scheme, ignoreCase = true) ||
@@ -870,7 +874,7 @@ internal object FixedPublicJsonTransport {
         ) {
             throw DailyInfoClientException("公开数据源地址不受信任。")
         }
-        val connection = uri.toURL().openConnection() as HttpURLConnection
+        val connection = CellularAssist.openConnection(uri.toURL())
         try {
             connection.requestMethod = "GET"
             connection.connectTimeout = 10_000

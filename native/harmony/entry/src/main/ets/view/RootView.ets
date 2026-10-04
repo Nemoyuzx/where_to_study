@@ -3,10 +3,12 @@
 // 否则使用底部 Tabs（对应 compact 布局）；示例模式顶部显示提示条。
 
 import { hilog } from '@kit.PerformanceAnalysisKit';
-import { window } from '@kit.ArkUI';
+import { FrameCallback, FrameNode, window } from '@kit.ArkUI';
+import { settings } from '@kit.BasicServicesKit';
 import { AppModel } from '../model/AppModel';
 import { AppLaunchConfiguration } from '../model/LaunchSupport';
 import { AppSection, AppSectionInfo } from '../common/AppSection';
+import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
 import { AppTheme } from '../common/AppTheme';
 import { PlannerView } from './PlannerView';
 import { CalendarSectionView } from './CalendarSectionView';
@@ -19,12 +21,29 @@ import { CourseView } from './CourseView';
 import { CourseSession } from './CourseSession';
 import { QMPlusSession } from './QMPlusSession';
 import { QMPlusConnectionView } from './QMPlusConnectionView';
+import { LanguagePickerView } from './LanguagePickerView';
 
 // 布局策略统一在 common/DeviceState.ets 中（含折叠屏半折叠降级规则），
 // 这里保留导出以兼容旧引用。
 import { AdaptiveLayoutPolicy, DeviceState, PhoneNavigationLayout } from '../common/DeviceState';
 export { AdaptiveLayoutPolicy };
 
+// UIContext 的一次性帧回调没有取消 API；RootView 的 epoch 在离页/后台/新点击后
+// 使旧回调无权读写新页面。每次只排下一帧，不持有整页截图或循环定时器。
+class LanguageLayoutFrameCallback extends FrameCallback {
+  private readonly work: () => void;
+
+  constructor(work: () => void) {
+    super();
+    this.work = work;
+  }
+
+  onFrame(frameTimeInNano: number): void {
+    this.work();
+  }
+
+  onIdle(timeLeftInNano: number): void {}
+}
 @ComponentV2
 export struct RootView {
   @Consumer('appModel') model: AppModel = new AppModel();
@@ -41,12 +60,42 @@ export struct RootView {
   private navigationWindow: window.Window | null = null;
   private navigationAvoidAreaListener: ((options: window.AvoidAreaOptions) => void) | null = null;
   private navigationAvoidanceActive: boolean = false;
+  private qmWindowListener: ((event: window.WindowEventType) => void) | null = null;
+  @Local languageOverlayVisible: boolean = false;
+  @Local languageOverlayOpacity: number = 0;
+  private languageTransitionEpoch: number = 0;
+  private languageAppliedRequestEpoch: number = 0;
+  private languageTransitionTarget: AppLanguage | null = null;
+  private languageTransitionTimer: number = -1;
+  private languageOverlayFading: boolean = false;
+  private languageStableFrames: number = 0;
+  private languageLastCardX: number = Number.NaN;
+  private languageLastCardY: number = Number.NaN;
+  private languageLastCardWidth: number = Number.NaN;
+  private languageLastCardHeight: number = Number.NaN;
+  private languageLastTargetX: number = Number.NaN;
+  private languageLastTargetY: number = Number.NaN;
+  private languageLastTargetWidth: number = Number.NaN;
+  private languageLastTargetHeight: number = Number.NaN;
 
   private sidebarWidth(): number {
     return this.containerWidth < 1000 ? 210 : 230;
   }
 
+  private isRightToLeftUI(): boolean {
+    return AppLanguageInfo.isRightToLeft(this.model.resolvedLanguage());
+  }
+
+  @Monitor('model.qmplusEnabled')
+  onQMplusEnabledChanged(monitor: IMonitor): void {
+    this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled && !this.model.isSampleMode());
+    if (!this.model.qmplusEnabled && this.courseSession.selectedCourseSource === 'qmplus') {
+      this.courseSession.closeCourse();
+    }
+  }
+
   aboutToAppear(): void {
+    this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled && !this.model.isSampleMode());
     if (AppLaunchConfiguration.consumeSettingsPresentationSeedForTesting()) {
       this.settingsSession.seedReviewPresentationDraftsOnce();
     }
@@ -63,6 +112,7 @@ export struct RootView {
   }
 
   aboutToDisappear(): void {
+    this.cancelLanguageTransition(true);
     this.navigationAvoidanceActive = false;
     this.querySession.dispose();
     this.qmPlusSession.dispose();
@@ -104,6 +154,14 @@ export struct RootView {
       };
       this.navigationAvoidAreaListener = listener;
       mainWindow.on('avoidAreaChange', listener);
+      const qmListener = (event: window.WindowEventType): void => {
+        if (event === window.WindowEventType.WINDOW_INACTIVE || event === window.WindowEventType.WINDOW_HIDDEN) {
+          this.qmPlusSession.cancelQuietLoginOnBackground();
+          this.cancelLanguageTransition(true);
+        }
+      };
+      this.qmWindowListener = qmListener;
+      mainWindow.on('windowEvent', qmListener);
     }).catch(() => {
       // 获取窗口失败时仍保留 28vp 的审核安全下限。
       this.phoneNavigationBottomMargin = PhoneNavigationLayout.minimumBottomClearanceVp;
@@ -111,6 +169,10 @@ export struct RootView {
   }
 
   private detachPhoneNavigationAvoidance(): void {
+    if (this.navigationWindow !== null && this.qmWindowListener !== null) {
+      try { this.navigationWindow.off('windowEvent', this.qmWindowListener); } catch (e) {}
+    }
+    this.qmWindowListener = null;
     if (this.navigationWindow !== null && this.navigationAvoidAreaListener !== null) {
       try {
         this.navigationWindow.off('avoidAreaChange', this.navigationAvoidAreaListener);
@@ -122,6 +184,186 @@ export struct RootView {
     this.navigationAvoidAreaListener = null;
   }
 
+  private reduceLanguageMotion(): boolean {
+    // 只读系统公开动画比例，不写系统设置、也不请求 MANAGE_SETTINGS 权限。
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) { return false; }
+      const animatorScale: string = settings.getValueSync(context, settings.display.ANIMATOR_DURATION_SCALE, '1');
+      const transitionScale: string = settings.getValueSync(context, settings.display.TRANSITION_ANIMATION_SCALE, '1');
+      return (animatorScale.length > 0 && Number(animatorScale) === 0) ||
+        (transitionScale.length > 0 && Number(transitionScale) === 0);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private clearLanguageTransitionTimer(): void {
+    if (this.languageTransitionTimer >= 0) {
+      clearTimeout(this.languageTransitionTimer);
+      this.languageTransitionTimer = -1;
+    }
+  }
+
+  private resetLanguageLayoutSamples(): void {
+    this.languageStableFrames = 0;
+    this.languageLastCardX = Number.NaN;
+    this.languageLastCardY = Number.NaN;
+    this.languageLastCardWidth = Number.NaN;
+    this.languageLastCardHeight = Number.NaN;
+    this.languageLastTargetX = Number.NaN;
+    this.languageLastTargetY = Number.NaN;
+    this.languageLastTargetWidth = Number.NaN;
+    this.languageLastTargetHeight = Number.NaN;
+  }
+
+  private postLanguageFrame(epoch: number, work: () => void): void {
+    try {
+      this.getUIContext().postFrameCallback(new LanguageLayoutFrameCallback((): void => {
+        if (epoch === this.languageTransitionEpoch) { work(); }
+      }));
+    } catch (e) {
+      // 渲染上下文销毁时由 deadline 清理遮罩；不能保留重试轮询。
+    }
+  }
+
+  private cancelLanguageTransition(commitIntent: boolean): void {
+    const target: AppLanguage | null = this.languageTransitionTarget;
+    this.languageTransitionEpoch++;
+    this.clearLanguageTransitionTimer();
+    this.languageTransitionTarget = null;
+    this.settingsSession.requestedLanguageRawValue = '';
+    this.languageOverlayOpacity = 0;
+    this.languageOverlayVisible = false;
+    this.languageOverlayFading = false;
+    this.languageStableFrames = 0;
+    if (commitIntent && target !== null &&
+      (this.model.languageSetting() !== target ||
+        AppLanguageInfo.systemLanguage() !== this.model.systemLanguageID)) {
+      // 离页/后台不能吞掉已接受的最终选择；不启动动画或重新持有 SettingsView。
+      void this.model.setLanguageSetting(target);
+    }
+  }
+
+  private beginLanguageTransition(target: AppLanguage): void {
+    if (this.currentSection !== AppSection.settings) { return; }
+    if (this.languageTransitionTarget === target) { return; }
+    if (target === this.model.languageSetting() &&
+      AppLanguageInfo.systemLanguage() === this.model.systemLanguageID) {
+      if (this.languageTransitionTarget !== null) { this.cancelLanguageTransition(false); }
+      this.settingsSession.showingLanguagePicker = false;
+      return;
+    }
+    if (this.reduceLanguageMotion()) {
+      this.cancelLanguageTransition(false);
+      const revision: number = ++this.languageTransitionEpoch;
+      this.languageAppliedRequestEpoch = revision;
+      this.settingsSession.requestLanguage(target);
+      return;
+    }
+    const epoch: number = ++this.languageTransitionEpoch;
+    this.languageTransitionTarget = target;
+    this.languageOverlayFading = false;
+    this.resetLanguageLayoutSamples();
+    this.clearLanguageTransitionTimer();
+    if (!this.languageOverlayVisible) {
+      this.languageOverlayOpacity = 0;
+      this.languageOverlayVisible = true;
+    }
+    // 失去窗口/帧回调时也必须有界结束；deadline 不启动任何网络请求。
+    this.languageTransitionTimer = setTimeout((): void => {
+      if (epoch !== this.languageTransitionEpoch) { return; }
+      this.languageTransitionTimer = -1;
+      // Missing frames or layout are an interrupted transition, not proof that
+      // the target is ready. Retire the mask and preserve the accepted choice.
+      this.cancelLanguageTransition(true);
+    }, 1600);
+    // 先给独立模糊层一个实际布局帧，再覆盖内容；不能让文字变化跟随整页动画。
+    this.postLanguageFrame(epoch, (): void => {
+      this.getUIContext().animateTo({ duration: 110, curve: Curve.EaseOut,
+        onFinish: (): void => {
+          if (epoch !== this.languageTransitionEpoch) { return; }
+          this.requestLanguageUnderOverlay(epoch);
+          this.sampleLanguageLayout(epoch);
+        }
+      }, (): void => {
+        this.languageOverlayOpacity = 1;
+      });
+    });
+  }
+
+  private requestLanguageUnderOverlay(epoch: number): void {
+    const target: AppLanguage | null = this.languageTransitionTarget;
+    if (target === null || epoch !== this.languageTransitionEpoch ||
+      this.languageAppliedRequestEpoch === epoch) { return; }
+    this.languageAppliedRequestEpoch = epoch;
+    this.settingsSession.requestLanguage(target);
+  }
+
+  private languageOptionIndex(target: AppLanguage): number {
+    return AppLanguageInfo.all.indexOf(target);
+  }
+
+  private sampleLanguageLayout(epoch: number): void {
+    const target: AppLanguage | null = this.languageTransitionTarget;
+    if (epoch !== this.languageTransitionEpoch || target === null || this.languageOverlayFading) { return; }
+    if (this.currentSection !== AppSection.settings) {
+      this.cancelLanguageTransition(true);
+      return;
+    }
+    let sampled: boolean = false;
+    if (this.languageAppliedRequestEpoch === epoch && this.model.languageSetting() === target) {
+      try {
+        const card: FrameNode | null = this.getUIContext().getAttachedFrameNodeById('settings_language_surface');
+        const targetNode: FrameNode | null = this.getUIContext().getAttachedFrameNodeById('settings.language.current.target.' + target);
+        if (card !== null && targetNode !== null) {
+          const position = card.getPositionToWindow();
+          const bounds = card.getMeasuredSize();
+          const targetPosition = targetNode.getPositionToWindow();
+          const targetBounds = targetNode.getMeasuredSize();
+          const geometry: number[] = [position.x, position.y, bounds.width, bounds.height,
+            targetPosition.x, targetPosition.y, targetBounds.width, targetBounds.height];
+          if (geometry.every((value: number): boolean => Number.isFinite(value)) &&
+            bounds.width > 0 && bounds.height > 0 && targetBounds.width > 0 && targetBounds.height > 0) {
+            sampled = true;
+            const stable: boolean = Math.abs(position.x - this.languageLastCardX) <= 1 &&
+              Math.abs(position.y - this.languageLastCardY) <= 1 &&
+              Math.abs(bounds.width - this.languageLastCardWidth) <= 1 &&
+              Math.abs(bounds.height - this.languageLastCardHeight) <= 1 &&
+              Math.abs(targetPosition.x - this.languageLastTargetX) <= 1 &&
+              Math.abs(targetPosition.y - this.languageLastTargetY) <= 1 &&
+              Math.abs(targetBounds.width - this.languageLastTargetWidth) <= 1 &&
+              Math.abs(targetBounds.height - this.languageLastTargetHeight) <= 1;
+            this.languageStableFrames = stable ? this.languageStableFrames + 1 : 0;
+            this.languageLastCardX = position.x; this.languageLastCardY = position.y;
+            this.languageLastCardWidth = bounds.width; this.languageLastCardHeight = bounds.height;
+            this.languageLastTargetX = targetPosition.x; this.languageLastTargetY = targetPosition.y;
+            this.languageLastTargetWidth = targetBounds.width; this.languageLastTargetHeight = targetBounds.height;
+            if (this.languageStableFrames >= 2) { this.fadeLanguageOverlay(epoch); return; }
+          }
+        }
+      } catch (e) {}
+    }
+    if (!sampled) { this.resetLanguageLayoutSamples(); }
+    this.postLanguageFrame(epoch, (): void => this.sampleLanguageLayout(epoch));
+  }
+
+  private fadeLanguageOverlay(epoch: number): void {
+    if (epoch !== this.languageTransitionEpoch || this.languageTransitionTarget === null ||
+      this.languageOverlayFading) { return; }
+    this.languageOverlayFading = true;
+    this.clearLanguageTransitionTimer();
+    this.languageTransitionTimer = setTimeout((): void => {
+      if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
+    }, 340);
+    this.getUIContext().animateTo({ duration: 190, curve: Curve.EaseOut,
+      onFinish: (): void => {
+        if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
+      }
+    }, (): void => {
+      this.languageOverlayOpacity = 0;
+    });
+  }
   private visibleBottomInsetVp(mainWindow: window.Window, type: window.AvoidAreaType): number {
     try {
       const area: window.AvoidArea = mainWindow.getWindowAvoidArea(type);
@@ -201,18 +443,42 @@ export struct RootView {
           .zIndex(110)
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
+      if (this.languageOverlayVisible) {
+        Column() {}
+          .width('100%').height('100%')
+          .backgroundBlurStyle(BlurStyle.Regular)
+          .opacity(this.languageOverlayOpacity)
+          .hitTestBehavior(HitTestMode.Block)
+          .id('language_transition_overlay')
+          .zIndex(130)
+      }
+
+      if (this.settingsSession.showingLanguagePicker) {
+        LanguagePickerView({
+          onSelect: (language: AppLanguage): void => { this.beginLanguageTransition(language); },
+          onClose: (): void => { this.settingsSession.showingLanguagePicker = false; }
+        })
+          .width('100%')
+          .height('100%')
+          .zIndex(115)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+      }
 
       if (this.qmPlusSession.loginVisible) {
         QMPlusConnectionView({ session: this.qmPlusSession })
           .width('100%')
           .height('100%')
           .zIndex(120)
+          .opacity(this.qmPlusSession.loginPresented ? 1 : 0)
+          .hitTestBehavior(this.qmPlusSession.loginPresented ? HitTestMode.Default : HitTestMode.None)
+          .accessibilityLevel(this.qmPlusSession.loginPresented ? 'auto' : 'no-hide-descendants')
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
     }
     .width('100%')
     .height('100%')
     .backgroundColor(AppTheme.background())
+    .direction(this.isRightToLeftUI() ? Direction.Rtl : Direction.Ltr)
     .onAreaChange((oldArea: Area, newArea: Area) => {
       this.containerWidth = Number(newArea.width);
     })
@@ -250,6 +516,7 @@ export struct RootView {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
+            .direction(Direction.Ltr)
         } else if (this.currentSection === AppSection.courses) {
           CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
             onOpenSettings: () => this.selectSection(AppSection.settings) })
@@ -341,6 +608,7 @@ export struct RootView {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth })
+            .direction(Direction.Ltr)
         } else if (this.currentSection === AppSection.courses) {
           CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
             onOpenSettings: () => this.selectSection(AppSection.settings) })
@@ -418,6 +686,7 @@ export struct RootView {
       PlannerView()
     } else if (section === AppSection.calendar) {
       CalendarSectionView({ containerWidth: this.containerWidth })
+        .direction(Direction.Ltr)
     } else if (section === AppSection.courses) {
       CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
         onOpenSettings: () => this.selectSection(AppSection.settings) })
@@ -430,12 +699,16 @@ export struct RootView {
   }
 
   selectSection(section: AppSection): void {
+    if (section !== AppSection.settings && this.languageTransitionTarget !== null) { this.cancelLanguageTransition(true); }
     hilog.info(0x0000, 'RootView', 'selectSection -> %{public}s', section);
     if (section !== this.currentSection && this.qmPlusSession.loginVisible) {
       this.qmPlusSession.closeLogin();
     }
     this.currentSection = section;
     if (section !== AppSection.settings) {
+      const pendingLanguage: AppLanguage | null = this.settingsSession.takeLanguageRequest();
+      if (pendingLanguage !== null) { void this.model.setLanguageSetting(pendingLanguage); }
+      this.settingsSession.showingLanguagePicker = false;
       this.settingsFavoriteManagerVisible = false;
       this.settingsSession.showingPrivacyPolicy = false;
     }

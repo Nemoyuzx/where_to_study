@@ -33,6 +33,24 @@ class CourseDirectoryLogicTest {
             listOf(base.copy(kind = "quiz", status = "submitted"), base.copy(id = "2", status = "finished"))))
     }
 
+    @Test fun legacyAdministrativeRequestsNeverInflatePendingOrSubmittedCourseworkCounts() {
+        val real = QmplusActivityItem("1", "course", "Real undated assignment", "assignment",
+            "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=1", null, null, null, null, null,
+            "submitted", "available", "")
+        val review = real.copy(id = "2", title = "ＣＯＵＲＳＥＷＯＲＫ　ＭＡＲＫ　ＲＥＶＩＥＷ　ＲＥＱＵＥＳＴ",
+            url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=2")
+        val administrative = listOf(review.copy(status = "not submitted"),
+            review.copy(id = "3", title = "Coursework-Mark/Review_Request:Form", status = "submitted",
+                url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=3"))
+        val essay = real.copy(id = "4", title = "Coursework Mark Review Request Essay", status = "not submitted",
+            url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=4")
+        val quiz = real.copy(id = "5", title = review.title, kind = "quiz", status = "submitted",
+            url = "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=5")
+        assertEquals(CourseSubmissionCounts(1, 1), CourseDirectoryLogic.qmplusCounts("course",
+            listOf(real, essay, quiz) + administrative))
+        assertEquals(CourseSubmissionCounts(null, null), CourseDirectoryLogic.qmplusCounts("course", administrative))
+    }
+
     private fun task(id: String, courseID: String?, status: String?) =
         AssignmentDeadlineItem(id, "Raw assignment", "Identical course name", "2026-10-03 12:00:00", status, courseID)
 }

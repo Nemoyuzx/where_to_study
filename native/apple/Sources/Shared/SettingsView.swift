@@ -628,11 +628,13 @@ struct SettingsView: View {
                     )
                 ) {
                     ForEach(AppLanguage.allCases) { language in
-                        Text(model.localized(language.titleKey)).tag(language)
+                        Text(verbatim: language == .system ? model.localized(language.titleKey) : language.nativeName)
+                            .accessibilityIdentifier("settings.language.option.\(language.rawValue)")
+                            .tag(language)
                     }
                 }
-                .pickerStyle(.segmented)
-                .background(ThemeSegmentedSurface())
+                .pickerStyle(.menu)
+                .accessibilityIdentifier("settings.language")
                 Text("API 、课程与竞赛返回的原始内容不会自动翻译。")
                     .font(.caption)
                     .foregroundStyle(theme.secondaryText)
@@ -656,7 +658,7 @@ struct SettingsView: View {
             transaction.disablesAnimations = true
             withTransaction(transaction) { model.setAppLanguage(language) }
         }
-        #if os(iOS)
+        #if os(iOS) || os(macOS)
         session.languageTransition.request(
             current: model.appLanguage, target: language,
             label: model.localized("正在切换界面语言"), reduceMotion: reduceMotion, change: apply
@@ -694,6 +696,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("field.term-id")
                 TextField("第一周周一（YYYY-MM-DD）", text: $model.termStartDate)
                     .textFieldStyle(ThemeTextFieldStyle())
+                    .environment(\.layoutDirection, .leftToRight)
                     .disabled(model.isSampleMode || model.automaticTermDetectionEnabled)
                     .focused($focusedAccountField, equals: .termStartDate)
                     .submitLabel(.done)
@@ -843,6 +846,7 @@ struct SettingsView: View {
                 .accessibilityIdentifier("settings.custom-deadlines-enabled")
                 TextField("自定义日程 HTTPS 地址", text: $model.customDeadlinesURL)
                     .textFieldStyle(ThemeTextFieldStyle())
+                    .environment(\.layoutDirection, .leftToRight)
                     .disabled(model.isSampleMode)
                     .focused($focusedAccountField, equals: .customURL)
                     .onSubmit { validateAndSaveCustomFeed() }
@@ -896,6 +900,8 @@ struct SettingsView: View {
                 Text("天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。")
                     .font(.caption)
                     .foregroundStyle(theme.secondaryText)
+                Divider()
+                systemNetworkAssistanceDescription
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -913,6 +919,23 @@ struct SettingsView: View {
         .padding(12)
         .background(theme.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
         .accessibilityIdentifier("settings.reference-notice")
+    }
+
+    private var systemNetworkAssistanceDescription: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(model.localized("系统网络辅助"), systemImage: "wifi").font(.headline)
+            #if os(iOS)
+            Text(model.localized("支持蜂窝网络的 iPhone／iPad 可在系统设置管理“连接助理”（较旧系统为“Wi-Fi 助理”）。Wi-Fi 较弱时是否使用蜂窝数据由系统、机型及网络条件决定。"))
+                .font(.caption).foregroundStyle(theme.secondaryText)
+            Link(model.localized("查看 Apple 官方网络辅助说明"), destination: URL(string: "https://support.apple.com/127686")!)
+                .font(.caption).accessibilityIdentifier("settings.network-assistance.help")
+            #else
+            Text(model.localized("macOS 可在系统设置中选择可用网络或个人热点。本应用不提供强制蜂窝网络或双通道开关。"))
+                .font(.caption).foregroundStyle(theme.secondaryText)
+            #endif
+            Text(model.localized("本应用不会自动开启或更改系统网络辅助，也不能保证 Wi-Fi 与蜂窝网络同时使用。蜂窝数据或个人热点可能产生额外费用，请自行确认套餐。"))
+                .font(.caption).foregroundStyle(theme.secondaryText)
+        }.accessibilityIdentifier("settings.network-assistance")
     }
 
     private func featureToggle(
@@ -1148,8 +1171,9 @@ private struct QMplusSettingsSurface: View {
     var body: some View {
         Surface {
             VStack(alignment: .leading, spacing: 10) {
-                Label("QMplus", systemImage: "network").font(.headline)
-                Text(model.localized("请在官方网页完成 SSO 与 MFA。本应用不读取或保存微软密码。"))
+                sectionHeader
+                featureToggle
+                Text(model.localized("请在官方网页完成 SSO 与 MFA；也可自愿保存独立的 QMplus 登录信息，用于官方网页自动填写。"))
                     .font(.callout).foregroundStyle(theme.secondaryText)
                 Text(model.localized(store.statusKey)).font(.caption).foregroundStyle(theme.secondaryText)
                 ViewThatFits(in: .horizontal) {
@@ -1157,15 +1181,36 @@ private struct QMplusSettingsSurface: View {
                     VStack(alignment: .leading) { connectionActions }
                 }
                 .buttonStyle(.bordered)
+                QMplusCredentialSettingsEditor(authorization: store.credentialAuthorization, draft: store.credentialDraft,
+                    language: model.appLanguage, sampleMode: model.isSampleMode,
+                    save: store.saveCredentials, disable: store.disableCredentialAutofill)
                 Text(model.localized("QMplus 会话与教务账号隔离；断开连接或清除本地数据会删除该会话和课程快照。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
             }
         }.accessibilityIdentifier("settings.qmplus")
     }
 
+    private var sectionHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Label("QMplus", systemImage: "network").font(.headline).fixedSize()
+            Text(model.localized("仅适用国院")).font(.caption).foregroundStyle(theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var featureToggle: some View {
+        let binding = Binding<Bool>(
+            get: { model.qmplusEnabled },
+            set: { model.setQMplusEnabled($0) })
+        return Toggle(model.localized("启用 QMplus"), isOn: binding)
+            .toggleStyle(.switch)
+            .disabled(model.isSampleMode)
+            .accessibilityIdentifier("settings.qmplus.enabled")
+    }
+
     @ViewBuilder private var connectionActions: some View {
         Button(model.localized("连接 QMplus")) { store.connect(sampleMode: model.isSampleMode) }
-            .disabled(model.isSampleMode).accessibilityIdentifier("settings.qmplus.connect")
+            .disabled(model.isSampleMode || !model.qmplusEnabled).accessibilityIdentifier("settings.qmplus.connect")
         Button(model.localized("断开 QMplus 并清除会话")) { store.disconnect() }
             .disabled(model.isSampleMode).accessibilityIdentifier("settings.qmplus.disconnect")
     }

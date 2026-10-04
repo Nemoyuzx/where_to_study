@@ -1,4 +1,7 @@
 {
+  "启用 QMplus": "Dayakan QMplus",
+  "仅适用国院": "Untuk Sekolah Antarabangsa sahaja",
+  "无法保存本地偏好。": "Tidak dapat menyimpan keutamaan setempat.",
   " 秒": " saat",
   " 起": " dan seterusnya",
   " 门": " kursus",
@@ -1525,5 +1528,7 @@
   "默认关闭。登录信息仅保存在本机系统 Keychain，与北邮密码独立，不上传或同步。": "Dimatikan secara lalai. Maklumat log masuk hanya disimpan dalam Keychain peranti ini, berasingan daripada kata laluan BUPT, dan tidak dimuat naik atau disegerakkan.",
   "默认提前 10 分钟；可添加多次提醒，与每日摘要分别开关。": "Lalai 10 minit sebelum kelas. Tambahkan beberapa peringatan dengan suis berasingan daripada ringkasan harian.",
   "默认校区": "Kampus lalai",
-  "默认青绿": "Hijau kebiruan klasik"
+  "默认青绿": "Hijau kebiruan klasik",
+  "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Hanya laman log masuk rasmi yang disahkan boleh memilih akaun yang sepadan tepat dengan akaun tersimpan dan mengisi nama pengguna serta kata laluan, dengan setiap langkah dicuba paling banyak sekali. Pemilihan akaun yang tidak sepadan, MFA, CAPTCHA, kekal log masuk serta pengesahan risiko dan terma masih perlu anda lakukan sendiri.",
+  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Mematikan “Dayakan QMplus” hanya menjeda sambungan dan penyegerakan; maklumat log masuk tersimpan, sesi dan cache kursus dikekalkan. Gunakan kawalan berasingan untuk mematikan autofill, memadam maklumat log masuk atau memutuskan sambungan dan mengosongkan data."
 }

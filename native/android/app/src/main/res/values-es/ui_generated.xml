@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"Consultando el último aviso del Departamento de Logística y el horario vigente."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"La raíz del horario personalizado debe ser un objeto."</string>
     <string name="ui_generated_ff93bd2c081d35">"Abrir la lista de tareas de la plataforma docente en la nube en el navegador."</string>
+    <string name="ui_generated_1a78803a506cc4">"Activar QMplus"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"Solo para la Escuela Internacional"</string>
+    <string name="ui_generated_dba3ae91be2408">"No se pudieron guardar las preferencias locales."</string>
     <string name="ui_generated_c51e74da2b9b1b">"En macOS puedes seleccionar una red disponible o un punto de acceso personal en los ajustes del sistema. Esta aplicación no incluye un interruptor para forzar los datos móviles o el uso de dos redes a la vez."</string>
     <string name="ui_generated_a8cb7a7cb858cf">"El autocompletado de QMplus se ha detenido. Completa manualmente el inicio de sesión o la verificación en el sitio oficial."</string>
     <string name="ui_generated_8ff421866994b1">"El autocompletado de QMplus no está disponible. Inicia sesión manualmente."</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"Completando la cuenta del inicio de sesión oficial de QMplus…"</string>
     <string name="ui_generated_1a61edb546454e">"Abriendo el inicio de sesión SSO oficial de QMplus…"</string>
     <string name="ui_generated_a16987f886401d">"Asistencia de red del sistema"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"Solo en páginas oficiales de inicio de sesión verificadas se selecciona automáticamente la cuenta guardada que coincide exactamente y se completan el usuario y la contraseña, con un máximo de un intento por paso. Las cuentas que no coincidan, MFA, CAPTCHA, mantener la sesión y las confirmaciones de riesgos o condiciones requieren tu intervención."</string>
+    <string name="ui_generated_fd4480c6c08ea3">"Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos."</string>
 </resources>

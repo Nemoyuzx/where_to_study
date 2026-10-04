@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-qmplus-autofill"
+description = "Enables the set_qmplus_autofill command without any pre-configured scope."
+commands.allow = ["set_qmplus_autofill"]
+
+[[permission]]
+identifier = "deny-set-qmplus-autofill"
+description = "Denies the set_qmplus_autofill command without any pre-configured scope."
+commands.deny = ["set_qmplus_autofill"]

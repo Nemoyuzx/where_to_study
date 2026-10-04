@@ -30,6 +30,7 @@ struct WhereToStudyiOSApp: App {
                             \.locale,
                             AppLaunchConfiguration.privacyConsentLanguage.locale
                         )
+                        .environment(\.layoutDirection, AppLaunchConfiguration.privacyConsentLanguage.isRightToLeft ? .rightToLeft : .leftToRight)
                 }
             }
         }
@@ -59,5 +60,6 @@ private struct ConsentedApplicationRoot: View {
             .environmentObject(model)
             .environmentObject(model.navigation)
             .environment(\.locale, model.appLanguage.locale)
+            .environment(\.layoutDirection, model.appLanguage.isRightToLeft ? .rightToLeft : .leftToRight)
     }
 }

@@ -256,6 +256,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var widgetShowsTeacher: Bool
     @Published private(set) var widgetCourseLimit: Int
     @Published private(set) var weatherEnabled: Bool
+    @Published private(set) var qmplusEnabled: Bool
     @Published private(set) var almanacEnabled: Bool
     @Published private(set) var competitionDeadlinesEnabled: Bool
     @Published private(set) var schoolContestNoticesEnabled: Bool
@@ -343,7 +344,8 @@ final class AppModel: ObservableObject {
         self.courseDeletionStore = courseDeletionStore
         self.scheduleClient = scheduleClient
         gradeStore = GradeQueryStore(client: gradeClient)
-        qmplus = QMplusStore(defaults: defaults)
+        qmplus = QMplusStore(defaults: defaults, allowsCredentialStorage: !runtimeMode.isSample
+            && !AppLaunchConfiguration.isXCTestRunning && !AppLaunchConfiguration.isUITesting && !AppLaunchConfiguration.isReviewDemo)
         self.classroomStore = classroomStore
         self.classroomClient = classroomClient
         self.holidayStore = holidayStore
@@ -385,6 +387,7 @@ final class AppModel: ObservableObject {
             ? TodayCourseWidgetData.Preferences.default.courseLimit
             : min(max(savedWidgetCourseLimit, 1), TodayCourseWidgetData.maximumCourseLimit)
         weatherEnabled = defaults.object(forKey: Self.weatherEnabledKey) as? Bool ?? true
+        qmplusEnabled = runtimeMode.isSample ? false : Self.loadQMplusEnabled(defaults: defaults)
         almanacEnabled = defaults.object(forKey: Self.almanacEnabledKey) as? Bool ?? true
         competitionDeadlinesEnabled = defaults.object(
             forKey: Self.competitionDeadlinesEnabledKey
@@ -417,6 +420,7 @@ final class AppModel: ObservableObject {
             savedCustomDeadlinesURL = storedCustomDeadlinesURL
             favoriteDeadlines = Self.loadFavoriteDeadlines(defaults: defaults)
         }
+        qmplus.setFeatureEnabled(qmplusEnabled)
         loadCredentials()
         loadCourseDeletions()
         loadInitialLocalData()
@@ -656,6 +660,8 @@ final class AppModel: ObservableObject {
         dailyClassroomRefreshTask?.cancel()
         dailyClassroomRefreshTask = nil
         runtimeMode = .sample(review: true)
+        qmplusEnabled = false
+        qmplus.setFeatureEnabled(false)
         qmplus.suspend()
         colorTheme = .default
 
@@ -697,6 +703,8 @@ final class AppModel: ObservableObject {
         invalidatePendingOperations()
         runtimeMode = .live
         colorTheme = ColorThemeConfiguration.load(defaults: defaults)
+        qmplusEnabled = Self.loadQMplusEnabled(defaults: defaults)
+        qmplus.setFeatureEnabled(qmplusEnabled)
 
         account = ""
         password = ""
@@ -1015,6 +1023,13 @@ final class AppModel: ObservableObject {
         defaults.set(enabled, forKey: Self.weatherEnabledKey)
     }
 
+    func setQMplusEnabled(_ enabled: Bool) {
+        guard !isSampleMode else { return }
+        qmplusEnabled = enabled
+        qmplus.setFeatureEnabled(enabled)
+        defaults.set(enabled, forKey: Self.qmplusEnabledKey)
+    }
+
     func setAlmanacEnabled(_ enabled: Bool) {
         guard !isSampleMode else { return }
         almanacEnabled = enabled
@@ -1188,6 +1203,7 @@ final class AppModel: ObservableObject {
             return
         }
         invalidatePendingOperations()
+        setQMplusEnabled(false)
         qmplus.disconnect()
         courseDataClearRevision &+= 1
         dailyClassroomRefreshTask?.cancel()
@@ -1204,6 +1220,7 @@ final class AppModel: ObservableObject {
         preClassNotificationStatusMessage = ""
         cancelDailyCourseNotifications(includingDelivered: true)
         var failures = [String]()
+        if qmplus.credentialAuthorization.removalNeedsAttention { failures.append(localized("QMplus 登录信息")) }
 
         do {
             try credentialStore.clear()
@@ -2113,6 +2130,7 @@ final class AppModel: ObservableObject {
     private static let widgetShowsTeacherKey = "widgetShowsTeacher"
     private static let widgetCourseLimitKey = "widgetCourseLimit"
     private static let weatherEnabledKey = "weatherEnabled"
+    static let qmplusEnabledKey = "qmplusEnabled"
     private static let almanacEnabledKey = "almanacEnabled"
     private static let competitionDeadlinesEnabledKey = "competitionDeadlinesEnabled"
     private static let schoolContestNoticesEnabledKey = "schoolContestNoticesEnabled"
@@ -2123,6 +2141,17 @@ final class AppModel: ObservableObject {
     private static let customDeadlinesURLKey = "customDeadlinesURL"
     private static let favoriteDeadlinesKey = "favoriteDeadlines.v1"
     static let maximumFavoriteDeadlines = 500
+
+    static func loadQMplusEnabled(defaults: UserDefaults) -> Bool {
+        if let enabled = defaults.object(forKey: qmplusEnabledKey) as? Bool { return enabled }
+        // Upgrade evidence is non-secret metadata; never load a saved password.
+        let hadSession = defaults.string(forKey: "qmplusWebsiteDataStoreIdentifier")
+            .flatMap(UUID.init(uuidString:)) != nil
+        let hadAuthorization = (try? QMplusDefaultsAuthorizationJournal(defaults: defaults).load()) != nil
+        let enabled = hadSession || hadAuthorization
+        defaults.set(enabled, forKey: qmplusEnabledKey)
+        return enabled
+    }
 
     private static func loadFavoriteDeadlines(defaults: UserDefaults) -> [PublicDeadlineItem] {
         guard let data = defaults.data(forKey: favoriteDeadlinesKey),

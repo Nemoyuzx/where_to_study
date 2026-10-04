@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_semester">"学期：%1$s"</string>
+    <string name="ui_format_gpa">"平均学分绩点：%1$s"</string>
+    <string name="ui_format_courses">"%1$s 门课"</string>
+    <string name="ui_format_course_count">"%1$s 门"</string>
+    <string name="ui_format_favorites">"收藏管理（%1$s）"</string>
+    <string name="ui_format_results">"%1$s 条结果 · 按 DDL 时间升序"</string>
+    <string name="ui_format_departures">"今日安排 %1$s 个发车时刻 · %2$s 辆车"</string>
+    <string name="ui_format_directions">"今日共 %1$s 个方向、%2$s 个计划班次"</string>
+    <string name="ui_format_notice">"后勤部通知 · %1$s"</string>
+    <string name="ui_format_from">"%1$s 起"</string>
+    <string name="ui_format_next_departure">"下一班 %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_updated">"数据更新时间：%1$s"</string>
+    <string name="ui_format_feed_saved">"自定义日程已保存：%1$s，%2$s 项"</string>
+    <string name="ui_format_feed_source">"自定义来源：%1$s"</string>
+    <string name="ui_format_period">"第 %1$s 节"</string>
+    <string name="ui_format_period_compact">"第%1$s节"</string>
+    <string name="ui_format_periods">"第 %1$s-%2$s 节"</string>
+    <string name="ui_format_week_compact">"%1$s\n周"</string>
+    <string name="ui_format_teaching_week_axis">"教学\n第%1$s周"</string>
+    <string name="ui_format_teaching_week">"第%1$s教学周"</string>
+    <string name="ui_format_date_week">"%1$s 第%2$s周"</string>
+    <string name="ui_format_date_teaching_week">"%1$s 第%2$s教学周"</string>
+    <string name="ui_format_view_courses">"查看全部 %1$s 门课程"</string>
+    <string name="ui_format_day_courses">"当日课程（%1$s）"</string>
+    <string name="ui_format_calendar_synced">"已同步 %1$s 条课程到系统日历。"</string>
+    <string name="ui_format_favorites_synced">"已同步 %1$s 条收藏日程到「%2$s」"</string>
+    <string name="ui_format_schedule_updated">"个人课表已更新，共 %1$s 门课程"</string>
+    <string name="ui_format_today_courses">"今日课程 · %1$s 门"</string>
+    <string name="ui_format_about">"Where To Study  %1$s\n北邮课表与空教室查询的独立非官方客户端，不由北京邮电大学运营。"</string>
+    <string name="ui_format_calendar_upsert">"已同步 %1$s 条课程到「%2$s」（新增 %3$s，更新 %4$s）"</string>
+    <string name="ui_format_weeks">"%1$s 周"</string>
+    <string name="ui_format_ending">"进行中 · %1$s 下课"</string>
+    <string name="ui_format_week_axis">"公历 %1$s\n教学 %2$s"</string>
+    <string name="ui_format_calendar_teaching_week">"公历第%1$s周，第%2$s教学周"</string>
+    <string name="ui_format_calendar_week_unknown">"公历第%1$s周，暂无教学周信息"</string>
+    <string name="ui_format_calendar_week">"公历第%1$s周"</string>
+    <string name="ui_format_widget_teaching_week">"教学第%1$s周"</string>
+    <string name="ui_format_ends_at">"%1$s 下课"</string>
+    <string name="ui_format_week">"第%1$s周"</string>
+</resources>

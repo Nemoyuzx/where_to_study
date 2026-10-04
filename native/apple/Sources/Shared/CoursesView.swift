@@ -68,18 +68,20 @@ struct CoursesView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { proxy in
+        GeometryReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         PageTitle(eyebrow: "Where To Study", title: model.localized("课程"), compact: proxy.size.height < 560)
+                            .accessibilityIdentifier("courses.page-title")
                         QueryDestinationPicker(selection: $session.selectedMode, language: model.appLanguage,
                                                availableWidth: max(0, min(proxy.size.width, 1180) - 32),
                                                identifier: "courses.mode", titleKey: "课程类型")
                         switch session.selectedMode {
                         case .currentCourses:
                             teachingCloudSection
-                            QMplusCourseSection(store: model.qmplus, session: session)
+                            if model.qmplusEnabled {
+                                QMplusCourseSection(store: model.qmplus, session: session)
+                            }
                         case .assignments: AssignmentQueryView(store: assignmentStore, session: session.assignments)
                         case .grades: GradeQueryView(store: model.gradeStore)
                         case .exams: ExamQueryView()
@@ -93,9 +95,12 @@ struct CoursesView: View {
                 #endif
             }
             .background(theme.background)
+            #if os(macOS)
             .navigationTitle(model.localized("课程"))
-        }
+            #endif
         .accessibilityIdentifier("screen.courses")
+        .onAppear { dismissDisabledQMplusDetails() }
+        .onChange(of: model.qmplusEnabled) { _ in dismissDisabledQMplusDetails() }
         .task(id: loadKey) {
             switch session.selectedMode {
             case .currentCourses:
@@ -107,6 +112,10 @@ struct CoursesView: View {
             case .exams: break
             }
         }
+    }
+
+    private func dismissDisabledQMplusDetails() {
+        if !model.qmplusEnabled, session.detailSelection?.source == .qmplus { session.dismissDetails() }
     }
 
     private var teachingCloudSection: some View {
@@ -169,7 +178,11 @@ private struct QMplusCourseSection: View {
         LazyVStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(model.localized("QMplus 课程与活动")).font(.headline)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(model.localized("QMplus 课程与活动")).font(.headline)
+                        Text(model.localized("仅适用国院")).font(.caption).foregroundStyle(theme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if let snapshot = store.snapshot {
                         Text(model.localizedFormat("%d 门课程", QMplusCourseSelection(snapshot: snapshot,
                              showsOtherTerms: session.showsOtherQMplusTerms).courses.count))
@@ -181,6 +194,11 @@ private struct QMplusCourseSection: View {
                     .disabled(model.isSampleMode).accessibilityIdentifier("courses.qmplus.connect")
             }
             Text(model.localized(store.statusKey)).font(.caption).foregroundStyle(theme.secondaryText)
+            if store.isRetainingPreviousSnapshot {
+                Text(model.localized("当前展示上次成功获取的课程，请留意更新时间。"))
+                    .font(.caption).foregroundStyle(theme.secondaryText)
+                    .accessibilityIdentifier("courses.qmplus.retained-cache")
+            }
             Text(model.localized("QMplus 使用独立的官方网页登录，与北邮教务账号无关。"))
                 .font(.caption).foregroundStyle(theme.secondaryText)
             if let snapshot = store.snapshot {
@@ -189,6 +207,7 @@ private struct QMplusCourseSection: View {
                     .font(.caption).foregroundStyle(theme.secondaryText)
                 if snapshot.courses.contains(where: { QMplusCourseSelection.includesCourse($0) && $0.currentTermStatus == .other }) {
                     Toggle(model.localized("显示其他学期／历史课程"), isOn: $session.showsOtherQMplusTerms)
+                        .toggleStyle(.switch)
                         .accessibilityIdentifier("courses.qmplus.other-terms")
                 }
                 if selected.courses.isEmpty {

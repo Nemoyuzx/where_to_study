@@ -41,11 +41,11 @@ enum CourseListEvidence {
     }
 
     static func qmplusActivities(courseID: String, snapshot: QMplusSnapshot?) -> [QMplusActivity] {
-        (snapshot?.activities ?? []).filter { $0.courseID == courseID }
+        (snapshot?.activities ?? []).filter { $0.courseID == courseID && QMplusCourseSelection.includesActivity($0) }
     }
 
     static func qmplusCounts(activities: [QMplusActivity]) -> CourseSubmissionCounts {
-        submissionCounts(statuses: activities.filter { $0.kind == .assignment }.map(\.status))
+        submissionCounts(statuses: activities.filter { $0.kind == .assignment && QMplusCourseSelection.includesActivity($0) }.map(\.status))
     }
 
     static func cachedAssignments(query: [AssignmentDeadlineItem]?,

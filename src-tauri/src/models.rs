@@ -1,6 +1,13 @@
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+pub const UI_LANGUAGES: [&str; 13] = [
+    "zh-Hans", "zh-Hant", "en", "ja", "es", "pt", "ar", "ru", "tr", "th", "ms", "vi", "id",
+];
+pub fn valid_ui_language(value: &str) -> bool {
+    value == "system" || UI_LANGUAGES.contains(&value)
+}
+
 fn default_true() -> bool {
     true
 }
@@ -79,6 +86,8 @@ pub struct MetadataResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedSettings {
     #[serde(default)]
+    pub qmplus_enabled: bool,
+    #[serde(default)]
     pub account: String,
     #[serde(default)]
     pub has_saved_password: bool,
@@ -133,6 +142,7 @@ pub struct SavedSettings {
 impl SavedSettings {
     pub fn with_defaults() -> Self {
         Self {
+            qmplus_enabled: false,
             account: String::new(),
             has_saved_password: false,
             has_saved_teaching_cloud_password: false,
@@ -168,7 +178,7 @@ impl SavedSettings {
         if self.campus_id.trim().is_empty() {
             self.campus_id = crate::config::CAMPUSES[0].id.to_string();
         }
-        if !matches!(self.ui_language.as_str(), "system" | "zh-Hans" | "en") {
+        if !valid_ui_language(&self.ui_language) {
             self.ui_language = "system".to_string();
         }
     }
@@ -229,7 +239,7 @@ impl SaveSettingsRequest {
         if self.campus_id.trim().is_empty() {
             self.campus_id = crate::config::CAMPUSES[0].id.to_string();
         }
-        if !matches!(self.ui_language.as_str(), "system" | "zh-Hans" | "en") {
+        if !valid_ui_language(&self.ui_language) {
             self.ui_language = "system".to_string();
         }
     }

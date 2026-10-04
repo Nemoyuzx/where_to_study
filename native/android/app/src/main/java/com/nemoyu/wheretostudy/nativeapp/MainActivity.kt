@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.content.res.Resources
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
@@ -45,6 +46,9 @@ data class LocalDataClearResult(val failedItems: List<String>, val pendingItems:
 }
 
 class MainActivity : Activity() {
+    private var languageResources: Resources? = null
+    private val languageTransition = LanguageChangeTransition()
+    override fun getResources(): Resources = languageResources ?: super.getResources()
     private enum class Destination(
         val label: String,
         val navigationViewID: Int,
@@ -306,6 +310,7 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
+        languageTransition.finishImmediately()
         if (windowLayoutListenerRegistered) {
             windowInfoTracker.removeWindowLayoutInfoListener(windowLayoutInfoListener)
             windowLayoutListenerRegistered = false
@@ -711,12 +716,13 @@ class MainActivity : Activity() {
         (start + (end - start) * fraction).toInt()
 
     private fun navigate(destination: Destination) {
+        if(destination != selectedDestination) languageTransition.finishImmediately()
         captureUiSession()
         val previousDestination = selectedDestination
         if (previousDestination == Destination.COURSES && destination != Destination.COURSES)
             courseSessionState.courseDetailKey = null
         selectedDestination = destination
-        if (destination == Destination.SETTINGS) prewarmPublicDeadlinesIfEnabled()
+        if (destination == Destination.SETTINGS && !restoringUiState) prewarmPublicDeadlinesIfEnabled()
         if (destination == Destination.SETTINGS) {
             window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         } else {
@@ -878,17 +884,37 @@ class MainActivity : Activity() {
 
     internal fun qmplusState(): QmplusRepository = activitySession.qmplus
 
+    internal fun setQMplusEnabled(enabled: Boolean): Boolean {
+        val repository = activitySession.qmplus
+        if (!enabled) repository.setFeatureEnabled(false)
+        return try {
+            preferences.qmplusEnabled = enabled
+            if (!repository.setFeatureEnabled(enabled) || repository.isFeatureEnabled != enabled) {
+                if (enabled) runCatching { preferences.qmplusEnabled = false }
+                throw IllegalStateException("无法保存本地偏好。")
+            }
+            true
+        } catch (_: Exception) {
+            Toast.makeText(this, uiText("无法保存本地偏好。"), Toast.LENGTH_LONG).show()
+            false
+        }
+    }
+
     internal fun connectQmplus(startURL: String = QmplusPolicy.START_URL) {
         if (isFinishing || isDestroyed || activitySession.uiOwner.current() !== this) return
         if (!QmplusPolicy.isBusinessPage(startURL)) return
         val repository = activitySession.qmplus
+        if (!repository.isFeatureEnabled) return
         val connection = repository.beginConnection() ?: return
         captureUiSession()
         runCatching {
             startActivityForResult(Intent(this, QmplusActivity::class.java)
                 .putExtra(QmplusActivity.EXTRA_GENERATION, connection.generation)
                 .putExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN, connection.token)
+                .putExtra(QmplusActivity.EXTRA_FEATURE_REVISION, connection.featureRevision)
                 .putExtra(QmplusActivity.EXTRA_START_URL, startURL)
+                .putExtra(QmplusActivity.EXTRA_SAVED_LOGIN_ENABLED, repository.savedLoginStatus.enabled)
+                .putExtra(QmplusActivity.EXTRA_SAVED_LOGIN_REVISION, repository.savedLoginStatus.revision)
                 .putExtra(QmplusActivity.EXTRA_CLEAR_FIRST, repository.cookiesNeedClearing), QMPLUS_REQUEST_CODE)
         }.onFailure {
             repository.finishConnection(connection.token)
@@ -903,6 +929,18 @@ class MainActivity : Activity() {
         if (!clearQmplusWebSession()) activitySession.qmplus.cookieClearCouldNotStart()
     }
 
+    internal fun saveQmplusLogin(account: String, password: CharArray, onComplete: (Result<Unit>) -> Unit) {
+        val repository = activitySession.qmplus
+        val owner = activitySession.uiOwner
+        repository.saveLogin(account, password, explicitOptIn = true) { result ->
+            owner.current()?.let { current ->
+                if (repository.pendingCookieClearAttempt != null && !current.clearQmplusWebSession())
+                    repository.cookieClearCouldNotStart()
+            }
+            onComplete(result)
+        }
+    }
+
     private fun clearQmplusWebSession(): Boolean = runCatching {
         val repository = activitySession.qmplus
         val attempt = checkNotNull(repository.pendingCookieClearAttempt)
@@ -915,6 +953,13 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != QMPLUS_REQUEST_CODE || isFinishing || isDestroyed) return
         val repository = activitySession.qmplus
+        if (data?.getBooleanExtra(QmplusActivity.EXTRA_OWNER_EXPIRED, false) == true) {
+            val expiredToken = data.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN)
+            if (repository.isFeatureEnabled &&
+                (repository.finishConnection(expiredToken) || repository.connection == null))
+                repository.connectionExpired()
+            return
+        }
         val token = data?.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN) ?: repository.connection?.token
         if (!repository.finishConnection(token) || data == null) return
         val generation = data.getLongExtra(QmplusActivity.EXTRA_GENERATION, -1)
@@ -985,6 +1030,7 @@ class MainActivity : Activity() {
     }
 
     private fun handleAppBack(): Boolean {
+        if(languageTransition.phase != "idle"){languageTransition.finishImmediately();return true}
         if (selectedDestination != Destination.SETTINGS ||
             settingsRoute != SettingsRoute.FAVORITES
         ) return false
@@ -994,11 +1040,36 @@ class MainActivity : Activity() {
 
     fun updateAppLanguage(language: AppLanguage) {
         if (!isCurrentUiOwner()) return
-        if (preferences.languageCode == language.code) return
-        captureUiSession()
-        preferences.languageCode = language.code
-        recreate()
+        if(preferences.languageCode == language.code){languageTransition.cancel();return}
+        if(!::adaptiveRoot.isInitialized) return
+        val weakOwner=java.lang.ref.WeakReference(this)
+        val systemLocales=Resources.getSystem().configuration.locales
+        val systemLocale=AppLocale.preferredSupportedLocale((0 until systemLocales.size()).map(systemLocales::get))
+        val target=AppLanguage.fromLocale(AppLocale.resolvedLocale(language,systemLocale)) ?: AppLanguage.ENGLISH
+        val decor=window.decorView as? ViewGroup ?: return
+        languageTransition.request(decor,adaptiveRoot,uiText("正在切换界面语言"),change={
+            weakOwner.get()?.takeIf(MainActivity::isCurrentUiOwner)?.applyLanguageInPlace(language)
+        },ready={
+            weakOwner.get()?.let {owner -> owner.isCurrentUiOwner() && !owner.restoringUiState &&
+                AppLocale.resolvedLanguage(owner)==target && owner.content.childCount>0 &&
+                owner.content.getChildAt(0).isLaidOut && !owner.content.getChildAt(0).isLayoutRequested}==true
+        })
     }
+
+    private fun applyLanguageInPlace(language: AppLanguage) {
+        if (!isCurrentUiOwner()) return
+        captureUiSession()
+        try{preferences.languageCode=language.code}catch(_:Exception){
+            Toast.makeText(this,uiText("无法保存语言设置。"),Toast.LENGTH_LONG).show();return
+        }
+        languageResources=AppLocale.wrap(applicationContext,language.code).resources
+        activitySession.detachObservers()
+        restoringUiState=true
+        updateAdaptiveLayout(force=true)
+    }
+
+    internal fun languageTransitionPhase(): String = languageTransition.phase
+    internal fun languageTransitionReadyFrames(): Int = languageTransition.readyFrameCount
 
     internal fun isCurrentUiOwner(): Boolean = !isFinishing && !isDestroyed && activitySession.uiOwner.current() === this
     internal fun allowsAutomaticPageLoads(): Boolean = !restoringUiState
@@ -1369,7 +1440,10 @@ class MainActivity : Activity() {
         LocalDataCoordinator.clear {
             academicGradesRepository.clear()
             calendarDailyInfoRepository.clearAssignments()
-            clearItem("QMplus 课程缓存") { activitySession.qmplus.clear() }
+            clearItem("QMplus 课程缓存") {
+                setQMplusEnabled(false)
+                activitySession.qmplus.clear()
+            }
             clearItem("账号和密码") { credentialStore.clear() }
             clearItem("应用设置") { preferences.clear() }
             clearItem("颜色主题") { ColorThemePreferences(this).clear() }
@@ -1463,6 +1537,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        languageTransition.close()
         if (!isChangingConfigurations) automaticScheduleLaunchRefreshKey?.let { key ->
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
             automaticScheduleLaunchRefreshKey = null

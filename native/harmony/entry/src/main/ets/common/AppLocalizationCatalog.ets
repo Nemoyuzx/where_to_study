@@ -2,6 +2,9 @@
 export class AppLocalizationCatalog {
   private static readonly values: Record<string, Record<string, string>> = {
   "zh-Hant": {
+    "启用 QMplus": "啟用 QMplus",
+    "仅适用国院": "僅適用國院",
+    "无法保存本地偏好。": "無法儲存本機偏好設定。",
     "今日课程": "今日課程",
     "今天可以自由安排": "今天可以自由安排",
     "课程进行中": "課程進行中",
@@ -562,9 +565,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "課表中沒有可導入的課程日期",
     "当天空教室已更新": "當天空教室已更新",
     "账号已更改，获取课表后将重新安排摘要": "賬號已更改，獲取課表後將重新安排摘要",
-    "本地数据已清除": "本地數據已清除"
+    "本地数据已清除": "本地數據已清除",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "僅在已核驗的官方登入頁自動選擇與已儲存帳號精確相符的帳號，並填寫帳號與密碼，各步驟最多一次。未匹配的帳號選擇、MFA、驗證碼、保持登入、風險及協議確認仍須本人操作。",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "關閉「啟用 QMplus」只暫停連線與同步，保留登入資料、連線工作階段及課程快取。關閉自動填寫、刪除登入資料或登出並清除資料，請使用對應操作。"
   },
   "ja": {
+    "启用 QMplus": "QMplus を有効にする",
+    "仅适用国院": "国際学院の学生のみ",
+    "无法保存本地偏好。": "端末の設定を保存できません。",
     "今日课程": "今日の授業",
     "今天可以自由安排": "今日は自由に過ごせます",
     "课程进行中": "授業中",
@@ -1125,9 +1133,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "追加できる授業の日付がありません",
     "当天空教室已更新": "今日の空き教室を更新しました",
     "账号已更改，获取课表后将重新安排摘要": "アカウントが変更されました。時間割の取得後に授業概要を再設定します。",
-    "本地数据已清除": "ローカルデータを削除しました"
+    "本地数据已清除": "ローカルデータを削除しました",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "確認済みの公式ログインページでのみ、保存済みアカウントと完全に一致するアカウントを選択し、ユーザー名とパスワードを自動入力します。各手順は1回までです。一致しないアカウントの選択、MFA、CAPTCHA、サインイン状態の維持、リスクや利用規約の確認は本人が行ってください。",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "「QMplus を有効にする」をオフにすると接続と同期だけが停止し、保存済みのログイン情報、セッション、授業キャッシュは保持されます。自動入力の停止、ログイン情報の削除、切断とデータ消去には、それぞれの操作を使用してください。"
   },
   "es": {
+    "启用 QMplus": "Activar QMplus",
+    "仅适用国院": "Solo para la Escuela Internacional",
+    "无法保存本地偏好。": "No se pudieron guardar las preferencias locales.",
     "今日课程": "Clases de hoy",
     "今天可以自由安排": "Tu día está libre",
     "课程进行中": "Clase en curso",
@@ -1688,9 +1701,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "No hay fechas de clases para importar",
     "当天空教室已更新": "Las aulas libres de hoy están actualizadas",
     "账号已更改，获取课表后将重新安排摘要": "La cuenta cambió; los resúmenes se reprogramarán después de obtener el horario",
-    "本地数据已清除": "Datos locales borrados"
+    "本地数据已清除": "Datos locales borrados",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Solo en páginas oficiales de inicio de sesión verificadas se selecciona automáticamente la cuenta guardada que coincide exactamente y se completan el usuario y la contraseña, con un máximo de un intento por paso. Las cuentas que no coincidan, MFA, CAPTCHA, mantener la sesión y las confirmaciones de riesgos o condiciones requieren tu intervención.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos."
   },
   "pt": {
+    "启用 QMplus": "Ativar QMplus",
+    "仅适用国院": "Apenas para a Escola Internacional",
+    "无法保存本地偏好。": "Não foi possível guardar as preferências locais.",
     "今日课程": "Aulas de hoje",
     "今天可以自由安排": "Sem aulas hoje",
     "课程进行中": "Aula em andamento",
@@ -2251,9 +2269,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "A grade não contém datas de aulas para importar",
     "当天空教室已更新": "Salas livres do dia atualizadas",
     "账号已更改，获取课表后将重新安排摘要": "A conta mudou; os resumos serão reprogramados após obter a grade",
-    "本地数据已清除": "Dados locais limpos"
+    "本地数据已清除": "Dados locais limpos",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Somente páginas oficiais de login verificadas podem selecionar automaticamente uma conta que corresponda exatamente à conta salva e preencher usuário e senha, com no máximo uma tentativa por etapa. Contas sem correspondência, MFA, CAPTCHA, manter a sessão e confirmações de riscos ou termos exigem sua intervenção.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desativar “Ativar QMplus” apenas pausa a conexão e a sincronização; os dados de login salvos, a sessão e o cache de cursos são mantidos. Use os controles correspondentes para desativar o preenchimento automático, excluir dados de login ou desconectar e limpar dados."
   },
   "ar": {
+    "启用 QMplus": "تفعيل QMplus",
+    "仅适用国院": "لطلاب الكلية الدولية فقط",
+    "无法保存本地偏好。": "تعذر حفظ التفضيلات المحلية.",
     "今日课程": "حصص اليوم",
     "今天可以自由安排": "لا توجد حصص اليوم",
     "课程进行中": "الحصة جارية",
@@ -2814,9 +2837,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "لا توجد تواريخ مقررات للاستيراد",
     "当天空教室已更新": "بيانات القاعات الشاغرة لليوم محدثة",
     "账号已更改，获取课表后将重新安排摘要": "تغير الحساب؛ ستُعاد جدولة الملخصات بعد جلب الجدول",
-    "本地数据已清除": "مُسحت البيانات المحلية"
+    "本地数据已清除": "مُسحت البيانات المحلية",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "يمكن فقط لصفحات تسجيل الدخول الرسمية المتحقق منها اختيار الحساب المطابق تمامًا للحساب المحفوظ وملء اسم المستخدم وكلمة المرور، بمحاولة واحدة كحد أقصى لكل خطوة. يظل اختيار حساب غير مطابق وMFA وCAPTCHA والبقاء مسجلًا وتأكيد المخاطر والشروط مسؤوليتك.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "إيقاف «تفعيل QMplus» يوقف الاتصال والمزامنة فقط، مع الاحتفاظ ببيانات الدخول المحفوظة والجلسة وذاكرة المقررات المؤقتة. استخدم عناصر التحكم المخصصة لإيقاف التعبئة التلقائية أو حذف بيانات الدخول أو قطع الاتصال ومسح البيانات."
   },
   "ru": {
+    "启用 QMplus": "Включить QMplus",
+    "仅适用国院": "Только для Международного института",
+    "无法保存本地偏好。": "Не удалось сохранить локальные настройки.",
     "今日课程": "Занятия сегодня",
     "今天可以自由安排": "Сегодня занятий нет",
     "课程进行中": "Занятие идёт",
@@ -3377,9 +3405,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "Нет дат занятий для импорта",
     "当天空教室已更新": "Свободные аудитории на сегодня обновлены",
     "账号已更改，获取课表后将重新安排摘要": "Аккаунт изменён; обзоры будут перепланированы после загрузки расписания",
-    "本地数据已清除": "Локальные данные очищены"
+    "本地数据已清除": "Локальные данные очищены",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Только на проверенных официальных страницах входа приложение автоматически выбирает аккаунт, точно совпадающий с сохранённым, и вводит имя пользователя и пароль, не более одной попытки на шаг. Несовпадающие аккаунты, MFA, CAPTCHA, сохранение входа и подтверждение рисков или условий требуют ваших действий.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Выключение «Включить QMplus» лишь приостанавливает подключение и синхронизацию; сохранённые данные входа, сеанс и кеш курсов сохраняются. Для отключения автозаполнения, удаления данных входа или отключения с очисткой данных используйте соответствующие действия."
   },
   "tr": {
+    "启用 QMplus": "QMplus’ı etkinleştir",
+    "仅适用国院": "Yalnızca Uluslararası Okul için",
+    "无法保存本地偏好。": "Yerel tercihler kaydedilemedi.",
     "今日课程": "Bugünkü dersler",
     "今天可以自由安排": "Bugününüz serbest",
     "课程进行中": "Ders sürüyor",
@@ -3940,9 +3973,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "Aktarılacak ders tarihi yok",
     "当天空教室已更新": "Bugünün boş sınıfları güncel",
     "账号已更改，获取课表后将重新安排摘要": "Hesap değişti; program alındıktan sonra özetler yeniden planlanacak",
-    "本地数据已清除": "Yerel veriler temizlendi"
+    "本地数据已清除": "Yerel veriler temizlendi",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Yalnızca doğrulanmış resmi giriş sayfalarında kayıtlı hesapla tam eşleşen hesap otomatik seçilir, kullanıcı adı ve parola doldurulur; her adım en fazla bir kez denenir. Eşleşmeyen hesap seçimi, MFA, CAPTCHA, oturumu açık tutma, risk ve koşul onayları sizin işleminizi gerektirir.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "“QMplus’ı etkinleştir” seçeneğini kapatmak yalnızca bağlantı ve eşitlemeyi duraklatır; kayıtlı giriş bilgileri, oturum ve ders önbelleği korunur. Otomatik doldurmayı kapatmak, giriş bilgilerini silmek veya bağlantıyı kesip verileri temizlemek için ilgili kontrolleri kullanın."
   },
   "th": {
+    "启用 QMplus": "เปิดใช้ QMplus",
+    "仅适用国院": "สำหรับวิทยาลัยนานาชาติเท่านั้น",
+    "无法保存本地偏好。": "บันทึกการตั้งค่าในเครื่องไม่ได้",
     "今日课程": "ชั้นเรียนวันนี้",
     "今天可以自由安排": "วันนี้ไม่มีชั้นเรียน จัดเวลาได้ตามต้องการ",
     "课程进行中": "กำลังเรียน",
@@ -4503,9 +4541,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "ไม่มีวันที่มีเรียนในตารางสำหรับนำเข้า",
     "当天空教室已更新": "อัปเดตห้องว่างวันนี้แล้ว",
     "账号已更改，获取课表后将重新安排摘要": "เปลี่ยนบัญชีแล้ว จะจัดสรุปใหม่หลังดึงตารางเรียน",
-    "本地数据已清除": "ล้างข้อมูลในเครื่องแล้ว"
+    "本地数据已清除": "ล้างข้อมูลในเครื่องแล้ว",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "เลือกบัญชีที่ตรงกับบัญชีที่บันทึกไว้อย่างครบถ้วนและกรอกชื่อบัญชีกับรหัสผ่านอัตโนมัติเฉพาะหน้าเข้าสู่ระบบทางการที่ตรวจสอบแล้ว แต่ละขั้นตอนลองได้ไม่เกินหนึ่งครั้ง คุณยังต้องเลือกบัญชีที่ไม่ตรงกัน ทำ MFA และ CAPTCHA และยืนยันการคงสถานะเข้าสู่ระบบ ความเสี่ยง และข้อตกลงด้วยตนเอง",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "การปิด “เปิดใช้ QMplus” จะพักการเชื่อมต่อและการซิงค์เท่านั้น โดยเก็บข้อมูลเข้าสู่ระบบ เซสชัน และแคชรายวิชาไว้ หากต้องการปิดการกรอกอัตโนมัติ ลบข้อมูลเข้าสู่ระบบ หรือยกเลิกการเชื่อมต่อพร้อมล้างข้อมูล ให้ใช้ตัวควบคุมที่เกี่ยวข้อง"
   },
   "ms": {
+    "启用 QMplus": "Dayakan QMplus",
+    "仅适用国院": "Untuk Sekolah Antarabangsa sahaja",
+    "无法保存本地偏好。": "Tidak dapat menyimpan keutamaan setempat.",
     "今日课程": "Kelas hari ini",
     "今天可以自由安排": "Hari ini anda bebas mengatur masa",
     "课程进行中": "Kelas sedang berlangsung",
@@ -5066,9 +5109,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "Tiada tarikh kelas dalam jadual yang boleh diimport",
     "当天空教室已更新": "Bilik kosong hari ini telah dikemas kini",
     "账号已更改，获取课表后将重新安排摘要": "Akaun telah berubah; ringkasan akan dijadualkan semula selepas jadual diambil",
-    "本地数据已清除": "Data setempat telah dipadam"
+    "本地数据已清除": "Data setempat telah dipadam",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Hanya laman log masuk rasmi yang disahkan boleh memilih akaun yang sepadan tepat dengan akaun tersimpan dan mengisi nama pengguna serta kata laluan, dengan setiap langkah dicuba paling banyak sekali. Pemilihan akaun yang tidak sepadan, MFA, CAPTCHA, kekal log masuk serta pengesahan risiko dan terma masih perlu anda lakukan sendiri.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Mematikan “Dayakan QMplus” hanya menjeda sambungan dan penyegerakan; maklumat log masuk tersimpan, sesi dan cache kursus dikekalkan. Gunakan kawalan berasingan untuk mematikan autofill, memadam maklumat log masuk atau memutuskan sambungan dan mengosongkan data."
   },
   "vi": {
+    "启用 QMplus": "Bật QMplus",
+    "仅适用国院": "Chỉ dành cho Khoa Quốc tế",
+    "无法保存本地偏好。": "Không thể lưu tùy chọn trên thiết bị.",
     "今日课程": "Lớp học hôm nay",
     "今天可以自由安排": "Hôm nay bạn có thể tự sắp xếp thời gian",
     "课程进行中": "Đang trong giờ học",
@@ -5629,9 +5677,14 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "Thời khóa biểu không có ngày học để nhập",
     "当天空教室已更新": "Phòng học trống hôm nay đã được cập nhật",
     "账号已更改，获取课表后将重新安排摘要": "Tài khoản đã thay đổi; tóm tắt sẽ được lên lịch lại sau khi tải thời khóa biểu",
-    "本地数据已清除": "Đã xóa dữ liệu cục bộ"
+    "本地数据已清除": "Đã xóa dữ liệu cục bộ",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Chỉ trên trang đăng nhập chính thức đã được xác minh, ứng dụng mới tự chọn tài khoản khớp chính xác với tài khoản đã lưu và điền tên đăng nhập cùng mật khẩu, mỗi bước tối đa một lần. Việc chọn tài khoản không khớp, MFA, CAPTCHA, duy trì đăng nhập và xác nhận rủi ro hoặc điều khoản vẫn do bạn thực hiện.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Tắt “Bật QMplus” chỉ tạm dừng kết nối và đồng bộ; thông tin đăng nhập đã lưu, phiên và bộ nhớ đệm khóa học vẫn được giữ lại. Hãy dùng các thao tác riêng để tắt tự điền, xóa thông tin đăng nhập hoặc ngắt kết nối và xóa dữ liệu."
   },
   "id": {
+    "启用 QMplus": "Aktifkan QMplus",
+    "仅适用国院": "Hanya untuk Fakultas Internasional",
+    "无法保存本地偏好。": "Tidak dapat menyimpan preferensi lokal.",
     "今日课程": "Kelas hari ini",
     "今天可以自由安排": "Hari ini Anda bebas mengatur waktu",
     "课程进行中": "Kelas sedang berlangsung",
@@ -6192,7 +6245,9 @@ export class AppLocalizationCatalog {
     "课表中没有可导入的课程日期": "Tidak ada tanggal kelas dalam jadwal yang dapat diimpor",
     "当天空教室已更新": "Ruang kosong hari ini sudah diperbarui",
     "账号已更改，获取课表后将重新安排摘要": "Akun telah berubah; ringkasan akan dijadwalkan ulang setelah jadwal diambil",
-    "本地数据已清除": "Data lokal telah dihapus"
+    "本地数据已清除": "Data lokal telah dihapus",
+    "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Hanya pada laman masuk resmi yang telah diverifikasi, aplikasi dapat memilih akun yang cocok persis dengan akun tersimpan dan mengisi nama pengguna serta kata sandi, dengan paling banyak satu upaya per langkah. Pemilihan akun yang tidak cocok, MFA, CAPTCHA, tetap masuk, serta konfirmasi risiko dan ketentuan tetap memerlukan tindakan Anda.",
+    "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Menonaktifkan “Aktifkan QMplus” hanya menjeda koneksi dan sinkronisasi; informasi masuk tersimpan, sesi, dan cache mata kuliah tetap disimpan. Gunakan kontrol terpisah untuk mematikan isi otomatis, menghapus informasi masuk, atau memutus koneksi dan menghapus data."
   }
 };
   static text(source: string, language: string): string | undefined {

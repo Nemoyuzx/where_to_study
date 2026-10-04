@@ -70,9 +70,7 @@ actor MobileMonthProjectionWorker {
         formatter.calendar = calendar
         formatter.locale = input.language.locale
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = input.language.resolvedResourceName == "en"
-            ? "EEEE, MMMM d, yyyy"
-            : "yyyy年M月d日 EEEE"
+        formatter.dateFormat = input.language.dateFormat(chinese: "yyyy年M月d日 EEEE", english: "EEEE, MMMM d, yyyy")
         let todayKey = StrictContractDateParser.string(from: input.today, calendar: calendar)
         let todayLabel = AppLocalization.string("今天", language: input.language)
         let holidayLabel = AppLocalization.string("休", language: input.language)

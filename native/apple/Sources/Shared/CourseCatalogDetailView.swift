@@ -133,6 +133,11 @@ private struct CourseCatalogDetailView: View {
             if let end = CourseListEvidence.qmplusShanghaiTime(course.endAt) { Text(model.localized("课程结束") + ": " + end).font(.caption) }
             if let fetchedAt = CourseListEvidence.qmplusShanghaiTime(qmplus.snapshot?.fetchedAt) { Text(fetchedAt).font(.caption).foregroundStyle(theme.secondaryText) }
             Text(model.localized(qmplus.statusKey)).font(.caption).foregroundStyle(theme.secondaryText)
+            if qmplus.isRetainingPreviousSnapshot {
+                Text(model.localized("当前展示上次成功获取的课程，请留意更新时间。"))
+                    .font(.caption).foregroundStyle(theme.secondaryText)
+                    .accessibilityIdentifier("course-detail.qmplus.retained-cache")
+            }
             Link(model.localized("打开官方课程页面"), destination: course.url)
                 .accessibilityIdentifier("course-detail.open-official")
             Text(model.localized("本课已同步活动")).font(.headline)

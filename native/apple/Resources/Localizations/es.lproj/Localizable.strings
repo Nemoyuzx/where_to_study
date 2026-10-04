@@ -53,7 +53,9 @@
 "仅修改此账号本学期的本地课表，刷新后仍保持，可在个人账户中恢复。不会退选学校课程、删除作业 DDL 或已导出的系统日历事件。" = "Solo modifica el horario local de esta cuenta y semestre, se conserva al actualizar y puede restaurarse en Cuenta personal. No cambia la matrícula, los plazos de tareas ni eventos ya exportados al calendario.";
 "仅删除本次课程" = "Eliminar esta sesión";
 "仅删除本次课程？" = "¿Eliminar solo esta sesión?";
+"仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" = "Solo en páginas oficiales de inicio de sesión verificadas se selecciona automáticamente la cuenta guardada que coincide exactamente y se completan el usuario y la contraseña, con un máximo de un intento por paso. Las cuentas que no coincidan, MFA, CAPTCHA, mantener la sesión y las confirmaciones de riesgos o condiciones requieren tu intervención.";
 "仅在当天有课时通知；课表更新或账号变更后会自动重排。" = "Solo se notifica en días con clases; los avisos se reprograman al cambiar el horario o la cuenta.";
+"仅适用国院" = "Solo para la Escuela Internacional";
 "今天" = "Hoy";
 "今天可以自由安排" = "Tu día está libre";
 "今天没有处于有效期内的结构化班车表" = "No hay un horario estructurado de transporte vigente hoy";
@@ -100,6 +102,7 @@
 "公开活动 DDL" = "Plazos de eventos públicos";
 "六" = "S";
 "关于本应用" = "Acerca de";
+"关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。" = "Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos.";
 "关闭全天日程" = "Cerrar eventos de todo el día";
 "关闭弹层" = "Cerrar panel";
 "关闭时间" = "Cierre";
@@ -129,6 +132,7 @@
 "同意并继续" = "Aceptar y continuar";
 "后勤部通知 · %@" = "Aviso del Departamento de Logística · %@";
 "启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。" = "Al iniciar o actualizar el horario, se aplican automáticamente el semestre y la fecha de inicio devueltos por el servicio académico.";
+"启用 QMplus" = "Activar QMplus";
 "周" = "Semana";
 "周一" = "Lun";
 "周三" = "Mié";
@@ -287,6 +291,7 @@
 "整点" = "Hora";
 "断开 QMplus 并清除会话" = "Desconectar QMplus y borrar sesión";
 "无法保存 QMplus 登录信息，自动填写未启用。" = "No se pudieron guardar los datos de acceso de QMplus. El autocompletado no está activado.";
+"无法保存本地偏好。" = "No se pudieron guardar las preferencias locales.";
 "无法同步公开活动或校内通知，请稍后重试。" = "No se pueden sincronizar los eventos públicos o avisos del campus. Inténtalo más tarde.";
 "无法清除原账号的课表与空教室缓存，账号未更改。" = "No se pudieron borrar el horario y la caché de aulas de la cuenta anterior; la cuenta no cambió.";
 "无法确认 QMplus 登录信息的保存状态，请重新保存或删除。" = "No se puede verificar el estado de los datos de acceso de QMplus. Guárdalos de nuevo o elimínalos.";

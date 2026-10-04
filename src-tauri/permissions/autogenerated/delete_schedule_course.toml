@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-schedule-course"
+description = "Enables the delete_schedule_course command without any pre-configured scope."
+commands.allow = ["delete_schedule_course"]
+
+[[permission]]
+identifier = "deny-delete-schedule-course"
+description = "Denies the delete_schedule_course command without any pre-configured scope."
+commands.deny = ["delete_schedule_course"]

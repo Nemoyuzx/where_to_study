@@ -1683,7 +1683,7 @@ final class ScheduleLogicTests: XCTestCase {
         )
         XCTAssertEqual(
             AppLanguage.system.resourceName(preferredLanguages: ["ja-JP"]),
-            "en"
+            "ja"
         )
         XCTAssertEqual(
             AppLanguage.system.resourceName(preferredLanguages: ["ko-KR"]),

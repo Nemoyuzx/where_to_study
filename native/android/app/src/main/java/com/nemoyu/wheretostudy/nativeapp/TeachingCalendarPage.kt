@@ -2104,6 +2104,7 @@ internal class TeachingCalendarPage(
     private fun phoneDateStrip(onDateChanged: () -> Unit): LinearLayout =
         LinearLayout(activity).apply {
             id = R.id.calendar_date_strip
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
             orientation = LinearLayout.HORIZONTAL
             val today = Calendar.getInstance(shanghai)
             val leadingWidth = if (selectedMode == Mode.WEEK) {
@@ -2119,8 +2120,8 @@ internal class TeachingCalendarPage(
                         selectedDate,
                     )
                     val calendarWeek = TeachingCalendarLogic.calendarWeekNumber(selectedDate)
-                    val english = AppLocale.isEnglish(activity)
-                    text = TeachingCalendarLogic.weekAxisLabel(calendarWeek, teachingWeek, english)
+                    text = if (AppLocale.isEnglish(activity)) TeachingCalendarLogic.weekAxisLabel(calendarWeek, teachingWeek, true)
+                        else activity.uiText(TeachingCalendarLogic.weekAxisLabel(calendarWeek, teachingWeek, false))
                     textSize = 9.5f
                     gravity = Gravity.CENTER
                     setThemeTextColor { Palette.muted }
@@ -2129,8 +2130,8 @@ internal class TeachingCalendarPage(
                     contentDescription = TeachingCalendarLogic.weekAccessibilityLabel(
                         calendarWeek,
                         teachingWeek,
-                        english,
-                    )
+                        false,
+                    ).let(activity::uiText)
                 }, LinearLayout.LayoutParams(
                     activity.dp(leadingWidth),
                     activity.dp(TeachingCalendarLogic.phoneDateStripHeightDp),
@@ -2403,6 +2404,7 @@ internal class TeachingCalendarPage(
         ))
         val grid = LinearLayout(activity).apply {
             id = R.id.calendar_month_grid
+            layoutDirection = View.LAYOUT_DIRECTION_LTR
             tag = selectedWeekIndex
             orientation = LinearLayout.VERTICAL
             dates.chunked(7).forEachIndexed { rowIndex, week ->
@@ -2548,11 +2550,8 @@ internal class TeachingCalendarPage(
         ).apply {
             bottomMargin = activity.dp(TeachingCalendarLogic.monthWeekdayHeaderBottomMarginDp)
         }
-        val labels = if (AppLocale.isEnglish(activity)) {
-            listOf("M", "T", "W", "T", "F", "S", "S")
-        } else {
-            listOf("一", "二", "三", "四", "五", "六", "日")
-        }
+        layoutDirection = View.LAYOUT_DIRECTION_LTR
+        val labels = AppLocale.weekdayLabels(activity)
         labels.forEach { label ->
             addView(TextView(activity).apply {
                 text = label
@@ -4526,16 +4525,15 @@ internal class TeachingCalendarPage(
         isLenient = false
     }
 
-    private fun displayLocale(): Locale =
-        if (AppLocale.isEnglish(activity)) Locale.US else Locale.SIMPLIFIED_CHINESE
+    private fun displayLocale(): Locale = AppLocale.calendarLocale(activity)
 
     private fun displayMonthDay(day: Calendar): String = SimpleDateFormat(
-        if (AppLocale.isEnglish(activity)) "MMM d" else "M月d日",
+        AppLocale.monthDayPattern(activity),
         displayLocale(),
     ).apply { timeZone = shanghai }.format(day.time)
 
     private fun displayMonthDayWithWeekday(day: Calendar): String = SimpleDateFormat(
-        if (AppLocale.isEnglish(activity)) "MMM d, EEEE" else "M月d日 EEEE",
+        AppLocale.monthDayPattern(activity, includesWeekday = true),
         displayLocale(),
     ).apply { timeZone = shanghai }.format(day.time)
 

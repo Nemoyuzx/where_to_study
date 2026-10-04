@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_ddb3b7159fd2" formatted="false">"颜色主题"</string>
+    <string name="ui_chrome_aa5c949544cd" formatted="false">"主色会同时调整页面、卡片和控件的底色。浅色与深色外观仍跟随系统。"</string>
+    <string name="ui_chrome_136e42c8ec73" formatted="false">"自定义 RGB 颜色"</string>
+    <string name="ui_chrome_11979c5c7acc" formatted="false">"主色"</string>
+    <string name="ui_chrome_f84e05423960" formatted="false">"强调色"</string>
+    <string name="ui_chrome_822eb432b858" formatted="false">"选中日期"</string>
+    <string name="ui_chrome_9cd555d72f1b" formatted="false">"输入 6 位十六进制颜色，可带 #。文字对比度会自动调整。"</string>
+    <string name="ui_chrome_41fa6af5de9e" formatted="false">"配色预览"</string>
+    <string name="ui_chrome_b364d8185174" formatted="false">"今天的日程"</string>
+    <string name="ui_chrome_1a0be4bd6722" formatted="false">"18 日 · 示例课程"</string>
+    <string name="ui_chrome_63fb443d8deb" formatted="false">"强调信息"</string>
+    <string name="ui_chrome_a2bb37329824" formatted="false">"已选日期 · 18"</string>
+    <string name="ui_chrome_5065fa9d9721" formatted="false">"查看课表"</string>
+    <string name="ui_chrome_29f63f7b210e" formatted="false">"应用自定义颜色"</string>
+    <string name="ui_chrome_ba2e93e73037" formatted="false">"恢复默认"</string>
+    <string name="ui_chrome_437a23f5a691" formatted="false">"请输入 6 位 RGB，例如 #166B5D"</string>
+    <string name="ui_chrome_1fd32f10122e" formatted="false">"颜色主题保存失败，请重试。"</string>
+    <string name="ui_chrome_4ee8a755167e" formatted="false">"默认青绿"</string>
+    <string name="ui_chrome_dcdf1f46691c" formatted="false">"海洋蓝"</string>
+    <string name="ui_chrome_c2f43ebe2000" formatted="false">"鸢尾紫"</string>
+    <string name="ui_chrome_aed843d1bd0b" formatted="false">"暖琥珀"</string>
+    <string name="ui_chrome_a6664df1efc8" formatted="false">"玫瑰"</string>
+    <string name="ui_chrome_8e5c672defaa" formatted="false">"学号和密码保存在操作系统的受保护凭据存储中。保存有效凭据且开启自动学期检测后，启动时会自动刷新一次个人课表，用于校验学期号和第一周周一。你主动请求课表、空教室或作业时也会按对应用途通过 HTTPS 使用凭据。课表和空教室请求发送到 jwglweixin.bupt.edu.cn；平台允许时还可能自动刷新当天空教室。维护者无法读取凭据，设置接口也不会返回密码。"</string>
+    <string name="ui_chrome_c0902fbc988c" formatted="false">"课表、空教室、校区、学期、开关、自定义日程地址和最多 500 条收藏快照保存在设备上；课程小组件只读取本地课表。课程删除记录按账号和学期隔离，仅影响本机有效课表，可在设置中恢复。“清除本地数据”会一并移除这些内容。"</string>
+    <string name="ui_chrome_8387adc19d38" formatted="false">"应用可能通过 unpkg 获取固定版本 holiday-calendar 数据；Android 在已有权限时也可能读取系统节假日日历。请求仅含 CN 与年份。iOS 只依据权威休息日数据显示“休”。"</string>
+    <string name="ui_chrome_85e2f87b9f51" formatted="false">"UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。公开活动优先读取 GitHub 上的 Contest DDL，where-to-study.cn 镜像仅在数据更新时间较新时使用，两者不可用时改用原有备用 API；校内竞赛通知另有来源。这些公开请求均不附带个人凭据。自定义日程只向用户填写的 HTTPS 地址发送无凭据 GET，拒绝重定向、本机和私有/保留 IP 字面量，响应上限 2 MiB。所有显示数据仅供参考。"</string>
+    <string name="ui_chrome_6c4174ecc9fd" formatted="false">"密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。"</string>
+    <string name="ui_chrome_4e62728c3d05" formatted="false">"QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在独立的应用内 WebView 进程和 profile 打开 QMplus 官方网页，由用户直接完成 SSO／Microsoft MFA；应用没有 Microsoft 密码输入框，也不读取外部浏览器 Cookie。只读脚本返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器。业务快照保存在应用私有存储中；真正部分失败时保留并标注此前已知资料。断开连接或清除本地数据会清除应用管理的网页会话与快照；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息及网络元数据。"</string>
+    <string name="ui_chrome_fe6a96889808" formatted="false">"QMplus 独立连接 / Independent QMplus connection"</string>
+    <string name="ui_chrome_c3b3e760e0ee" formatted="false">"日历写入和本地课程通知需要你的操作与权限；应用只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供，相关数据不上传。"</string>
+    <string name="ui_chrome_9832e5677a6d" formatted="false">"本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。"</string>
+    <string name="ui_chrome_1a9a3e51eed7" formatted="false">"凭据与缓存保留在设备上，直到被替换、清除或随卸载移除；清除本地数据不会删除学校或第三方持有的记录。"</string>
+    <string name="ui_chrome_52466d500ebc" formatted="false">"请按 SECURITY.md 报告安全问题；隐私问题可在 GitHub 提交不含敏感信息的 Issue。请勿公开账号、密码、令牌或个人课表。"</string>
+</resources>

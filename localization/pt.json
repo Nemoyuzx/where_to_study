@@ -1,4 +1,7 @@
 {
+  "启用 QMplus": "Ativar QMplus",
+  "仅适用国院": "Apenas para a Escola Internacional",
+  "无法保存本地偏好。": "Não foi possível guardar as preferências locais.",
   " 秒": " s",
   " 起": " em diante",
   " 门": " disciplinas",
@@ -1525,5 +1528,7 @@
   "默认关闭。登录信息仅保存在本机系统 Keychain，与北邮密码独立，不上传或同步。": "Desativado por padrão. Os dados de login ficam apenas no Keychain deste dispositivo, separados da senha da BUPT, sem upload ou sincronização.",
   "默认提前 10 分钟；可添加多次提醒，与每日摘要分别开关。": "Por padrão, 10 minutos antes da aula. Você pode adicionar vários lembretes e ativá-los separadamente do resumo diário.",
   "默认校区": "Campus padrão",
-  "默认青绿": "Verde-azulado clássico"
+  "默认青绿": "Verde-azulado clássico",
+  "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Somente páginas oficiais de login verificadas podem selecionar automaticamente uma conta que corresponda exatamente à conta salva e preencher usuário e senha, com no máximo uma tentativa por etapa. Contas sem correspondência, MFA, CAPTCHA, manter a sessão e confirmações de riscos ou termos exigem sua intervenção.",
+  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desativar “Ativar QMplus” apenas pausa a conexão e a sincronização; os dados de login salvos, a sessão e o cache de cursos são mantidos. Use os controles correspondentes para desativar o preenchimento automático, excluir dados de login ou desconectar e limpar dados."
 }

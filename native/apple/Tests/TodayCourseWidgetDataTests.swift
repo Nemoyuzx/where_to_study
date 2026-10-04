@@ -28,7 +28,7 @@ final class TodayCourseWidgetDataTests: XCTestCase {
                 rawValue: "system",
                 preferredLanguages: ["ja-JP"]
             ),
-            .english
+            .japanese
         )
         XCTAssertEqual(
             TodayCourseWidgetData.Language.resolve(

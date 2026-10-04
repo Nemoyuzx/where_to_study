@@ -10,12 +10,12 @@ final class SettingsViewSession {
     let reminderDraft = SettingsPreClassReminderDraft()
     let colorThemeDraft = SettingsColorThemeDraft()
     let languageScroll = SettingsLanguageScrollState()
-    #if os(iOS)
+    #if os(iOS) || os(macOS)
     let languageTransition = LanguageChangeTransition()
     #endif
 
     func dismissPresentations() {
-        #if os(iOS)
+        #if os(iOS) || os(macOS)
         languageTransition.finishImmediately()
         #endif
         if privacyPresentation.isPresented { privacyPresentation.isPresented = false }
@@ -29,7 +29,7 @@ struct SettingsPresentationHost: View {
 
     var body: some View {
         Color.clear
-            #if os(iOS)
+            #if os(iOS) || os(macOS)
             .background { LanguageChangeTransitionHost(transition: session.languageTransition) }
             #endif
             .background { PrivacyPolicyPresentationHost(presentation: session.privacyPresentation) }

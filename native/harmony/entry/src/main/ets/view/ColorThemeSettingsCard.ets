@@ -32,7 +32,8 @@ export struct ColorThemeSettingsCard {
   }
 
   private text(chinese: string, english: string): string {
-    return this.model.resolvedLanguage() === AppLanguage.english ? english : chinese;
+    const localized: string = this.model.text(chinese);
+    return this.model.resolvedLanguage() === AppLanguage.english && localized === chinese ? english : localized;
   }
 
   private allPresets(): ColorThemeSeed[] {

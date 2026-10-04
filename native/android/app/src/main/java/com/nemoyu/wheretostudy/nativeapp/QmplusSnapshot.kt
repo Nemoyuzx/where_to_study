@@ -24,6 +24,37 @@ internal data class QmplusSnapshot(
     val warnings: List<String>, val partial: Boolean = false,
 )
 
+/** An administrative mark-review request is not assessed coursework. Match
+ * only the known Assignment title; preserve the original title and all dates. */
+internal object QmplusCourseworkPolicy {
+    private val separators = setOf(0x20, 0x85, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F,
+        0x205F, 0x3000, 0xFEFF, 0x5F, 0x2D, 0x2F, 0x3A, 0x2212)
+
+    fun isMarkReviewRequest(kind: String, title: String): Boolean {
+        if (kind != "assignment") return false
+        val normalized = buildString {
+            var spacePending = false
+            title.forEach { character ->
+                var code = character.code
+                if (code in 0xFF01..0xFF5E) code -= 0xFEE0
+                if (code == 0x3000) code = 0x20
+                if (code in 9..13 || code in 0x2000..0x200A || code in 0x2010..0x2015 || code in separators) {
+                    if (isNotEmpty()) spacePending = true
+                } else {
+                    if (spacePending) append(' ')
+                    spacePending = false
+                    if (code in 0x61..0x7A) code -= 0x20
+                    append(code.toChar())
+                }
+            }
+        }
+        return normalized == "COURSEWORK MARK REVIEW REQUEST" || normalized == "COURSEWORK MARK REVIEW REQUEST FORM"
+    }
+
+    fun activities(items: List<QmplusActivityItem>): List<QmplusActivityItem> =
+        items.filterNot { isMarkReviewRequest(it.kind, it.title) }
+}
+
 internal object QmplusPolicy {
     const val START_URL = "https://qmplus.qmul.ac.uk/my/"
     const val MAXIMUM_SNAPSHOT_BYTES = 512 * 1024
@@ -53,7 +84,8 @@ internal object QmplusSnapshotCodec {
     fun ebuOnly(snapshot: QmplusSnapshot): QmplusSnapshot {
         val courses = snapshot.courses.filter { it.name.trimStart().startsWith("EBU", ignoreCase = true) }
         val ids = courses.map { it.id }.toSet()
-        return snapshot.copy(courses = courses, activities = snapshot.activities.filter { it.courseID in ids })
+        return snapshot.copy(courses = courses,
+            activities = QmplusCourseworkPolicy.activities(snapshot.activities).filter { it.courseID in ids })
     }
 
     fun decode(bytes: ByteArray): QmplusSnapshot {
@@ -97,9 +129,11 @@ internal object QmplusSnapshotCodec {
                 optional(item, "raw_time_text", 1000))
         } }
         require(activities.map { it.id }.distinct().size == activities.size)
-        return QmplusSnapshot(fetchedAt, courses, activities, (0 until rawWarnings.length()).map {
+        val warnings = (0 until rawWarnings.length()).map {
             rawWarnings.getString(it).also { warning -> require(Regex("^[A-Z0-9_]{1,64}$").matches(warning)) }
-        }, partial)
+        }
+        // Validate every entry and warning before applying a business exclusion.
+        return QmplusSnapshot(fetchedAt, courses, QmplusCourseworkPolicy.activities(activities), warnings, partial)
     }
 
     /** Re-encode only the business schema; never persist arbitrary webpage fields. */
@@ -121,11 +155,12 @@ internal object QmplusSnapshotCodec {
         }
 
     fun preservingKnownActivities(incoming: QmplusSnapshot, previous: QmplusSnapshot?): QmplusSnapshot {
-        if (!incoming.partial || previous == null) return incoming
+        if (!incoming.partial || previous == null)
+            return incoming.copy(activities = QmplusCourseworkPolicy.activities(incoming.activities))
         val allCourses = (incoming.courses + previous.courses).distinctBy { it.id }
         val courses = allCourses.take(100)
         val ids = courses.map { it.id }.toSet()
-        val allActivities = (incoming.activities + previous.activities).distinctBy { it.id }
+        val allActivities = QmplusCourseworkPolicy.activities((incoming.activities + previous.activities).distinctBy { it.id })
             .filter { it.courseID in ids }
         val warnings = (if (allCourses.size > 100 || allActivities.size > 500) listOf("QM_NATIVE_CACHE_LIMIT") else emptyList()) +
             listOf("QM_PREVIOUS_ACTIVITIES_RETAINED") + incoming.warnings

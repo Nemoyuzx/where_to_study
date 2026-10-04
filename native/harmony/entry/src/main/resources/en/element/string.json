@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Where To Study HarmonyOS client" },
+    { "name": "EntryAbility_desc", "value": "Find available classrooms and view your personal schedule" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "Today's Classes" },
+    { "name": "widget_desc", "value": "See today's class times and rooms" },
+    { "name": "calendar_read_reason", "value": "Read imported class events to synchronize your schedule" },
+    { "name": "calendar_write_reason", "value": "Add your personal schedule to system Calendar" }
+  ]
+}

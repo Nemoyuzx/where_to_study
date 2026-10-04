@@ -10,21 +10,35 @@ enum TodayCourseWidgetData {
 
     enum Language: String, Equatable, Sendable {
         case simplifiedChinese = "zh-Hans"
+        case traditionalChinese = "zh-Hant"
         case english = "en"
+        case japanese = "ja"
+        case spanish = "es"
+        case portuguese = "pt"
+        case arabic = "ar"
+        case russian = "ru"
+        case turkish = "tr"
+        case thai = "th"
+        case malay = "ms"
+        case vietnamese = "vi"
+        case indonesian = "id"
 
         static func resolve(
             rawValue: String?,
             preferredLanguages: [String] = Locale.preferredLanguages
         ) -> Language {
-            if rawValue == simplifiedChinese.rawValue { return .simplifiedChinese }
-            if rawValue == english.rawValue { return .english }
-            return preferredLanguages.first?.lowercased().hasPrefix("zh") == true
-                ? .simplifiedChinese
-                : .english
+            if let rawValue, let language = Language(rawValue: rawValue) { return language }
+            let resolved = AppLanguage.system.resourceName(preferredLanguages: preferredLanguages)
+            return Language(rawValue: resolved) ?? .english
         }
 
+        var appLanguage: AppLanguage { AppLanguage(rawValue: rawValue) ?? .english }
+        var isRightToLeft: Bool { self == .arabic }
         func text(chinese: String, english: String) -> String {
-            self == .english ? english : chinese
+            AppLocalization.string(chinese, language: appLanguage, englishFallback: english)
+        }
+        func format(chinese: String, english: String, _ arguments: CVarArg...) -> String {
+            AppLocalization.format(chinese, language: appLanguage, englishFallback: english, arguments: arguments)
         }
     }
 
@@ -327,20 +341,22 @@ enum TodayCourseWidgetData {
         calendar: Calendar = .shanghai,
         compact: Bool = false
     ) -> String {
-        if language == .english {
+        if !language.appLanguage.usesChineseDateFormatting {
             let formatter = DateFormatter()
             formatter.calendar = calendar
-            formatter.locale = Locale(identifier: "en")
+            formatter.locale = language.appLanguage.locale
             formatter.timeZone = calendar.timeZone
-            formatter.dateFormat = "MMM d · EEE"
+            formatter.dateFormat = language.appLanguage.dateFormat(chinese: "M月d日 EEE", english: "MMM d · EEE")
             var values = [formatter.string(from: date)]
             values.append(compact
-                ? "Cal W\(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))"
-                : "Calendar Week \(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))")
+                ? language.format(chinese: "公历%d周", english: "Cal W%d", ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))
+                : language.format(chinese: "公历第%d周", english: "Calendar Week %d", ScheduleLogic.civilWeekNumber(on: date, calendar: calendar)))
             if let weekNumber, weekNumber > 0 {
-                values.append(compact ? "Teach W\(weekNumber)" : "Teaching Week \(weekNumber)")
+                values.append(compact ? language.format(chinese: "教学%d周", english: "Teach W%d", weekNumber)
+                              : language.format(chinese: "第%d教学周", english: "Teaching Week %d", weekNumber))
             } else {
-                values.append(compact ? "Outside term" : "Outside teaching weeks")
+                values.append(compact ? language.text(chinese: "非教学周", english: "Outside term")
+                              : language.text(chinese: "非教学周", english: "Outside teaching weeks"))
             }
             return values.joined(separator: " · ")
         }
@@ -350,15 +366,16 @@ enum TodayCourseWidgetData {
         let weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
         var values = [
             "\(month)月\(day)日",
-            weekdays[weekdayIndex],
+            language.text(chinese: weekdays[weekdayIndex], english: weekdays[weekdayIndex]),
             compact
-                ? "公历\(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))周"
-                : "公历第\(ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))周"
+                ? language.format(chinese: "公历%d周", english: "Cal W%d", ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))
+                : language.format(chinese: "公历第%d周", english: "Calendar Week %d", ScheduleLogic.civilWeekNumber(on: date, calendar: calendar))
         ]
         if let weekNumber, weekNumber > 0 {
-            values.append(compact ? "教学\(weekNumber)周" : "第\(weekNumber)教学周")
+            values.append(compact ? language.format(chinese: "教学%d周", english: "Teach W%d", weekNumber)
+                          : language.format(chinese: "第%d教学周", english: "Teaching Week %d", weekNumber))
         } else {
-            values.append("非教学周")
+            values.append(language.text(chinese: "非教学周", english: "Outside teaching weeks"))
         }
         return values.joined(separator: " · ")
     }
@@ -401,7 +418,7 @@ enum TodayCourseWidgetData {
             let end = timeParts(course.timeRange)?.end ?? ""
             return end.isEmpty
                 ? language.text(chinese: "课程进行中", english: "Class in progress")
-                : language.text(chinese: "进行中 · \(end) 下课", english: "Now · ends \(end)")
+                : language.format(chinese: "进行中 · %@ 下课", english: "Now · ends %@", end)
         }
         if let course = courses.first(where: {
             coursePhase($0, at: date, calendar: calendar) == .upcoming
@@ -409,7 +426,7 @@ enum TodayCourseWidgetData {
             let start = timeParts(course.timeRange)?.start ?? ""
             return start.isEmpty
                 ? language.text(chinese: "还有待上课程", english: "Classes remaining")
-                : language.text(chinese: "下一节 · \(start)", english: "Next · \(start)")
+                : language.format(chinese: "下一节 · %@", english: "Next · %@", start)
         }
         return language.text(chinese: "今日课程已结束", english: "Today's classes are finished")
     }

@@ -1301,14 +1301,14 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         }
 
         app.tabBars.buttons["设置"].tap()
-        let chinesePicker = app.segmentedControls["settings.language"].firstMatch
+        let chinesePicker = app.buttons["settings.language"].firstMatch
         revealByScrolling(visibleElement: chinesePicker, in: app)
-        chinesePicker.buttons["English"].tap()
+        LanguageMenuTestSupport.select("en", nativeName: "English", in: app)
 
         XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 5))
-        let englishPicker = app.segmentedControls["settings.language"].firstMatch
+        let englishPicker = app.buttons["settings.language"].firstMatch
         revealByScrolling(visibleElement: englishPicker, in: app)
-        englishPicker.buttons["Simplified Chinese"].tap()
+        LanguageMenuTestSupport.select("zh-Hans", nativeName: "简体中文", in: app)
 
         XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 5))
         let restoredTabBar = app.tabBars.firstMatch

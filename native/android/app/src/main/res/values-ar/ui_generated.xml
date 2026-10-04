@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"جارٍ قراءة أحدث إعلان لإدارة الخدمات والجدول الساري حاليًا."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"يجب أن يكون المستوى الأعلى للجدول المخصص كائنًا."</string>
     <string name="ui_generated_ff93bd2c081d35">"فتح قائمة واجبات منصة التعليم السحابي في المتصفح."</string>
+    <string name="ui_generated_1a78803a506cc4">"تفعيل QMplus"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"لطلاب الكلية الدولية فقط"</string>
+    <string name="ui_generated_dba3ae91be2408">"تعذر حفظ التفضيلات المحلية."</string>
     <string name="ui_generated_c51e74da2b9b1b">"على macOS، اختر شبكة متاحة أو نقطة اتصال شخصية من إعدادات النظام. لا يوفر هذا التطبيق مفتاحًا لفرض بيانات الهاتف أو استخدام شبكتين."</string>
     <string name="ui_generated_a8cb7a7cb858cf">"توقفت التعبئة التلقائية لـ QMplus. أكمل الدخول أو التحقق يدويًا على الموقع الرسمي."</string>
     <string name="ui_generated_8ff421866994b1">"التعبئة التلقائية لـ QMplus غير متاحة. سجل الدخول يدويًا."</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"جارٍ تعبئة حساب دخول QMplus الرسمي…"</string>
     <string name="ui_generated_1a61edb546454e">"جارٍ فتح دخول SSO الرسمي لـ QMplus…"</string>
     <string name="ui_generated_a16987f886401d">"مساعد الشبكة في النظام"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"يمكن فقط لصفحات تسجيل الدخول الرسمية المتحقق منها اختيار الحساب المطابق تمامًا للحساب المحفوظ وملء اسم المستخدم وكلمة المرور، بمحاولة واحدة كحد أقصى لكل خطوة. يظل اختيار حساب غير مطابق وMFA وCAPTCHA والبقاء مسجلًا وتأكيد المخاطر والشروط مسؤوليتك."</string>
+    <string name="ui_generated_fd4480c6c08ea3">"إيقاف «تفعيل QMplus» يوقف الاتصال والمزامنة فقط، مع الاحتفاظ ببيانات الدخول المحفوظة والجلسة وذاكرة المقررات المؤقتة. استخدم عناصر التحكم المخصصة لإيقاف التعبئة التلقائية أو حذف بيانات الدخول أو قطع الاتصال ومسح البيانات."</string>
 </resources>

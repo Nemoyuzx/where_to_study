@@ -124,6 +124,7 @@ class YearCalendarView(
     private var downY = 0f
 
     init {
+        layoutDirection = View.LAYOUT_DIRECTION_LTR
         isClickable = true
         isFocusable = true
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
@@ -246,8 +247,8 @@ class YearCalendarView(
         boldPaint.textSize = sp(17f)
         boldPaint.color = Palette.text
         boldPaint.textAlign = Paint.Align.LEFT
-        val monthTitle = if (AppLocale.isEnglish(context)) {
-            java.text.DateFormatSymbols(Locale.US).shortMonths[month - 1]
+        val monthTitle = if (!AppLocale.isChinese(context)) {
+            java.text.DateFormatSymbols(AppLocale.calendarLocale(context)).shortMonths[month - 1]
         } else {
             "$month 月"
         }
@@ -257,7 +258,7 @@ class YearCalendarView(
         textPaint.color = Palette.muted
         textPaint.textAlign = Paint.Align.CENTER
         val cellWidth = monthWidth / 7f
-        val weekdays = if (AppLocale.isEnglish(context)) WEEKDAYS_EN else WEEKDAYS_ZH
+        val weekdays = AppLocale.weekdayLabels(context)
         weekdays.forEachIndexed { index, label ->
             drawCenteredText(
                 canvas,

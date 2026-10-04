@@ -5386,6 +5386,21 @@ input:disabled {
   margin: 0;
 }
 
+.qmplus-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qmplus-title small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
 .query-section-header > button,
 .course-actions > button,
 .query-error > button {
@@ -6171,3 +6186,30 @@ input:disabled {
 .course-detail-body { display: grid; gap: 14px; overflow: auto; max-height: min(500px, calc(100dvh - 160px)); padding: 16px 20px 24px; }
 .course-detail-body .course-activity { display: grid; gap: 8px; }
 .course-detail-body .course-activity:first-child { border-top: 0; }
+
+/* Mirror navigation/forms, never the chronological calendar columns, time
+   axis or machine identifiers. Raw course/activity text retains bidi isolation. */
+.app-shell[dir="rtl"] .side-nav { border-right: 0; border-left: 1px solid var(--border); }
+.app-shell[dir="rtl"] .course-list-chevron { transform: scaleX(-1); }
+.teaching-calendar-main, .app-shell input[type="date"], .app-shell input[type="time"],
+.app-shell input[type="url"], .app-shell input[inputmode="numeric"] { direction: ltr; }
+.course-list-content > strong, .course-activity > strong, .month-entry-title,
+.app-shell time, .app-shell code { unicode-bidi: isolate; }
+.settings-language select { max-width: 100%; min-height: 36px; }
+.language-blur-overlay {
+  position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
+  opacity: 0; visibility: hidden; background: transparent;
+  -webkit-backdrop-filter: blur(0px); backdrop-filter: blur(0px);
+  transition: opacity 120ms ease-out, backdrop-filter 120ms ease-out,
+    -webkit-backdrop-filter 120ms ease-out, background-color 120ms ease-out;
+}
+.language-blur-overlay.covering, .language-blur-overlay.waiting {
+  visibility: visible; opacity: 1;
+  background: color-mix(in srgb, var(--app-background) 12%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.language-blur-overlay.revealing {visibility: visible; transition-duration: 220ms}
+@media (prefers-reduced-motion: reduce) {.language-blur-overlay {transition: none}}
+@media (prefers-reduced-transparency: reduce) {
+  .language-blur-overlay.covering, .language-blur-overlay.waiting {background: var(--app-background)}
+}

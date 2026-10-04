@@ -669,6 +669,7 @@ struct MobileTeachingCalendarView: View {
             )
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("calendar.mobile.timeline")
+            .environment(\.layoutDirection, .leftToRight)
             .contentShape(Rectangle())
             .simultaneousGesture(periodSwipeGesture)
         }
@@ -1108,7 +1109,7 @@ struct MobileTeachingCalendarView: View {
         let columns = Array(repeating: GridItem(.flexible(minimum: 0), spacing: 4), count: 7)
         return LazyVGrid(columns: columns, spacing: 4) {
             ForEach(Self.weekdayLabels, id: \.self) { label in
-                Text(model.localized(label))
+                Text(AppLocalization.weekdaySymbol(for: label, language: model.appLanguage))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(theme.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 18)
@@ -2824,26 +2825,23 @@ struct MobileTeachingCalendarView: View {
     private static let monthExpansionAnimation = Animation.easeInOut(duration: 0.28)
     private static let detailsContentAnimation = Animation.easeOut(duration: 0.16)
     private static let yearMonthKeyFormatter = formatter("yyyy-MM")
-    private var usesEnglishFormatting: Bool {
-        model.appLanguage.resolvedResourceName == "en"
-    }
     private var fullDateFormatter: DateFormatter {
         dateFormatterCache.formatter(
-            format: usesEnglishFormatting ? "EEEE, MMMM d, yyyy" : "yyyy年M月d日 EEEE",
+            format: model.appLanguage.dateFormat(chinese: "yyyy年M月d日 EEEE", english: "EEEE, MMMM d, yyyy"),
             locale: model.appLanguage.locale
         )
     }
 
     private var monthFormatter: DateFormatter {
         dateFormatterCache.formatter(
-            format: usesEnglishFormatting ? "MMM" : "M月",
+            format: model.appLanguage.dateFormat(chinese: "M月", english: "MMM"),
             locale: model.appLanguage.locale
         )
     }
 
     private var monthDayCompactFormatter: DateFormatter {
         dateFormatterCache.formatter(
-            format: usesEnglishFormatting ? "MMM d" : "M月d日",
+            format: model.appLanguage.dateFormat(chinese: "M月d日", english: "MMM d"),
             locale: model.appLanguage.locale
         )
     }

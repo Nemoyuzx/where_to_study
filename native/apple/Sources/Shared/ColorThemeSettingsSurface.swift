@@ -10,8 +10,9 @@ struct ColorThemeSettingsSurface: View {
         fields = draft
     }
 
-    private var english: Bool { model.appLanguage.resolvedResourceName == "en" }
-    private func text(_ chinese: String, _ english: String) -> String { self.english ? english : chinese }
+    private func text(_ chinese: String, _ english: String) -> String {
+        AppLocalization.string(chinese, language: model.appLanguage, englishFallback: english)
+    }
     private var draft: ColorThemeConfiguration? {
         model.colorTheme.editing(primary: fields.primary, accent: fields.accent, selectedDate: fields.selectedDate)
     }
@@ -107,7 +108,7 @@ struct ColorThemeSettingsSurface: View {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(isSelected ? theme.primary : theme.secondaryText)
                 }
-                Text(preset.title(english: english))
+                Text(text(preset.title(english: false), preset.title(english: true)))
                     .font(.callout.weight(isSelected ? .semibold : .regular))
                     .foregroundStyle(presetTheme.text)
                     .fixedSize(horizontal: false, vertical: true)
@@ -119,7 +120,7 @@ struct ColorThemeSettingsSurface: View {
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(isSelected ? theme.primary : theme.border))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(preset.title(english: english))
+        .accessibilityLabel(text(preset.title(english: false), preset.title(english: true)))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityIdentifier("theme.preset.\(preset.rawValue)")
     }
@@ -138,6 +139,7 @@ struct ColorThemeSettingsSurface: View {
                 }))
                 .font(.body.monospaced())
                 .textFieldStyle(ThemeTextFieldStyle())
+                .environment(\.layoutDirection, .leftToRight)
                 .autocorrectionDisabled()
                 .focused($focusedField, equals: id)
                 .accessibilityLabel(label)
@@ -157,7 +159,7 @@ struct ColorThemeSettingsSurface: View {
             Text(text("实时预览", "Live Preview"))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(theme.secondaryText)
-            ThemeSurfacePreview(theme: previewTheme, english: english)
+            ThemeSurfacePreview(theme: previewTheme, language: model.appLanguage)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("theme.preview")
@@ -170,12 +172,18 @@ struct ColorThemeSettingsSurface: View {
 
 struct ThemeSurfacePreview: View {
     let theme: AppTheme
-    let english: Bool
+    let language: AppLanguage
+
+    init(theme: AppTheme, language: AppLanguage) { self.theme = theme; self.language = language }
+    init(theme: AppTheme, english: Bool) { self.init(theme: theme, language: english ? .english : .simplifiedChinese) }
+    private func text(_ chinese: String, _ english: String) -> String {
+        AppLocalization.string(chinese, language: language, englishFallback: english)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label(english ? "Today's Courses" : "今日课程", systemImage: "calendar")
+                Label(text("今日课程", "Today's Courses"), systemImage: "calendar")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(theme.primary)
                 Spacer(minLength: 0)
@@ -189,15 +197,16 @@ struct ThemeSurfacePreview: View {
                         .background(theme.selectedDate, in: RoundedRectangle(cornerRadius: 7))
                         .overlay(RoundedRectangle(cornerRadius: 7).stroke(theme.selectedDateOutline))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(english ? "Sample Course" : "示例课程")
+                        Text(text("示例课程", "Sample Course"))
                             .font(.callout.weight(.semibold))
                             .foregroundStyle(theme.text)
                         Text("08:00 – 09:35")
+                            .environment(\.layoutDirection, .leftToRight)
                             .font(.caption)
                             .foregroundStyle(theme.secondaryText)
                     }
                 }
-                Text(english ? "View Schedule" : "查看课表")
+                Text(text("查看课表", "View Schedule"))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(theme.onPrimary)
                     .padding(.horizontal, 12)

@@ -135,6 +135,7 @@ class CalendarTimelineView(
     showDayHeader: Boolean = true,
 ) : LinearLayout(context) {
     init {
+        layoutDirection = View.LAYOUT_DIRECTION_LTR
         orientation = HORIZONTAL
         isBaselineAligned = false
         setThemeBackgroundColor { Palette.surface }

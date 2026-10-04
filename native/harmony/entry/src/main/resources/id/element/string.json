@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Aplikasi Where To Study untuk HarmonyOS" },
+    { "name": "EntryAbility_desc", "value": "Lihat ruang kelas kosong dan jadwal pribadi" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "Kelas hari ini" },
+    { "name": "widget_desc", "value": "Lihat waktu dan ruang kelas hari ini" },
+    { "name": "calendar_read_reason", "value": "Baca acara kelas yang diimpor untuk menyinkronkan jadwal" },
+    { "name": "calendar_write_reason", "value": "Tambahkan jadwal pribadi ke Kalender sistem" }
+  ]
+}

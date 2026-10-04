@@ -325,40 +325,40 @@ export default function settingsPresentationDeviceTest() {
       const driver: Driver = await launchReviewDemo(true);
       try {
         await openSettings(driver);
-        const english: Component = await scrollToSetting(driver, 'settings.language.2');
-        const before = await english.getBounds();
-        await english.click();
+        const languageRow: Component = await scrollToSetting(driver, 'settings.language.open');
+        const before = await languageRow.getBounds();
+        await languageRow.click();
+        expect(await hasID(driver, 'settings.language.back')).assertTrue();
+        await (await driver.findComponent(ON.id('settings.language.option.en'))).click();
         const englishBounds: Rect = await observeLanguageAnchorUntilStable(
-          driver, 'settings.language.2', 'settings.language.1', 'Simplified Chinese', before);
-        const chineseEnglish: Component = await driver.findComponent(ON.id('settings.language.1'));
-        expect(await chineseEnglish.getText()).assertEqual('Simplified Chinese');
-        const afterEnglish: Component | null = await visibleSetting(driver, 'settings.language.2');
+          driver, 'settings.language.open', 'settings.language.current', 'English', before);
+        const afterEnglish: Component | null = await visibleSetting(driver, 'settings.language.open');
         if (afterEnglish === null) { throw new Error('切为英文后语言卡不再位于原视口'); }
         const englishDelta: number = englishBounds.top - before.top;
         const englishRowHeight: number = Math.max(before.bottom - before.top,
           englishBounds.bottom - englishBounds.top);
         if (Math.abs(englishDelta) > englishRowHeight) {
           const viewport: Rect = await (await driver.findComponent(ON.id('settings_scroll'))).getBounds();
-          throw new Error('中→英语言锚点位移超过一个实测分段行高：delta=' + englishDelta.toString() +
+          throw new Error('中→英语言锚点位移超过一个实测语言行高：delta=' + englishDelta.toString() +
             ' rowHeight=' + englishRowHeight.toString() +
             ' before=' + boundsText(before) + ' after=' + boundsText(englishBounds) +
             ' scrollViewport=' + boundsText(viewport));
         }
         expect(await hasID(driver, 'settings_scroll')).assertTrue();
 
-        await chineseEnglish.click();
+        await afterEnglish.click();
+        expect(await hasID(driver, 'settings.language.back')).assertTrue();
+        await (await driver.findComponent(ON.id('settings.language.option.zh-Hans'))).click();
         const chineseBounds: Rect = await observeLanguageAnchorUntilStable(
-          driver, 'settings.language.2', 'settings.language.1', '简体中文', before);
-        const chineseChinese: Component = await driver.findComponent(ON.id('settings.language.1'));
-        expect(await chineseChinese.getText()).assertEqual('简体中文');
-        const afterChinese: Component | null = await visibleSetting(driver, 'settings.language.2');
+          driver, 'settings.language.open', 'settings.language.current', '简体中文', before);
+        const afterChinese: Component | null = await visibleSetting(driver, 'settings.language.open');
         if (afterChinese === null) { throw new Error('切回中文后语言卡不再位于原视口'); }
         const chineseDelta: number = chineseBounds.top - before.top;
         const chineseRowHeight: number = Math.max(before.bottom - before.top,
           chineseBounds.bottom - chineseBounds.top);
         if (Math.abs(chineseDelta) > chineseRowHeight) {
           const viewport: Rect = await (await driver.findComponent(ON.id('settings_scroll'))).getBounds();
-          throw new Error('英→中语言锚点位移超过一个实测分段行高：delta=' + chineseDelta.toString() +
+          throw new Error('英→中语言锚点位移超过一个实测语言行高：delta=' + chineseDelta.toString() +
             ' rowHeight=' + chineseRowHeight.toString() +
             ' before=' + boundsText(before) + ' after=' + boundsText(chineseBounds) +
             ' scrollViewport=' + boundsText(viewport));

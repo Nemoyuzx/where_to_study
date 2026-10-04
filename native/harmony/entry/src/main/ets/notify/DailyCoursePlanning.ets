@@ -5,6 +5,22 @@
 import { Course, ScheduleSnapshot } from '../common/Models';
 import { ScheduleLogic } from '../common/ScheduleLogic';
 import { StrictDates, DateParts, SHANGHAI_OFFSET_MS } from '../common/StrictDates';
+import { AppLanguage, AppLanguageInfo, AppLocalization, LocalizationValues } from '../common/AppLocalization';
+
+function reminderLanguage(value: AppLanguage | boolean): AppLanguage {
+  if (typeof value === 'boolean') { return value ? AppLanguage.english : AppLanguage.simplifiedChinese; }
+  const normalized: AppLanguage = AppLanguageInfo.normalize(value);
+  return normalized === AppLanguage.system ?
+    AppLanguageInfo.resolved(normalized, AppLanguageInfo.systemLanguage()) : normalized;
+}
+
+function reminderText(source: string, language: AppLanguage): string {
+  return AppLocalization.text(source, language, language);
+}
+
+function reminderFormat(source: string, values: LocalizationValues, language: AppLanguage): string {
+  return AppLocalization.format(source, values, language, language);
+}
 
 export class PreClassNotificationSettings {
   static readonly enabledKey: string = 'preClassNotificationsEnabled';
@@ -78,9 +94,10 @@ export class DailyCourseNotificationPlanner {
 
   static requests(
     schedule: ScheduleSnapshot, nowEpochMs: number, scanDayLimit?: number,
-    english: boolean = false,
+    languageSetting: AppLanguage | boolean = false,
     reminderMinutes: number = DailyCourseNotificationSettings.defaultMinutes
   ): DailyCourseNotificationRequest[] {
+    const language: AppLanguage = reminderLanguage(languageSetting);
     const days: DateParts[] = DailyCourseNotificationPlanner.scheduleDays(schedule, nowEpochMs, scanDayLimit);
     const requests: DailyCourseNotificationRequest[] = [];
     for (const day of days) {
@@ -95,19 +112,19 @@ export class DailyCourseNotificationPlanner {
       const entries: string[] = [];
       for (const course of courses) {
         const location: string = course.room.length === 0 ? '' : ' @ ' + course.room;
-        const kind: string = course.eventKind === 'exam' ? (english ? 'Exam · ' : '考试 · ') : '';
+        const kind: string = course.eventKind === 'exam' ? reminderText('考试', language) + ' · ' : '';
         const time: string = course.eventKind === 'exam' && !ScheduleLogic.hasTime(course) ?
-          (english ? 'Time pending' : '时间待定') : course.timeRange;
+          reminderText('时间待定', language) : course.timeRange;
         entries.push(kind + time + ' ' + course.name + location);
       }
       const date: string = StrictDates.formatDateParts(day);
       const includesExams: boolean = courses.some((course: Course) => course.eventKind === 'exam');
       requests.push(new DailyCourseNotificationRequest(
         DailyCourseNotificationPlanner.identifierPrefix + date, fireEpochMs,
-        includesExams ? (english ? 'Today\'s Schedule · ' + courses.length.toString() :
-          '今日安排 · ' + courses.length.toString() + ' 项') :
-          (english ? 'Today\'s Courses · ' + courses.length.toString() :
-          '今日课程 · ' + courses.length.toString() + ' 门'), entries.join(english ? '; ' : '；')));
+        reminderFormat(includesExams ? '今日安排 · {count} 项' : '今日课程 · {count} 门',
+          new LocalizationValues('count', courses.length.toString()), language),
+        entries.join(language === AppLanguage.simplifiedChinese || language === AppLanguage.traditionalChinese ?
+          '；' : '; ')));
     }
     return requests;
   }
@@ -159,7 +176,8 @@ export class PreClassNotificationPlanner {
   static readonly identifierPrefix: string = 'pre-class.';
 
   static requests(schedule: ScheduleSnapshot, nowEpochMs: number, leadMinutes: number[] = [10],
-    english: boolean = false): DailyCourseNotificationRequest[] {
+    languageSetting: AppLanguage | boolean = false): DailyCourseNotificationRequest[] {
+    const language: AppLanguage = reminderLanguage(languageSetting);
     const requests: DailyCourseNotificationRequest[] = [];
     const seen: Set<string> = new Set<string>();
     const offsets: number[] = PreClassNotificationSettings.normalized(leadMinutes);
@@ -178,9 +196,9 @@ export class PreClassNotificationPlanner {
           const identifier: string = PreClassNotificationPlanner.identifierPrefix + occurrence + '.' + offset.toString();
           if (fire <= nowEpochMs || seen.has(identifier)) { continue; }
           seen.add(identifier);
-          const kind: string = course.eventKind === 'exam' ? (english ? 'Exam' : '考试') : (english ? 'Class' : '课程');
-          const title: string = english ? kind + ' starts in ' + offset.toString() + ' min' :
-            kind + '将在 ' + offset.toString() + ' 分钟后开始';
+          const title: string = reminderFormat(course.eventKind === 'exam' ?
+            '考试将在 {minutes} 分钟后开始' : '课程将在 {minutes} 分钟后开始',
+            new LocalizationValues('minutes', offset.toString()), language);
           requests.push(new DailyCourseNotificationRequest(identifier, fire, title,
             course.name + ' · ' + ScheduleLogic.startTime(course) +
             (course.room.length > 0 ? ' @ ' + course.room : '')));
@@ -195,11 +213,11 @@ export class PreClassNotificationPlanner {
 export class CourseReminderPlanner {
   static requests(schedule: ScheduleSnapshot, nowEpochMs: number, dailyEnabled: boolean,
     preClassEnabled: boolean, dailyMinutes: number = DailyCourseNotificationSettings.defaultMinutes,
-    leadMinutes: number[] = [10], english: boolean = false): DailyCourseNotificationRequest[] {
+    leadMinutes: number[] = [10], language: AppLanguage | boolean = false): DailyCourseNotificationRequest[] {
     const daily: DailyCourseNotificationRequest[] = dailyEnabled ?
-      DailyCourseNotificationPlanner.requests(schedule, nowEpochMs, undefined, english, dailyMinutes) : [];
+      DailyCourseNotificationPlanner.requests(schedule, nowEpochMs, undefined, language, dailyMinutes) : [];
     const requests: DailyCourseNotificationRequest[] = daily.concat(preClassEnabled ?
-      PreClassNotificationPlanner.requests(schedule, nowEpochMs, leadMinutes, english) : []);
+      PreClassNotificationPlanner.requests(schedule, nowEpochMs, leadMinutes, language) : []);
     requests.sort((left: DailyCourseNotificationRequest, right: DailyCourseNotificationRequest): number =>
       left.fireEpochMs - right.fireEpochMs || left.identifier.localeCompare(right.identifier));
     return requests.slice(0, DailyCourseNotificationPlanner.maximumPendingRequestCount).map(
@@ -325,13 +343,13 @@ export class DailyCourseNotificationReconcileResult {
 export class DailyCourseNotificationCoordinator {
   private readonly scheduler: DailyCourseNotificationScheduling;
   private readonly authorizationTimeoutMs: number;
-  private readonly english: boolean;
+  private readonly language: AppLanguage | boolean;
 
   constructor(scheduler: DailyCourseNotificationScheduling, authorizationTimeoutMs: number = 8000,
-    english: boolean = false) {
+    language: AppLanguage | boolean = false) {
     this.scheduler = scheduler;
     this.authorizationTimeoutMs = authorizationTimeoutMs;
-    this.english = english;
+    this.language = language;
   }
 
   async reconcile(
@@ -366,7 +384,8 @@ export class DailyCourseNotificationCoordinator {
         DailyCourseNotificationReconcileOutcome.waitingForSchedule, 0);
     }
     const requests: DailyCourseNotificationRequest[] =
-      CourseReminderPlanner.requests(schedule, Date.now(), enabled, preClassEnabled, reminderMinutes, leadMinutes, this.english);
+      CourseReminderPlanner.requests(schedule, Date.now(), enabled, preClassEnabled, reminderMinutes,
+        leadMinutes, this.language);
     const nextFire: number | null = requests.length > 0 ? requests[0].fireEpochMs : null;
     try {
       const published: number = await this.scheduler.replacePending(requests, revision);

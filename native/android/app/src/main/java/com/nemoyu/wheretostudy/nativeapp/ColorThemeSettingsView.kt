@@ -25,7 +25,7 @@ internal class ColorThemeSettingsView(
     private val fields = mutableListOf<EditText>()
     private val isDark get() = resources.configuration.uiMode and
         android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
-    private fun label(zh: String, en: String) = if (AppLocale.isEnglish(activity)) en else zh
+    private fun label(zh: String, en: String) = if (AppLocale.isEnglish(activity)) en else activity.uiText(zh)
 
     init {
         id = R.id.settings_color_theme_section

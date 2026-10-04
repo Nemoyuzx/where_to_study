@@ -9,7 +9,7 @@ import {
   PublicDeadlineKindInfo, PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../../net/CalendarDailyInfoClient';
 import { AppContext } from '../../store/AppContext';
-import { AppLanguage } from '../../common/AppLocalization';
+import { AppLocalization, LocalizationValues } from '../../common/AppLocalization';
 
 @ComponentV2
 export struct CalendarDailyInfoCards {
@@ -221,16 +221,16 @@ export struct CalendarDailyInfoCards {
 
   @Builder
   almanacContent(info: AlmanacInfo) {
-    Text(this.model.resolvedLanguage() === AppLanguage.english ?
-      info.weekday + ' · Lunar ' + info.lunarDate + ' · Zodiac ' + info.zodiac :
-      info.weekday + ' · 农历' + info.lunarDate + ' · ' + info.zodiac + '年')
+    Text(AppLocalization.format('{weekday} · 农历{lunar} · {zodiac}年',
+      new LocalizationValues('weekday', info.weekday, 'lunar', info.lunarDate, 'zodiac', info.zodiac),
+      this.model.resolvedLanguage(), this.model.systemLanguageID))
       .fontSize(13)
       .fontWeight(FontWeight.Medium)
       .fontColor(AppTheme.text())
       .width('100%')
-    Text(this.model.resolvedLanguage() === AppLanguage.english ?
-      'Ganzhi: ' + info.ganzhiYear + ' / ' + info.ganzhiMonth + ' / ' + info.ganzhiDay :
-      '干支：' + info.ganzhiYear + '年 ' + info.ganzhiMonth + '月 ' + info.ganzhiDay + '日')
+    Text(AppLocalization.format('干支：{year}年 {month}月 {day}日',
+      new LocalizationValues('year', info.ganzhiYear, 'month', info.ganzhiMonth, 'day', info.ganzhiDay),
+      this.model.resolvedLanguage(), this.model.systemLanguageID))
       .fontSize(12)
       .fontColor(AppTheme.secondaryText())
       .width('100%')

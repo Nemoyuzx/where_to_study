@@ -53,7 +53,9 @@
 "仅修改此账号本学期的本地课表，刷新后仍保持，可在个人账户中恢复。不会退选学校课程、删除作业 DDL 或已导出的系统日历事件。" = "Hanya mengubah jadual setempat akaun ini bagi semester semasa. Perubahan kekal selepas muat semula dan boleh dipulihkan di Akaun Peribadi. Pendaftaran kursus universiti, tarikh akhir tugasan dan acara kalendar sistem yang telah dieksport tidak berubah.";
 "仅删除本次课程" = "Padam sesi ini sahaja";
 "仅删除本次课程？" = "Padam sesi ini sahaja?";
+"仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" = "Hanya laman log masuk rasmi yang disahkan boleh memilih akaun yang sepadan tepat dengan akaun tersimpan dan mengisi nama pengguna serta kata laluan, dengan setiap langkah dicuba paling banyak sekali. Pemilihan akaun yang tidak sepadan, MFA, CAPTCHA, kekal log masuk serta pengesahan risiko dan terma masih perlu anda lakukan sendiri.";
 "仅在当天有课时通知；课表更新或账号变更后会自动重排。" = "Pemberitahuan hanya dihantar pada hari yang mempunyai kelas dan dijadual semula secara automatik selepas jadual kuliah atau akaun berubah.";
+"仅适用国院" = "Untuk Sekolah Antarabangsa sahaja";
 "今天" = "Hari ini";
 "今天可以自由安排" = "Hari ini anda bebas mengatur masa";
 "今天没有处于有效期内的结构化班车表" = "Tiada jadual bas kampus berstruktur yang berkuat kuasa hari ini";
@@ -100,6 +102,7 @@
 "公开活动 DDL" = "Tarikh akhir acara awam";
 "六" = "Sab";
 "关于本应用" = "Perihal aplikasi";
+"关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。" = "Mematikan “Dayakan QMplus” hanya menjeda sambungan dan penyegerakan; maklumat log masuk tersimpan, sesi dan cache kursus dikekalkan. Gunakan kawalan berasingan untuk mematikan autofill, memadam maklumat log masuk atau memutuskan sambungan dan mengosongkan data.";
 "关闭全天日程" = "Tutup acara sepanjang hari";
 "关闭弹层" = "Tutup lapisan";
 "关闭时间" = "Masa penutupan";
@@ -129,6 +132,7 @@
 "同意并继续" = "Setuju dan teruskan";
 "后勤部通知 · %@" = "Notis jabatan logistik · %@";
 "启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。" = "Apabila aplikasi dimulakan atau selepas jadual diambil/dimuat semula, semester dan tarikh mula yang dipulangkan oleh perkhidmatan akademik digunakan secara automatik.";
+"启用 QMplus" = "Dayakan QMplus";
 "周" = "Minggu";
 "周一" = "Isn";
 "周三" = "Rab";
@@ -287,6 +291,7 @@
 "整点" = "Tepat jam";
 "断开 QMplus 并清除会话" = "Putuskan QMplus dan padam sesi";
 "无法保存 QMplus 登录信息，自动填写未启用。" = "Maklumat log masuk QMplus tidak dapat disimpan; autofill belum dihidupkan.";
+"无法保存本地偏好。" = "Tidak dapat menyimpan keutamaan setempat.";
 "无法同步公开活动或校内通知，请稍后重试。" = "Acara awam atau notis kampus tidak dapat disegerakkan. Cuba lagi kemudian.";
 "无法清除原账号的课表与空教室缓存，账号未更改。" = "Jadual dan cache bilik kosong akaun sebelumnya tidak dapat dipadam, jadi akaun tidak ditukar.";
 "无法确认 QMplus 登录信息的保存状态，请重新保存或删除。" = "Status penyimpanan maklumat log masuk QMplus tidak dapat dipastikan. Simpan semula atau padam.";

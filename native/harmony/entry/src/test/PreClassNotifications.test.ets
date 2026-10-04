@@ -242,6 +242,10 @@ export default function preClassNotificationsTest() {
       expect(requests[0].title).assertEqual('Exam starts in 10 min');
       expect(requests[0].body).assertEqual('Synthetic Exam · 08:10 @ Exam Room');
       expect(requests[0].fireEpochMs).assertEqual(at(day, 480));
+      const traditional = PreClassNotificationPlanner.requests(schedule, at(day), [10],
+        AppLanguage.traditionalChinese);
+      expect(traditional[0].title).assertEqual('考試將在 10 分鐘後開始');
+      expect(traditional[0].body).assertEqual('Synthetic Exam · 08:10 @ Exam Room');
     });
 
     it('combined_capacity_is_earliest_first_and_daily_summary_is_preserved', 0, () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { SettingsSession } from '../main/ets/view/SettingsSession';
 import { SettingsPresentationSeedPolicy } from '../main/ets/model/LaunchSupport';
+import { AppLanguage } from '../main/ets/common/AppLocalization';
 
 export default function settingsSessionTest() {
   describe('SettingsSessionTest', () => {
@@ -37,11 +38,28 @@ export default function settingsSessionTest() {
       session.editingPreClassReminders = true;
       session.preClassLeadDrafts = ['5', '20'];
       session.previewDimension = 4;
+      session.showingLanguagePicker = true;
+      session.requestLanguage(AppLanguage.traditionalChinese);
       session.clearDrafts();
       expect(session.customDeadlineURLDraft).assertEqual('');
       expect(session.editingPreClassReminders).assertFalse();
       expect(session.preClassLeadDrafts.join(',')).assertEqual('10');
       expect(session.previewDimension).assertEqual(3);
+      expect(session.showingLanguagePicker).assertFalse();
+      expect(session.takeLanguageRequest()).assertNull();
+    });
+
+    it('language_picker_request_survives_layout_recreation_and_is_consumed_once', 0, () => {
+      const session: SettingsSession = new SettingsSession();
+      session.showingLanguagePicker = true;
+      session.editCustomDeadlineURL('https://example.org/draft.json');
+      session.preClassLeadDrafts = ['17'];
+      session.requestLanguage(AppLanguage.arabic);
+      expect(session.showingLanguagePicker).assertFalse();
+      expect(session.customDeadlineURLDraft).assertEqual('https://example.org/draft.json');
+      expect(session.preClassLeadDrafts.join(',')).assertEqual('17');
+      expect(session.takeLanguageRequest()).assertEqual(AppLanguage.arabic);
+      expect(session.takeLanguageRequest()).assertNull();
     });
 
     it('presentation_seed_requires_debug_review_flag_and_is_one_shot_in_memory', 0, () => {

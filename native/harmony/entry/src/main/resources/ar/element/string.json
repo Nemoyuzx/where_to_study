@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "تطبيق Where To Study لنظام HarmonyOS" },
+    { "name": "EntryAbility_desc", "value": "اعرض القاعات المتاحة وجدولك الدراسي الشخصي" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "حصص اليوم" },
+    { "name": "widget_desc", "value": "اعرض أوقات حصص اليوم وقاعاتها" },
+    { "name": "calendar_read_reason", "value": "قراءة مواعيد الحصص المستوردة لمزامنة جدولك" },
+    { "name": "calendar_write_reason", "value": "إضافة جدولك الدراسي إلى تقويم النظام" }
+  ]
+}

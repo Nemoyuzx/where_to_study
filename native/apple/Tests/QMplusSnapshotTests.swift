@@ -7,6 +7,67 @@ import XCTest
 
 @MainActor
 final class QMplusSnapshotTests: XCTestCase {
+    func testVerifiedSynchronizationHidesVisibleSheetWithoutCancellingOwnerOrResult() throws {
+        let suite = "QMSyncHide.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        let request = try XCTUnwrap(store.beginSynchronization())
+        store.hideVerifiedConnectionForSynchronization()
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertTrue(store.isSyncing)
+        store.connectionSheetDidDismiss()
+        XCTAssertTrue(store.isSyncing, "Automatic dismissal must not cancel the flight")
+        store.receive(try payload(), request: request)
+        XCTAssertNotNil(store.snapshot)
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.hasActiveConnection)
+    }
+
+    func testDisabledFeaturePreservesCacheAndSessionMetadataButRejectsLateResults() throws {
+        let suite = "QMFeatureOff.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("synthetic-profile-id", forKey: "qmplusWebsiteDataStoreIdentifier")
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let first = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(), request: first)
+        let prior = try XCTUnwrap(store.snapshot)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        let late = try XCTUnwrap(store.beginSynchronization())
+        store.setFeatureEnabled(false)
+        store.receive(try payload(title: "Late result"), request: late)
+        XCTAssertEqual(store.snapshot, prior)
+        XCTAssertEqual(defaults.string(forKey: "qmplusWebsiteDataStoreIdentifier"), "synthetic-profile-id")
+        XCTAssertNil(store.beginSynchronization())
+        XCTAssertFalse(store.beginConnectionOwner(quiet: false))
+        store.setFeatureEnabled(true)
+        store.receive(try payload(title: "Still stale"), request: late)
+        XCTAssertEqual(store.snapshot, prior)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        store.endPresentation()
+    }
+
+    func testOldSheetDismissalCannotCancelAReplacementVisibleOrQuietOwner() throws {
+        let suite = "QMOldDismissal.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        _ = try XCTUnwrap(store.beginSynchronization())
+        store.hideVerifiedConnectionForSynchronization()
+        store.endPresentation()
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        store.connectionSheetDidDismiss()
+        XCTAssertTrue(store.hasActiveConnection)
+        store.endPresentation()
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        store.connectionSheetDidDismiss()
+        XCTAssertTrue(store.hasActiveConnection)
+        store.endPresentation()
+    }
     func testNavigationFailureProjectsOnlyKnownDomainAndNumericCode() {
         let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut,
                             userInfo: [NSLocalizedDescriptionKey: "fixture-private-error-text",
@@ -102,6 +163,78 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertFalse(encoded.contains("sesskey"))
     }
 
+    func testAdministrativeItemIsValidatedBeforeTheDecoderExcludesIt() throws {
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: payload()) as? [String: Any])
+        let quiz = try XCTUnwrap((object["activities"] as? [[String: Any]])?.first)
+        var review = quiz
+        review["id"] = "3"
+        review["kind"] = "assignment"
+        review["title"] = "COURSEWORK MARK REVIEW REQUEST"
+        review["url"] = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=3"
+        object["activities"] = [quiz, review]
+        let decoded = try QMplusSnapshotPolicy.decode(JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(decoded.activities.map(\.id), ["2"])
+        for invalidURL in ["https://foreign.invalid/mod/assign/view.php?id=3",
+                           "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=3&sesskey=synthetic",
+                           "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=3"] {
+            var invalid = review
+            invalid["url"] = invalidURL
+            object["activities"] = [quiz, invalid]
+            XCTAssertThrowsError(try QMplusSnapshotPolicy.decode(JSONSerialization.data(withJSONObject: object)))
+        }
+        object["activities"] = [quiz, review, review]
+        XCTAssertThrowsError(try QMplusSnapshotPolicy.decode(JSONSerialization.data(withJSONObject: object)),
+                             "Duplicate IDs must not be concealed by administrative filtering")
+        var invalidDate = review
+        invalidDate["due_at"] = "not-a-date"
+        object["activities"] = [quiz, invalidDate]
+        XCTAssertThrowsError(try QMplusSnapshotPolicy.decode(JSONSerialization.data(withJSONObject: object)))
+    }
+
+    func testPartialRetentionCannotRestoreReviewRequestsOrDropRealHomeworkWithoutDueDates() throws {
+        let suite = "QMplusAdministrativePartialTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: payload()) as? [String: Any])
+        var courses = try XCTUnwrap(object["courses"] as? [[String: Any]])
+        courses[0]["name"] = "EBU Original course"
+        object["courses"] = courses
+        let quiz = try XCTUnwrap((object["activities"] as? [[String: Any]])?.first)
+        var review = quiz
+        review["id"] = "3"
+        review["kind"] = "assignment"
+        review["title"] = "COURSEWORK MARK REVIEW REQUEST"
+        review["url"] = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=3"
+        review["status"] = "not submitted"
+        var homework = review
+        homework["id"] = "4"
+        homework["title"] = "Real homework without a deadline"
+        homework["url"] = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=4"
+        homework["status"] = "submitted"
+        object["activities"] = [quiz, review, homework]
+        let first = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try JSONSerialization.data(withJSONObject: object), request: first)
+        let verified = try XCTUnwrap(store.snapshot)
+        XCTAssertEqual(verified.activities.map(\.id), ["2", "4"])
+        XCTAssertNil(verified.activities.last?.dueAt)
+
+        object["partial"] = true
+        object["warnings"] = ["QM_DETAIL_PARTIAL"]
+        object["fetched_at"] = "2026-10-04T12:00:00.000Z"
+        homework["title"] = "Incomplete replacement title"
+        object["activities"] = [quiz, review, homework]
+        let partial = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try JSONSerialization.data(withJSONObject: object), request: partial)
+        let retained = try XCTUnwrap(store.snapshot)
+        XCTAssertEqual(retained, verified)
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
+        XCTAssertEqual(CourseListEvidence.qmplusActivities(courseID: "1", snapshot: retained).map(\.id), ["2", "4"])
+        XCTAssertEqual(QMplusCourseSelection(snapshot: retained, showsOtherTerms: false).activities.map(\.id), ["2", "4"])
+        XCTAssertEqual(CourseListEvidence.qmplusCounts(activities: retained.activities), CourseSubmissionCounts(pending: 0, submitted: 1))
+        XCTAssertNil(store.webView, "The partial regression uses only synthetic business snapshots")
+    }
+
     func testPartialRetainsPreviousSnapshotAndDisconnectRejectsLatePublication() throws {
         let suite = "QMplusSnapshotTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -115,11 +248,13 @@ final class QMplusSnapshotTests: XCTestCase {
         store.receive(try payload(partial: true, title: "Incomplete new title"), request: partial)
         XCTAssertEqual(store.snapshot, original)
         XCTAssertTrue(store.isPartial)
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
         let late = try XCTUnwrap(store.beginSynchronization())
         store.disconnect()
         store.receive(try payload(), request: late)
         XCTAssertNil(store.snapshot)
         XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.isRetainingPreviousSnapshot)
         XCTAssertNil(store.webView, "Pure snapshot tests must not launch a browser")
     }
 
@@ -133,8 +268,287 @@ final class QMplusSnapshotTests: XCTestCase {
         let second = try XCTUnwrap(store.beginSynchronization())
         store.receive(Data("{\"ok\":false,\"partial\":false,\"error_code\":\"QM_LOGIN_REQUIRED\"}".utf8), request: second)
         XCTAssertEqual(store.snapshot?.activities.count, 1)
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
         XCTAssertEqual(store.statusKey, "请先在 QMplus 官方网页完成登录")
         XCTAssertFalse(store.isSyncing)
+    }
+
+    func testCompletedVisibleAndQuietFlightsRejectLateFailureAndDuplicateResult() throws {
+        for quiet in [false, true] {
+            let suite = "QMplusLateFailureTests.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+            XCTAssertTrue(store.beginConnectionOwner(quiet: quiet))
+            let completed = try XCTUnwrap(store.beginSynchronization())
+            store.receive(try payload(), request: completed)
+            let verified = try XCTUnwrap(store.snapshot)
+
+            // Directly drive the same boundary used by a WebKit failure callback.
+            // The visible owner keeps its generation, so the active-flight guard
+            // must reject this even when the request ID still matches.
+            store.finishFailure(request: completed)
+            store.receive(try payload(title: "Late synthetic title"), request: completed)
+            store.receive(Data("{\"ok\":false,\"partial\":false,\"error_code\":\"QM_LOGIN_REQUIRED\"}".utf8), request: completed)
+            XCTAssertEqual(store.snapshot, verified)
+            XCTAssertEqual(store.statusKey, "QMplus 同步完成")
+            XCTAssertFalse(store.isSyncing)
+            XCTAssertFalse(store.isPartial)
+            XCTAssertFalse(store.isRetainingPreviousSnapshot)
+            XCTAssertEqual(store.hasActiveConnection, !quiet)
+            XCTAssertEqual(store.isShowingConnection, !quiet)
+            XCTAssertNil(store.webView, "Fake terminal callbacks must not open WebKit or use a real session")
+            store.endPresentation()
+        }
+    }
+
+    func testCancelledFlightCannotReviveAnOwnerOrFinishAReplacementRequest() throws {
+        let suite = "QMplusCancelledReplacementTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let first = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(), request: first)
+        let verified = try XCTUnwrap(store.snapshot)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        let cancelled = try XCTUnwrap(store.beginSynchronization())
+        store.cancelQuietConnection()
+        store.finishFailure(request: cancelled)
+        store.receive(try payload(title: "Cancelled late title"), request: cancelled)
+        XCTAssertEqual(store.snapshot, verified)
+        XCTAssertEqual(store.statusKey, "QMplus 同步已取消，可重新连接后重试")
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertFalse(store.isSyncing)
+
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        let replacement = try XCTUnwrap(store.beginSynchronization())
+        store.finishFailure(request: cancelled)
+        store.receive(try payload(title: "Superseded late title"), request: cancelled)
+        XCTAssertTrue(store.isSyncing, "An obsolete callback must not finish the new flight")
+        XCTAssertEqual(store.statusKey, "正在同步 QMplus 课程与活动…")
+        XCTAssertEqual(store.snapshot, verified)
+        store.receive(try payload(title: "Replacement verified title", fetchedAt: "2026-10-04T12:00:00.000Z"), request: replacement)
+        XCTAssertEqual(store.snapshot?.fetchedAt, "2026-10-04T12:00:00.000Z")
+        XCTAssertEqual(store.snapshot?.activities.first?.title, "Replacement verified title")
+        XCTAssertEqual(store.statusKey, "QMplus 同步完成")
+        XCTAssertFalse(store.isRetainingPreviousSnapshot)
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertNil(store.webView)
+        store.endPresentation()
+    }
+
+    func testNewRefreshFailureMarksRetainedSnapshotAndOnlyAValidatedRefreshClearsIt() throws {
+        let suite = "QMplusRetainedRefreshTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let first = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(due: "2026-10-04T12:00:00Z"), request: first)
+        let verified = try XCTUnwrap(store.snapshot)
+        let failed = try XCTUnwrap(store.beginSynchronization())
+        store.finishFailure(request: failed)
+        XCTAssertEqual(store.snapshot, verified)
+        XCTAssertEqual(store.snapshot?.fetchedAt, verified.fetchedAt)
+        XCTAssertEqual(store.snapshot?.activities.first?.dueAt, "2026-10-04T12:00:00Z")
+        XCTAssertEqual(store.statusKey, "QMplus 同步失败，请检查官方网页登录状态后重试")
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
+        XCTAssertFalse(store.isSyncing)
+
+        let retry = try XCTUnwrap(store.beginSynchronization())
+        XCTAssertTrue(store.isRetainingPreviousSnapshot, "Starting a retry cannot relabel old data as freshly verified")
+        store.receive(try payload(title: "New verified title", fetchedAt: "2026-10-04T12:00:00.000Z"), request: retry)
+        XCTAssertEqual(store.snapshot?.fetchedAt, "2026-10-04T12:00:00.000Z")
+        XCTAssertFalse(store.isRetainingPreviousSnapshot)
+        XCTAssertEqual(store.statusKey, "QMplus 同步完成")
+        let abandoned = try XCTUnwrap(store.beginSynchronization())
+        store.endPresentation()
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
+        store.disconnect()
+        store.finishFailure(request: abandoned)
+        XCTAssertNil(store.snapshot)
+        XCTAssertFalse(store.isRetainingPreviousSnapshot)
+        XCTAssertEqual(store.statusKey, "QMplus 尚未连接")
+        XCTAssertNil(store.webView)
+    }
+
+    func testClosingConnectionCancelsPendingFlightAndRejectsLateResultWithoutClaimingSuccess() throws {
+        let suite = "QMplusPresentationTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults)
+        let request = try XCTUnwrap(store.beginSynchronization())
+        store.endPresentation()
+        store.receive(try payload(), request: request)
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.canSynchronize)
+        XCTAssertNil(store.snapshot)
+        XCTAssertEqual(store.statusKey, "QMplus 同步已取消，可重新连接后重试")
+        XCTAssertNil(store.webView, "The lifecycle regression must not open a website or real account")
+    }
+
+    func testQuietSyncCanPublishValidatedSnapshotWithoutASheetAndCannotPublishAfterCancellation() throws {
+        let suite = "QMplusQuietTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        XCTAssertFalse(store.beginConnectionOwner(quiet: true), "Only one logical connection owner may be active")
+        XCTAssertFalse(store.isShowingConnection)
+        let completed = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(), request: completed)
+        let previous = try XCTUnwrap(store.snapshot)
+        XCTAssertEqual(store.statusKey, "QMplus 同步完成")
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        let cancelled = try XCTUnwrap(store.beginSynchronization())
+        store.cancelQuietConnection()
+        store.receive(try payload(title: "Late synthetic title"), request: cancelled)
+        XCTAssertEqual(store.snapshot, previous)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView, "Pure quiet-owner tests must not open WebKit or touch a real session")
+    }
+
+    func testQuietFailureShowsSameOwnerForManualRetryWithoutErasingPreviousSnapshot() throws {
+        let suite = "QMplusQuietFailureTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let first = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(), request: first)
+        let previous = try XCTUnwrap(store.snapshot)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        let failed = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(activityURL: "https://evil.invalid/mod/quiz/view.php?id=2"), request: failed)
+        XCTAssertTrue(store.isShowingConnection)
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertFalse(store.beginConnectionOwner(quiet: false), "Failure must reveal the same session, not create another owner")
+        XCTAssertEqual(store.snapshot, previous)
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
+        XCTAssertEqual(store.statusKey, "QMplus 同步失败，请检查官方网页登录状态后重试")
+        store.endPresentation()
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView)
+    }
+
+    func testInactiveSceneCancelsQuietWorkButPreservesTheLastVerifiedSnapshot() throws {
+        let suite = "QMplusInactiveQuietTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let first = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(), request: first)
+        let previous = try XCTUnwrap(store.snapshot)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        let late = try XCTUnwrap(store.beginSynchronization())
+        store.stopAutomaticLoginForInactiveScene()
+        store.receive(try payload(title: "Late synthetic title"), request: late)
+        XCTAssertEqual(store.snapshot, previous)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertNil(store.webView)
+    }
+
+    func testInactiveSceneRetainsVisibleManualOwnerAndRejectsOldSyncWithoutErasingLastGoodData() throws {
+        let suite = "QMplusInactiveVisibleTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let first = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(), request: first)
+        let previous = try XCTUnwrap(store.snapshot)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        XCTAssertTrue(store.hasActiveAutofillLedger)
+        let late = try XCTUnwrap(store.beginSynchronization())
+        store.stopAutomaticLoginForInactiveScene()
+        store.receive(try payload(title: "Late synthetic title"), request: late)
+        XCTAssertEqual(store.snapshot, previous)
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertTrue(store.isShowingConnection)
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.beginConnectionOwner(quiet: true), "Inactivity must not create a second login owner")
+        XCTAssertNil(store.webView)
+        store.endPresentation()
+    }
+
+    func testForegroundRecognitionResumesVisibleOwnerWithoutRestoringCredentialAutofill() throws {
+        let suite = "QMplusForegroundRecognitionTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        XCTAssertTrue(store.hasActiveAuthenticationRecognition)
+        XCTAssertTrue(store.hasActiveAutofillLedger)
+        let oldRequest = try XCTUnwrap(store.beginSynchronization())
+        store.stopAutomaticLoginForInactiveScene()
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertTrue(store.isShowingConnection)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        let manualStatus = store.statusKey
+
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertTrue(store.hasActiveAuthenticationRecognition, "Only read-only session recognition may resume")
+        XCTAssertFalse(store.hasActiveAutofillLedger, "Foregrounding must not authorize another username or password submission")
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertTrue(store.isShowingConnection, "The user's visible MFA presentation must remain open")
+        XCTAssertEqual(store.statusKey, manualStatus)
+        store.receive(try payload(title: "Retired callback"), request: oldRequest)
+        XCTAssertNil(store.snapshot)
+        let recognized = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(title: "Verified after foreground"), request: recognized)
+        XCTAssertEqual(store.statusKey, "QMplus 同步完成")
+        XCTAssertEqual(store.snapshot?.activities.first?.title, "Verified after foreground")
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertNil(store.webView, "This lifecycle test must not load a webpage or real session")
+
+        store.endPresentation()
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.isShowingConnection)
+    }
+
+    func testForegroundRecognitionCannotReviveAQuietOwnerCancelledDuringInactivity() throws {
+        let suite = "QMplusQuietForegroundTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        store.stopAutomaticLoginForInactiveScene()
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertNil(store.webView)
+    }
+
+    func testRepeatedConnectRevealsExistingQuietOwnerWithoutStartingAnotherBrowserOrRequest() throws {
+        let suite = "QMplusRepeatedConnectTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        XCTAssertEqual(store.statusKey, "正在确认 QMplus 登录状态…")
+        let request = try XCTUnwrap(store.beginSynchronization())
+        store.connect(sampleMode: false)
+        XCTAssertTrue(store.isShowingConnection)
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertTrue(store.isSyncing)
+        XCTAssertNil(store.beginSynchronization())
+        XCTAssertNil(store.webView)
+        store.endPresentation()
+        store.receive(try payload(), request: request)
+        XCTAssertNil(store.snapshot)
+        XCTAssertFalse(store.hasActiveConnection)
     }
 
     func testRestrictedQuizDoesNotBlockOtherNewDeadlines() throws {
@@ -186,13 +600,14 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertEqual(store.snapshot?.fetchedAt, original.fetchedAt)
         XCTAssertEqual(store.snapshot?.activities.first?.dueAt, "2026-10-04T12:00:00Z")
         XCTAssertTrue(store.isPartial)
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
     }
 
     private func payload(partial: Bool = false, title: String = "Synthetic quiz", schema: Int = 1,
                          activityURL: String = "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=2",
-                         due: String? = nil) throws -> Data {
+                         due: String? = nil, fetchedAt: String = "2026-10-03T12:00:00.000Z") throws -> Data {
         try JSONSerialization.data(withJSONObject: [
-            "schema_version": schema, "source": "qmplus", "fetched_at": "2026-10-03T12:00:00.000Z",
+            "schema_version": schema, "source": "qmplus", "fetched_at": fetchedAt,
             "ok": true, "partial": partial, "warnings": partial ? ["QM_DETAIL_PARTIAL"] : [],
             "courses": [["id": "1", "name": "Synthetic API course 2026/27", "short_name": "API name",
                          "url": "https://qmplus.qmul.ac.uk/course/view.php?id=1",

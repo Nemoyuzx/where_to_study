@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_title">可选：保存 QMplus 登录信息</string>
+    <string name="qmplus_saved_login_notice">默认不保存。只有勾选并保存后，QMplus 账号和密码才会加密保存在本机的独立 Keystore 域，仅用于受信官方登录网页的一次自动填写；不会复用北邮密码或发送给本项目服务器。验证码、MFA、账号选择和风险确认仍由你完成。更改保存信息会断开旧 QMplus 会话；断开或清除本地数据也会移除保存信息。</string>
+    <string name="qmplus_saved_login_opt_in">我选择在本机加密保存并用于官方网页填写</string>
+    <string name="qmplus_saved_login_account">QMplus / Queen Mary 账号</string>
+    <string name="qmplus_saved_login_password">QMplus / Queen Mary 密码</string>
+    <string name="qmplus_saved_login_save">加密保存</string>
+    <string name="qmplus_saved_login_remove">移除并断开连接</string>
+    <string name="qmplus_saved_login_invalid">请输入 QMplus 账号和密码，并明确选择保存。</string>
+    <string name="qmplus_saved_login_failed">无法安全保存 QMplus 登录信息，请重试。未启用新的自动填写信息。</string>
+    <string name="qmplus_saved_login_manual">请在官方网页完成登录、验证码或 MFA。应用不会替你确认风险、同意协议或绕过验证。</string>
+    <item name="settings_qmplus_saved_login" type="id" />
+    <item name="qmplus_saved_login_opt_in" type="id" />
+    <item name="qmplus_saved_login_account" type="id" />
+    <item name="qmplus_saved_login_password" type="id" />
+</resources>

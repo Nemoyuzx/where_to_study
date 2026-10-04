@@ -1,3 +1,6 @@
+import { normalizeUiPreference as normalizeUiLanguage, resolveUiLanguage } from './ui-languages.js'
+export { normalizeUiLanguage }
+
 export const FALLBACK_SLOTS = [
   { index: 0, label: '1', start: '08:00', end: '08:45' },
   { index: 1, label: '2', start: '08:50', end: '09:35' },
@@ -65,6 +68,7 @@ export const DEFAULT_SETTINGS = {
   courseReminderMinutes: [10],
   automaticTermDetectionEnabled: true,
   weatherEnabled: true,
+  qmplusEnabled: false,
   almanacEnabled: true,
   competitionDeadlinesEnabled: true,
   conferenceDeadlinesEnabled: true,
@@ -528,9 +532,6 @@ function normalizeMinSeats(value) {
   return Number.isSafeInteger(integerSeats) ? Math.max(0, integerSeats) : 0
 }
 
-export function normalizeUiLanguage(value) {
-  return ['system', 'zh-Hans', 'en'].includes(value) ? value : 'system'
-}
 
 export function normalizeDailyCourseNotificationMinutes(value) {
   return Number.isInteger(value) && value >= 0 && value < 1440 ? value : 450
@@ -548,9 +549,7 @@ export function parseDailyCourseNotificationTime(value) {
 }
 
 export function resolvedUiLanguage(preference, systemLanguage = '') {
-  const normalized = normalizeUiLanguage(preference)
-  if (normalized !== 'system') return normalized
-  return String(systemLanguage).toLowerCase().startsWith('zh') ? 'zh-Hans' : 'en'
+  return resolveUiLanguage(preference, systemLanguage)
 }
 
 export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
@@ -582,6 +581,7 @@ export function savedSettingsToState(data = {}, fallback = DEFAULT_SETTINGS) {
       ?? true,
     ),
     weatherEnabled: Boolean(data.weather_enabled ?? fallback.weatherEnabled ?? true),
+    qmplusEnabled: Boolean(data.qmplus_enabled ?? fallback.qmplusEnabled ?? false),
     almanacEnabled: Boolean(data.almanac_enabled ?? fallback.almanacEnabled ?? true),
     competitionDeadlinesEnabled: Boolean(
       data.competition_deadlines_enabled ?? fallback.competitionDeadlinesEnabled ?? true,
@@ -798,6 +798,7 @@ export function settingsToPayload(settings) {
     course_reminder_minutes: normalizeCourseReminderMinutes(settings.courseReminderMinutes),
     automatic_term_detection_enabled: Boolean(settings.automaticTermDetectionEnabled),
     weather_enabled: Boolean(settings.weatherEnabled),
+    qmplus_enabled: Boolean(settings.qmplusEnabled),
     almanac_enabled: Boolean(settings.almanacEnabled),
     competition_deadlines_enabled: Boolean(settings.competitionDeadlinesEnabled),
     conference_deadlines_enabled: Boolean(settings.conferenceDeadlinesEnabled),

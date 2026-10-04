@@ -891,9 +891,7 @@ struct CalendarTimelineView: View {
 
     private func headerDetail(for day: CalendarTimelineDay) -> String {
         guard !day.courses.isEmpty else { return model.localized("无课") }
-        return model.appLanguage.resolvedResourceName == "en"
-            ? "\(day.courses.count) courses"
-            : "\(day.courses.count) 门课"
+        return AppLocalization.format("%d 门课", language: model.appLanguage, englishFallback: "%d courses", arguments: [day.courses.count])
     }
 
     private func headerDetailColor(for day: CalendarTimelineDay) -> Color {
@@ -915,7 +913,7 @@ struct CalendarTimelineView: View {
     }
 
     private var accessibleDateFormatter: DateFormatter {
-        formatter(model.appLanguage.resolvedResourceName == "en" ? "EEEE, MMMM d, yyyy" : "yyyy年M月d日 EEEE")
+        formatter(model.appLanguage.dateFormat(chinese: "yyyy年M月d日 EEEE", english: "EEEE, MMMM d, yyyy"))
     }
 
     private var timeFormatter: DateFormatter {

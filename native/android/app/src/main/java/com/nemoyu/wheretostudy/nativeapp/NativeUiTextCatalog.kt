@@ -1398,6 +1398,9 @@ internal object NativeUiTextCatalog {
         "小组件优先显示今日课程，剩余空间补充标有“明日”的课程，总数受课程上限限制。预览使用虚构示例，不会写入课表。" to R.string.widget_preview_description,
         "在桌面查看今天的课程、节次、教室、教师与上课状态。" to R.string.widget_today_course_description,
         "今日课程" to R.string.widget_today_course_name,
+        "启用 QMplus" to R.string.ui_generated_1a78803a506cc4,
+        "仅适用国院" to R.string.ui_generated_de0fc50a49bf3c,
+        "无法保存本地偏好。" to R.string.ui_generated_dba3ae91be2408,
         "macOS 可在系统设置中选择可用网络或个人热点。本应用不提供强制蜂窝网络或双通道开关。" to R.string.ui_generated_c51e74da2b9b1b,
         "QMplus 自动填写已停止，请在官方网页手动完成登录或验证。" to R.string.ui_generated_a8cb7a7cb858cf,
         "QMplus 自动填写组件不可用，请手动登录。" to R.string.ui_generated_8ff421866994b1,
@@ -1409,6 +1412,8 @@ internal object NativeUiTextCatalog {
         "正在填写 QMplus 官方登录账号…" to R.string.ui_generated_0f472efd10e9f7,
         "正在打开 QMplus 官方 SSO 登录…" to R.string.ui_generated_1a61edb546454e,
         "系统网络辅助" to R.string.ui_generated_a16987f886401d,
+        "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" to R.string.ui_generated_cf1c3b50baf4c5,
+        "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。" to R.string.ui_generated_fd4480c6c08ea3,
     )
     fun resolve(context: Context, source: String): String? = resources[source]?.let(context::getString)
 }

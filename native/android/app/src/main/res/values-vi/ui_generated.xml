@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"Đang đọc thông báo mới nhất của bộ phận hậu cần và thời gian biểu đang áp dụng."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"Gốc JSON lịch tùy chỉnh phải là đối tượng."</string>
     <string name="ui_generated_ff93bd2c081d35">"Mở danh sách bài tập của nền tảng học tập trong trình duyệt"</string>
+    <string name="ui_generated_1a78803a506cc4">"Bật QMplus"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"Chỉ dành cho Khoa Quốc tế"</string>
+    <string name="ui_generated_dba3ae91be2408">"Không thể lưu tùy chọn trên thiết bị."</string>
     <string name="ui_generated_c51e74da2b9b1b">"Trên macOS, hãy chọn mạng khả dụng hoặc Điểm truy cập cá nhân trong Cài đặt hệ thống. Ứng dụng này không có công tắc buộc dùng dữ liệu di động hoặc dùng đồng thời hai mạng."</string>
     <string name="ui_generated_a8cb7a7cb858cf">"Đã dừng tự điền QMplus. Hãy tự hoàn tất đăng nhập hoặc xác minh trên trang chính thức."</string>
     <string name="ui_generated_8ff421866994b1">"Thành phần tự điền QMplus không khả dụng. Hãy đăng nhập thủ công."</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"Đang điền tài khoản đăng nhập QMplus trên trang chính thức…"</string>
     <string name="ui_generated_1a61edb546454e">"Đang mở trang đăng nhập SSO chính thức của QMplus…"</string>
     <string name="ui_generated_a16987f886401d">"Hỗ trợ mạng của hệ thống"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"Chỉ trên trang đăng nhập chính thức đã được xác minh, ứng dụng mới tự chọn tài khoản khớp chính xác với tài khoản đã lưu và điền tên đăng nhập cùng mật khẩu, mỗi bước tối đa một lần. Việc chọn tài khoản không khớp, MFA, CAPTCHA, duy trì đăng nhập và xác nhận rủi ro hoặc điều khoản vẫn do bạn thực hiện."</string>
+    <string name="ui_generated_fd4480c6c08ea3">"Tắt “Bật QMplus” chỉ tạm dừng kết nối và đồng bộ; thông tin đăng nhập đã lưu, phiên và bộ nhớ đệm khóa học vẫn được giữ lại. Hãy dùng các thao tác riêng để tắt tự điền, xóa thông tin đăng nhập hoặc ngắt kết nối và xóa dữ liệu."</string>
 </resources>

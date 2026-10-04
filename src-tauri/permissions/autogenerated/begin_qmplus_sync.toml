@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-begin-qmplus-sync"
+description = "Enables the begin_qmplus_sync command without any pre-configured scope."
+commands.allow = ["begin_qmplus_sync"]
+
+[[permission]]
+identifier = "deny-begin-qmplus-sync"
+description = "Denies the begin_qmplus_sync command without any pre-configured scope."
+commands.deny = ["begin_qmplus_sync"]

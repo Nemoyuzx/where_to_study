@@ -4,6 +4,32 @@ export function isEbuCourse(course) {
   return typeof course?.name === 'string' && /^EBU/i.test(course.name.trim())
 }
 
+// Cache presentation uses the same conservative policy as WTSQmProtocol and
+// native snapshot readers. Never filter real assignments for missing dates.
+export function isQmplusAssessmentActivity(item) {
+  if (item?.kind !== 'assignment' || typeof item.title !== 'string') return true
+  let normalized = '', gap = false
+  for (const scalar of item.title) {
+    let cp = scalar.codePointAt(0)
+    if (cp >= 0xFF01 && cp <= 0xFF5E) cp -= 0xFEE0
+    const separator = (cp >= 9 && cp <= 13) || cp === 0x20 || cp === 0x85 || cp === 0xA0 ||
+      cp === 0x1680 || (cp >= 0x2000 && cp <= 0x200A) || cp === 0x2028 || cp === 0x2029 ||
+      cp === 0x202F || cp === 0x205F || cp === 0x3000 || cp === 0xFEFF ||
+      [0x5F, 0x2D, 0x2F, 0x3A, 0x2212].includes(cp) || (cp >= 0x2010 && cp <= 0x2015)
+    if (separator) { gap = normalized.length > 0; continue }
+    if (gap) normalized += ' '
+    gap = false
+    normalized += String.fromCodePoint(cp >= 0x61 && cp <= 0x7A ? cp - 0x20 : cp)
+  }
+  return normalized !== 'COURSEWORK MARK REVIEW REQUEST' && normalized !== 'COURSEWORK MARK REVIEW REQUEST FORM'
+}
+
+export function qmplusActivitiesForCourse(snapshot, course) {
+  if (course?.current_term_status !== 'current' || !isEbuCourse(course)) return []
+  return (Array.isArray(snapshot?.activities) ? snapshot.activities : [])
+    .filter(item => item.course_id === course.id && isQmplusAssessmentActivity(item))
+}
+
 export function assignmentsForCourse(items, course, directory) {
   if (!Array.isArray(items)) return null
   const name = course.name?.trim()

@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Ứng dụng Where To Study cho HarmonyOS" },
+    { "name": "EntryAbility_desc", "value": "Xem phòng học trống và thời khóa biểu cá nhân" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "Lớp học hôm nay" },
+    { "name": "widget_desc", "value": "Xem giờ học và phòng học hôm nay" },
+    { "name": "calendar_read_reason", "value": "Đọc các sự kiện lớp học đã nhập để đồng bộ thời khóa biểu" },
+    { "name": "calendar_write_reason", "value": "Thêm thời khóa biểu cá nhân vào lịch hệ thống" }
+  ]
+}

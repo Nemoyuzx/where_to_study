@@ -2,6 +2,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { Course, ScheduleSnapshot } from '../main/ets/common/Models';
 import { StrictDates, DateParts } from '../main/ets/common/StrictDates';
+import { AppLanguage } from '../main/ets/common/AppLocalization';
 import {
   DailyCourseNotificationAuthorization, DailyCourseNotificationCoordinator,
   DailyCourseNotificationPlanner, DailyCourseNotificationReconcileOutcome,
@@ -332,6 +333,10 @@ export default function dailyCoursePlanningTest() {
         DailyCourseNotificationPlanner.requests(schedule, now, undefined, true);
       expect(requests[0].title).assertEqual('Today\'s Courses · 1');
       expect(requests[0].body.includes('早课')).assertTrue();
+      const traditional: DailyCourseNotificationRequest[] =
+        DailyCourseNotificationPlanner.requests(schedule, now, undefined, AppLanguage.traditionalChinese);
+      expect(traditional[0].title).assertEqual('今日課程 · 1 門');
+      expect(traditional[0].body.includes('早课')).assertTrue();
     });
 
     it('planner_caps_pending_requests_at_platform_limit', 0, () => {

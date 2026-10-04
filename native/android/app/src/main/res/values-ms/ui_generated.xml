@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"Sedang membaca notis terkini jabatan logistik dan jadual yang sedang berkuat kuasa."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"Akar JSON jadual tersuai mestilah objek."</string>
     <string name="ui_generated_ff93bd2c081d35">"Buka senarai tugasan Teaching Cloud dalam pelayar"</string>
+    <string name="ui_generated_1a78803a506cc4">"Dayakan QMplus"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"Untuk Sekolah Antarabangsa sahaja"</string>
+    <string name="ui_generated_dba3ae91be2408">"Tidak dapat menyimpan keutamaan setempat."</string>
     <string name="ui_generated_c51e74da2b9b1b">"Pada macOS, pilih rangkaian yang tersedia atau Hotspot Peribadi dalam Tetapan Sistem. Aplikasi ini tidak menyediakan suis untuk memaksa data selular atau penggunaan dua rangkaian serentak."</string>
     <string name="ui_generated_a8cb7a7cb858cf">"Autolengkap QMplus telah dihentikan. Lengkapkan log masuk atau pengesahan secara manual di laman rasmi."</string>
     <string name="ui_generated_8ff421866994b1">"Komponen autolengkap QMplus tidak tersedia. Log masuk secara manual."</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"Sedang mengisi akaun log masuk QMplus pada halaman rasmi…"</string>
     <string name="ui_generated_1a61edb546454e">"Sedang membuka halaman log masuk SSO rasmi QMplus…"</string>
     <string name="ui_generated_a16987f886401d">"Bantuan rangkaian sistem"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"Hanya laman log masuk rasmi yang disahkan boleh memilih akaun yang sepadan tepat dengan akaun tersimpan dan mengisi nama pengguna serta kata laluan, dengan setiap langkah dicuba paling banyak sekali. Pemilihan akaun yang tidak sepadan, MFA, CAPTCHA, kekal log masuk serta pengesahan risiko dan terma masih perlu anda lakukan sendiri."</string>
+    <string name="ui_generated_fd4480c6c08ea3">"Mematikan “Dayakan QMplus” hanya menjeda sambungan dan penyegerakan; maklumat log masuk tersimpan, sesi dan cache kursus dikekalkan. Gunakan kawalan berasingan untuk mematikan autofill, memadam maklumat log masuk atau memutuskan sambungan dan mengosongkan data."</string>
 </resources>

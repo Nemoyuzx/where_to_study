@@ -19,7 +19,11 @@ export struct PrivacyPolicyView {
     if (parts.length < 2) {
       return this.model.text(value);
     }
-    return this.model.resolvedLanguage() === AppLanguage.english ? parts[parts.length - 1] : parts[0];
+    if (this.model.resolvedLanguage() === AppLanguage.english) { return parts[parts.length - 1]; }
+    if (this.model.resolvedLanguage() === AppLanguage.simplifiedChinese) { return parts[0]; }
+    // 现有法律声明是经维护的中英双语正文；其它界面语言先完整呈现两份，
+    // 不自动机翻法律含义或仅显示用户读不懂的中文半段。
+    return value;
   }
 
   build() {
@@ -28,7 +32,7 @@ export struct PrivacyPolicyView {
         SymbolGlyph($r('sys.symbol.chevron_left'))
           .fontSize(20)
           .fontColor([AppTheme.text()])
-        Text(this.model.resolvedLanguage() === AppLanguage.english ? 'Back' : '返回')
+        Text(this.model.text('返回'))
           .fontSize(16)
           .fontColor(AppTheme.text())
       }
@@ -50,8 +54,7 @@ export struct PrivacyPolicyView {
               .fontSize(30)
               .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.text())
-            Text(this.model.resolvedLanguage() === AppLanguage.english ?
-              'Effective date: 2026-10-03' : '生效日期：2026-10-03')
+            Text(this.model.text('生效日期：') + '2026-10-03')
               .fontSize(14)
               .fontColor(AppTheme.secondaryText())
           }
@@ -76,7 +79,9 @@ export struct PrivacyPolicyView {
           this.privacySection('云课堂作业 / UCloud assignments',
             '密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\nThe password is submitted only to auth.bupt.edu.cn over HTTPS. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes.')
           this.privacySection('QMplus 独立连接 / Independent QMplus connection',
-            'QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在自己的 incognito ArkWeb 打开 QMplus 官方网页，由用户直接完成 SSO／Microsoft MFA；应用没有 Microsoft 密码输入框，也不读取外部浏览器 Cookie。只读脚本仅返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器。网页会话与业务快照只在当前进程内存中；真正部分失败时保留并标明上次成功资料。断开连接或清除本地数据会清除应用管理的会话与快照；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息与网络元数据。\n\nQMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in its own incognito ArkWeb, where you complete SSO/Microsoft MFA directly. The app has no Microsoft password field and reads no external-browser cookies. Its read-only script returns only a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML; it does not submit work, start quizzes, or use a third-party Worker or this project’s server. The web session and snapshot stay in process memory; genuine partial failures retain labelled prior data. Disconnecting or clearing local data removes the app-managed session and snapshot; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies.')
+            'QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在自己的 incognito ArkWeb 打开官方网页。您可自愿在设置中输入 QMplus／Microsoft 登录邮箱和密码，独立保存到本机 HarmonyOS ASSET 安全存储；普通偏好只保存与该资产匹配的随机授权标识，不含密码，未授权时自动填写默认关闭。只有本机授权匹配、官方主文档和已核验的登录表单同时成立时，应用才会在官方 Microsoft 页面各尝试一次普通账号 Next 与密码 Sign in；不会在未知网页上填写，不自动重试，也不处理 MFA、账号选择、验证码、风险验证、保持登录或新条款。应用不读取外部浏览器 Cookie。只读业务脚本仅返回有界的课程与 Assignment／Quiz 快照，不返回密码、Cookie、sesskey、令牌、身份字段或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器；本项目服务器不接收 QMplus 身份或业务资料。网页会话与业务快照只在当前进程内存中；真正部分失败时保留并标明上次成功资料。退出或清除本地数据会尝试清除应用管理的会话、快照和单独保存的登录资料；如安全存储无法确认删除，应用会提示您重试或核查。更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息与网络元数据。\n\nQMplus is independent of BUPT academic credentials. Only when you connect does the app open official pages in its own incognito ArkWeb. You may choose to enter a QMplus/Microsoft sign-in email and password in Settings; they are stored separately in HarmonyOS ASSET secure storage. Ordinary preferences hold only a random authorization identifier matching that asset, never the password; autofill is off without matching authorization. Only when that local authorization, the official main document, and a verified sign-in form all match may the app attempt one ordinary account Next and one password Sign in on the official Microsoft page. It never fills an unknown page, retries automatically, or handles MFA, account selection, CAPTCHA, risk checks, Stay signed in, or new terms. The app does not read external-browser cookies. Its separate read-only business script returns only a bounded course and Assignment/Quiz snapshot, not passwords, cookies, session keys, tokens, identity fields, or full HTML; it does not submit work, start quizzes, or use a third-party Worker or this project’s server. This project’s server does not receive QMplus identity or business data. The web session and business snapshot stay in process memory; genuine partial failures retain labelled prior data. Sign-out or clearing local data attempts to remove the app-managed session, snapshot, and separately saved login; if secure deletion cannot be confirmed, the app tells you to retry or check. Changing BUPT credentials does not switch QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies.')
+          this.privacySection('系统密码管理器 / System password manager',
+            'HarmonyOS 或您使用的系统密码管理器可能依据您在系统中的单独授权，为官方网页提供填充建议。本应用的 QMplus 自动填写开关只控制是否使用本应用独立保存的登录资料，不关闭系统自己的密码管理功能；本应用无法读取其密码库，也不会清除其中的资料。\n\nHarmonyOS or a system password manager you use may offer autofill on official pages under your separate system authorization. The QMplus autofill switch in this app controls only the separately saved login managed by this app; it does not disable system password management. The app cannot read or clear the system password vault.')
           this.privacySection('教学云平台密码与课程删除 / Teaching Cloud password and course deletion',
             '可选的教学云平台独立密码与教务密码一起受 HarmonyOS ASSET 安全存储保护，仅用于作业 DDL。未设置时使用教务密码；清除独立密码后恢复此方式。课程删除记录仅在本机按账号与学期隔离保存，支持删除单次或本学期整门课程，并可恢复；刷新课表会继续应用记录。删除不会更改学校数据、作业 DDL 或已导出的系统日历。清除本地数据也会清除独立密码和课程删除记录。\n\nThe optional Teaching Cloud password is protected with your academic password in HarmonyOS ASSET and used only for assignment deadlines. Without an override, the academic password is used. Course deletion records remain on this device, scoped to account and semester; occurrences or whole courses can be removed and restored, and removals survive refresh. School records, assignment deadlines, and previously exported calendar events are unchanged. Clear local data also removes the separate password and course deletion records.')
           this.privacySection('系统日历、通知与小组件 / Calendar, notifications, and widgets',

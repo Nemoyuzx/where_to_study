@@ -25,7 +25,7 @@ import { CalendarDailyInfoCards } from './CalendarDailyInfoCards';
 import {
   CalendarDailyInfoSources, PublicDeadlineItem, PublicDeadlineKindInfo, PublicDeadlineSource
 } from '../../net/CalendarDailyInfoClient';
-import { AppLanguage } from '../../common/AppLocalization';
+import { AppLanguage, AppLocalization, LocalizationValues } from '../../common/AppLocalization';
 import { AppContext } from '../../store/AppContext';
 
 class MonthEventItem {
@@ -293,7 +293,7 @@ export struct ExpandedTeachingCalendarView {
 
   private periodTitle(): string {
     const base: string = TeachingCalendarLogic.periodTitle(
-      this.selectedDate(), this.mode(), this.isEnglish());
+      this.selectedDate(), this.mode(), this.model.resolvedLanguage());
     if (this.mode() !== CalendarMode.week) {
       return base;
     }
@@ -303,6 +303,9 @@ export struct ExpandedTeachingCalendarView {
       return base + ' · Calendar Week ' + calendarWeek.toString() +
         (teachingWeek === null ? ' · Outside teaching weeks' :
           ' · Teaching Week ' + teachingWeek.toString());
+    }
+    if (this.model.resolvedLanguage() !== AppLanguage.simplifiedChinese) {
+      return base + ' · ' + this.localizedWeekText(calendarWeek, teachingWeek);
     }
     return base + ' · 公历第 ' + calendarWeek.toString() + ' 周' +
       (teachingWeek === null ? ' · 非教学周' :
@@ -316,6 +319,9 @@ export struct ExpandedTeachingCalendarView {
       return 'Calendar Week ' + calendarWeek.toString() +
         (teachingWeek === null ? ' · Outside teaching weeks' :
           ' · Teaching Week ' + teachingWeek.toString());
+    }
+    if (this.model.resolvedLanguage() !== AppLanguage.simplifiedChinese) {
+      return this.localizedWeekText(calendarWeek, teachingWeek);
     }
     return '公历第 ' + calendarWeek.toString() + ' 周' +
       (teachingWeek === null ? ' · 非教学周' :
@@ -332,8 +338,25 @@ export struct ExpandedTeachingCalendarView {
       return 'Cal ' + calendarWeek.toString() + ' · Teach ' +
         (teachingWeek === null ? '—' : teachingWeek.toString());
     }
+    if (this.model.resolvedLanguage() !== AppLanguage.simplifiedChinese) {
+      const language: AppLanguage = this.model.resolvedLanguage();
+      return AppLocalization.format('公历{week} · 教学{teaching}',
+        new LocalizationValues('week', calendarWeek.toString(), 'teaching',
+          teachingWeek === null ? '—' : teachingWeek.toString()),
+        language, language);
+    }
     return '公历' + calendarWeek.toString() + ' · 教学' +
       (teachingWeek === null ? '—' : teachingWeek.toString());
+  }
+
+  private localizedWeekText(calendarWeek: number, teachingWeek: number | null): string {
+    const language: AppLanguage = this.model.resolvedLanguage();
+    const calendarText: string = AppLocalization.format('公历第 {week} 周',
+      new LocalizationValues('week', calendarWeek.toString()), language, language);
+    const teachingText: string = teachingWeek === null ? this.model.text('非教学周') :
+      AppLocalization.format('第 {week} 教学周',
+        new LocalizationValues('week', teachingWeek.toString()), language, language);
+    return calendarText + ' · ' + teachingText;
   }
 
   private statusMessages(): string[] {
@@ -502,7 +525,8 @@ export struct ExpandedTeachingCalendarView {
         .border({ width: 1, color: AppTheme.border() })
         .backgroundColor(AppTheme.background())
       }
-      .width(this.isEnglish() ? 243 : 170)
+      .width(this.model.resolvedLanguage() === AppLanguage.simplifiedChinese ||
+        this.model.resolvedLanguage() === AppLanguage.traditionalChinese ? 170 : 243)
     }
     .width('100%')
     .alignItems(VerticalAlign.Bottom)
@@ -1229,7 +1253,7 @@ export struct ExpandedTeachingCalendarView {
   @Builder
   miniMonth(month: number) {
     Column({ space: 6 }) {
-      Text(CalendarFormatters.monthLabel(month, this.isEnglish()))
+      Text(CalendarFormatters.monthLabel(month, this.model.resolvedLanguage()))
         .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
@@ -1409,11 +1433,11 @@ export struct ExpandedTeachingCalendarView {
       Column({ space: 12 }) {
         Row({ space: 8 }) {
           Column({ space: 2 }) {
-            Text(TeachingCalendarLogic.allDayDialogTitle(mode, this.isEnglish()))
+            Text(TeachingCalendarLogic.allDayDialogTitle(mode, this.model.resolvedLanguage()))
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.text())
-            Text(CalendarFormatters.fullDate(this.allDayDialogDay as DateParts, this.isEnglish()))
+            Text(CalendarFormatters.fullDate(this.allDayDialogDay as DateParts, this.model.resolvedLanguage()))
               .fontSize(12)
               .fontColor(AppTheme.secondaryText())
           }
@@ -1529,7 +1553,7 @@ export struct ExpandedTeachingCalendarView {
           this.dismissYearDay();
         })
       Column({ space: 12 }) {
-        Text(CalendarFormatters.fullDate(this.presentedDay as DateParts, this.isEnglish()))
+        Text(CalendarFormatters.fullDate(this.presentedDay as DateParts, this.model.resolvedLanguage()))
           .fontSize(16)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
@@ -1591,7 +1615,7 @@ export struct ExpandedTeachingCalendarView {
   @Builder
   daySummaryCard(day: DateParts) {
     Column({ space: 8 }) {
-      Text(CalendarFormatters.fullDate(day, this.isEnglish()))
+      Text(CalendarFormatters.fullDate(day, this.model.resolvedLanguage()))
         .fontSize(15)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())

@@ -14,9 +14,9 @@ import org.junit.Test
 
 class ScheduleLogicTest {
     @Test
-    fun appLanguagePreferenceOffersSystemChineseAndEnglish() {
+    fun appLanguagePreferenceOffersSystemAndAllThirteenSupportedLanguages() {
         assertEquals(
-            listOf("system", "zh-Hans", "en"),
+            listOf("system", "zh-Hans", "zh-Hant", "en", "ja", "es", "pt", "ar", "ru", "tr", "th", "ms", "vi", "id"),
             AppLanguage.entries.map(AppLanguage::code),
         )
     }

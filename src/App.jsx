@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import QmplusLoginSettings from './QmplusLoginSettings.jsx'
+import {uiFormat} from './ui-text.js'
+import {useLanguageTransition} from './use-language-transition.js'
 import {
   AlertTriangle,
   BellRing,
@@ -124,6 +127,8 @@ import CourseHub from './CourseHub.jsx'
 import ColorThemeSettings, { useColorTheme } from './ColorThemeSettings.jsx'
 import { colorThemeHeatmap, resolvedColorTheme } from './color-themes.js'
 import './App.css'
+import uiCatalogs from './ui-catalogs.generated.json'
+import { UI_LANGUAGES, uiDirection, uiDateLocale, localizedWeek } from './ui-languages.js'
 
 const NAV_ITEMS = [
   { id: 'planner', label: '空教室', Icon: Home },
@@ -451,8 +456,8 @@ const EN_TEXT_PREFIXES = Object.freeze({
 function translator(language) {
   return (text, values = {}) => {
     let template = text
-    if (language === 'en') {
-      template = EN_TEXT[text] || text
+    if (language !== 'zh-Hans') {
+      template = uiCatalogs[language]?.[text] || EN_TEXT[text] || text
       if (template === text) {
         for (const [prefix, translated] of Object.entries(EN_TEXT_PREFIXES)) {
           if (text.startsWith(prefix)) {
@@ -516,7 +521,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: 'QMplus 独立连接 / Independent QMplus connection',
-    body: 'QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在自己的隔离 incognito 窗口打开官方 QMplus 页面，由用户直接完成 SSO／Microsoft MFA；应用没有 Microsoft 密码输入框，也不读取系统浏览器 Cookie。只读同步脚本返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业或开始测验，也不经过第三方 Worker 或本项目服务器。Windows/Linux 的会话与业务快照仅在进程内存中；部分同步失败会保留明确标注的上次资料。断开连接或清除本地数据会删除应用管理的会话与快照；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按其政策处理登录信息及网络元数据。\n\nQMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in its own isolated incognito window, where you complete SSO/Microsoft MFA directly. The app has no Microsoft password field and reads no system-browser cookies. Its read-only script returns a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML. It does not submit work, start quizzes, use a third-party Worker, or send data to this project’s server. On Windows/Linux the session and snapshot remain only in process memory; genuine partial failures retain clearly labelled prior data. Disconnecting or clearing local data removes the app-managed session and snapshot; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies.',
+    body: 'QMplus 与教务账号独立，使用应用自己的隔离官方网页登录会话，不读取系统浏览器 Cookie。默认不保存密码；可在独立 QMplus 设置中明确选择系统安全保存和自动填写，Windows 使用 Credential Manager、Linux 使用 Secret Service，无安全存储时不退回明文。授权后仅在已核验的官方 Microsoft 主文档表单尝试普通 Next／Sign in 各一次；MFA、验证码、账号选择、风险或协议仍须手动处理。密码不进入普通设置、业务快照、日志、截图、剪贴板、通知或小组件。关闭自动填写撤销授权；断开并清除或清除本地数据删除独立安全记录，删除失败会提示重试。只读同步仅获取 EBU 课程及已发布 Assignment／Quiz，不请求日历、开始测验、提交作业或访问答案；不使用第三方 Worker，不向本项目服务器上传身份或课程。课程快照在本次进程内保留，真实部分失败保留明确标注的上次资料。官方服务按其政策处理登录信息与网络元数据。\n\nQMplus uses its own isolated official sign-in session, separate from academic credentials, without system-browser cookies. Password saving is off by default. Separate QMplus settings let you explicitly save securely and authorize autofill: Windows Credential Manager or Linux Secret Service, never plaintext fallback. Only verified official Microsoft main-document forms may receive one ordinary Next and Sign in submission each. MFA, CAPTCHA, account selection, risk and terms still require you. Passwords never enter ordinary settings, business snapshots, logs, screenshots, clipboard, notifications or widgets. Turning autofill off revokes authorization; disconnect-and-clear or clearing local data deletes the separate secure record, with failures reported for retry. Read-only synchronization retrieves EBU courses and published Assignment/Quiz information, never calendar, quiz attempts, assignment submissions or answers. No third-party Worker or project server receives identity or course data. Snapshots stay in process memory and genuine partial failures retain clearly labelled prior results. Official services process sign-in and network metadata under their policies.',
   },
   {
     title: '系统日历、通知与小组件 / Calendar, notifications, and widgets',
@@ -714,6 +719,7 @@ function browserPreviewCommand(name, payload = {}) {
       course_reminder_minutes: DEFAULT_SETTINGS.courseReminderMinutes,
       automatic_term_detection_enabled: DEFAULT_SETTINGS.automaticTermDetectionEnabled,
       weather_enabled: DEFAULT_SETTINGS.weatherEnabled,
+      qmplus_enabled: DEFAULT_SETTINGS.qmplusEnabled,
       almanac_enabled: DEFAULT_SETTINGS.almanacEnabled,
       competition_deadlines_enabled: DEFAULT_SETTINGS.competitionDeadlinesEnabled,
       conference_deadlines_enabled: DEFAULT_SETTINGS.conferenceDeadlinesEnabled,
@@ -746,6 +752,7 @@ function browserPreviewCommand(name, payload = {}) {
       course_reminder_minutes: payload.course_reminder_minutes,
       automatic_term_detection_enabled: Boolean(payload.automatic_term_detection_enabled),
       weather_enabled: Boolean(payload.weather_enabled),
+      qmplus_enabled: Boolean(browserPreviewSavedSettings?.qmplus_enabled),
       almanac_enabled: Boolean(payload.almanac_enabled),
       competition_deadlines_enabled: Boolean(payload.competition_deadlines_enabled),
       conference_deadlines_enabled: Boolean(payload.conference_deadlines_enabled),
@@ -755,6 +762,10 @@ function browserPreviewCommand(name, payload = {}) {
       custom_deadlines_enabled: Boolean(payload.custom_deadlines_enabled),
       custom_deadlines_url: String(payload.custom_deadlines_url || '').trim(),
     }
+    return browserPreviewSavedSettings
+  }
+  if (name === 'set_qmplus_enabled') {
+    browserPreviewSavedSettings = { ...browserPreviewCommand('load_saved_settings'), qmplus_enabled: Boolean(payload.enabled) }
     return browserPreviewSavedSettings
   }
   if (name === 'load_saved_schedule' || name === 'load_saved_schedule_for_scope') return previewCourseEdits().schedule
@@ -1216,10 +1227,11 @@ function datePart(value) {
 }
 
 function formatUiCalendarTitle(dateString, view, language) {
-  if (language !== 'en') return formatCalendarTitle(dateString, view)
+  if (language === 'zh-Hans') return formatCalendarTitle(dateString, view)
   const date = dateFromString(dateString)
   if (view === 'year') return String(date.getFullYear())
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat(uiDateLocale(language), {
+    calendar: 'gregory',
     year: 'numeric',
     month: view === 'day' ? 'short' : 'long',
     ...(view === 'day' ? { day: 'numeric' } : {}),
@@ -1227,8 +1239,9 @@ function formatUiCalendarTitle(dateString, view, language) {
 }
 
 function formatUiCourseDate(dateString, language) {
-  if (language !== 'en') return formatCourseDate(dateString)
-  return new Intl.DateTimeFormat('en-US', {
+  if (language === 'zh-Hans') return formatCourseDate(dateString)
+  return new Intl.DateTimeFormat(uiDateLocale(language), {
+    calendar: 'gregory',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -1237,13 +1250,12 @@ function formatUiCourseDate(dateString, language) {
 }
 
 function formatUiTeachingWeek(weekNumber, language) {
-  if (language !== 'en') return formatTeachingWeek(weekNumber)
-  return weekNumber > 0 ? `Teaching week ${weekNumber}` : 'Outside teaching weeks'
+  return localizedWeek('teaching', weekNumber, language)
 }
 
 function formatUiCalendarWeek(dateString, language) {
   const weekNumber = calendarWeekOfYear(dateString)
-  return language === 'en' ? `Calendar week ${weekNumber}` : `公历第 ${weekNumber} 周`
+  return localizedWeek('calendar', weekNumber, language)
 }
 
 function AssignmentDeadlineCard({ date, response, loading, error, onRetry, t }) {
@@ -1578,11 +1590,15 @@ function App() {
     supports_calendar_import: false,
   })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
-  const uiLanguage = resolvedUiLanguage(settings.uiLanguage, navigator.languages?.[0] || navigator.language)
+  const appShellRef = useRef(null)
+  const uiLanguage = resolvedUiLanguage(settings.uiLanguage, navigator.languages || [navigator.language])
+  const languageTransition = useLanguageTransition({rootRef:appShellRef,
+    apply:value=>updateSettingImmediately('uiLanguage',value),currentLanguage:uiLanguage,activePage,
+    resolve:value=>resolvedUiLanguage(value,navigator.languages || [navigator.language])})
   const t = useMemo(() => translator(uiLanguage), [uiLanguage])
-  const uiWeekdayLabels = uiLanguage === 'en'
-    ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    : CALENDAR_WEEKDAYS
+  const uiWeekdayLabels = useMemo(() => Array.from({length:7}, (_, index) =>
+    new Intl.DateTimeFormat(uiDateLocale(uiLanguage), {weekday:'short', timeZone:'UTC'})
+      .format(new Date(Date.UTC(2026, 0, 5 + index)))), [uiLanguage])
   const [queryCampusId, setQueryCampusId] = useState(DEFAULT_SETTINGS.campusId)
   const [calendarDate, setCalendarDate] = useState(localDateString())
   const [calendarView, setCalendarView] = useState('week')
@@ -1622,6 +1638,7 @@ function App() {
   const [settingsSaved, setSettingsSaved] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [qmplusFeatureSaving, setQMplusFeatureSaving] = useState(false)
   const [calendarImportedPath, setCalendarImportedPath] = useState('')
   const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false)
   const [privacyPolicyOpen, setPrivacyPolicyOpen] = useState(false)
@@ -1662,6 +1679,8 @@ function App() {
   const savedCredentialState = useRef({ account: '', hasSavedPassword: false })
   const credentialStateRevision = useRef(0)
   const localDataClearRevision = useRef(0)
+  const qmplusFeatureRevision = useRef(0)
+  const qmplusFeatureWork = useRef(null)
   const privacyTriggerRef = useRef(null)
   const yearClickTimerRef = useRef(null)
   const clearCancelButtonRef = useRef(null)
@@ -1746,7 +1765,8 @@ function App() {
   const calendarScrollSurfaceKey = calendarSurfaceKey(calendarView, calendarDate)
 
   useEffect(() => {
-    document.documentElement.lang = uiLanguage === 'en' ? 'en' : 'zh-Hans'
+    document.documentElement.lang = uiLanguage
+    document.documentElement.dir = uiDirection(uiLanguage)
     void command('set_interface_language', uiLanguage).catch(() => {})
   }, [uiLanguage])
 
@@ -2434,9 +2454,8 @@ function App() {
     const year = dateFromString(calendarDate).getFullYear()
     return Array.from({ length: 12 }, (_, monthIndex) => ({
       monthIndex,
-      label: uiLanguage === 'en'
-        ? new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(year, monthIndex, 1))
-        : `${monthIndex + 1}月`,
+      label: new Intl.DateTimeFormat(uiDateLocale(uiLanguage), {month:'long',calendar:'gregory'})
+        .format(new Date(year, monthIndex, 1)),
       days: buildMiniMonthDays(year, monthIndex),
     }))
   }, [calendarDate, uiLanguage])
@@ -2548,6 +2567,11 @@ function App() {
   }, [classroomsCache, classroomsCacheLoaded, settings.account, settings.hasSavedPassword, settingsLoaded, settingsSaving, todayDate])
 
   function updateSetting(field, value) {
+    if(field==='uiLanguage'){languageTransition.request(value);return}
+    updateSettingImmediately(field,value)
+  }
+
+  function updateSettingImmediately(field, value) {
     setSettingsSaved(false)
     if (['dailyCourseNotificationsEnabled', 'dailyCourseNotificationMinutes', 'courseRemindersEnabled', 'courseReminderMinutes'].includes(field)) {
       setReminderSettingsStatus('')
@@ -2558,6 +2582,28 @@ function App() {
     setSettings((current) => {
       return settingsWithCredentialDraft(current, field, value, savedCredentialState.current)
     })
+  }
+
+  async function setQMplusEnabled(enabled) {
+    if (!settingsLoaded || qmplusFeatureWork.current !== null) return
+    const revision = ++qmplusFeatureRevision.current
+    const clearRevision = localDataClearRevision.current
+    if (!enabled) setSettings(current => ({ ...current, qmplusEnabled: false }))
+    setQMplusFeatureSaving(true)
+    const work = command('set_qmplus_enabled', { enabled })
+    qmplusFeatureWork.current = work
+    try {
+      const saved = await work
+      if (revision === qmplusFeatureRevision.current && clearRevision === localDataClearRevision.current) {
+        setSettings(current => ({ ...current, qmplusEnabled: Boolean(saved.qmplus_enabled) }))
+      }
+    } catch {
+      if (revision === qmplusFeatureRevision.current && clearRevision === localDataClearRevision.current) {
+        setError('无法保存本地偏好。')
+      }
+    } finally {
+      if (qmplusFeatureWork.current === work) { qmplusFeatureWork.current = null; setQMplusFeatureSaving(false) }
+    }
   }
 
   async function saveReminderSettings() {
@@ -2635,7 +2681,7 @@ function App() {
         }))
         return
       }
-      setSettings(nextSettings)
+      setSettings(current => ({ ...nextSettings, qmplusEnabled: current.qmplusEnabled }))
       setMinSeats(Number(nextSettings.defaultMinSeats) || 0)
       setSelectedBuildings([])
       setSettingsSaved(true)
@@ -3753,13 +3799,17 @@ function App() {
   }
 
   async function clearAllLocalData() {
+    languageTransition.cancel()
     await runTask('clear-local-data', async () => {
       const previousSavedCredential = { ...savedCredentialState.current }
       credentialStateRevision.current += 1
       localDataClearRevision.current += 1
+      qmplusFeatureRevision.current += 1
+      setSettings(current => ({ ...current, qmplusEnabled: false }))
       autoFetchedScheduleKey.current = ''
       savedCredentialState.current = { account: '', hasSavedPassword: false }
       try {
+        await qmplusFeatureWork.current?.catch(() => {})
         await command('clear_local_data')
       } catch (clearError) {
         savedCredentialState.current = previousSavedCredential
@@ -3900,7 +3950,7 @@ function App() {
   }
 
   return (
-    <main className="app-shell" lang={uiLanguage === 'en' ? 'en' : 'zh-Hans'}>
+    <main ref={appShellRef} className="app-shell" lang={uiLanguage} dir={uiDirection(uiLanguage)}>
       <div className="app-frame">
         <aside className="side-nav">
           <div className="side-brand">
@@ -4009,6 +4059,7 @@ function App() {
           {activePage === 'courses' ? <CourseHub
             key={`courses:${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`}
             command={command} language={uiLanguage} hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
+            qmplusEnabled={settings.qmplusEnabled}
             examSnapshot={schedule?.exam_schedule} onOpenAccount={()=>setActivePage('settings')}
           /> : null}
 
@@ -4121,14 +4172,14 @@ function App() {
                       disabled={busy}
                       title={busy ? t('个人课表占用') : personalCourseSlot ? t('个人课程时间，已纳入筛选') : t('个人空闲，可筛选教室')}
                     >
-                      <span>{uiLanguage === 'en' ? `Period ${slot.label}` : `第 ${slot.label} 节`}</span>
+                      <span>{uiFormat(uiLanguage, '第 %1$s 节', [slot.label])}</span>
                       <small>{slot.start}-{slot.end}</small>
                     </button>
                   )
                 })}
               </div>
               <p className="muted">
-                {formatUiCalendarWeek(todayDate, uiLanguage)} · {formatUiTeachingWeek(plannerWeekState.weekNumber, uiLanguage)} · {uiLanguage === 'en' ? 'Selected: ' : '选中范围：'}
+                {formatUiCalendarWeek(todayDate, uiLanguage)} · {formatUiTeachingWeek(plannerWeekState.weekNumber, uiLanguage)} · {t('节次筛选')}:
                 {selectedRanges.length ? selectedRanges.map((range) => range.label).join(' / ') : t('未选择')}
               </p>
             </section>
@@ -4191,7 +4242,7 @@ function App() {
                     <article key={room.id} className="room-card">
                       <div>
                         <strong>{displayBuildingName(room.name)}</strong>
-                        <span>{room.size ? (uiLanguage === 'en' ? `${room.size} seats` : `${room.size} 座`) : t('座位未知')}</span>
+                        <span>{room.size ? `${room.size} ${t('座')}` : t('座位未知')}</span>
                       </div>
                       <p>{slotsToRanges(room.available_slots.filter((slot) => selectedSlots.includes(slot)), slotMeta).map((range) => range.label).join(' / ')}</p>
                     </article>
@@ -4304,12 +4355,12 @@ function App() {
                           type="button"
                           className={`time-day-head ${dateString === calendarDate ? 'selected' : ''} ${dateString === todayDate ? 'today' : ''}`}
                           style={{ gridColumn: dayIndex + 3, gridRow: 1 }}
-                          aria-label={`${formatUiCourseDate(dateString, uiLanguage)} · ${dayState.dayCourses.length ? (uiLanguage === 'en' ? `${dayState.dayCourses.length} courses` : `${dayState.dayCourses.length} 门课`) : t('无课程')}`}
+                          aria-label={`${formatUiCourseDate(dateString, uiLanguage)} · ${dayState.dayCourses.length ? uiFormat(uiLanguage, '%d 门课', [dayState.dayCourses.length]) : t('无课程')}`}
                           onClick={() => chooseCalendarDate(dateString)}
                         >
                           <span>{uiWeekdayLabels[(date.getDay() + 6) % 7]}</span>
                           <strong data-mobile-day={date.getDate()}>{date.getMonth() + 1}/{date.getDate()}</strong>
-                          <small>{dayState.dayCourses.length ? (uiLanguage === 'en' ? `${dayState.dayCourses.length} courses` : `${dayState.dayCourses.length} 门课`) : t('无课程')}</small>
+                          <small>{dayState.dayCourses.length ? uiFormat(uiLanguage, '%d 门课', [dayState.dayCourses.length]) : t('无课程')}</small>
                           {dayState.dayCourses.length ? (
                             <div className="calendar-day-tags">
                               <i aria-hidden="true" />
@@ -4378,7 +4429,7 @@ function App() {
                                 <button
                                   type="button"
                                   className="time-all-day-overflow"
-                                  aria-label={uiLanguage === 'en' ? `${summary.hiddenCount} more all-day events on ${dateString}` : `${dateString} 还有 ${summary.hiddenCount} 项全天日程`}
+                                  aria-label={`${formatUiCourseDate(dateString, uiLanguage)} · ${uiFormat(uiLanguage, '查看其余 %lld 项全天日程', [summary.hiddenCount])}`}
                                   onClick={(event) => {
                                     event.stopPropagation()
                                     setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })
@@ -4414,7 +4465,7 @@ function App() {
                         const height = Math.max(((end - start) / ((timelineHours.end - timelineHours.start) * 60)) * 100, 4)
                         return (
                           <span key={slot.index} style={{ top: `${top}%`, height: `${height}%` }}>
-                            <strong>{uiLanguage === 'en' ? `Period ${slot.label}` : `第 ${slot.label} 节`}</strong>
+                            <strong>{uiFormat(uiLanguage, '第 %1$s 节', [slot.label])}</strong>
                             <small>{slot.start}-{slot.end}</small>
                           </span>
                         )
@@ -4511,7 +4562,7 @@ function App() {
                       <div className="desktop-month-weekdays">
                         {uiWeekdayLabels.map((label) => (
                           <span key={label} className="month-weekday">
-                            {uiLanguage === 'en' ? label : `周${label}`}
+                            {label}
                           </span>
                         ))}
                       </div>
@@ -4526,7 +4577,7 @@ function App() {
                         <span key={label} className="month-weekday">
                           <span className="month-weekday-mobile">{label}</span>
                           <span className="month-weekday-desktop">
-                            {uiLanguage === 'en' ? label : `周${label}`}
+                            {label}
                           </span>
                         </span>
                       )) : null}
@@ -4636,9 +4687,7 @@ function App() {
                                 <button
                                   type="button"
                                   className="month-entry-overflow"
-                                  aria-label={uiLanguage === 'en'
-                                    ? `${monthEntrySummary.hiddenCount} more events on ${dateString}`
-                                    : `${dateString} 还有 ${monthEntrySummary.hiddenCount} 项日程`}
+                                  aria-label={`${formatUiCourseDate(dateString, uiLanguage)} · ${t('当日日程')} +${monthEntrySummary.hiddenCount}`}
                                   onClick={(event) => {
                                     event.stopPropagation()
                                     chooseCalendarDate(dateString)
@@ -4651,7 +4700,7 @@ function App() {
                                 >
                                   <span className="month-overflow-mobile">+{monthEntrySummary.hiddenCount}</span>
                                   <span className="month-overflow-desktop">
-                                    +{monthEntrySummary.hiddenCount}{uiLanguage === 'en' ? '' : ' 项'}
+                                    +{monthEntrySummary.hiddenCount}
                                   </span>
                                 </button>
                               ) : null}
@@ -4776,8 +4825,8 @@ function App() {
                                 onDoubleClick={(event) => currentMonth && openDesktopYearMonth(event, dateString)}
                               >
                                 <span>{date.getDate()}</span>
-                                {hasHoliday ? <em>{uiLanguage === 'en' ? 'O' : t('休')}</em> : null}
-                                {hasWorkday ? <em className="workday">{uiLanguage === 'en' ? 'W' : t('班')}</em> : null}
+                                {hasHoliday ? <em>{t('休')}</em> : null}
+                                {hasWorkday ? <em className="workday">{t('班')}</em> : null}
                                 {hasAssignment ? <em className="assignment">{t('作')}</em> : null}
                                 {hasSchoolNotice ? <em className="school-notice">{t('赛')}</em> : null}
                                 {hasPublicDeadline ? <em className={publicDeadlineKind}>D</em> : null}
@@ -4801,7 +4850,7 @@ function App() {
                   >
                     <header className="year-day-popover-header">
                       <span>{formatUiCourseDate(calendarPopover.date, uiLanguage)}</span>
-                      <strong>{uiLanguage === 'en' ? `${calendarPopoverState.dayCourses.length} courses` : `${calendarPopoverState.dayCourses.length} 门课`}</strong>
+                      <strong>{uiFormat(uiLanguage, '%d 门课', [calendarPopoverState.dayCourses.length])}</strong>
                       <small>{formatUiCalendarWeek(calendarPopover.date, uiLanguage)} · {formatUiTeachingWeek(calendarPopoverState.weekNumber, uiLanguage)}</small>
                     </header>
                     <div className="year-day-popover-scroll">
@@ -4885,12 +4934,9 @@ function App() {
 
           {activePage === 'settings' && !favoriteManagerOpen ? (
         <section className="settings-layout">
-          <section className="panel"><div className="panel-title"><BookOpen size={18}/><h2>QMplus</h2></div>
-            <p>{uiLanguage==='en'?'Connect through the official QMplus login and complete SSO/MFA. Microsoft passwords are not stored. Only course and assessment data stays in this app.':'通过 QMplus 官方网页完成 SSO／MFA，不保存微软密码；仅同步课程和活动业务信息到本机。'}</p>
-            <div className="query-action-row"><button onClick={()=>command('connect_qmplus').catch(e=>setError(normalizeError(e)))}><ExternalLink size={16}/>{uiLanguage==='en'?'Connect / sync QMplus':'连接／同步 QMplus'}</button>
-            <button onClick={()=>command('disconnect_qmplus').catch(e=>setError(normalizeError(e)))}>{uiLanguage==='en'?'Disconnect and clear QMplus data':'退出并清除 QMplus 数据'}</button></div>
-            <small>{uiLanguage==='en'?'This isolated session may require sign-in again after closing the login window.':'隔离会话关闭后可能需要重新登录，课程快照在本次应用会话中保留。'}</small>
-          </section>
+          <QmplusLoginSettings language={uiLanguage} command={command} native={hasTauriRuntime()}
+            enabled={settings.qmplusEnabled} onEnabledChange={setQMplusEnabled}
+            featureBusy={qmplusFeatureSaving || !settingsLoaded}/>
           <section className="panel settings-reference-notice" aria-label={t('数据参考提示')}>
             <strong>{t('显示数据仅供参考，请以实际情况为准。')}</strong>
             <span>{uiLanguage === 'en' ? '显示数据仅供参考，请以实际情况为准。' : 'Displayed data is for reference only; please rely on the actual official information.'}</span>
@@ -5160,20 +5206,14 @@ function App() {
 
           <section className="panel settings-language">
             <div className="panel-title"><Settings size={18} /><h2>{t('界面语言')}</h2></div>
-            <div className="language-options" role="group" aria-label={t('界面语言')}>
-              {[
-                ['system', t('跟随系统')],
-                ['zh-Hans', t('简体中文')],
-                ['en', 'English'],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={settings.uiLanguage === value ? 'active' : ''}
-                  onClick={() => updateSetting('uiLanguage', value)}
-                >{label}</button>
-              ))}
-            </div>
+            <label>
+              <span>{t('界面语言')}</span>
+              <select value={settings.uiLanguage} onChange={event => updateSetting('uiLanguage', event.target.value)}
+                      aria-label={t('界面语言')} data-testid="settings-language-picker">
+                <option value="system">{t('跟随系统')}</option>
+                {UI_LANGUAGES.map(({code, name}) => <option key={code} value={code} lang={code}>{name}</option>)}
+              </select>
+            </label>
           </section>
 
           <section className="panel settings-about">
@@ -5321,6 +5361,9 @@ function App() {
           </div>
         </CourseManagementDialog>
       ) : null}
+      <div className={`language-blur-overlay ${languageTransition.overlay.phase}`}
+        data-phase={languageTransition.overlay.phase} data-target-locale={languageTransition.overlay.target || ''}
+        aria-hidden="true"/>
     </main>
   )
 }

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-clear-qmplus-login"
+description = "Enables the clear_qmplus_login command without any pre-configured scope."
+commands.allow = ["clear_qmplus_login"]
+
+[[permission]]
+identifier = "deny-clear-qmplus-login"
+description = "Denies the clear_qmplus_login command without any pre-configured scope."
+commands.deny = ["clear_qmplus_login"]

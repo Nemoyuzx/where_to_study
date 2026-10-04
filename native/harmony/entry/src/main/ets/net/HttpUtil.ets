@@ -10,6 +10,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { UrlPolicy } from './UrlPolicy';
 import { Utf8 } from '../common/Utf8';
 import { NetworkDiagnostics } from './NetworkDiagnostics';
+import { CellularAssist, CellularAssistError } from './CellularAssist';
 
 export class HttpTooLargeError extends Error {
   constructor() {
@@ -19,10 +20,12 @@ export class HttpTooLargeError extends Error {
 
 export class HttpTransportError extends Error {
   readonly code: number;
+  readonly cellularAttempted: boolean;
 
-  constructor(code: number) {
+  constructor(code: number, cellularAttempted: boolean = false) {
     super(NetworkDiagnostics.userMessage(code));
     this.code = code;
+    this.cellularAttempted = cellularAttempted;
   }
 }
 
@@ -45,6 +48,7 @@ export class HttpRequestSpec {
   maxBytes: number = 2 * 1024 * 1024;
   maxRedirects: number = 5;
   addressFamily: http.AddressFamily = http.AddressFamily.DEFAULT;
+  fallbackConsumed: boolean = false;
 
   constructor() {
   }
@@ -79,7 +83,8 @@ export class HttpUtil {
         if (spec.body.length > 0) {
           options.extraData = spec.body;
         }
-        response = await client.request(currentUrl, options);
+        response = await CellularAssist.request(client, currentUrl, options, spec.fallbackConsumed,
+          (): void => { spec.fallbackConsumed = true; });
       } catch (e) {
         const error: BusinessError = e as BusinessError;
         const errorCode: number = typeof error.code === 'number' ? error.code : 0;
@@ -88,7 +93,8 @@ export class HttpUtil {
         hilog.error(0x0000, 'HttpUtil',
           'NetworkKit request failed code=%{public}d msg=%{private}s',
           errorCode, typeof error.message === 'string' ? error.message : '');
-        throw new HttpTransportError(errorCode);
+        throw new HttpTransportError(errorCode,
+          e instanceof CellularAssistError && e.cellularAttempted);
       } finally {
         client.destroy();
       }

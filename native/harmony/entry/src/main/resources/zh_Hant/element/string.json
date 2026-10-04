@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Where To Study HarmonyOS 用戶端主模組" },
+    { "name": "EntryAbility_desc", "value": "查詢空教室與個人課表" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "今日課程" },
+    { "name": "widget_desc", "value": "查看今日課程時間與教室" },
+    { "name": "calendar_read_reason", "value": "用於讀取及同步匯入的個人課程行事曆事件" },
+    { "name": "calendar_write_reason", "value": "用於將個人課表匯入系統行事曆" }
+  ]
+}

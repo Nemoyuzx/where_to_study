@@ -668,6 +668,7 @@ export struct QueryView {
           }, (schedules: ShuttleBusSchedule[]) => this.routeRowKey(schedules, daily))
       }
       .width('100%')
+      .direction(Direction.Ltr)
     }
   }
 
@@ -749,6 +750,7 @@ export struct QueryView {
       .backgroundColor(AppTheme.surface())
       .alignItems(HorizontalAlign.Start)
       .id('query.shuttle.full-timetable')
+      .direction(Direction.Ltr)
     }
   }
 

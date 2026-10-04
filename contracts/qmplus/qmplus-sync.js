@@ -16,6 +16,26 @@
       return courseID ? `${origin}${u.pathname}?id=${courseID}` : null;
     } catch { return null; }
   };
+  // Moodle's assign module also hosts administrative forms. Only this known
+  // mark-review request is excluded; an unpublished due date is not a filter.
+  // Keep this bounded scalar policy in parity with course-domain and native readers.
+  function includesAssessmentActivity(kind, title) {
+    if (kind !== 'assignment' || typeof title !== 'string') return true;
+    let normalized = '', gap = false;
+    for (const scalar of title) {
+      let cp = scalar.codePointAt(0);
+      if (cp >= 0xFF01 && cp <= 0xFF5E) cp -= 0xFEE0;
+      const separator = (cp >= 9 && cp <= 13) || cp === 0x20 || cp === 0x85 || cp === 0xA0 ||
+        cp === 0x1680 || (cp >= 0x2000 && cp <= 0x200A) || cp === 0x2028 || cp === 0x2029 ||
+        cp === 0x202F || cp === 0x205F || cp === 0x3000 || cp === 0xFEFF ||
+        [0x5F, 0x2D, 0x2F, 0x3A, 0x2212].includes(cp) || (cp >= 0x2010 && cp <= 0x2015);
+      if (separator) { gap = normalized.length > 0; continue; }
+      if (gap) normalized += ' ';
+      gap = false;
+      normalized += String.fromCodePoint(cp >= 0x61 && cp <= 0x7A ? cp - 0x20 : cp);
+    }
+    return normalized !== 'COURSEWORK MARK REVIEW REQUEST' && normalized !== 'COURSEWORK MARK REVIEW REQUEST FORM';
+  }
   function currentTermStatus(c, now = Date.now()) {
     const marker = String(c.fullname || c.name || '').match(/(20\d{2})\s*[\/-]\s*(\d{2}|20\d{2})/);
     const year = Number(new Intl.DateTimeFormat('en', {timeZone: 'Europe/London', year: 'numeric'}).format(now));
@@ -72,7 +92,7 @@
     }
     return values;
   }
-  globalThis.WTSQmProtocol = Object.freeze({currentTermStatus, londonDate, safeURL, timingTexts});
+  globalThis.WTSQmProtocol = Object.freeze({currentTermStatus, londonDate, safeURL, timingTexts, includesAssessmentActivity});
   globalThis.WTSQmSync = async function(options = {}) {
     const fetched = new Date().toISOString();
     const result = {schema_version:1, source:'qmplus', fetched_at:fetched, ok:true, partial:false, courses:[], activities:[], warnings:[]};
@@ -151,13 +171,15 @@
           if (!m || typeof m !== 'object') { warn('QM_MODULE_PARTIAL'); continue; }
           if (!['assign','quiz'].includes(m.module)) continue;
           if(!id(m.id)) { warn('QM_MODULE_PARTIAL'); continue; }
-          if (result.activities.length >= 500) { warn('QM_ACTIVITY_LIMIT'); break; }
           const url = safeURL(m.url||`/mod/${m.module}/view.php?id=${m.id}`);
           if (url !== `${origin}/mod/${m.module}/view.php?id=${m.id}`) { warn('QM_MODULE_PARTIAL'); continue; }
+          const kind = m.module === 'assign' ? 'assignment' : 'quiz', title = text(m.name);
+          if (!includesAssessmentActivity(kind, title)) continue;
           if (emitted.has(url)) continue;
+          if (result.activities.length >= 500) { warn('QM_ACTIVITY_LIMIT'); break; }
           emitted.add(url);
           const restricted = m.uservisible === false || m.accessvisible === false || m.visible === false || m.uservisible === 0;
-          const item = {id:String(m.id),course_id:c.id,title:text(m.name),kind:m.module==='assign'?'assignment':'quiz',url,due_at:null,opens_at:null,closes_at:null,cutoff_at:null,time_limit_seconds:null,status:'unknown',detail_status:restricted?'restricted':'unavailable',raw_time_text:''};
+          const item = {id:String(m.id),course_id:c.id,title,kind,url,due_at:null,opens_at:null,closes_at:null,cutoff_at:null,time_limit_seconds:null,status:'unknown',detail_status:restricted?'restricted':'unavailable',raw_time_text:''};
           result.activities.push(item);
         }
       }

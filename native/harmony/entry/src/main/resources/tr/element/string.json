@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "HarmonyOS için Where To Study istemcisi" },
+    { "name": "EntryAbility_desc", "value": "Boş derslikleri ve kişisel ders programını görüntüleyin" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "Bugünkü dersler" },
+    { "name": "widget_desc", "value": "Bugünkü derslerin saatlerini ve sınıflarını görün" },
+    { "name": "calendar_read_reason", "value": "Ders programını eşitlemek için içe aktarılan ders etkinliklerini okuyun" },
+    { "name": "calendar_write_reason", "value": "Kişisel ders programını sistem takvimine ekleyin" }
+  ]
+}

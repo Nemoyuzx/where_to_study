@@ -1,6 +1,8 @@
 // 纯合成快照，不含个人账户、Cookie 或 QMplus 页面正文。
 import { describe, it, expect } from '@ohos/hypium';
-import { QMPlusSnapshotParser, QMPlusURLPolicy } from '../main/ets/net/QMPlusSnapshot';
+import { QMPlusSnapshotParser, QMPlusURLPolicy, QMPlusCourseworkPolicy, QMPlusActivity,
+  QMPlusCourse, QMPlusSnapshot } from '../main/ets/net/QMPlusSnapshot';
+import { CourseQMPlusScope } from '../main/ets/common/CourseLogic';
 import { QMPlusSession } from '../main/ets/view/QMPlusSession';
 
 function syntheticSnapshot(): string {
@@ -13,6 +15,22 @@ function syntheticSnapshot(): string {
     '"due_at":"2026-10-10T12:00:00.000Z","opens_at":null,"closes_at":null,' +
     '"cutoff_at":null,"time_limit_seconds":null,"status":"unknown",' +
     '"detail_status":"available","raw_time_text":""}],"warnings":[]}';
+}
+
+function syntheticCourseworkSnapshot(title: string, kind: string = 'assignment'): string {
+  const root: Record<string, Object> = JSON.parse(syntheticSnapshot()) as Record<string, Object>;
+  const activities: Object[] = root['activities'] as Object[];
+  const item: Record<string, Object> = activities[0] as Record<string, Object>;
+  item['title'] = title;
+  item['kind'] = kind;
+  item['url'] = 'https://qmplus.qmul.ac.uk/mod/' + (kind === 'quiz' ? 'quiz' : 'assign') + '/view.php?id=8';
+  return JSON.stringify(root).replace('"due_at":"2026-10-10T12:00:00.000Z"', '"due_at":null');
+}
+
+function courseworkItem(id: string, title: string, kind: string = 'assignment'): QMPlusActivity {
+  return new QMPlusActivity(id, '7', title, kind,
+    'https://qmplus.qmul.ac.uk/mod/' + (kind === 'quiz' ? 'quiz' : 'assign') + '/view.php?id=' + id,
+    null, null, null, null, null, 'unknown', 'available', '');
 }
 
 export default function qmPlusSnapshotTest() {
@@ -81,6 +99,8 @@ export default function qmPlusSnapshotTest() {
       const second: number = session.beginSync();
       session.completeSync(second, syntheticSnapshot());
       expect(session.snapshot?.activities.length).assertEqual(1);
+      // A validated sync now closes its owner. A later refresh is a new explicit connection.
+      session.openLogin();
       const failed: number = session.beginSync();
       session.completeSync(failed, '{broken');
       expect(session.snapshot?.activities.length).assertEqual(1);
@@ -154,6 +174,7 @@ export default function qmPlusSnapshotTest() {
       const warnings: string[] = ['QM_DETAIL_PARTIAL'];
       partial['activities'] = noActivities;
       partial['warnings'] = warnings;
+      session.openLogin();
       const second: number = session.beginSync();
       session.completeSync(second, JSON.stringify(partial));
       expect(session.snapshot?.partial).assertFalse();
@@ -168,6 +189,76 @@ export default function qmPlusSnapshotTest() {
       expect(firstConnect.snapshot?.partial).assertTrue();
       expect(firstConnect.snapshot?.activities.length).assertEqual(0);
       expect(firstConnect.showingStalePartial).assertFalse();
+    });
+
+    it('only_exact_mark_review_assignment_titles_are_administrative_with_conservative_normalization', 0, () => {
+      for (const title of ['COURSEWORK MARK REVIEW REQUEST', ' coursework\tmark  review\nrequest ',
+        'Coursework-Mark/Review_Request:Form', 'COURSEWORK\u0085MARK\u202FREVIEW\u00A0REQUEST',
+        'COURSEWORK\u2010MARK\u2011REVIEW\u2012REQUEST\u2015FORM', 'COURSEWORK\u2212MARK REVIEW REQUEST',
+        '\uFEFFＣＯＵＲＳＥＷＯＲＫ　ＭＡＲＫ　ＲＥＶＩＥＷ　ＲＥＱＵＥＳＴ　ＦＯＲＭ\uFEFF']) {
+        expect(QMPlusCourseworkPolicy.isMarkReviewRequest('assignment', title)).assertTrue();
+        expect(QMPlusCourseworkPolicy.isMarkReviewRequest('quiz', title)).assertFalse();
+      }
+      for (const title of ['Essay: Coursework Mark Review Request', 'Coursework Mark Review Request Essay',
+        'Coursework Mark Review Request Formative Essay', 'Coursework Mark Review Requests',
+        'Coursework Mark Review', 'Peer review assignment', 'Feedback report',
+        'Coursework Mark Review Request (Form)', 'Coursework.Mark.Review.Request']) {
+        expect(QMPlusCourseworkPolicy.isMarkReviewRequest('assignment', title)).assertFalse();
+      }
+    });
+
+    it('validated_snapshot_filters_only_administrative_assignments_and_keeps_real_undated_work_and_same_named_quiz', 0, () => {
+      const title: string = 'COURSEWORK MARK REVIEW REQUEST';
+      expect(QMPlusSnapshotParser.parse(syntheticCourseworkSnapshot(title)).activities.length).assertEqual(0);
+      const undated: QMPlusSnapshot = QMPlusSnapshotParser.parse(syntheticCourseworkSnapshot('Real undated assignment'));
+      expect(undated.activities.length).assertEqual(1);
+      expect(undated.activities[0].dueAt).assertNull();
+      const quiz: QMPlusSnapshot = QMPlusSnapshotParser.parse(syntheticCourseworkSnapshot(title, 'quiz'));
+      expect(quiz.activities.length).assertEqual(1);
+      expect(quiz.activities[0].title).assertEqual(title);
+    });
+
+    it('legacy_display_counts_and_partial_retention_share_the_same_coursework_filter', 0, () => {
+      const courses: QMPlusCourse[] = [new QMPlusCourse('7', 'EBU Synthetic', 'SC', null, null, null, 'current')];
+      const real: QMPlusActivity = courseworkItem('11', 'Real undated assignment');
+      const quiz: QMPlusActivity = courseworkItem('12', 'COURSEWORK MARK REVIEW REQUEST', 'quiz');
+      const review: QMPlusActivity = courseworkItem('13', 'Coursework-Mark/Review_Request:Form');
+      const warnings: string[] = [];
+      const original: QMPlusSnapshot = new QMPlusSnapshot('2026-10-03T10:00:00.000Z', false,
+        courses, [real, quiz, review], warnings);
+      expect(original.activities.length).assertEqual(2);
+      // Emulate a previously accepted cache made before the title exclusion;
+      // the shared presentation scope also protects retained old snapshots.
+      original.activities.push(review);
+      const visible: QMPlusActivity[] = CourseQMPlusScope.currentActivities(original);
+      expect(visible.length).assertEqual(2);
+      expect(visible[0].id).assertEqual('11');
+      expect(visible[1].id).assertEqual('12');
+      expect(visible[0].dueAt).assertNull();
+      const session: QMPlusSession = new QMPlusSession((): void => {});
+      session.snapshot = original;
+      session.openLogin();
+      session.completeSync(session.beginSync(), syntheticCourseworkSnapshot('COURSEWORK MARK REVIEW REQUEST')
+        .replace('"partial":false', '"partial":true'));
+      expect(session.showingStalePartial).assertTrue();
+      expect(session.snapshot?.fetchedAt).assertEqual(original.fetchedAt);
+      expect(CourseQMPlusScope.currentActivities(session.snapshot).length).assertEqual(2);
+      session.dispose();
+    });
+
+    it('an_excluded_title_cannot_skip_link_time_identity_duplicate_or_warning_validation', 0, () => {
+      const valid: string = syntheticCourseworkSnapshot('COURSEWORK MARK REVIEW REQUEST');
+      const duplicate: Record<string, Object> = JSON.parse(valid) as Record<string, Object>;
+      const items: Object[] = duplicate['activities'] as Object[];
+      items.push(JSON.parse(JSON.stringify(items[0])) as Object);
+      let rejected: number = 0;
+      for (const raw of [valid.replace('qmplus.qmul.ac.uk/mod/assign', 'evil.test/mod/assign'),
+        valid.replace('"due_at":null', '"due_at":"invalid"'),
+        valid.replace('"course_id":"7"', '"course_id":"999"'),
+        valid.replace('"warnings":[]', '"warnings":["invalid-warning"]'), JSON.stringify(duplicate)]) {
+        try { QMPlusSnapshotParser.parse(raw); } catch (e) { rejected++; }
+      }
+      expect(rejected).assertEqual(5);
     });
   });
 }

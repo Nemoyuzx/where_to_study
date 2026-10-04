@@ -122,6 +122,17 @@ export default function todayCourseWidgetDataTest() {
       expect(String(data['course1Name'])).assertEqual('In progress · 高等数学');
     });
 
+    it('traditional_chinese_widget_copy_keeps_raw_course_names_and_beijing_week_order', 0, () => {
+      const data: Record<string, Object> = TodayCourseWidgetData.binding(
+        archive(), new WidgetCoursePreferences(true, true, 4, AppLanguage.traditionalChinese),
+        new DateParts(2026, 3, 2), 8 * 60 + 30);
+      expect(String(data['todayTitle'])).assertEqual('今日課程');
+      expect(String(data['dateContext'])).assertEqual('3/2 · 週一 · 第1週');
+      expect(String(data['statusText'])).assertEqual('進行中 · 09:35 下課');
+      expect(String(data['course1Name'])).assertEqual('進行中 · 高等数学');
+      expect(String(data['course3Group'])).assertEqual('明日 · 3/3 · 第1週');
+    });
+
     it('preview_archive_contains_sample_courses', 0, () => {
       const preview: WidgetArchive = TodayCourseWidgetData.previewArchive();
       expect(preview.courses.length).assertEqual(6);

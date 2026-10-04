@@ -19,15 +19,23 @@ use crate::error::{ServiceError, ServiceResult};
     target_os = "windows",
     target_os = "linux"
 ))]
-const SERVICE_NAME: &str = "com.nemoyu.wheretostudy";
-#[cfg(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "android",
-    target_os = "windows",
-    target_os = "linux"
-))]
+const SERVICE_NAME: &str = if cfg!(debug_assertions) {
+    match option_env!("WTS_QA_CREDENTIAL_SERVICE") {
+        Some(service) => service,
+        None => "com.nemoyu.wheretostudy",
+    }
+} else {
+    "com.nemoyu.wheretostudy"
+};
 const ENTRY_NAME: &str = "default-account";
+
+pub fn load() -> ServiceResult<Option<Credentials>> {
+    load_named(ENTRY_NAME)
+}
+
+pub fn save(credentials: &Credentials) -> ServiceResult<()> {
+    save_named(credentials, ENTRY_NAME)
+}
 
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Credentials {
@@ -62,14 +70,14 @@ impl std::fmt::Debug for Credentials {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub fn load() -> ServiceResult<Option<Credentials>> {
+pub(crate) fn load_named(entry_name: &str) -> ServiceResult<Option<Credentials>> {
     use security_framework::passwords::{generic_password, PasswordOptions};
     use security_framework_sys::base::errSecItemNotFound;
 
     let payload = Zeroizing::new(
         match generic_password(PasswordOptions::new_generic_password(
             SERVICE_NAME,
-            ENTRY_NAME,
+            entry_name,
         )) {
             Ok(payload) => payload,
             Err(error) if error.code() == errSecItemNotFound => return Ok(None),
@@ -82,12 +90,12 @@ pub fn load() -> ServiceResult<Option<Credentials>> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub fn save(credentials: &Credentials) -> ServiceResult<()> {
+pub(crate) fn save_named(credentials: &Credentials, entry_name: &str) -> ServiceResult<()> {
     use security_framework::passwords::{delete_generic_password, set_generic_password};
     use security_framework_sys::base::errSecItemNotFound;
 
     if credentials.account.is_empty() && credentials.password.is_empty() {
-        return match delete_generic_password(SERVICE_NAME, ENTRY_NAME) {
+        return match delete_generic_password(SERVICE_NAME, entry_name) {
             Ok(()) => Ok(()),
             Err(error) if error.code() == errSecItemNotFound => Ok(()),
             Err(error) => Err(ServiceError::new(format!("无法清除系统凭据存储：{error}"))),
@@ -98,24 +106,24 @@ pub fn save(credentials: &Credentials) -> ServiceResult<()> {
         serde_json::to_vec(credentials)
             .map_err(|error| ServiceError::new(format!("无法序列化账户凭据：{error}")))?,
     );
-    set_generic_password(SERVICE_NAME, ENTRY_NAME, &payload)
+    set_generic_password(SERVICE_NAME, entry_name, &payload)
         .map_err(|error| ServiceError::new(format!("无法写入系统凭据存储：{error}")))
 }
 
 #[cfg(target_os = "android")]
-fn android_entry() -> ServiceResult<keyring_core::Entry> {
+fn android_entry(entry_name: &str) -> ServiceResult<keyring_core::Entry> {
     use keyring_core::api::CredentialStoreApi;
 
     let store = android_native_keyring_store::Store::new()
         .map_err(|error| ServiceError::new(format!("无法访问 Android Keystore：{error}")))?;
     store
-        .build(SERVICE_NAME, ENTRY_NAME, None)
+        .build(SERVICE_NAME, entry_name, None)
         .map_err(|error| ServiceError::new(format!("无法创建 Android 凭据记录：{error}")))
 }
 
 #[cfg(target_os = "android")]
-pub fn load() -> ServiceResult<Option<Credentials>> {
-    let payload = Zeroizing::new(match android_entry()?.get_secret() {
+pub(crate) fn load_named(entry_name: &str) -> ServiceResult<Option<Credentials>> {
+    let payload = Zeroizing::new(match android_entry(entry_name)?.get_secret() {
         Ok(payload) => payload,
         Err(keyring_core::Error::NoEntry) => return Ok(None),
         Err(error) => return Err(ServiceError::new(format!("无法读取 Android 凭据：{error}"))),
@@ -126,8 +134,8 @@ pub fn load() -> ServiceResult<Option<Credentials>> {
 }
 
 #[cfg(target_os = "android")]
-pub fn save(credentials: &Credentials) -> ServiceResult<()> {
-    let entry = android_entry()?;
+pub(crate) fn save_named(credentials: &Credentials, entry_name: &str) -> ServiceResult<()> {
+    let entry = android_entry(entry_name)?;
     if credentials.account.is_empty() && credentials.password.is_empty() {
         return match entry.delete_credential() {
             Ok(()) | Err(keyring_core::Error::NoEntry) => Ok(()),
@@ -145,7 +153,7 @@ pub fn save(credentials: &Credentials) -> ServiceResult<()> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn load() -> ServiceResult<Option<Credentials>> {
+pub(crate) fn load_named(entry_name: &str) -> ServiceResult<Option<Credentials>> {
     use std::{ptr, slice};
     use windows_sys::Win32::Foundation::{GetLastError, ERROR_NOT_FOUND};
     use windows_sys::Win32::Security::Credentials::{
@@ -172,7 +180,7 @@ pub fn load() -> ServiceResult<Option<Credentials>> {
         }
     }
 
-    let target_name = wide_string(&format!("{SERVICE_NAME}/{ENTRY_NAME}"));
+    let target_name = wide_string(&format!("{SERVICE_NAME}/{entry_name}"));
     let mut raw_credential: *mut CREDENTIALW = ptr::null_mut();
     if unsafe {
         CredReadW(
@@ -208,14 +216,14 @@ pub fn load() -> ServiceResult<Option<Credentials>> {
 }
 
 #[cfg(target_os = "windows")]
-pub fn save(credentials: &Credentials) -> ServiceResult<()> {
+pub(crate) fn save_named(credentials: &Credentials, entry_name: &str) -> ServiceResult<()> {
     use windows_sys::Win32::Foundation::{GetLastError, ERROR_NOT_FOUND};
     use windows_sys::Win32::Security::Credentials::{
         CredDeleteW, CredWriteW, CREDENTIALW, CRED_MAX_CREDENTIAL_BLOB_SIZE,
         CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
     };
 
-    let mut target_name = wide_string(&format!("{SERVICE_NAME}/{ENTRY_NAME}"));
+    let mut target_name = wide_string(&format!("{SERVICE_NAME}/{entry_name}"));
     if credentials.account.is_empty() && credentials.password.is_empty() {
         if unsafe { CredDeleteW(target_name.as_ptr(), CRED_TYPE_GENERIC, 0) } != 0 {
             return Ok(());
@@ -238,7 +246,7 @@ pub fn save(credentials: &Credentials) -> ServiceResult<()> {
     if payload_size > CRED_MAX_CREDENTIAL_BLOB_SIZE {
         return Err(ServiceError::new("账户凭据超过 Windows 凭据管理器容量限制"));
     }
-    let mut user_name = wide_string(ENTRY_NAME);
+    let mut user_name = wide_string(entry_name);
     let credential = CREDENTIALW {
         Type: CRED_TYPE_GENERIC,
         TargetName: target_name.as_mut_ptr(),
@@ -266,10 +274,10 @@ fn wide_string(value: &str) -> Vec<u16> {
 }
 
 #[cfg(target_os = "linux")]
-pub fn load() -> ServiceResult<Option<Credentials>> {
+pub(crate) fn load_named(entry_name: &str) -> ServiceResult<Option<Credentials>> {
     use keyring::Entry;
 
-    let entry = Entry::new(SERVICE_NAME, ENTRY_NAME)
+    let entry = Entry::new(SERVICE_NAME, entry_name)
         .map_err(|error| ServiceError::new(format!("无法访问系统凭据存储：{error}")))?;
     let payload = match entry.get_password() {
         Ok(payload) => payload,
@@ -283,10 +291,10 @@ pub fn load() -> ServiceResult<Option<Credentials>> {
 }
 
 #[cfg(target_os = "linux")]
-pub fn save(credentials: &Credentials) -> ServiceResult<()> {
+pub(crate) fn save_named(credentials: &Credentials, entry_name: &str) -> ServiceResult<()> {
     use keyring::Entry;
 
-    let entry = Entry::new(SERVICE_NAME, ENTRY_NAME)
+    let entry = Entry::new(SERVICE_NAME, entry_name)
         .map_err(|error| ServiceError::new(format!("无法访问系统凭据存储：{error}")))?;
     if credentials.account.is_empty() && credentials.password.is_empty() {
         return match entry.delete_credential() {
@@ -312,7 +320,7 @@ pub fn save(credentials: &Credentials) -> ServiceResult<()> {
     not(target_os = "android"),
     not(target_os = "ios")
 ))]
-pub fn load() -> ServiceResult<Option<Credentials>> {
+pub(crate) fn load_named(_entry_name: &str) -> ServiceResult<Option<Credentials>> {
     Err(ServiceError::new("当前平台尚未提供系统级安全凭据存储"))
 }
 
@@ -323,7 +331,7 @@ pub fn load() -> ServiceResult<Option<Credentials>> {
     not(target_os = "android"),
     not(target_os = "ios")
 ))]
-pub fn save(_credentials: &Credentials) -> ServiceResult<()> {
+pub(crate) fn save_named(_credentials: &Credentials, _entry_name: &str) -> ServiceResult<()> {
     Err(ServiceError::new("当前平台尚未提供系统级安全凭据存储"))
 }
 

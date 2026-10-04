@@ -64,12 +64,32 @@ struct QMplusCourseSelection: Equatable, Sendable {
         course.name.range(of: "EBU", options: [.anchored, .caseInsensitive]) != nil
     }
 
+    static func includesActivity(_ activity: QMplusActivity) -> Bool {
+        guard activity.kind == .assignment else { return true }
+        var title = "", pendingSpace = false
+        for scalar in activity.title.unicodeScalars {
+            var code = scalar.value
+            if (0xFF01...0xFF5E).contains(code) { code -= 0xFEE0 }
+            switch code {
+            case 0x09...0x0D, 0x20, 0x85, 0xA0, 0x1680, 0x2000...0x200A,
+                 0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF,
+                 0x5F, 0x2D, 0x2F, 0x3A, 0x2010...0x2015, 0x2212:
+                pendingSpace = !title.isEmpty
+            default:
+                if pendingSpace { title.append(" "); pendingSpace = false }
+                if (0x61...0x7A).contains(code) { code -= 0x20 }
+                title.unicodeScalars.append(UnicodeScalar(code)!)
+            }
+        }
+        return title != "COURSEWORK MARK REVIEW REQUEST" && title != "COURSEWORK MARK REVIEW REQUEST FORM"
+    }
+
     init(snapshot: QMplusSnapshot, showsOtherTerms: Bool) {
         courses = snapshot.courses.filter {
             Self.includesCourse($0) && (showsOtherTerms || $0.currentTermStatus != .other)
         }
         let courseIDs = Set(courses.map(\.id))
-        activities = snapshot.activities.filter { courseIDs.contains($0.courseID) }
+        activities = snapshot.activities.filter { courseIDs.contains($0.courseID) && Self.includesActivity($0) }
     }
 }
 
@@ -125,6 +145,10 @@ enum QMplusSnapshotPolicy {
                 && ["available", "restricted", "unavailable"].contains(activity.detailStatus)
                 && (activity.timeLimitSeconds.map { $0 >= 0 } ?? true)
         }), snapshot.warnings.allSatisfy({ $0.utf16.count <= 1000 }) else { throw QMplusSnapshotError.invalidSnapshot }
-        return snapshot
+        // Validate the complete DTO first, including the administrative item.
+        // Filtering must never turn a malformed or unsafe payload into success.
+        return QMplusSnapshot(schemaVersion: snapshot.schemaVersion, source: snapshot.source, fetchedAt: snapshot.fetchedAt,
+            courses: snapshot.courses, activities: snapshot.activities.filter(QMplusCourseSelection.includesActivity),
+            warnings: snapshot.warnings)
     }
 }

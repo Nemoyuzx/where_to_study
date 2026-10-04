@@ -250,9 +250,8 @@ class LanguageSessionUiTest {
                 scenario.onActivity { activity ->
                     original = activity
                     activity.findViewById<View>(R.id.navigation_settings).performClick()
-                    val selector = activity.findViewById<View>(R.id.settings_language_selector)
-                    uiDescendants(selector).filterIsInstance<TextView>().first { it.text.toString() == "English" }.performClick()
-                    uiDescendants(selector).filterIsInstance<TextView>().first { it.text.toString() == "简体中文" }.performClick()
+                    selectInterfaceLanguage(activity, AppLanguage.ENGLISH)
+                    selectInterfaceLanguage(activity, AppLanguage.SIMPLIFIED_CHINESE)
                     // Observe beyond the bounded commit delay; this is an owner
                     // cancellation assertion, not a rendering performance test.
                     activity.window.decorView.postDelayed({ reversalSettled.countDown() }, 300)
@@ -265,8 +264,7 @@ class LanguageSessionUiTest {
                 }
                 val navigationSettled = java.util.concurrent.CountDownLatch(1)
                 scenario.onActivity { activity ->
-                    val selector = activity.findViewById<View>(R.id.settings_language_selector)
-                    uiDescendants(selector).filterIsInstance<TextView>().first { it.text.toString() == "English" }.performClick()
+                    selectInterfaceLanguage(activity, AppLanguage.ENGLISH)
                     activity.findViewById<View>(R.id.navigation_query).performClick()
                     activity.window.decorView.postDelayed({ navigationSettled.countDown() }, 300)
                 }
@@ -284,13 +282,24 @@ class LanguageSessionUiTest {
     }
 
     private fun field(root: View, tag: String): EditText = root.findViewWithTag(tag)
+    private fun selectInterfaceLanguage(activity: MainActivity, language: AppLanguage) {
+        assertTrue(activity.findViewById<View>(R.id.settings_language_selector).performClick())
+        val page = checkNotNull(MainActivity::class.java.getDeclaredField("settingsPage")
+            .apply { isAccessible = true }.get(activity))
+        val dialog = checkNotNull(page.javaClass.getDeclaredField("languagePickerDialog")
+            .apply { isAccessible = true }.get(page)) as android.app.AlertDialog
+        assertTrue(dialog.isShowing)
+        assertEquals(14, dialog.listView.adapter.count)
+        val position = AppLanguage.entries.indexOf(language)
+        assertTrue(dialog.listView.performItemClick(null, position, dialog.listView.adapter.getItemId(position)))
+    }
     private fun session(activity: MainActivity): Any = checkNotNull(MainActivity::class.java.getDeclaredMethod("getActivitySession")
         .apply { isAccessible = true }.invoke(activity))
     private fun awaitLanguage(scenario: ActivityScenario<MainActivity>, language: AppLanguage) {
         val deadline = SystemClock.elapsedRealtime() + 5_000
         var ready = false
         while (!ready && SystemClock.elapsedRealtime() < deadline) {
-            scenario.onActivity { ready = AppLocale.isEnglish(it) == (language == AppLanguage.ENGLISH) }
+            scenario.onActivity { ready = AppLocale.resolvedLanguage(it) == language }
             if (!ready) SystemClock.sleep(10)
         }
         assertTrue("The recreated Activity must use the requested localized Context", ready)

@@ -96,9 +96,9 @@ export class MobileCalendarTimelineLayout {
       MobileCalendarTimelineLayout.expandedVisibleAllDayEventCount(eventCount), 0);
   }
 
-  static expandedDayHeaderTitle(day: DateParts, english: boolean): string {
+  static expandedDayHeaderTitle(day: DateParts, language: AppLanguage | boolean): string {
     return day.month.toString() + '/' + day.day.toString() + ' ' +
-      CalendarFormatters.weekdayLabel(day, english);
+      CalendarFormatters.weekdayLabel(day, language);
   }
 
 }
@@ -117,10 +117,6 @@ export struct ExpandedCalendarTimelineDayHeaderView {
   private dayWidthValue(): number {
     return MobileCalendarTimelineLayout.fittedDayWidth(
       this.dayAreaWidth, Math.max(this.days.length, 1));
-  }
-
-  private isEnglish(): boolean {
-    return this.model.resolvedLanguage() === AppLanguage.english;
   }
 
   build() {
@@ -158,7 +154,7 @@ export struct ExpandedCalendarTimelineDayHeaderView {
 
       ForEach(this.days, (day: CalendarTimelineDay, index: number) => {
         Column({ space: 5 }) {
-          Text(MobileCalendarTimelineLayout.expandedDayHeaderTitle(day.date, this.isEnglish()))
+          Text(MobileCalendarTimelineLayout.expandedDayHeaderTitle(day.date, this.model.resolvedLanguage()))
             .fontSize(10)
             .fontWeight(FontWeight.Bold)
             .fontColor(day.date.equals(this.selectedDate) ? AppTheme.onPrimary() : AppTheme.text())
@@ -335,10 +331,6 @@ export struct MobileCalendarTimelineView {
       }
     }
     return false;
-  }
-
-  private isEnglish(): boolean {
-    return this.model.resolvedLanguage() === AppLanguage.english;
   }
 
   // 为各天一次计算课程布局（BUG-046 修复）。

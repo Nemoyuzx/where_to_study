@@ -70,6 +70,7 @@ final class MobileYearMonthGridUIView: UIView {
 
     init() {
         super.init(frame: .zero)
+        semanticContentAttribute = .forceLeftToRight
         isOpaque = false
         backgroundColor = .clear
         // Offsets change while paging; retain the existing backing instead of
@@ -97,7 +98,7 @@ final class MobileYearMonthGridUIView: UIView {
         let activationChanged = active != grid.active
         if content?.resourceName != next.resourceName {
             weekdayLabels = ["一", "二", "三", "四", "五", "六", "日"].map {
-                AppLocalization.string($0, language: grid.language)
+                AppLocalization.weekdaySymbol(for: $0, language: grid.language)
             }
         }
         content = next

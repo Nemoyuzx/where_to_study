@@ -16,7 +16,8 @@ internal object CourseDirectoryLogic {
         counts(teachingCloudAssignments(courseID, items)?.map { it.id to it.status })
 
     fun qmplusCounts(courseID: String, items: List<QmplusActivityItem>): CourseSubmissionCounts =
-        counts(items.filter { it.courseID == courseID && it.kind == "assignment" }.map { it.id to it.status })
+        counts(QmplusCourseworkPolicy.activities(items)
+            .filter { it.courseID == courseID && it.kind == "assignment" }.map { it.id to it.status })
 
     private fun counts(items: List<Pair<String, String?>>?): CourseSubmissionCounts {
         var pendingCount = 0; var submittedCount = 0

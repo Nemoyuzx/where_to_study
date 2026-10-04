@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"Sedang membaca pengumuman terbaru bagian logistik dan jadwal yang kini berlaku."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"Akar JSON jadwal khusus harus berupa objek."</string>
     <string name="ui_generated_ff93bd2c081d35">"Buka daftar tugas Teaching Cloud di peramban"</string>
+    <string name="ui_generated_1a78803a506cc4">"Aktifkan QMplus"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"Hanya untuk Fakultas Internasional"</string>
+    <string name="ui_generated_dba3ae91be2408">"Tidak dapat menyimpan preferensi lokal."</string>
     <string name="ui_generated_c51e74da2b9b1b">"Di macOS, pilih jaringan yang tersedia atau Hotspot Pribadi di Pengaturan Sistem. Aplikasi ini tidak menyediakan sakelar untuk memaksa penggunaan data seluler atau dua jaringan sekaligus."</string>
     <string name="ui_generated_a8cb7a7cb858cf">"Pengisian otomatis QMplus dihentikan. Selesaikan proses masuk atau verifikasi secara manual di situs resmi."</string>
     <string name="ui_generated_8ff421866994b1">"Komponen pengisian otomatis QMplus tidak tersedia. Masuk secara manual."</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"Sedang mengisi akun masuk QMplus pada halaman resmi…"</string>
     <string name="ui_generated_1a61edb546454e">"Sedang membuka halaman masuk SSO resmi QMplus…"</string>
     <string name="ui_generated_a16987f886401d">"Bantuan jaringan sistem"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"Hanya pada laman masuk resmi yang telah diverifikasi, aplikasi dapat memilih akun yang cocok persis dengan akun tersimpan dan mengisi nama pengguna serta kata sandi, dengan paling banyak satu upaya per langkah. Pemilihan akun yang tidak cocok, MFA, CAPTCHA, tetap masuk, serta konfirmasi risiko dan ketentuan tetap memerlukan tindakan Anda."</string>
+    <string name="ui_generated_fd4480c6c08ea3">"Menonaktifkan “Aktifkan QMplus” hanya menjeda koneksi dan sinkronisasi; informasi masuk tersimpan, sesi, dan cache mata kuliah tetap disimpan. Gunakan kontrol terpisah untuk mematikan isi otomatis, menghapus informasi masuk, atau memutus koneksi dan menghapus data."</string>
 </resources>

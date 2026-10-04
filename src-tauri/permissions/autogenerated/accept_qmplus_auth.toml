@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-accept-qmplus-auth"
+description = "Enables the accept_qmplus_auth command without any pre-configured scope."
+commands.allow = ["accept_qmplus_auth"]
+
+[[permission]]
+identifier = "deny-accept-qmplus-auth"
+description = "Denies the accept_qmplus_auth command without any pre-configured scope."
+commands.deny = ["accept_qmplus_auth"]

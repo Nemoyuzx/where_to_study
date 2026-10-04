@@ -10,9 +10,13 @@ STRICT_SWIFT_SETTINGS=(
   SWIFT_STRICT_CONCURRENCY=complete
   SWIFT_TREAT_WARNINGS_AS_ERRORS=YES
 )
+IOS_TEST_SIMULATOR_STARTED=false
 
 shutdown_test_simulators() {
-  xcrun simctl shutdown all >/dev/null 2>&1 || true
+  # Do not shut down user simulators or another task's devices.
+  if [[ "$IOS_TEST_SIMULATOR_STARTED" == true && -n "${IOS_SIMULATOR_UDID:-}" ]]; then
+    xcrun simctl shutdown "$IOS_SIMULATOR_UDID" >/dev/null 2>&1 || true
+  fi
 }
 
 select_ios_simulator_udid() {
@@ -42,6 +46,9 @@ trap shutdown_test_simulators EXIT
 
 "$ROOT_DIR/scripts/native-apple-generate.sh"
 IOS_SIMULATOR_UDID="$(select_ios_simulator_udid)"
+if ! xcrun simctl list devices booted | grep -Fq "$IOS_SIMULATOR_UDID"; then
+  IOS_TEST_SIMULATOR_STARTED=true
+fi
 
 xcodebuild \
   -project "$PROJECT" \

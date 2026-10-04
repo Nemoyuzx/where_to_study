@@ -23,7 +23,7 @@ import {
   AssignmentDeadlineItem, PublicDeadlineItem, PublicDeadlineKindInfo, PublicDeadlineSource
 } from '../../net/CalendarDailyInfoClient';
 import { vibrator } from '@kit.SensorServiceKit';
-import { AppLanguage } from '../../common/AppLocalization';
+import { AppLanguage, AppLocalization, LocalizationValues } from '../../common/AppLocalization';
 import { DeviceState, PhoneNavigationLayout } from '../../common/DeviceState';
 
 class MonthEvent {
@@ -865,12 +865,14 @@ export struct MobileTeachingCalendarView {
     Row({ space: 0 }) {
       if (TeachingCalendarLogic.showsCompactWeekAxis(this.indicatorMode())) {
         Column({ space: 0 }) {
-          Text((this.isEnglish() ? 'Cal ' : '公历 ') +
+          Text((this.isEnglish() ? 'Cal ' : this.model.resolvedLanguage() === AppLanguage.simplifiedChinese ?
+            '公历 ' : this.model.text('公历') + ' ') +
             StrictDates.isoWeekNumber(this.selectedDate()).toString())
             .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
             .fontWeight(FontWeight.Medium)
             .fontColor(AppTheme.secondaryText())
-          Text((this.isEnglish() ? 'Teach ' : '教学 ') +
+          Text((this.isEnglish() ? 'Teach ' : this.model.resolvedLanguage() === AppLanguage.simplifiedChinese ?
+            '教学 ' : this.model.text('教学') + ' ') +
             (this.model.weekNumberOn(this.selectedDate()) === null ? '—' :
               (this.model.weekNumberOn(this.selectedDate()) as number).toString()))
             .fontSize(CalendarTypography.fontSize(9.5, this.isPc))
@@ -897,7 +899,7 @@ export struct MobileTeachingCalendarView {
   @Builder
   dateStripButton(day: DateParts) {
     Column({ space: 3 }) {
-      Text(CalendarFormatters.weekdayLabel(day, this.isEnglish()))
+      Text(CalendarFormatters.weekdayLabel(day, this.model.resolvedLanguage()))
         .fontSize(11)
         .fontWeight(day.equals(this.selectedDate()) || day.equals(StrictDates.todayParts()) ?
           FontWeight.Bold : FontWeight.Regular)
@@ -1094,7 +1096,7 @@ export struct MobileTeachingCalendarView {
   @Builder
   selectedDateSummary(renderDate: DateParts, interactive: boolean) {
     Row({ space: 8 }) {
-      Text(CalendarFormatters.fullDate(renderDate, this.isEnglish()))
+      Text(CalendarFormatters.fullDate(renderDate, this.model.resolvedLanguage()))
         .fontSize(14)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
@@ -1195,7 +1197,7 @@ export struct MobileTeachingCalendarView {
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.secondaryText())
         ForEach(this.allDayItemsOn(renderDate).slice(0, 3), (item: CalendarAllDayItem) => {
-          Text(CalendarFormatters.monthDayCompact(renderDate, this.isEnglish()) + ' · ' + item.title)
+          Text(CalendarFormatters.monthDayCompact(renderDate, this.model.resolvedLanguage()) + ' · ' + item.title)
             .fontSize(10.5)
             .fontWeight(FontWeight.Medium)
             .fontColor(item.tint)
@@ -1855,7 +1857,7 @@ export struct MobileTeachingCalendarView {
   @Builder
   miniMonth(month: number, renderDate: DateParts, interactive: boolean) {
     Column({ space: 0 }) {
-      Text(CalendarFormatters.monthLabel(month, this.isEnglish()))
+      Text(CalendarFormatters.monthLabel(month, this.model.resolvedLanguage()))
         .fontSize(17)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
@@ -2070,11 +2072,11 @@ export struct MobileTeachingCalendarView {
       Column({ space: 12 }) {
         Row({ space: 8 }) {
           Column({ space: 2 }) {
-            Text(TeachingCalendarLogic.allDayDialogTitle(mode, this.isEnglish()))
+            Text(TeachingCalendarLogic.allDayDialogTitle(mode, this.model.resolvedLanguage()))
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
               .fontColor(AppTheme.text())
-            Text(CalendarFormatters.fullDate(this.allDayDialogDay as DateParts, this.isEnglish()))
+            Text(CalendarFormatters.fullDate(this.allDayDialogDay as DateParts, this.model.resolvedLanguage()))
               .fontSize(12)
               .fontColor(AppTheme.secondaryText())
           }
@@ -2185,7 +2187,7 @@ export struct MobileTeachingCalendarView {
         })
       Column({ space: 10 }) {
         Row({ space: 8 }) {
-          Text(CalendarFormatters.monthDayCompact(this.presentedDay as DateParts, this.isEnglish()))
+          Text(CalendarFormatters.monthDayCompact(this.presentedDay as DateParts, this.model.resolvedLanguage()))
             .fontSize(16)
             .fontWeight(FontWeight.Bold)
             .fontColor(AppTheme.text())
@@ -2287,7 +2289,7 @@ export struct MobileTeachingCalendarView {
   @Builder
   daySummaryCard(day: DateParts, framed: boolean = true) {
     Column({ space: 10 }) {
-      Text(CalendarFormatters.fullDate(day, this.isEnglish()))
+      Text(CalendarFormatters.fullDate(day, this.model.resolvedLanguage()))
         .fontSize(16)
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.text())
@@ -2437,7 +2439,7 @@ export struct MobileTeachingCalendarView {
 
   private periodTitle(): string {
     const base: string = TeachingCalendarLogic.periodTitle(
-      this.selectedDate(), this.mode(), this.isEnglish());
+      this.selectedDate(), this.mode(), this.model.resolvedLanguage());
     if (this.mode() !== CalendarMode.week) {
       return base;
     }
@@ -2446,6 +2448,13 @@ export struct MobileTeachingCalendarView {
     if (this.isEnglish()) {
       return base + ' · Calendar week ' + calendarWeek.toString() + ' · Teaching week ' +
         (teachingWeek === null ? '—' : teachingWeek.toString());
+    }
+    if (this.model.resolvedLanguage() !== AppLanguage.simplifiedChinese) {
+      const language: AppLanguage = this.model.resolvedLanguage();
+      return base + ' · ' + AppLocalization.format('公历第 {week} 周',
+        new LocalizationValues('week', calendarWeek.toString()), language, language) + ' · ' +
+        AppLocalization.format('第 {week} 教学周',
+          new LocalizationValues('week', teachingWeek === null ? '—' : teachingWeek.toString()), language, language);
     }
     return base + ' · 公历第' + calendarWeek.toString() + '周 · 第' +
       (teachingWeek === null ? '—' : teachingWeek.toString()) + '教学周';

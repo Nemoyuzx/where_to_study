@@ -1,3 +1,5 @@
+import { uiText } from './ui-text.js'
+import { uiDateLocale } from './ui-languages.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, ClipboardList, ExternalLink, RefreshCw, Settings2 } from 'lucide-react'
 import { filterAssignmentQueries } from './query-domain.js'
@@ -6,9 +8,9 @@ import {courseActivityKey} from './course-domain.js'
 // Kept mounted across Query segments. Opening/changing a segment never logs in;
 // explicit retrieval uses the existing native, credential-scoped services.
 export default function PrivateQueriesPanel({ kind, enabled, command, language, hasAccount, onOpenAccount, examSnapshot, assignmentSnapshot, onAssignmentSnapshot, onAssignmentRequest }) {
-  const en = language === 'en'
+  const text=(zh,english,values)=>uiText(language,zh,english,values)
   const assignments = kind === 'assignments'
-  const title = assignments ? (en ? 'Assignment DDL' : '课程作业 DDL') : (en ? 'Exams' : '考试查询')
+  const title = assignments ? (text('课程作业 DDL', 'Assignment DDL')) : (text('考试查询', 'Exams'))
   const [items, setItems] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -37,36 +39,36 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
       if (revision.current !== id) return
       setItems(assignments ? value : value.items)
       if(assignments) onAssignmentSnapshot?.(value,snapshotRevision)
-      setUpdated(new Intl.DateTimeFormat(en ? 'en-GB' : 'zh-CN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Shanghai' }).format(new Date()))
+      setUpdated(new Date().toISOString())
     } catch {
-      if (revision.current === id) setError(en ? 'Unable to retrieve data. Check your connection and the corresponding account password in Settings, then retry.' : '读取失败，请检查网络及设置中对应的教务／教学云密码后重试。')
+      if (revision.current === id) setError(text('读取失败，请检查网络及设置中对应的教务／教学云密码后重试。', 'Unable to retrieve data. Check your connection and the corresponding account password in Settings, then retry.'))
     } finally { if (revision.current === id) setBusy(false) }
   }
   return <div className="query-grades" hidden={!enabled} role="tabpanel" aria-label={title}>
     <header className="query-section-header"><h2>{assignments ? <ClipboardList size={22} /> : <CalendarClock size={22} />}{title}</h2>
-      <button type="button" onClick={load} disabled={busy || !hasAccount}><RefreshCw size={16} className={busy ? 'spin' : ''} />{en ? 'Fetch / refresh' : '获取／刷新'}</button>
+      <button type="button" onClick={load} disabled={busy || !hasAccount}><RefreshCw size={16} className={busy ? 'spin' : ''} />{text('获取／刷新', 'Fetch / refresh')}</button>
     </header>
-    {!hasAccount ? <div className="query-grade-status"><p>{en ? 'Save your academic account in Settings first. Assignments use the separate Teaching Cloud password if provided.' : '请先在设置中保存个人账户；作业优先使用单独填写的教学云密码。'}</p><button type="button" className="query-action-button" onClick={onOpenAccount}><Settings2 size={16} aria-hidden="true" />{en ? 'Go to account settings' : '前往个人账户'}</button></div> : <>
+    {!hasAccount ? <div className="query-grade-status"><p>{text('请先在设置中保存个人账户；作业优先使用单独填写的教学云密码。', 'Save your academic account in Settings first. Assignments use the separate Teaching Cloud password if provided.')}</p><button type="button" className="query-action-button" onClick={onOpenAccount}><Settings2 size={16} aria-hidden="true" />{text('前往个人账户', 'Go to account settings')}</button></div> : <>
       <div className="query-grade-filters">
-        <label>{en ? 'Search' : '搜索'}<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={en ? 'Course or title' : '课程或标题'} /></label>
-        {assignments && <><label>{en ? 'Course' : '课程'}<select value={course} onChange={e => setCourse(e.target.value)}><option value="">{en ? 'All courses' : '全部课程'}</option>{courses.map(name => <option key={name}>{name}</option>)}</select></label>
-          <label>{en ? 'Deadline' : '截止时间'}<select value={range} onChange={e => setRange(e.target.value)}><option value="all">{en ? 'All' : '全部'}</option><option value="upcoming">{en ? 'Upcoming' : '尚未截止'}</option><option value="past">{en ? 'Past' : '已截止'}</option></select></label></>}
+        <label>{text('搜索', 'Search')}<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={text('课程或标题', 'Course or title')} /></label>
+        {assignments && <><label>{text('课程', 'Course')}<select value={course} onChange={e => setCourse(e.target.value)}><option value="">{text('全部课程', 'All courses')}</option>{courses.map(name => <option key={name}>{name}</option>)}</select></label>
+          <label>{text('截止时间', 'Deadline')}<select value={range} onChange={e => setRange(e.target.value)}><option value="all">{text('全部', 'All')}</option><option value="upcoming">{text('尚未截止', 'Not yet due')}</option><option value="past">{text('已截止', 'Past')}</option></select></label></>}
       </div>
-      {busy && <p role="status">{en ? 'Loading…' : '正在读取…'}</p>}
+      {busy && <p role="status">{text('正在读取…', 'Loading…')}</p>}
       {error && <p role="alert">{error}</p>}
-      {snapshotState === 'failed' && <p role="alert">{en ? 'Exam synchronization failed. Refresh to retry; this is not an empty exam list.' : '考试同步失败，请点击刷新重试；此状态不代表没有考试。'}</p>}
-      {snapshotState === 'stale' && <p role="status">{en ? 'Showing a previously cached exam schedule. Refresh and confirm against the university service.' : '正在显示此前缓存的考试安排，请刷新并以学校最新信息为准。'} {examSnapshot?.fetched_at}</p>}
-      {available == null && !busy && <p className="query-grade-status">{en ? 'Use Fetch / refresh to retrieve your data. Switching tabs will not log you in again.' : '点击“获取／刷新”读取数据，切换查询栏目不会重复登录。'}</p>}
-      {available != null && !filtered.length && <p className="query-grade-status">{en ? 'No matching records.' : '暂无符合条件的记录。'}</p>}
+      {snapshotState === 'failed' && <p role="alert">{text('考试同步失败，请点击刷新重试；此状态不代表没有考试。', 'Exam synchronization failed. Refresh to retry; this is not an empty exam list.')}</p>}
+      {snapshotState === 'stale' && <p role="status">{text('正在显示此前缓存的考试安排，请刷新并以学校最新信息为准。', 'Showing a previously cached exam schedule. Refresh and confirm against the university service.')} {examSnapshot?.fetched_at}</p>}
+      {available == null && !busy && <p className="query-grade-status">{text('点击“获取／刷新”读取数据，切换查询栏目不会重复登录。', 'Use Fetch / refresh to retrieve your data. Switching tabs will not log you in again.')}</p>}
+      {available != null && !filtered.length && <p className="query-grade-status">{text('暂无符合条件的记录。', 'No matching records.')}</p>}
       <div className="query-grade-list">{filtered.slice(0, limit).map(item => <article className="query-grade-card" key={assignments?courseActivityKey(item):item.id}>
         <header><strong>{assignments ? item.title : item.name}</strong></header>
-        {assignments ? <><p>{item.course_name}</p><strong>{item.deadline}</strong><small>{item.status || (en ? 'Status not provided' : '状态未提供')}</small></>
-          : <><p>{item.date || (en ? 'Date pending' : '日期待定')} · {item.start_time ? `${item.start_time}–${item.end_time}` : item.time_text || (en ? 'Time pending' : '时间待定')}</p><small>{item.room || (en ? 'Room pending' : '地点待定')}{item.seat ? ` · ${en ? 'Seat' : '座位'} ${item.seat}` : ''}</small></>}
+        {assignments ? <><p>{item.course_name}</p><strong>{item.deadline}</strong><small>{item.status || (text('状态未提供', 'Status not provided'))}</small></>
+          : <><p>{item.date || (text('日期待定', 'Date pending'))} · {item.start_time ? `${item.start_time}–${item.end_time}` : item.time_text || (text('时间待定', 'Time pending'))}</p><small>{item.room || (text('地点待定', 'Room pending'))}{item.seat ? ` · ${text('座位', 'Seat')} ${item.seat}` : ''}</small></>}
       </article>)}</div>
-      {limit < filtered.length && <button type="button" onClick={() => setLimit(v => v + 30)}>{en ? 'Show more' : '加载更多'}</button>}
-      {updated && <small>{en ? 'Updated' : '更新于'} {updated}</small>}
+      {limit < filtered.length && <button type="button" onClick={() => setLimit(v => v + 30)}>{text('加载更多', 'Show more')}</button>}
+      {updated && <small>{text('更新于', 'Updated')} {new Intl.DateTimeFormat(uiDateLocale(language), {dateStyle:'short',timeStyle:'short',timeZone:'Asia/Shanghai'}).format(new Date(updated))}</small>}
     </>}
-    <p className="query-source">{assignments ? (en ? 'Source: university Teaching Cloud. Assignments are queried directly using your saved account and are not uploaded to this app’s server.' : '第三方来源：学校教学云平台。使用已保存账户直接查询，不上传至本应用服务端。') : (en ? 'Source: university academic service. Exam arrangements are also synchronized when refreshing the timetable.' : '第三方来源：学校教务服务。考试安排也会随个人课表一起同步。')} {en ? 'For reference only; confirm against the official platform.' : '显示数据仅供参考，请以学校实际安排为准。'}</p>
-    {assignments ? <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />{en ? 'Open Teaching Cloud Platform' : '打开教学云平台'}</a> : null}
+    <p className="query-source">{assignments ? (text('第三方来源：学校教学云平台。使用已保存账户直接查询，不上传至本应用服务端。', 'Source: university Teaching Cloud. Assignments are queried directly using your saved account and are not uploaded to this app’s server.')) : (text('第三方来源：学校教务服务。考试安排也会随个人课表一起同步。', 'Source: university academic service. Exam arrangements are also synchronized when refreshing the timetable.'))} {text('显示数据仅供参考，请以学校实际安排为准。', 'For reference only; confirm against the official platform.')}</p>
+    {assignments ? <a className="external-action-button" href="https://ucloud.bupt.edu.cn/uclass/" target="_blank" rel="noreferrer"><ExternalLink size={16} aria-hidden="true" />{text('打开教学云平台', 'Open Teaching Cloud Platform')}</a> : null}
   </div>
 }

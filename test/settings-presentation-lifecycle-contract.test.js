@@ -70,34 +70,30 @@ test('Harmony fixed draft seed is DEBUG review-only and physical IME test is opt
   assert.match(device, /describe\('SettingsKeyboardInputDevice'/)
 })
 
-test('Harmony language segments have stable IDs and local writes are serialized without account refresh', () => {
+test('Harmony language picker has stable IDs and local writes are serialized without account refresh', () => {
   const settings = read(`${harmony}view/SettingsView.ets`)
   const model = read(`${harmony}model/AppModel.ets`)
   const device = read('native/harmony/entry/src/ohosTest/ets/test/SettingsPresentationDevice.test.ets')
-  const languageSegments = settings.slice(settings.indexOf('  languageSegments() {'),
-    settings.indexOf('  languageSurface() {'))
   const languageSurface = settings.slice(settings.indexOf('  languageSurface() {'),
     settings.indexOf('  removedCoursesSurface() {'))
   assert.match(settings, /\}, \(label: string, index: number\) => idPrefix \+ '\.' \+ index\.toString\(\)\)/)
-  assert.match(settings, /Text\(idPrefix === 'settings\.language' \?\s*AppLanguageInfo\.label\(AppLanguageInfo\.all\[index\], this\.model\.resolvedLanguage\(\)\)/)
-  assert.match(settings, /idPrefix === 'settings\.campus' \? this\.model\.text\(index === 0 \? '西土城' : '沙河'\)/)
+  assert.match(settings, /Text\(idPrefix === 'settings\.campus' \? this\.model\.text\(index === 0 \? '西土城' : '沙河'\)/)
   assert.match(settings, /Scroll\(this\.settingsScroller\)/)
   assert.match(settings, /selectLanguageAtCurrentPosition\(target: AppLanguage\): void \{[\s\S]*?new SettingsLanguageAnchor\(revision, this\.languageCardGlobalY, offset\)/)
   assert.match(settings, /preserveLanguageAnchorAfterLayout\(area: Area\): void \{[\s\S]*?this\.pendingLanguageAnchor = null;[\s\S]*?this\.settingsScroller\.scrollTo\(\{ xOffset: 0, yOffset: Math\.max\(0, offset \+ delta\), animation: false \}\)/)
   assert.match(settings, /aboutToDisappear\(\): void \{[\s\S]*?this\.pendingLanguageAnchor = null;[\s\S]*?clearTimeout\(this\.languageAnchorCleanupTimer\)/)
-  assert.ok(languageSegments.length > 0)
-  assert.match(languageSegments, /\.id\('settings\.language\.' \+ index\.toString\(\)\)/)
-  assert.match(languageSegments, /\.onClick\(\(\) => this\.selectLanguageAtCurrentPosition\(language\)\)/)
-  assert.match(languageSegments, /Column\(\) \{\}[\s\S]*?\.backgroundColor\([\s\S]*?\.animation\(\{ duration: 160/)
-  assert.doesNotMatch(languageSegments, /getUIContext\(\)\.animateTo\(/)
-  assert.match(languageSurface, /this\.languageSegments\(\)/)
+  assert.match(languageSurface, /\.id\('settings\.language\.open'\)/)
+  assert.match(languageSurface, /this\.session\.showingLanguagePicker = true/)
+  assert.match(settings, /onLanguagePickerSelection\(monitor: IMonitor\): void \{[\s\S]*?applyPendingLanguageRequest\(\)/)
+  assert.match(read(`${harmony}view/RootView.ets`), /if \(this\.settingsSession\.showingLanguagePicker\) \{\s*LanguagePickerView\(/)
+  assert.match(read(`${harmony}view/SettingsSession.ets`), /requestLanguage\(value: AppLanguage\): void \{[\s\S]*?takeLanguageRequest\(\): AppLanguage \| null/)
   assert.doesNotMatch(languageSurface, /this\.segmentedOptions\(/)
   assert.match(model, /private languagePreferenceWrite: Promise<void> = Promise\.resolve\(\)/)
   assert.match(model, /setLanguageSetting\(value: AppLanguage\): Promise<void> \{[\s\S]*?if \(this\.isSampleMode\(\)\) \{ return; \}[\s\S]*?this\.languagePreferenceWrite\.catch\(\(\) => \{\}\)/)
   assert.match(model, /await this\.languagePreferenceWrite\.catch\(\(\) => \{\}\);\s*await this\.preferences\.remove\('appLanguage'\)/)
   assert.match(model, /languageGeneration === this\.languageClearGeneration &&\s*languageRevision === this\.languageSettingRevision && this\.localDataClearWork === null/)
   assert.doesNotMatch(model.slice(model.indexOf('async setLanguageSetting('), model.indexOf('async setWidgetShowsTeacher(')), /refreshSchedule|fetchSchedule|loadClassrooms|credentialsForRequest/)
-  assert.match(device, /language_switch_keeps_the_visible_settings_anchor_in_place/)
+  assert.match(device, /language_switch_keeps_the_visible_settings_anchor_in_place[\s\S]*?settings\.language\.open[\s\S]*?settings\.language\.option\.en/)
   assert.match(read('native/harmony/entry/src/test/LanguageSettingTransaction.test.ets'), /rapid_zh_en_zh_writes_are_serial/)
   assert.match(read('native/harmony/entry/src/test/LanguageSettingTransaction.test.ets'), /clear_waits_for_pending_write_and_old_language_read_cannot_repopulate_it/)
 })
@@ -111,7 +107,26 @@ test('Harmony favorites reject the 501st item before memory changes and render i
   assert.match(update, /favoriteDeadlinePreferenceWrite\.catch\(\(\) => \{\}\)[\s\S]*?await this\.preferences\.setString\('favoriteDeadlinesV1',[\s\S]*?this\.favoriteDeadlines = next;[\s\S]*?return true;/)
   assert.match(model, /async removeFavoriteDeadline\(item: PublicDeadlineItem\): Promise<void> \{\s*await this\.enqueueFavoriteDeadlineUpdate\(item, false\)/)
   assert.match(model, /favoriteDeadlineClearInProgress = true;[\s\S]*?favoriteDeadlineClearGeneration\+\+;[\s\S]*?clearLocalDataAfterFavoriteWrites\(\)/)
-  assert.match(model, /private async clearLocalDataAfterFavoriteWrites\(\): Promise<void> \{[\s\S]*?await this\.favoriteDeadlinePreferenceWrite\.catch\(\(\) => \{\}\);\s*await this\.preferences\.remove\('favoriteDeadlinesV1'\);\s*this\.favoriteDeadlines = \[\]/)
+  const clearStart = model.indexOf('private async clearLocalDataAfterFavoriteWrites(): Promise<void> {')
+  assert.ok(clearStart >= 0)
+  const clearPublish = model.indexOf('this.favoriteDeadlines = [];', clearStart)
+  assert.ok(clearPublish > clearStart)
+  const clearPrefix = model.slice(clearStart, clearPublish + 'this.favoriteDeadlines = [];'.length)
+  const clearSteps = [
+    'await this.favoriteDeadlinePreferenceWrite.catch(() => {});',
+    'await this.qmplusPreferenceWrite.catch(() => {});',
+    "await this.preferences.setBool('qmplusEnabled', false);",
+    "await this.preferences.remove('favoriteDeadlinesV1');",
+    'this.favoriteDeadlines = [];',
+  ]
+  const clearOffsets = clearSteps.map(step => clearPrefix.indexOf(step))
+  clearOffsets.forEach((offset, index) => {
+    assert.ok(offset >= 0, `missing clear step: ${clearSteps[index]}`)
+    if (index > 0) assert.ok(offset > clearOffsets[index - 1], `out-of-order clear step: ${clearSteps[index]}`)
+  })
+  assert.doesNotMatch(clearPrefix.slice(0, clearOffsets[3]),
+    /this\.favoriteDeadlines\s*=|this\.favoriteDeadlines\.(?:push|pop|splice|shift|unshift|sort|reverse)\s*\(/,
+    'favorite state must not publish or mutate before durable removal')
   assert.match(settings, /favoriteDeadlines\.slice\(0, this\.requestedFavoriteCount\)/)
   assert.match(settings, /\.onScrollIndex\([\s\S]*?this\.appendFavoritePage\(end\)/)
   assert.match(settings, /this\.linkButton\('加载更多'/)

@@ -58,6 +58,39 @@ export class QMPlusActivity {
   }
 }
 
+// Only the confirmed Assignment title is administrative. Matching does not
+// change display titles, inspect due dates, or exclude similarly named Quiz.
+export class QMPlusCourseworkPolicy {
+  private static readonly separators: Set<number> = new Set<number>([0x20, 0x85, 0xA0, 0x1680,
+    0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF, 0x5F, 0x2D, 0x2F, 0x3A, 0x2212]);
+
+  static isMarkReviewRequest(kind: string, title: string): boolean {
+    if (kind !== 'assignment') { return false; }
+    let normalized: string = '';
+    let spacePending: boolean = false;
+    for (let index: number = 0; index < title.length; index++) {
+      let code: number = title.charCodeAt(index);
+      if (code >= 0xFF01 && code <= 0xFF5E) { code -= 0xFEE0; }
+      if (code === 0x3000) { code = 0x20; }
+      if ((code >= 9 && code <= 13) || (code >= 0x2000 && code <= 0x200A) ||
+        (code >= 0x2010 && code <= 0x2015) || QMPlusCourseworkPolicy.separators.has(code)) {
+        if (normalized.length > 0) { spacePending = true; }
+      } else {
+        if (spacePending) { normalized += ' '; }
+        spacePending = false;
+        if (code >= 0x61 && code <= 0x7A) { code -= 0x20; }
+        normalized += String.fromCharCode(code);
+      }
+    }
+    return normalized === 'COURSEWORK MARK REVIEW REQUEST' || normalized === 'COURSEWORK MARK REVIEW REQUEST FORM';
+  }
+
+  static activities(items: QMPlusActivity[]): QMPlusActivity[] {
+    return items.filter((item: QMPlusActivity): boolean =>
+      !QMPlusCourseworkPolicy.isMarkReviewRequest(item.kind, item.title));
+  }
+}
+
 export class QMPlusSnapshot {
   readonly fetchedAt: string;
   readonly partial: boolean;
@@ -70,7 +103,7 @@ export class QMPlusSnapshot {
     this.fetchedAt = fetchedAt;
     this.partial = partial;
     this.courses = courses;
-    this.activities = activities;
+    this.activities = QMPlusCourseworkPolicy.activities(activities);
     this.warnings = warnings;
   }
 }
@@ -194,6 +227,8 @@ export class QMPlusSnapshotParser {
       }
       warnings.push(warning);
     }
+    // The constructor's business exclusion runs only after every original DTO
+    // and warning has passed validation, including a mark-review request.
     return new QMPlusSnapshot(fetchedAt, root['partial'] === true, courses, activities, warnings);
   }
 

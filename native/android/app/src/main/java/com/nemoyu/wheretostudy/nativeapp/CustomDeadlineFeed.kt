@@ -338,8 +338,12 @@ internal object PublicDeadlineItemJsonCodec {
 
 internal object CustomDeadlineFeedTransport {
     fun fetch(uri: URI, maximumBytes: Int = CalendarDailyInfoSources.deadlinePayloadLimit): String {
+        return CellularAssist.readOnly { fetchOnRoute(uri, maximumBytes) }
+    }
+
+    private fun fetchOnRoute(uri: URI, maximumBytes: Int): String {
         CustomDeadlineFeedURLValidator.validate(uri)
-        val connection = uri.toURL().openConnection() as HttpURLConnection
+        val connection = CellularAssist.openConnection(uri.toURL())
         try {
             connection.requestMethod = "GET"
             connection.connectTimeout = 10_000

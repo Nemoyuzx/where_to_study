@@ -168,11 +168,16 @@ export class SJDAPIClient {
         return this.checkAuthentication(result, endpoint);
       } catch (e) {
         // 部分真实设备网络会优先选择不可达的 IPv6 路径。默认族失败且错误
-        // 属于 DNS/连接/收发/超时时，仅对固定 SJD 主机回退一次 IPv4。
+        // 属于 DNS/连接/收发/超时时，仅对固定 SJD 主机的 GET/HEAD
+        // 回退一次 IPv4。POST 可能已送达服务器，不能重发凭据或请求体。
         if (e instanceof HttpTransportError &&
+          !e.cellularAttempted &&
+          !spec.fallbackConsumed &&
+          (spec.method === http.RequestMethod.GET || spec.method === http.RequestMethod.HEAD) &&
           spec.addressFamily === http.AddressFamily.DEFAULT &&
           NetworkDiagnostics.shouldRetryIPv4(e.code)) {
           spec.addressFamily = http.AddressFamily.ONLY_V4;
+          spec.fallbackConsumed = true;
           const result: HttpResult = await HttpUtil.perform(url, spec, SJDNetworkPolicy.allowedHost);
           return this.checkAuthentication(result, endpoint);
         }

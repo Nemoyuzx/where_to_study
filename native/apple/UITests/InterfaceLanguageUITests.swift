@@ -18,7 +18,7 @@ final class InterfaceLanguageUITests: XCTestCase {
             XCTAssertTrue(settings.waitForExistence(timeout: 5))
             settings.tap()
         }
-        let picker = app.segmentedControls["settings.language"].firstMatch
+        let picker = app.buttons["settings.language"].firstMatch
         reveal(picker, app: app)
         let probe = app.descendants(matching: .any)["debug.language-layout.frames"].firstMatch
         XCTAssertTrue(probe.waitForExistence(timeout: 5))
@@ -26,10 +26,10 @@ final class InterfaceLanguageUITests: XCTestCase {
         let readiness = XCTWaiter.wait(for: [ready], timeout: 5)
         if readiness != .completed { attachGeometryFailure(app, value: probe.value) }
         XCTAssertEqual(readiness, .completed, "An actual Settings scroll viewport must be registered before switching language")
-        picker.buttons["English"].tap()
+        LanguageMenuTestSupport.select("en", nativeName: "English", in: app)
         assertFrameSamples(probe, language: "en", compact: compact, app: app)
         XCTAssertTrue(picker.isHittable, "The language card must remain reachable without another reveal")
-        picker.buttons["Simplified Chinese"].tap()
+        LanguageMenuTestSupport.select("zh-Hans", nativeName: "简体中文", in: app)
         assertFrameSamples(probe, language: "zh-Hans", compact: compact, app: app)
         XCTAssertTrue(picker.isHittable)
     }
@@ -94,13 +94,13 @@ final class InterfaceLanguageUITests: XCTestCase {
         let primary = app.textFields["theme.custom.primary"]
         reveal(primary, app: app)
         replace(primary, with: "#123456\n")
-        let picker = app.segmentedControls["settings.language"].firstMatch
+        let picker = app.buttons["settings.language"].firstMatch
         reveal(picker, app: app)
-        picker.buttons["English"].tap()
+        LanguageMenuTestSupport.select("en", nativeName: "English", in: app)
         XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 5))
         waitForLanguageTransitionToFinish(app)
         XCTAssertTrue(app.tabBars.buttons["Settings"].isSelected)
-        let english = app.segmentedControls["settings.language"].firstMatch
+        let english = app.buttons["settings.language"].firstMatch
         XCTAssertTrue(english.waitForExistence(timeout: 5))
         if !english.isHittable {
             let failure = XCTAttachment(screenshot: app.screenshot())
@@ -110,11 +110,11 @@ final class InterfaceLanguageUITests: XCTestCase {
             print("LANGUAGE_CARD_ANCHOR_FAILURE picker=\(english.frame) app=\(app.frame) scrolls=\(app.scrollViews.allElementsBoundByIndex.map { $0.frame })")
         }
         XCTAssertTrue(english.isHittable, "Language conversion must keep the current settings location, without another reveal")
-        english.buttons["Simplified Chinese"].tap()
+        LanguageMenuTestSupport.select("zh-Hans", nativeName: "简体中文", in: app)
         XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 5))
         waitForLanguageTransitionToFinish(app)
         XCTAssertTrue(app.tabBars.buttons["设置"].isSelected)
-        XCTAssertTrue(app.segmentedControls["settings.language"].firstMatch.isHittable)
+        XCTAssertTrue(app.buttons["settings.language"].firstMatch.isHittable)
         reveal(reminder, app: app)
         XCTAssertEqual(reminder.value as? String, "37")
         reveal(primary, app: app)
@@ -142,9 +142,9 @@ final class InterfaceLanguageUITests: XCTestCase {
         search.tap()
         search.typeText("示例\n")
         app.tabBars.buttons["设置"].tap()
-        let picker = app.segmentedControls["settings.language"].firstMatch
+        let picker = app.buttons["settings.language"].firstMatch
         reveal(picker, app: app)
-        picker.buttons["English"].tap()
+        LanguageMenuTestSupport.select("en", nativeName: "English", in: app)
         XCTAssertTrue(app.tabBars.buttons["Courses"].waitForExistence(timeout: 5))
         waitForLanguageTransitionToFinish(app)
         app.tabBars.buttons["Courses"].tap()

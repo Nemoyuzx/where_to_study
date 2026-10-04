@@ -153,6 +153,24 @@ class AppPreferences(context: Context) {
     @Volatile
     private var favoriteDeadlineCache: List<PublicDeadlineItem>? = null
 
+    var qmplusEnabled: Boolean
+        get() = synchronized(qmplusPreferenceLock) { preferences.getBoolean(QMPLUS_ENABLED_KEY, false) }
+        set(value) { synchronized(qmplusPreferenceLock) { save(QMPLUS_ENABLED_KEY, value) } }
+
+    internal fun resolveQMplusMigration(hadLegacyState: Boolean): Boolean = synchronized(qmplusPreferenceLock) {
+        if (!preferences.contains(QMPLUS_ENABLED_KEY)) save(QMPLUS_ENABLED_KEY, hadLegacyState)
+        preferences.getBoolean(QMPLUS_ENABLED_KEY, false)
+    }
+
+    var cellularAssistEnabled: Boolean
+        get() = CellularAssist.sessionPermitsFallback && preferences.getBoolean(CellularAssistPolicy.preferenceKey, false)
+        set(value) {
+            // Fail closed before disk work, especially when the user opts out.
+            CellularAssist.blockUntilPreferenceSaved()
+            save(CellularAssistPolicy.preferenceKey, value)
+            CellularAssist.preferenceSaved()
+        }
+
     var campusID: String
         get() = preferences.getString(CAMPUS_KEY, AppMetadata.campuses.first().id)
             ?: AppMetadata.campuses.first().id
@@ -162,12 +180,12 @@ class AppPreferences(context: Context) {
 
     var languageCode: String
         get() = preferences.getString(LANGUAGE_KEY, AppLanguage.SYSTEM.code)
-            ?.takeIf { value -> AppLanguage.entries.any { it.code == value } }
+            ?.let { value -> AppLanguage.fromCode(value)?.code }
             ?: AppLanguage.SYSTEM.code
         set(value) {
             save(
                 LANGUAGE_KEY,
-                AppLanguage.entries.firstOrNull { it.code == value }?.code
+                AppLanguage.fromCode(value)?.code
                     ?: AppLanguage.SYSTEM.code,
             )
         }
@@ -343,8 +361,12 @@ class AppPreferences(context: Context) {
         get() = hasEnabledPublicDeadlines || favoriteDeadlines.isNotEmpty()
 
     fun clear() {
-        if (!preferences.edit().clear().commit()) {
-            throw IllegalStateException("无法清除本地偏好。")
+        CellularAssist.blockUntilPreferenceSaved()
+        synchronized(qmplusPreferenceLock) {
+            // Keep an explicit off fence even if an old QM record cannot be removed.
+            if (!preferences.edit().clear().putBoolean(QMPLUS_ENABLED_KEY, false).commit()) {
+                throw IllegalStateException("无法清除本地偏好。")
+            }
         }
         favoriteDeadlineCache = emptyList()
     }
@@ -368,7 +390,9 @@ class AppPreferences(context: Context) {
     }
 
     companion object {
+        private val qmplusPreferenceLock = Any()
         const val PREFERENCES_NAME = "app_preferences_v1"
+        const val QMPLUS_ENABLED_KEY = "qmplus_enabled"
         const val CAMPUS_KEY = "campus_id"
         const val LANGUAGE_KEY = "language_code"
         const val TERM_ID_KEY = "term_id"

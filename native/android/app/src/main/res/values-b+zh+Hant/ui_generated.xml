@@ -884,6 +884,9 @@
     <string name="ui_generated_fee09598ad7872">"正在讀取後勤部最新通知與目前生效時刻表。"</string>
     <string name="ui_generated_ff89a1a38ca3a7">"自定義日程頂層必須是對象。"</string>
     <string name="ui_generated_ff93bd2c081d35">"在瀏覽器中打開教學雲平台作業列表"</string>
+    <string name="ui_generated_1a78803a506cc4">"啟用 QMplus"</string>
+    <string name="ui_generated_de0fc50a49bf3c">"僅適用國院"</string>
+    <string name="ui_generated_dba3ae91be2408">"無法儲存本機偏好設定。"</string>
     <string name="ui_generated_c51e74da2b9b1b">"macOS 可在系統設定中選擇可用網路或個人熱點。本應用程式不提供強制使用行動網路或雙通道開關。"</string>
     <string name="ui_generated_a8cb7a7cb858cf">"QMplus 自動填寫已停止，請在官方網頁手動完成登入或驗證。"</string>
     <string name="ui_generated_8ff421866994b1">"QMplus 自動填寫元件無法使用，請手動登入。"</string>
@@ -895,4 +898,6 @@
     <string name="ui_generated_0f472efd10e9f7">"正在填寫 QMplus 官方登入帳號…"</string>
     <string name="ui_generated_1a61edb546454e">"正在開啟 QMplus 官方 SSO 登入…"</string>
     <string name="ui_generated_a16987f886401d">"系統網路輔助"</string>
+    <string name="ui_generated_cf1c3b50baf4c5">"僅在已核驗的官方登入頁自動選擇與已儲存帳號精確相符的帳號，並填寫帳號與密碼，各步驟最多一次。未匹配的帳號選擇、MFA、驗證碼、保持登入、風險及協議確認仍須本人操作。"</string>
+    <string name="ui_generated_fd4480c6c08ea3">"關閉「啟用 QMplus」只暫停連線與同步，保留登入資料、連線工作階段及課程快取。關閉自動填寫、刪除登入資料或登出並清除資料，請使用對應操作。"</string>
 </resources>

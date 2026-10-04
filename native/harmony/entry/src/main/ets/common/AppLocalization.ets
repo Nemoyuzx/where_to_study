@@ -1,24 +1,37 @@
 // 应用内语言偏好。API 返回的课程名、竞赛名、黄历内容等不经过本地化；
 // 只有代码内已知的静态 UI 与状态文案会进入此映射。
 import { i18n } from '@kit.LocalizationKit';
+import { AppLocalizationCatalog } from './AppLocalizationCatalog';
 
 export enum AppLanguage {
   system = 'system',
   simplifiedChinese = 'zh-Hans',
-  english = 'en'
+  traditionalChinese = 'zh-Hant',
+  english = 'en',
+  japanese = 'ja',
+  spanish = 'es',
+  portuguese = 'pt',
+  arabic = 'ar',
+  russian = 'ru',
+  turkish = 'tr',
+  thai = 'th',
+  malay = 'ms',
+  vietnamese = 'vi',
+  indonesian = 'id'
 }
 
 export class AppLanguageInfo {
   static readonly all: AppLanguage[] = [
-    AppLanguage.system, AppLanguage.simplifiedChinese, AppLanguage.english
+    AppLanguage.system, AppLanguage.simplifiedChinese, AppLanguage.traditionalChinese,
+    AppLanguage.english, AppLanguage.japanese, AppLanguage.spanish,
+    AppLanguage.portuguese, AppLanguage.arabic, AppLanguage.russian,
+    AppLanguage.turkish, AppLanguage.thai, AppLanguage.malay,
+    AppLanguage.vietnamese, AppLanguage.indonesian
   ];
 
   static normalize(value: string | null): AppLanguage {
-    if (value === AppLanguage.simplifiedChinese) {
-      return AppLanguage.simplifiedChinese;
-    }
-    if (value === AppLanguage.english) {
-      return AppLanguage.english;
+    for (const supported of AppLanguageInfo.all) {
+      if (value === supported) { return supported; }
     }
     return AppLanguage.system;
   }
@@ -35,32 +48,172 @@ export class AppLanguageInfo {
     if (setting !== AppLanguage.system) {
       return setting;
     }
-    return systemLanguage.toLowerCase().startsWith('zh') ?
-      AppLanguage.simplifiedChinese : AppLanguage.english;
+    const parts: string[] = systemLanguage.replace(/_/g, '-').toLowerCase().split('-');
+    const primary: string = parts[0] ?? '';
+    if (primary === 'zh') {
+      if (parts.includes('hant')) { return AppLanguage.traditionalChinese; }
+      if (parts.includes('hans')) { return AppLanguage.simplifiedChinese; }
+      return parts.includes('tw') || parts.includes('hk') || parts.includes('mo') ?
+        AppLanguage.traditionalChinese : AppLanguage.simplifiedChinese;
+    }
+    for (const supported of AppLanguageInfo.all) {
+      if (supported === primary && supported !== AppLanguage.system) { return supported; }
+    }
+    return AppLanguage.english;
   }
 
   static label(setting: AppLanguage, displayLanguage: AppLanguage): string {
-    if (displayLanguage === AppLanguage.english) {
-      if (setting === AppLanguage.system) {
-        return 'System';
-      }
-      if (setting === AppLanguage.simplifiedChinese) {
-        return 'Simplified Chinese';
-      }
-      return 'English';
-    }
     if (setting === AppLanguage.system) {
+      if (displayLanguage === AppLanguage.traditionalChinese) { return '跟隨系統'; }
+      if (displayLanguage === AppLanguage.english) { return 'System'; }
+      if (displayLanguage === AppLanguage.japanese) { return 'システムに従う'; }
+      if (displayLanguage === AppLanguage.spanish) { return 'Seguir el sistema'; }
+      if (displayLanguage === AppLanguage.portuguese) { return 'Seguir o sistema'; }
+      if (displayLanguage === AppLanguage.arabic) { return 'حسب النظام'; }
+      if (displayLanguage === AppLanguage.russian) { return 'Как в системе'; }
+      if (displayLanguage === AppLanguage.turkish) { return 'Sistemi takip et'; }
+      if (displayLanguage === AppLanguage.thai) { return 'ตามระบบ'; }
+      if (displayLanguage === AppLanguage.malay) { return 'Ikut sistem'; }
+      if (displayLanguage === AppLanguage.vietnamese) { return 'Theo hệ thống'; }
+      if (displayLanguage === AppLanguage.indonesian) { return 'Ikuti sistem'; }
       return '跟随系统';
     }
-    if (setting === AppLanguage.simplifiedChinese) {
-      return '简体中文';
-    }
-    return 'English';
+    if (setting === AppLanguage.simplifiedChinese) { return '简体中文'; }
+    if (setting === AppLanguage.traditionalChinese) { return '繁體中文'; }
+    if (setting === AppLanguage.english) { return 'English'; }
+    if (setting === AppLanguage.japanese) { return '日本語'; }
+    if (setting === AppLanguage.spanish) { return 'Español'; }
+    if (setting === AppLanguage.portuguese) { return 'Português'; }
+    if (setting === AppLanguage.arabic) { return 'العربية'; }
+    if (setting === AppLanguage.russian) { return 'Русский'; }
+    if (setting === AppLanguage.turkish) { return 'Türkçe'; }
+    if (setting === AppLanguage.thai) { return 'ไทย'; }
+    if (setting === AppLanguage.malay) { return 'Bahasa Melayu'; }
+    if (setting === AppLanguage.vietnamese) { return 'Tiếng Việt'; }
+    return 'Bahasa Indonesia';
+  }
+
+  static isRightToLeft(language: AppLanguage): boolean {
+    return language === AppLanguage.arabic;
+  }
+}
+
+export class LocalizationValues {
+  readonly key: string;
+  readonly value: string;
+  readonly secondKey: string;
+  readonly secondValue: string;
+  readonly thirdKey: string;
+  readonly thirdValue: string;
+
+  constructor(key: string, value: string, secondKey: string = '', secondValue: string = '',
+    thirdKey: string = '', thirdValue: string = '') {
+    this.key = key;
+    this.value = value;
+    this.secondKey = secondKey;
+    this.secondValue = secondValue;
+    this.thirdKey = thirdKey;
+    this.thirdValue = thirdValue;
+  }
+
+  apply(template: string): string {
+    let result: string = template.replaceAll('{' + this.key + '}', this.value);
+    if (this.secondKey.length > 0) { result = result.replaceAll('{' + this.secondKey + '}', this.secondValue); }
+    if (this.thirdKey.length > 0) { result = result.replaceAll('{' + this.thirdKey + '}', this.thirdValue); }
+    return result;
   }
 }
 
 export class AppLocalization {
   private static readonly english: Record<string, string> = {
+    '启用 QMplus': 'Enable QMplus',
+    '仅适用国院': 'International School only',
+    '无法保存本地偏好。': 'Unable to save local preferences.',
+    '今日课程': 'Today\'s Courses',
+    '今天可以自由安排': 'No classes today',
+    '课程进行中': 'In progress',
+    '进行中': 'In progress',
+    '还有待上课程': 'Upcoming class',
+    '下一节': 'Next',
+    '考试时间待定': 'Exam time pending',
+    '今日课程已结束': 'Classes finished for today',
+    '今日无课': 'No classes today',
+    '打开应用获取个人课表': 'Open the app to fetch your schedule',
+    '进行中 · {time} 下课': 'In progress · Ends {time}',
+    '下一节 · {time}': 'Next · {time}',
+    '今日另有 {count} 门课程': '{count} more courses today',
+    '课程将在 {minutes} 分钟后开始': 'Class starts in {minutes} min',
+    '考试将在 {minutes} 分钟后开始': 'Exam starts in {minutes} min',
+    '今日课程 · {count} 门': 'Today\'s Courses · {count}',
+    '今日安排 · {count} 项': 'Today\'s Schedule · {count}',
+    '进行中 · {time}': 'In progress · {time}',
+    '第{week}周': 'Week {week}',
+    '{count} 门': '{count} courses',
+    '日视图 · 全天': 'Day View · All-day',
+    '周视图 · 全天': 'Week View · All-day',
+    '月视图 · 全天': 'Month View · All-day',
+    '公历': 'Calendar',
+    '教学': 'Teaching',
+    '公历第 {week} 周': 'Calendar Week {week}',
+    '第 {week} 教学周': 'Teaching Week {week}',
+    '非教学周': 'Outside teaching weeks',
+    '公历{week} · 教学{teaching}': 'Cal {week} · Teach {teaching}',
+    '颜色主题': 'Color Theme',
+    '立即应用，深浅色跟随系统。': 'Applies immediately. Light and dark follow the system.',
+    '默认青绿': 'Classic Teal',
+    '海洋蓝': 'Ocean Blue',
+    '鸢尾紫': 'Iris Violet',
+    '暖琥珀': 'Warm Amber',
+    '玫瑰': 'Rose',
+    '自定义': 'Custom',
+    '，已选中': ', selected',
+    '主色': 'Primary',
+    '强调色': 'Accent',
+    '选中日期': 'Selected Date',
+    '请输入六位十六进制 RGB（例如 #166B5D），当前已保存主题保持不变。':
+      'Enter six hexadecimal RGB digits, for example #166B5D. Your saved theme is unchanged.',
+    '实时预览': 'Live Preview',
+    '页面背景': 'Page Canvas',
+    '课程卡片': 'Course Card',
+    '课程 · 08:00–09:35': 'Course · 08:00–09:35',
+    '日程详情浮层': 'Event Details Panel',
+    '应用自定义颜色': 'Apply Custom Colors',
+    '恢复默认': 'Restore Default',
+    '无法保存颜色主题，请重试。': 'Unable to save the color theme. Please retry.',
+    '生效日期：': 'Effective date: ',
+    '{weekday} · 农历{lunar} · {zodiac}年': '{weekday} · Lunar {lunar} · Zodiac {zodiac}',
+    '干支：{year}年 {month}月 {day}日': 'Ganzhi: {year} / {month} / {day}',
+    '教学云 ': 'Teaching Cloud ',
+    ' 门': ' courses',
+    '课程详情': 'Course Details',
+    '课程资料已更新，请返回列表。': 'Course data changed. Return to the list.',
+    '该课作业尚未在本机同步；可到“作业”栏目手动刷新。':
+      'Assignments for this course have not been synced here. Refresh manually in Assignments.',
+    '当前缓存没有可确认归属该课的作业条目。':
+      'No assignment in the current cache can be reliably attributed to this course.',
+    '查看作业栏目': 'Open Assignments',
+    '该课程尚未确认为当前学期，未自动读取其作业或测验详情。':
+      'This course is not verified as current, so its assignment and quiz details were not fetched.',
+    '打开 QMplus 官方课程页': 'Open Official QMplus Course',
+    '教学云': 'Teaching Cloud',
+    '待交 ': 'Pending ',
+    '已交 ': 'Submitted ',
+    '（北京时间）': ' (Beijing time)',
+    '以下换算为北京时间；原网页伦敦时间说明保持原文。':
+      'Times below are converted to Beijing time; original London wording is unchanged.',
+    '当前学期': 'Current term',
+    '其它学期': 'Other term',
+    '学期未确认': 'Term unconfirmed',
+    '已获取 ': 'Fetched ',
+    '网络与流量': 'Network & Data',
+    '使用移动网络改善数据获取': 'Use Mobile Data to Improve Fetching',
+    '默认关闭。Wi-Fi 读取失败时，仅对可安全重试的只读请求尝试一次移动网络；可能产生流量费用。':
+      'Off by default. If a Wi-Fi read fails, the app tries mobile data once only for safely repeatable read-only requests. Data charges may apply.',
+    '不会通过移动网络重发密码或修改请求；QMplus 官方登录网页不在此功能范围内。':
+      'Passwords and modifying requests are not retried over mobile data. Official QMplus sign-in pages are not covered.',
+    '无法保存移动网络设置，请重试。': 'Could not save the mobile-data setting. Please retry.',
+    '移动网络辅助已在本次会话中关闭，但设置未保存；下次启动请检查开关。':
+      'Mobile-data assistance is off for this session, but the setting was not saved. Check the switch next time you launch the app.',
     '考试查询': 'Exams',
     '作业 DDL': 'Assignments',
     '按学期查询教务考试安排。': 'Query exam arrangements by term.',
@@ -153,6 +306,52 @@ export class AppLocalization {
     '同步课程': 'Sync Courses',
     '正在同步…': 'Syncing…',
     '退出并清除 QMplus 会话': 'Sign Out and Clear QMplus Session',
+    '退出并清除 QMplus 会话及已保存登录资料': 'Sign Out and Delete Saved QMplus Login',
+    'QMplus 使用独立的官方网页；仅在您主动保存时，Microsoft 登录资料才进入本机安全存储。MFA 仍须本人完成。':
+      'QMplus uses a separate official web page. Microsoft login details enter local secure storage only if you choose to save them. You still complete MFA yourself.',
+    '已在本机安全保存 QMplus 登录资料。': 'QMplus login details are saved securely on this device.',
+    '尚未保存 QMplus 登录资料。': 'No QMplus login details are saved.',
+    'QMplus Microsoft 登录邮箱': 'QMplus Microsoft sign-in email',
+    'QMplus 密码（仅在本机安全保存）': 'QMplus password (stored securely on this device only)',
+    '安全保存 QMplus 登录资料': 'Save QMplus Login Securely',
+    '允许官方登录页自动填写（默认关闭）': 'Allow Autofill on Official Sign-in Pages (Off by Default)',
+    '当前构建尚未验证官方登录表单，自动填写暂不可用；请在网页中手动登录。不会自动处理 MFA 或提交登录。':
+      'The official sign-in form is not yet verified in this build, so autofill is unavailable. Sign in manually; MFA and sign-in submission are never automated.',
+    '仅在已核验的官方登录表单尝试一次自动填写和正常登录；账号选择、MFA、验证码及其它确认仍须手动完成。':
+      'The app attempts one autofill and normal sign-in only on verified official forms. Account selection, MFA, CAPTCHA and other confirmations remain manual.',
+    '仅在已核验的官方登录表单尝试自动填写；其它步骤请手动完成。':
+      'Autofill is attempted only on verified official sign-in forms. Complete other steps manually.',
+    '请在官方网页手动选择登录账户。': 'Choose the sign-in account manually on the official page.',
+    '当前官方账号与保存的账号不一致，请手动登录。':
+      'The current official account does not match the saved account. Sign in manually.',
+    '此官方登录步骤需要您手动完成；应用不会重试或处理 MFA、验证码及确认页面。':
+      'Complete this official sign-in step manually. The app will not retry or handle MFA, CAPTCHA or confirmation pages.',
+    '此官方页面无法安全启用自动填写，请手动登录。':
+      'Autofill cannot be used safely on this official page. Sign in manually.',
+    '账号已提交到官方页面；如出现其他验证，请手动完成。':
+      'The account was submitted to the official page. Complete any further checks manually.',
+    '密码已提交到官方页面；MFA 与其他确认请由您手动完成。':
+      'The password was submitted to the official page. Complete MFA and other confirmations manually.',
+    '当前构建尚未验证官方登录表单，自动填写暂不可用；请手动完成登录。':
+      'Autofill is unavailable until the official sign-in form is verified. Please sign in manually.',
+    '删除已保存的 QMplus 登录资料': 'Delete Saved QMplus Login',
+    '仅在官方网页完成 SSO/MFA；只有您主动保存时，本机系统安全存储才保存独立的 QMplus 登录资料。':
+      'Complete SSO/MFA on the official site. Separate QMplus login details are kept in local system secure storage only if you choose to save them.',
+    '将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏、QMplus 会话和独立保存的登录资料及其它设置。此操作无法撤销。':
+      'This deletes saved accounts and passwords, timetables, room caches, custom schedules, favorites, the QMplus session, separately saved QMplus login details, and other settings. This cannot be undone.',
+    '无法读取 QMplus 登录资料，自动填写已关闭。': 'QMplus login details could not be read. Autofill is off.',
+    '系统无法准备 QMplus 安全存储，请稍后重试。':
+      'System secure storage could not be prepared for QMplus. Try again later.',
+    '无法确认已撤销 QMplus 自动填写；本次运行已停用，重启后请检查。':
+      'The QMplus autofill revocation could not be confirmed. It is off for this run; check it after restart.',
+    '请填写有效的 QMplus 登录账号及密码。': 'Enter a valid QMplus sign-in email and password.',
+    '无法保存 QMplus 登录资料，自动填写保持关闭。': 'QMplus login details could not be saved. Autofill remains off.',
+    '请先安全保存 QMplus 登录账号及密码。': 'Save your QMplus sign-in email and password securely first.',
+    '无法保存 QMplus 自动填写授权，已保持关闭。': 'QMplus autofill authorization could not be saved. It remains off.',
+    'QMplus 自动填写已关闭，但保存的密码未能确认删除，请重试。':
+      'QMplus autofill is off, but deletion of the saved password could not be confirmed. Try again.',
+    '无法确认已撤销 QMplus 自动填写或删除密码；本次运行已停用，重启后请检查。':
+      'Neither QMplus autofill revocation nor password deletion could be confirmed. It is off for this run; check after restart.',
     '在独立的官方网页完成 QMplus SSO/MFA；不向本应用输入或保存 Microsoft 密码。':
       'Complete QMplus SSO/MFA in a separate official web view. This app never asks for or saves your Microsoft password.',
     '将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏、QMplus 会话和其它设置。此操作无法撤销。':
@@ -335,6 +534,8 @@ export class AppLocalization {
       'Browse fictional schedules, rooms, and calendars without a school account.',
     '浏览内置示例数据': 'Browse Demo Data',
     '语言': 'Language',
+    '选择语言': 'Choose Language',
+    '返回': 'Back',
     '跟随系统': 'System',
     '简体中文': 'Simplified Chinese',
     '个人账户': 'Account',
@@ -577,12 +778,18 @@ export class AppLocalization {
     '当天空教室已更新': 'Today\'s empty rooms are up to date',
     '账号已更改，获取课表后将重新安排摘要':
       'The account changed; summaries will be rescheduled after fetching the schedule',
-    '本地数据已清除': 'Local data cleared'
+    '本地数据已清除': 'Local data cleared',
+    '仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。': 'Only verified official sign-in pages may select the exact saved account and fill the username and password, with each step attempted at most once. Unmatched account choices, MFA, CAPTCHA, staying signed in, risk and terms confirmations still require your action.',
+    '关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。': 'Turning off “Enable QMplus” only pauses connection and sync; saved credentials, the session and course cache are retained. Use the separate controls to turn off autofill, delete credentials, or disconnect and clear data.'
   };
 
   static text(source: string, setting: AppLanguage, systemLanguage: string): string {
-    if (AppLanguageInfo.resolved(setting, systemLanguage) !== AppLanguage.english) {
+    const language: AppLanguage = AppLanguageInfo.resolved(setting, systemLanguage);
+    if (language === AppLanguage.simplifiedChinese) {
       return source;
+    }
+    if (language !== AppLanguage.english) {
+      return AppLocalizationCatalog.text(source, language) ?? source;
     }
     const exact: string | undefined = AppLocalization.english[source];
     if (exact !== undefined) {
@@ -714,5 +921,10 @@ export class AppLocalization {
       return 'Month ' + source.substring(0, source.length - 2);
     }
     return source;
+  }
+
+  static format(source: string, values: LocalizationValues, setting: AppLanguage,
+    systemLanguage: string): string {
+    return values.apply(AppLocalization.text(source, setting, systemLanguage));
   }
 }

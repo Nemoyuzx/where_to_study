@@ -7,6 +7,7 @@
 // 并限制响应体大小。云课堂作业需要独立登录会话，本客户端只解析已获授权的
 // 响应；真实登录同步由 UCloudAssignmentClient 负责，不读取浏览器令牌。
 import { http } from '@kit.NetworkKit';
+import { CellularAssist } from './CellularAssist';
 import { util } from '@kit.ArkTS';
 import { AppMeta } from '../common/AppMeta';
 import { JsonUtil } from '../common/JsonUtil';
@@ -1254,7 +1255,7 @@ class FixedPublicJsonTransport {
   private static async request(url: string, maximumBytes: number): Promise<string> {
     const client: http.HttpRequest = http.createHttp();
     try {
-      const response: http.HttpResponse = await client.request(url, {
+      const response: http.HttpResponse = await CellularAssist.request(client, url, {
         method: http.RequestMethod.GET,
         header: {
           'Accept': 'application/json',

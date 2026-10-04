@@ -1,8 +1,12 @@
 // 仅保存设置页的临时 UI 状态，由 RootView 持有；不写入业务偏好或磁盘。
 // 平板侧栏与手机底栏互切时 SettingsView 会重新创建，草稿仍应保留。
+import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
+
 @ObservedV2
 export class SettingsSession {
   @Trace showingPrivacyPolicy: boolean = false;
+  @Trace showingLanguagePicker: boolean = false;
+  @Trace requestedLanguageRawValue: string = '';
   @Trace customDeadlineURLDraft: string = '';
   @Trace editingPreClassReminders: boolean = false;
   @Trace preClassLeadDrafts: string[] = ['10'];
@@ -13,6 +17,18 @@ export class SettingsSession {
 
   private customDeadlineURLDirty: boolean = false;
   private presentationSeeded: boolean = false;
+
+  requestLanguage(value: AppLanguage): void {
+    this.requestedLanguageRawValue = AppLanguageInfo.normalize(value);
+    this.showingLanguagePicker = false;
+  }
+
+  takeLanguageRequest(): AppLanguage | null {
+    if (this.requestedLanguageRawValue.length === 0) { return null; }
+    const requested: AppLanguage = AppLanguageInfo.normalize(this.requestedLanguageRawValue);
+    this.requestedLanguageRawValue = '';
+    return requested;
+  }
 
   seedReviewPresentationDraftsOnce(): boolean {
     if (this.presentationSeeded) { return false; }
@@ -46,6 +62,8 @@ export class SettingsSession {
   }
 
   clearDrafts(): void {
+    this.showingLanguagePicker = false;
+    this.requestedLanguageRawValue = '';
     this.customDeadlineURLDraft = '';
     this.customDeadlineURLDirty = false;
     this.editingPreClassReminders = false;

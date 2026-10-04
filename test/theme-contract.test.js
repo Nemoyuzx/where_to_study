@@ -551,9 +551,11 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
   assert.match(appleSettingsSource, /ForEach\(1 \.\.\. TodayCourseWidgetData\.maximumCourseLimit/)
   assert.match(appleSettingsSource, /Picker\("预览尺寸"/)
   assert.ok(
-    (appleSettingsSource.match(/\.pickerStyle\(\.segmented\)/g) || []).length >= 4,
-    'Apple campus, language, widget count, and preview size must all use segmented controls',
+    (appleSettingsSource.match(/\.pickerStyle\(\.segmented\)/g) || []).length >= 3,
+    'Apple campus, widget count, and preview size must retain segmented controls',
   )
+  assert.match(appleSettingsSource, /private var languageSurface:[\s\S]*?\.pickerStyle\(\.menu\)/,
+    'The multi-language selector must use an independent native menu rather than a thirteen-item segment')
 
   assert.match(
     appleTimelineSource,
@@ -800,7 +802,8 @@ test('Harmony tablet week view follows the macOS header, all-day, and timeline h
   assert.doesNotMatch(allDayRow, /\.height\(58\)/)
   assert.match(harmonyTimelineSource, /calendar\.expanded\.timeline-axis-header/)
   assert.match(harmonyTimelineSource, /calendar\.expanded\.day-header\.'/)
-  assert.match(harmonyTimelineSource, /expandedDayHeaderTitle\(day\.date, this\.isEnglish\(\)\)/)
+  assert.match(harmonyTimelineSource, /expandedDayHeaderTitle\(day\.date, this\.model\.resolvedLanguage\(\)\)/)
+  assert.match(harmonyTimelineSource, /static expandedDayHeaderTitle\(day: DateParts, language: AppLanguage \| boolean\): string \{[\s\S]*?CalendarFormatters\.weekdayLabel\(day, language\)/)
   assert.match(harmonyTimelineSource, /static readonly expandedHourAxisWidth: number = 52/)
   assert.match(harmonyTimelineSource, /static readonly expandedSlotAxisWidth: number = 104/)
   assert.match(harmonyTimelineSource, /static readonly expandedHourHeight: number = 64/)
@@ -818,7 +821,7 @@ test('Harmony tablet week view follows the macOS header, all-day, and timeline h
     /@Builder\s+titleBar\(\)[\s\S]*?@Builder\s+calendarPanelHeader\(\)/,
   )?.[0] ?? ''
   assert.match(titleBar, /this\.model\.text\('视图'\)/)
-  assert.match(titleBar, /\.width\(this\.isEnglish\(\) \? 243 : 170\)/)
+  assert.match(titleBar, /\.width\(this\.model\.resolvedLanguage\(\) === AppLanguage\.simplifiedChinese \|\|[\s\S]*?this\.model\.resolvedLanguage\(\) === AppLanguage\.traditionalChinese \? 170 : 243\)/)
   const dateControls = harmonyExpandedCalendarSource.match(
     /@Builder\s+dateControls\(\)[\s\S]*?@Builder\s+timelineContent\(\)/,
   )?.[0] ?? ''
@@ -864,34 +867,38 @@ test('desktop calendar supplement commands are exposed by the Tauri capability m
 
 test('desktop interface language is persistent and updates the tray without translating API data', () => {
   assert.match(appSource, /resolvedUiLanguage\(settings\.uiLanguage/)
-  assert.match(appSource, /\['system', t\('跟随系统'\)\]/)
-  assert.match(appSource, /\['zh-Hans', t\('简体中文'\)\]/)
-  assert.match(appSource, /\['en', 'English'\]/)
+  assert.match(appSource, /<option value="system">\{t\('跟随系统'\)\}<\/option>/)
+  assert.match(appSource, /UI_LANGUAGES\.map\(\(\{code, name\}\)/)
+  assert.match(appSource, /updateSetting\('uiLanguage', event\.target\.value\)/)
   assert.match(appSource, /command\('set_interface_language', uiLanguage\)/)
   assert.match(tauriSource, /fn set_interface_language/)
-  assert.match(tauriSource, /DESKTOP_INTERFACE_ENGLISH/)
+  assert.match(tauriSource, /DESKTOP_INTERFACE_LANGUAGE/)
   assert.match(appSource, /item\.title/)
   assert.match(appSource, /item\.name/)
   assert.match(appSource, /day\.weather_day/)
 })
 
-test('native graphical clients and supported widgets share the system Chinese English boundary', () => {
+test('native graphical clients expose all thirteen UI locales without translating API data', () => {
   assert.match(appleLocalizationSource, /case system/)
   assert.match(appleLocalizationSource, /case simplifiedChinese = "zh-Hans"/)
   assert.match(appleLocalizationSource, /case english = "en"/)
-  assert.match(appleLocalizationSource, /hasPrefix\("zh"\)/)
   assert.match(appleWidgetDataSource, /languageDefaultsKey = "appLanguage"/)
   assert.match(appleWidgetDataSource, /UserDefaults\(suiteName: appGroupIdentifier\)/)
 
-  assert.match(androidLocaleSource, /SYSTEM\("system"\)/)
-  assert.match(androidLocaleSource, /SIMPLIFIED_CHINESE\("zh-Hans"\)/)
-  assert.match(androidLocaleSource, /ENGLISH\("en"\)/)
+  for (const code of ['zh-Hant','ja','es','pt','ar','ru','tr','th','ms','vi','id']) {
+    assert.ok(appleLocalizationSource.includes(`= "${code}"`), `Apple preference missing ${code}`)
+    assert.ok(androidLocaleSource.includes(`("${code}",`), `Android preference missing ${code}`)
+    assert.ok(harmonyLocalizationSource.includes(`= '${code}'`), `Harmony preference missing ${code}`)
+  }
+  assert.match(androidLocaleSource, /SYSTEM\("system",/)
+  assert.match(androidLocaleSource, /SIMPLIFIED_CHINESE\("zh-Hans",/)
+  assert.match(androidLocaleSource, /ENGLISH\("en",/)
   assert.match(androidWidgetSource, /AppLocale\.wrap\(context, preferences\.languageCode\)/)
 
   assert.match(harmonyLocalizationSource, /system = 'system'/)
   assert.match(harmonyLocalizationSource, /simplifiedChinese = 'zh-Hans'/)
   assert.match(harmonyLocalizationSource, /english = 'en'/)
-  assert.match(harmonyWidgetSource, /prefs\.language === AppLanguage\.english/)
+  assert.match(harmonyWidgetSource, /AppLocalization\.text/)
   assert.match(appleCalendarSource, /Text\(item\.name\)/)
   assert.match(androidLocaleSource, /third-party content/)
   assert.match(harmonyLocalizationSource, /API 返回/)

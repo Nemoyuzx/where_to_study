@@ -54,6 +54,7 @@ final class MobileMonthGridUIView: UIView {
 
     init() {
         super.init(frame: .zero)
+        semanticContentAttribute = .forceLeftToRight
         isAccessibilityElement = false
         backgroundColor = .clear
         cells.forEach(addSubview)

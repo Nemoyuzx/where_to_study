@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "Клиент Where To Study для HarmonyOS" },
+    { "name": "EntryAbility_desc", "value": "Поиск свободных аудиторий и просмотр личного расписания" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "Занятия сегодня" },
+    { "name": "widget_desc", "value": "Время и аудитории сегодняшних занятий" },
+    { "name": "calendar_read_reason", "value": "Чтение импортированных занятий для синхронизации расписания" },
+    { "name": "calendar_write_reason", "value": "Добавление личного расписания в системный календарь" }
+  ]
+}

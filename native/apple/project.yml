@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.4.0"
-    CURRENT_PROJECT_VERSION: "104"
+    CURRENT_PROJECT_VERSION: "106"
     CODE_SIGN_STYLE: Automatic
 targets:
   WhereToStudyMac:
@@ -23,6 +23,8 @@ targets:
       - path: ../../src-tauri/icons/icon.icns
         buildPhase: resources
       - path: ../../contracts/qmplus/qmplus-sync.js
+        buildPhase: resources
+      - path: ../../contracts/qmplus/qmplus-auth.js
         buildPhase: resources
       - path: Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -73,6 +75,9 @@ targets:
       - path: Sources/WidgetShared
       - path: Sources/Widget
       - path: Sources/Shared/Models.swift
+      - path: Sources/Shared/AppLocalization.swift
+      - path: Resources/Localizations
+        buildPhase: resources
       - path: Resources/Widget/PrivacyInfo.xcprivacy
         buildPhase: resources
     info:
@@ -108,6 +113,8 @@ targets:
       - path: Resources/Assets.xcassets
         buildPhase: resources
       - path: ../../contracts/qmplus/qmplus-sync.js
+        buildPhase: resources
+      - path: ../../contracts/qmplus/qmplus-auth.js
         buildPhase: resources
       - path: Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -166,6 +173,9 @@ targets:
       - path: Sources/WidgetShared
       - path: Sources/Widget
       - path: Sources/Shared/Models.swift
+      - path: Sources/Shared/AppLocalization.swift
+      - path: Resources/Localizations
+        buildPhase: resources
       - path: Resources/Widget/PrivacyInfo.xcprivacy
         buildPhase: resources
     info:

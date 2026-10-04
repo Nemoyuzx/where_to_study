@@ -3,6 +3,7 @@
 import { mediaquery } from '@kit.ArkUI';
 import { Course, HolidayItem, SlotMetadata } from '../../common/Models';
 import { StrictDates, DateParts } from '../../common/StrictDates';
+import { AppLanguage, AppLanguageInfo, AppLocalization } from '../../common/AppLocalization';
 
 // 深色模式探测：Android Palette 按 uiMode 取色，月/年课程填充色需要在代码里
 // 完成混色（对应 UiSupport.kt blend(primary, background, opacity)），
@@ -300,8 +301,9 @@ export class TeachingCalendarLogic {
     return result;
   }
 
-  static allDayDialogTitle(mode: CalendarMode, english: boolean): string {
-    if (english) {
+  static allDayDialogTitle(mode: CalendarMode, languageSetting: AppLanguage | boolean): string {
+    const language: AppLanguage = CalendarFormatters.languageOf(languageSetting);
+    if (language === AppLanguage.english) {
       if (mode === CalendarMode.day) {
         return 'Day View · All-day';
       }
@@ -310,7 +312,9 @@ export class TeachingCalendarLogic {
       }
       return 'Week View · All-day';
     }
-    return mode + '视图 · 全天';
+    const source: string = mode + '视图 · 全天';
+    return language === AppLanguage.simplifiedChinese ? source :
+      AppLocalization.text(source, language, language);
   }
 
   static showsTodayMarker(isToday: boolean): boolean {
@@ -382,8 +386,10 @@ export class TeachingCalendarLogic {
     return new CalendarPopoverPosition(x, y);
   }
 
-  static periodTitle(date: DateParts, mode: CalendarMode, english: boolean = false): string {
-    if (english) {
+  static periodTitle(date: DateParts, mode: CalendarMode,
+    languageSetting: AppLanguage | boolean = false): string {
+    const language: AppLanguage = CalendarFormatters.languageOf(languageSetting);
+    if (language === AppLanguage.english) {
       if (mode === CalendarMode.day) {
         return CalendarFormatters.englishMonth(date.month) + ' ' + date.day.toString() + ', ' +
           date.year.toString();
@@ -395,6 +401,10 @@ export class TeachingCalendarLogic {
         return date.year.toString();
       }
       return CalendarFormatters.englishMonth(date.month) + ' ' + date.year.toString();
+    }
+    if (language !== AppLanguage.simplifiedChinese) {
+      return CalendarFormatters.localized(date, language, mode === CalendarMode.year ? 'periodYear' :
+        mode === CalendarMode.day ? 'periodDay' : 'periodMonth');
     }
     if (mode === CalendarMode.day) {
       return date.year.toString() + '年' + date.month.toString() + '月' + date.day.toString() + '日';
@@ -654,18 +664,58 @@ export class CalendarPopoverPosition {
 
 export class CalendarFormatters {
   static readonly weekdayLabels: string[] = ['一', '二', '三', '四', '五', '六', '日'];
+  private static readonly localizedFormats: Map<string, Intl.DateTimeFormat> = new Map<string, Intl.DateTimeFormat>();
 
-  static weekdayLabel(day: DateParts, english: boolean = false): string {
-    if (english) {
+  static languageOf(value: AppLanguage | boolean): AppLanguage {
+    if (typeof value === 'boolean') { return value ? AppLanguage.english : AppLanguage.simplifiedChinese; }
+    const normalized: AppLanguage = AppLanguageInfo.normalize(value);
+    return normalized === AppLanguage.system ?
+      AppLanguageInfo.resolved(normalized, AppLanguageInfo.systemLanguage()) : normalized;
+  }
+
+  static localized(day: DateParts, language: AppLanguage, style: string): string {
+    const cacheKey: string = language + '|' + style;
+    let formatter: Intl.DateTimeFormat | undefined = CalendarFormatters.localizedFormats.get(cacheKey);
+    if (formatter === undefined) {
+      if (style === 'weekdayShort') {
+        formatter = new Intl.DateTimeFormat(language, { timeZone: 'UTC', weekday: 'short' });
+      } else if (style === 'fullDate') {
+        formatter = new Intl.DateTimeFormat(language,
+          { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      } else if (style === 'monthDay') {
+        formatter = new Intl.DateTimeFormat(language, { timeZone: 'UTC', month: 'short', day: 'numeric' });
+      } else if (style === 'periodDay') {
+        formatter = new Intl.DateTimeFormat(language,
+          { timeZone: 'UTC', year: 'numeric', month: 'long', day: 'numeric' });
+      } else if (style === 'periodMonth') {
+        formatter = new Intl.DateTimeFormat(language,
+          { timeZone: 'UTC', year: 'numeric', month: 'long' });
+      } else if (style === 'periodYear') {
+        formatter = new Intl.DateTimeFormat(language, { timeZone: 'UTC', year: 'numeric' });
+      } else {
+        formatter = new Intl.DateTimeFormat(language, { timeZone: 'UTC', month: 'long' });
+      }
+      CalendarFormatters.localizedFormats.set(cacheKey, formatter);
+    }
+    return formatter.format(new Date(Date.UTC(day.year, day.month - 1, day.day, 12)));
+  }
+
+  static weekdayLabel(day: DateParts, languageSetting: AppLanguage | boolean = false): string {
+    const language: AppLanguage = CalendarFormatters.languageOf(languageSetting);
+    if (language === AppLanguage.english) {
       const labels: string[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return labels[StrictDates.weekdayMonday1(day) - 1];
+    }
+    if (language !== AppLanguage.simplifiedChinese) {
+      return CalendarFormatters.localized(day, language, 'weekdayShort');
     }
     return '周' + CalendarFormatters.weekdayLabels[StrictDates.weekdayMonday1(day) - 1];
   }
 
   // 2026年8月18日 星期二
-  static fullDate(day: DateParts, english: boolean = false): string {
-    if (english) {
+  static fullDate(day: DateParts, languageSetting: AppLanguage | boolean = false): string {
+    const language: AppLanguage = CalendarFormatters.languageOf(languageSetting);
+    if (language === AppLanguage.english) {
       const weekdays: string[] = [
         'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
       ];
@@ -673,20 +723,29 @@ export class CalendarFormatters {
         CalendarFormatters.englishMonth(day.month) + ' ' + day.day.toString() + ', ' +
         day.year.toString();
     }
+    if (language !== AppLanguage.simplifiedChinese) {
+      return CalendarFormatters.localized(day, language, 'fullDate');
+    }
     const weekdays: string[] = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
     return day.year.toString() + '年' + day.month.toString() + '月' + day.day.toString() + '日 ' +
       weekdays[StrictDates.weekdayMonday1(day) - 1];
   }
 
-  static monthDayCompact(day: DateParts, english: boolean = false): string {
-    if (english) {
+  static monthDayCompact(day: DateParts, languageSetting: AppLanguage | boolean = false): string {
+    const language: AppLanguage = CalendarFormatters.languageOf(languageSetting);
+    if (language === AppLanguage.english) {
       return CalendarFormatters.englishMonth(day.month) + ' ' + day.day.toString();
     }
-    return day.month.toString() + '月' + day.day.toString() + '日';
+    return language === AppLanguage.simplifiedChinese ?
+      day.month.toString() + '月' + day.day.toString() + '日' :
+      CalendarFormatters.localized(day, language, 'monthDay');
   }
 
-  static monthLabel(month: number, english: boolean = false): string {
-    return english ? CalendarFormatters.englishMonth(month) : month.toString() + '月';
+  static monthLabel(month: number, languageSetting: AppLanguage | boolean = false): string {
+    const language: AppLanguage = CalendarFormatters.languageOf(languageSetting);
+    if (language === AppLanguage.english) { return CalendarFormatters.englishMonth(month); }
+    if (language === AppLanguage.simplifiedChinese) { return month.toString() + '月'; }
+    return CalendarFormatters.localized(new DateParts(2020, month, 1), language, 'month');
   }
 
   static englishMonth(month: number): string {

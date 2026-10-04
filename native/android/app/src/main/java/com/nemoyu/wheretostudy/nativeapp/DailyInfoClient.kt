@@ -174,11 +174,15 @@ class UapiWeatherClient(
     }
 
     private fun fetchPayload(initial: URI): String {
+        return CellularAssist.readOnly { fetchPayloadOnRoute(initial) }
+    }
+
+    private fun fetchPayloadOnRoute(initial: URI): String {
         var current = initial
         try {
             repeat(DailyInfoLimits.maximumRedirects + 1) {
                 validate(current)
-                val connection = current.toURL().openConnection() as HttpURLConnection
+                val connection = CellularAssist.openConnection(current.toURL())
                 try {
                     connection.requestMethod = "GET"
                     connection.connectTimeout = 10_000

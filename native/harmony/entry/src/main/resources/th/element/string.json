@@ -1,0 +1,11 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "แอป Where To Study สำหรับ HarmonyOS" },
+    { "name": "EntryAbility_desc", "value": "ดูห้องเรียนว่างและตารางเรียนส่วนตัว" },
+    { "name": "EntryAbility_label", "value": "Where To Study" },
+    { "name": "widget_label", "value": "วิชาเรียนวันนี้" },
+    { "name": "widget_desc", "value": "ดูเวลาและห้องของวิชาเรียนวันนี้" },
+    { "name": "calendar_read_reason", "value": "อ่านกิจกรรมวิชาที่นำเข้าเพื่อซิงค์ตารางเรียน" },
+    { "name": "calendar_write_reason", "value": "เพิ่มตารางเรียนส่วนตัวลงในปฏิทินระบบ" }
+  ]
+}

@@ -53,7 +53,9 @@
 "仅修改此账号本学期的本地课表，刷新后仍保持，可在个人账户中恢复。不会退选学校课程、删除作业 DDL 或已导出的系统日历事件。" = "Chỉ thay đổi lịch học cục bộ của tài khoản này trong học kỳ hiện tại. Thay đổi vẫn còn sau khi làm mới và có thể khôi phục trong Tài khoản Cá nhân. Việc đăng ký môn tại trường, hạn chót bài tập và sự kiện lịch đã xuất không thay đổi.";
 "仅删除本次课程" = "Chỉ xóa buổi học này";
 "仅删除本次课程？" = "Chỉ xóa buổi học này?";
+"仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" = "Chỉ trên trang đăng nhập chính thức đã được xác minh, ứng dụng mới tự chọn tài khoản khớp chính xác với tài khoản đã lưu và điền tên đăng nhập cùng mật khẩu, mỗi bước tối đa một lần. Việc chọn tài khoản không khớp, MFA, CAPTCHA, duy trì đăng nhập và xác nhận rủi ro hoặc điều khoản vẫn do bạn thực hiện.";
 "仅在当天有课时通知；课表更新或账号变更后会自动重排。" = "Chỉ thông báo vào ngày có lớp và tự lên lịch lại sau khi lịch học hoặc tài khoản thay đổi.";
+"仅适用国院" = "Chỉ dành cho Khoa Quốc tế";
 "今天" = "Hôm nay";
 "今天可以自由安排" = "Hôm nay bạn có thể tự sắp xếp thời gian";
 "今天没有处于有效期内的结构化班车表" = "Không có lịch xe buýt trường dạng cấu trúc nào còn hiệu lực hôm nay";
@@ -100,6 +102,7 @@
 "公开活动 DDL" = "Hạn chót sự kiện công khai";
 "六" = "T7";
 "关于本应用" = "Giới thiệu ứng dụng";
+"关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。" = "Tắt “Bật QMplus” chỉ tạm dừng kết nối và đồng bộ; thông tin đăng nhập đã lưu, phiên và bộ nhớ đệm khóa học vẫn được giữ lại. Hãy dùng các thao tác riêng để tắt tự điền, xóa thông tin đăng nhập hoặc ngắt kết nối và xóa dữ liệu.";
 "关闭全天日程" = "Đóng sự kiện cả ngày";
 "关闭弹层" = "Đóng lớp phủ";
 "关闭时间" = "Giờ đóng";
@@ -129,6 +132,7 @@
 "同意并继续" = "Đồng ý và tiếp tục";
 "后勤部通知 · %@" = "Thông báo hậu cần · %@";
 "启动或获取/刷新课表后，会自动应用教务返回的学期与开学日期。" = "Khi mở ứng dụng hoặc tải/làm mới thời khóa biểu, học kỳ và ngày bắt đầu do hệ thống học vụ trả về sẽ được áp dụng tự động.";
+"启用 QMplus" = "Bật QMplus";
 "周" = "Tuần";
 "周一" = "Thứ Hai";
 "周三" = "Thứ Tư";
@@ -287,6 +291,7 @@
 "整点" = "Giờ tròn";
 "断开 QMplus 并清除会话" = "Ngắt kết nối QMplus và xóa phiên";
 "无法保存 QMplus 登录信息，自动填写未启用。" = "Không lưu được thông tin đăng nhập QMplus; tự điền chưa được bật.";
+"无法保存本地偏好。" = "Không thể lưu tùy chọn trên thiết bị.";
 "无法同步公开活动或校内通知，请稍后重试。" = "Không đồng bộ được sự kiện công khai hoặc thông báo trong trường. Hãy thử lại sau.";
 "无法清除原账号的课表与空教室缓存，账号未更改。" = "Không xóa được thời khóa biểu và bộ nhớ đệm phòng học trống của tài khoản cũ, nên tài khoản chưa được thay đổi.";
 "无法确认 QMplus 登录信息的保存状态，请重新保存或删除。" = "Không xác minh được trạng thái lưu thông tin đăng nhập QMplus. Hãy lưu lại hoặc xóa.";

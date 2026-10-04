@@ -145,4 +145,75 @@ class QmplusSnapshotCodecTest {
         assertEquals(listOf("due_at", "cutoff_at"), QmplusActivityPresentation.timeFields(dates.copy(kind = "assignment")).map { it.first })
         assertTrue(QmplusActivityPresentation.timeFields(item.copy(opensAt = null, closesAt = null)).isEmpty())
     }
+
+    @Test fun onlyTheExactAdministrativeAssignmentTitleIsExcludedWithConservativeNormalization() {
+        val excluded = listOf("COURSEWORK MARK REVIEW REQUEST", " coursework\tmark  review\nrequest ",
+            "Coursework-Mark/Review_Request:Form", "COURSEWORK\u0085MARK\u202FREVIEW\u00A0REQUEST",
+            "COURSEWORK\u2010MARK\u2011REVIEW\u2012REQUEST\u2015FORM", "COURSEWORK\u2212MARK REVIEW REQUEST",
+            "\uFEFFＣＯＵＲＳＥＷＯＲＫ　ＭＡＲＫ　ＲＥＶＩＥＷ　ＲＥＱＵＥＳＴ　ＦＯＲＭ\uFEFF")
+        excluded.forEach { title ->
+            assertTrue(title, QmplusCourseworkPolicy.isMarkReviewRequest("assignment", title))
+            assertFalse(title, QmplusCourseworkPolicy.isMarkReviewRequest("quiz", title))
+        }
+        listOf("Essay: Coursework Mark Review Request", "Coursework Mark Review Request Essay",
+            "Coursework Mark Review Request Formative Essay", "Coursework Mark Review Requests",
+            "Coursework Mark Review", "Peer review assignment", "Feedback report",
+            "Coursework Mark Review Request (Form)", "Coursework.Mark.Review.Request").forEach { title ->
+            assertFalse(title, QmplusCourseworkPolicy.isMarkReviewRequest("assignment", title))
+        }
+    }
+
+    @Test fun decodedAndLegacyDisplayedSnapshotsRetainRealUndatedAssignmentsAndSameNamedQuiz() {
+        val base = sample()
+        val assignment = base.activities.single().copy(kind = "assignment", title = "Real undated assignment",
+            url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=2", opensAt = null, timeLimitSeconds = null)
+        val review = assignment.copy(id = "3", title = "COURSEWORK MARK REVIEW REQUEST",
+            url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=3")
+        val sameNamedQuiz = base.activities.single().copy(id = "4", title = review.title,
+            url = "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=4")
+        val legacy = base.copy(courses = listOf(base.courses.single().copy(name = "EBU Synthetic")),
+            activities = listOf(review, assignment, sameNamedQuiz))
+        val decoded = QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(legacy))
+        assertEquals(listOf("2", "4"), decoded.activities.map { it.id })
+        assertEquals(listOf("2", "4"), QmplusSnapshotCodec.ebuOnly(legacy).activities.map { it.id })
+        assertNull(decoded.activities.first().dueAt)
+        assertEquals(review.title, decoded.activities.last().title)
+        assertEquals(legacy.fetchedAt, decoded.fetchedAt)
+    }
+
+    @Test fun partialCacheMergesCannotRestoreAdministrativeRequestsFromEitherSnapshot() {
+        val base = sample()
+        val review = base.activities.single().copy(id = "3", title = "Coursework Mark Review Request Form",
+            kind = "assignment", url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=3")
+        val previous = base.copy(activities = listOf(review) + base.activities)
+        val partial = base.copy(activities = listOf(review), partial = true)
+        val merged = QmplusSnapshotCodec.preservingKnownActivities(partial, previous)
+        assertEquals(base.activities, merged.activities)
+        assertTrue(merged.partial)
+        assertTrue("QM_PREVIOUS_ACTIVITIES_RETAINED" in merged.warnings)
+        assertTrue(QmplusSnapshotCodec.preservingKnownActivities(partial, null).activities.isEmpty())
+        assertTrue(QmplusSnapshotCodec.preservingKnownActivities(partial.copy(partial = false), previous).activities.isEmpty())
+    }
+
+    @Test fun excludedTitlesStillRequireValidDTOFieldsUniqueIDsAndWarningsBeforeFiltering() {
+        val base = sample()
+        val review = base.activities.single().copy(title = "COURSEWORK MARK REVIEW REQUEST", kind = "assignment",
+            url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=2")
+        fun changed(key: String, value: Any): ByteArray {
+            val root = JSONObject(String(QmplusSnapshotCodec.encode(base.copy(activities = listOf(review)))))
+            root.getJSONArray("activities").getJSONObject(0).put(key, value)
+            return root.toString().toByteArray(StandardCharsets.UTF_8)
+        }
+        assertThrows(IllegalArgumentException::class.java) { QmplusSnapshotCodec.decode(changed("course_id", "999")) }
+        assertThrows(IllegalArgumentException::class.java) { QmplusSnapshotCodec.decode(changed("due_at", "invalid")) }
+        assertThrows(IllegalArgumentException::class.java) {
+            QmplusSnapshotCodec.decode(changed("url", "https://evil.example/mod/assign/view.php?id=2"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(base.copy(activities = listOf(review, review))))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(base.copy(activities = listOf(review), warnings = listOf("invalid-warning"))))
+        }
+    }
 }
