@@ -39,9 +39,9 @@ import androidx.window.layout.WindowMetricsCalculator
 import java.util.concurrent.Executor
 import kotlin.math.ceil
 
-data class LocalDataClearResult(val failedItems: List<String>) {
+data class LocalDataClearResult(val failedItems: List<String>, val pendingItems: List<String> = emptyList()) {
     val isComplete: Boolean
-        get() = failedItems.isEmpty()
+        get() = failedItems.isEmpty() && pendingItems.isEmpty()
 }
 
 class MainActivity : Activity() {
@@ -53,6 +53,7 @@ class MainActivity : Activity() {
     ) {
         PLANNER("空教室", R.id.navigation_planner, R.id.page_planner, R.drawable.ic_nav_classroom),
         CALENDAR("教学日历", R.id.navigation_calendar, R.id.page_calendar, R.drawable.ic_nav_calendar),
+        COURSES("课程", R.id.navigation_courses, R.id.page_courses, R.drawable.ic_course_book),
         QUERY("查询", R.id.navigation_query, R.id.page_query, R.drawable.ic_nav_query),
         SETTINGS("设置", R.id.navigation_settings, R.id.page_settings, R.drawable.ic_nav_settings),
     }
@@ -75,6 +76,8 @@ class MainActivity : Activity() {
     private lateinit var teachingCalendarSessionState: TeachingCalendarSessionState
     private lateinit var informationQuerySessionState: InformationQuerySessionState
     private var informationQueryPage: InformationQueryPage? = null
+    private lateinit var courseSessionState: InformationQuerySessionState
+    private var coursesPage: InformationQueryPage? = null
     private var settingsPage: SettingsPage? = null
     private var restoringUiState = false
     private var uiRestoreRevision = 0
@@ -202,6 +205,14 @@ class MainActivity : Activity() {
             ?: InformationQuerySessionState(
                 savedInstanceState?.getString(INFORMATION_QUERY_MODE_KEY),
             ).also { activitySession.query = it }
+        courseSessionState = activitySession.courses ?: InformationQuerySessionState(
+            savedInstanceState?.getString(COURSE_MODE_KEY) ?: InformationQueryMode.COURSES.name,
+        ).also { activitySession.courses = it }
+        if (informationQuerySessionState.selectedMode in InformationQueryMode.courseModes) {
+            courseSessionState.selectedMode = informationQuerySessionState.selectedMode
+            informationQuerySessionState.selectedMode = InformationQueryMode.SHUTTLE
+            if (selectedDestination == Destination.QUERY) selectedDestination = Destination.COURSES
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(
@@ -702,6 +713,8 @@ class MainActivity : Activity() {
     private fun navigate(destination: Destination) {
         captureUiSession()
         val previousDestination = selectedDestination
+        if (previousDestination == Destination.COURSES && destination != Destination.COURSES)
+            courseSessionState.courseDetailKey = null
         selectedDestination = destination
         if (destination == Destination.SETTINGS) prewarmPublicDeadlinesIfEnabled()
         if (destination == Destination.SETTINGS) {
@@ -746,6 +759,7 @@ class MainActivity : Activity() {
         updatePhoneNavigationVisibility()
         plannerPage = null
         informationQueryPage = null
+        coursesPage = null
         settingsPage = null
         val page = when (destination) {
             Destination.PLANNER -> PlannerPage(
@@ -789,6 +803,24 @@ class MainActivity : Activity() {
                         ViewGroup.LayoutParams.MATCH_PARENT,
                     ),
                 )
+            }
+            Destination.COURSES -> FrameLayout(this).apply {
+                setThemeBackgroundColor { Palette.background }
+                addView(InformationQueryPage(
+                    activity = this@MainActivity,
+                    shuttleRepository = shuttleBusRepository,
+                    dailyInfoRepository = calendarDailyInfoRepository,
+                    preferences = preferences,
+                    availableWidthDp = currentLayoutSpec?.contentWidthDp ?: currentWindowWidthDp(),
+                    sessionState = courseSessionState,
+                    usesBottomNavigation = currentLayoutSpec?.usesBottomNavigation == true,
+                    gradesRepository = academicGradesRepository,
+                    scheduleRepository = scheduleRepository,
+                    modes = InformationQueryMode.courseModes,
+                    pageTitleText = "课程",
+                    qmplusRepository = activitySession.qmplus,
+                ).also { coursesPage = it }.build(), FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
             }
             Destination.SETTINGS -> SettingsPage(
                 this,
@@ -842,6 +874,55 @@ class MainActivity : Activity() {
             return
         }
         navigate(selectedDestination)
+    }
+
+    internal fun qmplusState(): QmplusRepository = activitySession.qmplus
+
+    internal fun connectQmplus(startURL: String = QmplusPolicy.START_URL) {
+        if (isFinishing || isDestroyed || activitySession.uiOwner.current() !== this) return
+        if (!QmplusPolicy.isBusinessPage(startURL)) return
+        val repository = activitySession.qmplus
+        val connection = repository.beginConnection() ?: return
+        captureUiSession()
+        runCatching {
+            startActivityForResult(Intent(this, QmplusActivity::class.java)
+                .putExtra(QmplusActivity.EXTRA_GENERATION, connection.generation)
+                .putExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN, connection.token)
+                .putExtra(QmplusActivity.EXTRA_START_URL, startURL)
+                .putExtra(QmplusActivity.EXTRA_CLEAR_FIRST, repository.cookiesNeedClearing), QMPLUS_REQUEST_CODE)
+        }.onFailure {
+            repository.finishConnection(connection.token)
+            repository.synchronizationFailed(connection.generation)
+        }
+    }
+
+    internal fun disconnectQmplus() {
+        runCatching { activitySession.qmplus.clear() }.onFailure {
+            Toast.makeText(this, getString(R.string.qmplus_clear_failed), Toast.LENGTH_LONG).show()
+        }
+        if (!clearQmplusWebSession()) activitySession.qmplus.cookieClearCouldNotStart()
+    }
+
+    private fun clearQmplusWebSession(): Boolean = runCatching {
+        val repository = activitySession.qmplus
+        startService(Intent(this, QmplusClearService::class.java)
+            .putExtra(QmplusActivity.EXTRA_GENERATION, repository.generation)
+            .putExtra(QmplusClearService.EXTRA_RECEIVER, QmplusClearReceiver(repository)))
+    }.isSuccess
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != QMPLUS_REQUEST_CODE || isFinishing || isDestroyed) return
+        val repository = activitySession.qmplus
+        val token = data?.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN) ?: repository.connection?.token
+        if (!repository.finishConnection(token) || data == null) return
+        val generation = data.getLongExtra(QmplusActivity.EXTRA_GENERATION, -1)
+        if (data.getBooleanExtra(QmplusActivity.EXTRA_COOKIES_CLEARED, false))
+            activitySession.qmplus.cookiesCleared(generation)
+        data.getByteArrayExtra(QmplusActivity.EXTRA_SNAPSHOT)?.takeIf { resultCode == RESULT_OK }
+            ?.let { activitySession.qmplus.accept(it, generation) }
+        if (data.getBooleanExtra(QmplusActivity.EXTRA_SYNC_FAILED, false))
+            activitySession.qmplus.synchronizationFailed(generation)
     }
 
     /** UI-only appearance update. Existing pages, input fields and scroll state stay mounted. */
@@ -1219,6 +1300,7 @@ class MainActivity : Activity() {
             INFORMATION_QUERY_MODE_KEY,
             informationQuerySessionState.selectedMode.name,
         )
+        outState.putString(COURSE_MODE_KEY, courseSessionState.selectedMode.name)
         outState.putBoolean(NAVIGATION_RAIL_COLLAPSED_KEY, navigationRailCollapsed)
         outState.putBoolean(
             CALENDAR_PERMISSION_PENDING_KEY,
@@ -1286,6 +1368,7 @@ class MainActivity : Activity() {
         LocalDataCoordinator.clear {
             academicGradesRepository.clear()
             calendarDailyInfoRepository.clearAssignments()
+            clearItem("QMplus 课程缓存") { activitySession.qmplus.clear() }
             clearItem("账号和密码") { credentialStore.clear() }
             clearItem("应用设置") { preferences.clear() }
             clearItem("颜色主题") { ColorThemePreferences(this).clear() }
@@ -1314,11 +1397,17 @@ class MainActivity : Activity() {
         activitySession.scrollAnchors.clear()
         settingsPage = null
         runCatching(::refreshCurrentPage)
-        return LocalDataClearResult(failures)
+        val cookieClearStarted = clearQmplusWebSession()
+        if (!cookieClearStarted) {
+            failures += "QMplus 网页会话"
+            activitySession.qmplus.cookieClearCouldNotStart()
+        }
+        return LocalDataClearResult(failures, if (cookieClearStarted) listOf("QMplus 网页会话") else emptyList())
     }
 
     fun clearCalendarAssignmentData() {
         calendarDailyInfoRepository.clearAssignments()
+        activitySession.courses?.automaticCourseLoadAttempted = false
     }
 
     private fun refreshClassroomsAtStartup() {
@@ -1360,6 +1449,7 @@ class MainActivity : Activity() {
         if (!::content.isInitialized) return
         when (selectedDestination) {
             Destination.QUERY -> informationQueryPage?.scheduleDidRefresh()
+            Destination.COURSES -> coursesPage?.scheduleDidRefresh()
             Destination.SETTINGS -> settingsPage?.scheduleDidRefresh()
             else -> if (succeeded && refreshOtherPages) refreshCurrentPage()
         }
@@ -1614,6 +1704,8 @@ class MainActivity : Activity() {
         const val SELECTED_DESTINATION_KEY = "selected_destination"
         const val SETTINGS_ROUTE_KEY = "settings_route"
         const val INFORMATION_QUERY_MODE_KEY = "information_query_mode"
+        const val COURSE_MODE_KEY = "course_mode"
+        const val QMPLUS_REQUEST_CODE = 7401
         const val CALENDAR_PERMISSION_REQUEST_CODE = 4107
         const val CALENDAR_PERMISSION_PENDING_KEY = "calendar_permission_request_pending"
         const val CALENDAR_IMPORT_TOKEN_KEY = "calendar_import_token"

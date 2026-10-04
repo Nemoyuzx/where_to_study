@@ -22,7 +22,7 @@ class NavigationVisualPolishUiTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
     private val device get() = UiDevice.getInstance(instrumentation)
-    private val navigationNames = listOf("navigation_planner", "navigation_calendar", "navigation_query", "navigation_settings")
+    private val navigationNames = listOf("navigation_planner", "navigation_calendar", "navigation_courses", "navigation_query", "navigation_settings")
 
     private fun id(name: String): Int = context.resources.getIdentifier(name, "id", context.packageName)
     private fun launch(): ActivityScenario<MainActivity> {
@@ -77,7 +77,7 @@ class NavigationVisualPolishUiTest {
 
     @Test fun capsuleSelectionMovesWithoutScalingLabelsOrRebuildingReselectedPage() {
         launch().use { scenario ->
-            listOf(1, 3, 0, 2, 3, 1).forEach { index ->
+            listOf(1, 4, 0, 2, 3, 1).forEach { index ->
                 scenario.onActivity { activity -> activity.findViewById<View>(id(navigationNames[index])).performClick() }
                 device.waitForIdle()
                 scenario.onActivity { activity ->
@@ -100,10 +100,10 @@ class NavigationVisualPolishUiTest {
                         assertEquals("Only the active destination should stay bold",
                             tab.isSelected, tab.typeface.isBold)
                     }
-                    val pageName = listOf("page_planner", "page_calendar", "page_query", "page_settings")[index]
+                    val pageName = listOf("page_planner", "page_calendar", "page_courses", "page_query", "page_settings")[index]
                     val page = activity.findViewById<View>(id(pageName))
                     selected.performClick()
-                    if (index == 3) assertSame(page, activity.findViewById(id(pageName)))
+                    if (index == 4) assertSame(page, activity.findViewById(id(pageName)))
                 }
             }
         }

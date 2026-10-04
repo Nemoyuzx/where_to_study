@@ -1,11 +1,8 @@
 import SwiftUI
 
-enum InformationQueryMode: String, CaseIterable, Identifiable {
+enum InformationQueryMode: String, QueryDestinationMode {
     case shuttle
     case importantEvents
-    case grades
-    case exams
-    case assignments
 
     var id: String { rawValue }
 
@@ -13,9 +10,6 @@ enum InformationQueryMode: String, CaseIterable, Identifiable {
         switch self {
         case .shuttle: "bus"
         case .importantEvents: "calendar.badge.exclamationmark"
-        case .grades: "chart.bar.xaxis"
-        case .exams: "doc.text.magnifyingglass"
-        case .assignments: "checklist"
         }
     }
 
@@ -23,9 +17,6 @@ enum InformationQueryMode: String, CaseIterable, Identifiable {
         switch self {
         case .shuttle: "班车查询"
         case .importantEvents: "重要事件"
-        case .grades: "成绩查询"
-        case .exams: "考试安排"
-        case .assignments: "课程作业 DDL"
         }
     }
 }
@@ -331,11 +322,6 @@ struct InformationQueriesView: View {
         .task(id: eventQueryKey) {
             await eventQueryStore.update(key: eventQueryKey, snapshots: calendarDeadlines.publicByDate)
         }
-        .task(id: model.calendarDataOwnerRevision) {
-            async let grades: Void = model.loadGrades(termID: model.gradeStore.selectedTerm, recordType: model.gradeStore.recordType)
-            async let assignments: Void = calendarDeadlines.loadAssignmentQuery(sampleMode: model.isSampleMode)
-            _ = await (grades, assignments)
-        }
     }
 
     private var animatedModeSelection: Binding<InformationQueryMode> {
@@ -361,12 +347,6 @@ struct InformationQueriesView: View {
             shuttleContent
         case .importantEvents:
             importantEventsContent
-        case .grades:
-            GradeQueryView(store: model.gradeStore)
-        case .exams:
-            ExamQueryView()
-        case .assignments:
-            AssignmentQueryView(store: calendarDeadlines)
         }
     }
 

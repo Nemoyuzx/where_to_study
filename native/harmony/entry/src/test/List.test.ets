@@ -21,6 +21,8 @@ import appLocalizationTest from './AppLocalization.test';
 import shuttleBusClientTest from './ShuttleBusClient.test';
 import shuttleQueryLayoutTest from './ShuttleQueryLayout.test';
 import queryLogicTest from './QueryLogic.test';
+import courseLogicTest from './CourseLogic.test';
+import qmPlusSnapshotTest from './QMPlusSnapshot.test';
 import networkDiagnosticsTest from './NetworkDiagnostics.test';
 import privacyConsentTest from './PrivacyConsent.test';
 import settingsSessionTest from './SettingsSession.test';
@@ -54,6 +56,8 @@ export default function testsuite() {
   shuttleBusClientTest();
   shuttleQueryLayoutTest();
   queryLogicTest();
+  courseLogicTest();
+  qmPlusSnapshotTest();
   networkDiagnosticsTest();
   privacyConsentTest();
   settingsSessionTest();

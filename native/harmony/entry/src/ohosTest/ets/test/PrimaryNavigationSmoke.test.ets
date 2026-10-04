@@ -1,5 +1,5 @@
 // 主导航 UI 冒烟测试，对应 iOS 端 PrimaryNavigationSmokeTests 的关键断言：
-// 四个一级页面可导航、示例模式（review-demo）展示本地数据、
+// 五个一级页面可导航、示例模式（review-demo）展示本地数据、
 // 日历四视图切换与月视图展开收起。
 import { describe, it, expect, beforeAll } from '@ohos/hypium';
 import { Driver, ON, MatchPattern, Component, Point } from '@ohos.UiTest';
@@ -9,6 +9,7 @@ import { PhoneNavigationLayout } from '../../../main/ets/common/DeviceState';
 import { DateParts, StrictDates } from '../../../main/ets/common/StrictDates';
 import { TeachingCalendarLogic } from '../../../main/ets/view/calendar/CalendarLogic';
 import { QueryPageContract, QueryPageTab } from '../../../main/ets/common/QueryLogic';
+import { CoursePageContract, CoursePageTab } from '../../../main/ets/common/CourseLogic';
 
 const BUNDLE_NAME: string = 'com.nemoyu.wheretostudy';
 
@@ -332,6 +333,34 @@ export default function primaryNavigationSmokeTest() {
       await driver.delayMs(500);
       expect(await (await driver.findComponent(ON.id('query.tab.events'))).isSelected()).assertTrue();
       expect(await driver.findComponent(ON.id('query.events.show_ended')) !== null).assertTrue();
+    });
+
+    it('courses_are_primary_with_private_grade_exam_assignment_tabs', 0, async () => {
+      await launchApp(true);
+      const driver: Driver = Driver.create();
+      const courses: Component = await driver.findComponent(ON.id('navigation.courses'));
+      expect(courses !== null).assertTrue();
+      await courses.click();
+      await driver.delayMs(500);
+      const selector: Component = await driver.findComponent(ON.id('courses.tab_picker'));
+      expect(selector !== null).assertTrue();
+      for (const tab of CoursePageContract.tabs) {
+        expect(await driver.findComponent(ON.id(CoursePageContract.accessibilityID(tab))) !== null).assertTrue();
+      }
+      expect(await (await driver.findComponent(ON.id(CoursePageContract.accessibilityID(CoursePageTab.current))))
+        .isSelected()).assertTrue();
+      await (await driver.findComponent(ON.id(CoursePageContract.accessibilityID(CoursePageTab.grades)))).click();
+      await driver.delayMs(300);
+      expect(await (await driver.findComponent(ON.id(CoursePageContract.accessibilityID(CoursePageTab.grades))))
+        .isSelected()).assertTrue();
+      await (await driver.findComponent(ON.id('navigation.query'))).click();
+      await driver.delayMs(300);
+      expect(await driver.findComponent(ON.id('query.tab.shuttle')) !== null).assertTrue();
+      expect(await driver.findComponent(ON.id('query.tab.events')) !== null).assertTrue();
+      await (await driver.findComponent(ON.id('navigation.courses'))).click();
+      await driver.delayMs(300);
+      expect(await (await driver.findComponent(ON.id(CoursePageContract.accessibilityID(CoursePageTab.grades))))
+        .isSelected()).assertTrue();
     });
 
     it('query_tabs_stay_in_one_fixed_row_and_expose_selected_accessibility_state', 0, async () => {

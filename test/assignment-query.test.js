@@ -17,10 +17,13 @@ test('assignment catalogue keeps completed work and filters locally in Shanghai 
   assert.equal(items[0].id, 'b')
 })
 test('query panels are independently addressable and use native private commands', () => {
-  const hub = readFileSync(new URL('../src/QueryHub.jsx', import.meta.url), 'utf8')
+  const hub = readFileSync(new URL('../src/CourseHub.jsx', import.meta.url), 'utf8')
+  const publicHub = readFileSync(new URL('../src/QueryHub.jsx', import.meta.url), 'utf8')
   const panel = readFileSync(new URL('../src/PrivateQueriesPanel.jsx', import.meta.url), 'utf8')
   const capabilities = JSON.parse(readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url)))
-  for (const kind of ['shuttle', 'events', 'grades', 'exams', 'assignments']) assert.ok(hub.includes(`setTab('${kind}')`))
+  for (const kind of ['shuttle', 'events']) assert.ok(publicHub.includes(`setTab('${kind}')`))
+  for (const kind of ['grades', 'exams', 'assignments']) assert.ok(hub.includes(`'${kind}'`))
+  assert.doesNotMatch(publicHub, /<GradesPanel|<PrivateQueriesPanel/)
   for (const command of ['fetch_assignment_list', 'fetch_exams']) {
     assert.ok(panel.includes(`command('${command}'`))
     assert.ok(capabilities.permissions.includes(`allow-${command.replaceAll('_', '-')}`))

@@ -345,14 +345,17 @@ export class AssignmentDeadlineItem {
   readonly courseName: string | null;
   readonly deadline: string;
   readonly status: string | null;
+  // Only filled when a per-course Teaching Cloud response supplies the owning siteId.
+  readonly courseID: string | null;
 
   constructor(id: string, title: string, courseName: string | null, deadline: string,
-    status: string | null) {
+    status: string | null, courseID: string | null = null) {
     this.id = id;
     this.title = title;
     this.courseName = courseName;
     this.deadline = deadline;
     this.status = status;
+    this.courseID = courseID;
   }
 }
 

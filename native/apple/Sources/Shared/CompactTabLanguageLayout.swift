@@ -101,6 +101,11 @@ final class CompactTabLanguageLayoutView: UIView {
             }
             bar.invalidateIntrinsicContentSize()
             bar.setNeedsLayout()
+            // The bar can invalidate its container's safe area. Flush both
+            // layouts in the same nonanimated transaction, not on a later
+            // frame after SwiftUI has already displayed the new locale.
+            controller.view.setNeedsLayout()
+            controller.view.layoutIfNeeded()
             bar.layoutIfNeeded()
             if let selected, bar.selectedItem !== selected { bar.selectedItem = selected }
         }

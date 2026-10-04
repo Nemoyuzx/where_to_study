@@ -24,6 +24,9 @@ final class CompactTabLanguageLayoutTests: XCTestCase {
         defer { probe.cancelPendingUpdate(); window.isHidden = true; window.rootViewController = nil }
         let items = try XCTUnwrap(tabs.tabBar.items)
         let controllers = try XCTUnwrap(tabs.viewControllers)
+        var settledControllerFrame: CGRect?
+        var settledBarFrame: CGRect?
+        var settledSafeArea: UIEdgeInsets?
         for (index, titles) in [["课表", "设置"], ["Schedule", "Settings"], ["课表", "设置"]].enumerated() {
             probe.update(titles: titles)
             try await waitUntil { probe.refreshCount == index + 1 && state.taskStarts > 0 }
@@ -32,6 +35,15 @@ final class CompactTabLanguageLayoutTests: XCTestCase {
             XCTAssertTrue(tabs.tabBar.items?.first === items[0])
             XCTAssertEqual(tabs.tabBar.items?.map(\.title), titles.map(Optional.some))
             XCTAssertEqual(scroll.contentOffset.y, 640)
+            if let settledControllerFrame, let settledBarFrame, let settledSafeArea {
+                XCTAssertEqual(tabs.view.frame, settledControllerFrame)
+                XCTAssertEqual(tabs.tabBar.frame, settledBarFrame)
+                XCTAssertEqual(tabs.view.safeAreaInsets, settledSafeArea)
+            } else {
+                settledControllerFrame = tabs.view.frame
+                settledBarFrame = tabs.tabBar.frame
+                settledSafeArea = tabs.view.safeAreaInsets
+            }
             XCTAssertEqual(state.taskStarts, 1, "Refreshing translated titles must not reappear/reload the selected page")
             probe.update(titles: titles)
             XCTAssertEqual(probe.refreshCount, index + 1, "Unchanged titles must not schedule another refresh")

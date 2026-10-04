@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import GradesPanel from './GradesPanel.jsx'
-import PrivateQueriesPanel from './PrivateQueriesPanel.jsx'
 import {
   AlertTriangle,
   BusFront,
   CalendarClock,
-  CheckCircle2,
-  Clock3,
   ExternalLink,
   Loader2,
   MapPin,
@@ -267,18 +263,7 @@ export default function QueryHub({
         <button type="button" role="tab" aria-selected={tab === 'events'} className={tab === 'events' ? 'active' : ''} onClick={() => setTab('events')}>
           <CalendarClock size={17} />{t('重要事件')}
         </button>
-        <button type="button" role="tab" aria-selected={tab === 'grades'} className={tab === 'grades' ? 'active' : ''} onClick={() => setTab('grades')}>
-          <CheckCircle2 size={17} />{language === 'en' ? 'Grades' : '成绩查询'}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === 'exams'} className={tab === 'exams' ? 'active' : ''} onClick={() => setTab('exams')}>
-          <CalendarClock size={17} />{language === 'en' ? 'Exams' : '考试查询'}
-        </button>
-        <button type="button" role="tab" aria-selected={tab === 'assignments'} className={tab === 'assignments' ? 'active' : ''} onClick={() => setTab('assignments')}>
-          <Clock3 size={17} />{language === 'en' ? 'Assignment DDL' : '课程作业 DDL'}
-        </button>
       </div>
-      <GradesPanel command={command} language={language} enabled={tab === 'grades'} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount} />
-      {['exams', 'assignments'].map(kind => <PrivateQueriesPanel key={kind} kind={kind} enabled={tab === kind} command={command} language={language} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount} examSnapshot={examSnapshot} />)}
 
       {tab === 'shuttle' ? (
         <div className="query-shuttle" role="tabpanel">

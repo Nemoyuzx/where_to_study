@@ -3,6 +3,7 @@ import WidgetKit
 
 enum SettingsSurfaceID: String, Hashable {
     case account
+    case qmplus
     case semester
     case notification
     case information
@@ -118,6 +119,7 @@ struct FavoriteDeadlineManagementPresentation: View {
 enum SettingsLayoutPolicy {
     static let leadingColumn: [SettingsSurfaceID] = [
         .account,
+        .qmplus,
         .semester
     ]
 
@@ -133,6 +135,7 @@ enum SettingsLayoutPolicy {
 
     static let singleColumn: [SettingsSurfaceID] = [
         .account,
+        .qmplus,
         .semester,
         .notification,
         .information,
@@ -323,6 +326,8 @@ struct SettingsView: View {
         switch surface {
         case .account:
             accountSurface
+        case .qmplus:
+            QMplusSettingsSurface(store: model.qmplus)
         case .semester:
             semesterSurface
         case .notification:
@@ -612,7 +617,9 @@ struct SettingsView: View {
                             if language != model.appLanguage {
                                 session.languageScroll.capture(beforeSwitchTo: language)
                             }
-                            model.setAppLanguage(language)
+                            var transaction = Transaction()
+                            transaction.disablesAnimations = true
+                            withTransaction(transaction) { model.setAppLanguage(language) }
                         }
                     )
                 ) {
@@ -1102,6 +1109,37 @@ struct SettingsView: View {
 
     private func dismissKeyboard() {
         if focusedAccountField != nil { focusedAccountField = nil }
+    }
+}
+
+private struct QMplusSettingsSurface: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.appTheme) private var theme
+    @ObservedObject var store: QMplusStore
+
+    var body: some View {
+        Surface {
+            VStack(alignment: .leading, spacing: 10) {
+                Label("QMplus", systemImage: "network").font(.headline)
+                Text(model.localized("请在官方网页完成 SSO 与 MFA。本应用不读取或保存微软密码。"))
+                    .font(.callout).foregroundStyle(theme.secondaryText)
+                Text(model.localized(store.statusKey)).font(.caption).foregroundStyle(theme.secondaryText)
+                ViewThatFits(in: .horizontal) {
+                    HStack { connectionActions }.fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading) { connectionActions }
+                }
+                .buttonStyle(.bordered)
+                Text(model.localized("QMplus 会话与教务账号隔离；断开连接或清除本地数据会删除该会话和课程快照。"))
+                    .font(.caption).foregroundStyle(theme.secondaryText)
+            }
+        }.accessibilityIdentifier("settings.qmplus")
+    }
+
+    @ViewBuilder private var connectionActions: some View {
+        Button(model.localized("连接 QMplus")) { store.connect(sampleMode: model.isSampleMode) }
+            .disabled(model.isSampleMode).accessibilityIdentifier("settings.qmplus.connect")
+        Button(model.localized("断开 QMplus 并清除会话")) { store.disconnect() }
+            .disabled(model.isSampleMode).accessibilityIdentifier("settings.qmplus.disconnect")
     }
 }
 

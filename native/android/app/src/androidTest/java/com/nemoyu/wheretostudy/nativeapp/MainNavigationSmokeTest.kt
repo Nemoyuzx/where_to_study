@@ -1399,7 +1399,7 @@ class MainNavigationSmokeTest {
                 scenario.onActivity { activity ->
                     originalGeometry = phoneNavigationGeometry(activity)
                     assertEquals(
-                        listOf("空教室", "教学日历", "查询", "设置"),
+                        listOf("空教室", "教学日历", "课程", "查询", "设置"),
                         phoneNavigationLabels(activity),
                     )
                     activity.updateAppLanguage(AppLanguage.ENGLISH)
@@ -1412,10 +1412,14 @@ class MainNavigationSmokeTest {
                         originalGeometry,
                         phoneNavigationGeometry(activity),
                     )
-                    assertEquals(
-                        listOf("Empty Classrooms", "Teaching Calendar", "Query", "Settings"),
-                        phoneNavigationLabels(activity),
-                    )
+                    val expectedLabels = listOf("Empty Classrooms", "Teaching Calendar", "Courses", "Query", "Settings")
+                    val displayedLabels = phoneNavigationLabels(activity)
+                    if (displayedLabels.all(String::isEmpty)) {
+                        assertEquals(expectedLabels, listOf(R.id.navigation_planner, R.id.navigation_calendar,
+                            R.id.navigation_courses, R.id.navigation_query, R.id.navigation_settings).map {
+                            activity.findViewById<View>(it).contentDescription.toString()
+                        })
+                    } else assertEquals(expectedLabels, displayedLabels)
                     activity.updateAppLanguage(AppLanguage.SIMPLIFIED_CHINESE)
                 }
                 SystemClock.sleep(600L)
@@ -1427,7 +1431,7 @@ class MainNavigationSmokeTest {
                         phoneNavigationGeometry(activity),
                     )
                     assertEquals(
-                        listOf("空教室", "教学日历", "查询", "设置"),
+                        listOf("空教室", "教学日历", "课程", "查询", "设置"),
                         phoneNavigationLabels(activity),
                     )
                 }
@@ -2429,6 +2433,7 @@ class MainNavigationSmokeTest {
     private fun phoneNavigationLabels(activity: MainActivity): List<String> = listOf(
         R.id.navigation_planner,
         R.id.navigation_calendar,
+        R.id.navigation_courses,
         R.id.navigation_query,
         R.id.navigation_settings,
     ).map { id -> activity.findViewById<TextView>(id).text.toString() }
@@ -2562,6 +2567,7 @@ class MainNavigationSmokeTest {
             listOf(
                 R.id.navigation_planner,
                 R.id.navigation_calendar,
+                R.id.navigation_courses,
                 R.id.navigation_query,
                 R.id.navigation_settings,
             ).forEach { navigationID ->

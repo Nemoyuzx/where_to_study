@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import org.junit.Assert.*
 import org.junit.Before
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -26,22 +27,71 @@ class QueryContentStabilityUiTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
     private val context get() = instrumentation.targetContext
 
-    @Before fun privacy() = ensurePrivacyConsentForUiTest()
+    private val animationSettings = linkedMapOf<String, String>()
+
+    @Before fun privacy() {
+        ensurePrivacyConsentForUiTest()
+        val device = UiDevice.getInstance(instrumentation)
+        listOf("animator_duration_scale", "transition_animation_scale", "window_animation_scale").forEach { key ->
+            val previous = device.executeShellCommand("settings get global $key").trim()
+            check(previous == "null" || Regex("^[0-9]+(?:\\.[0-9]+)?$").matches(previous))
+            animationSettings[key] = previous
+            device.executeShellCommand("settings put global $key 1")
+        }
+        // The owned AVD may start with all three scales disabled. Assert a real
+        // animation environment; production still respects disabled-motion mode.
+        var enabled = false
+        val deadline = android.os.SystemClock.elapsedRealtime() + 5_000
+        while (!enabled && android.os.SystemClock.elapsedRealtime() < deadline) {
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                enabled = android.os.Build.VERSION.SDK_INT < 26 || android.animation.ValueAnimator.areAnimatorsEnabled()
+            }
+            if (!enabled) android.os.SystemClock.sleep(10)
+        }
+        assertTrue("Animation lifecycle assertions require enabled system animators", enabled)
+    }
+
+    @After fun restoreAnimationSettings() {
+        val device = UiDevice.getInstance(instrumentation)
+        animationSettings.forEach { (key, value) ->
+            device.executeShellCommand(if (value == "null") "settings delete global $key" else "settings put global $key $value")
+        }
+        animationSettings.clear()
+    }
 
     @Test fun activitySchedulePublicationInvalidatesOnlyTheExamBody() {
         ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
             .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
+            lateinit var page: ViewGroup
+            lateinit var header: View
+            lateinit var content: FrameLayout
             scenario.onActivity { activity ->
-                activity.findViewById<View>(R.id.navigation_query).performClick()
+                activity.findViewById<View>(R.id.navigation_courses).performClick()
                 activity.findViewById<View>(R.id.information_query_grades_tab).performClick()
-                val page = activity.findViewById<ViewGroup>(R.id.information_query_page)
-                val header = page.findViewWithTag<View>("information.query.header")
-                val content = activity.findViewById<FrameLayout>(R.id.information_query_content)
+                page = activity.findViewById(R.id.information_query_page)
+                header = page.findViewWithTag("information.query.header")
+                content = activity.findViewById(R.id.information_query_content)
                 val body = content.getChildAt(0)
                 activity.scheduleDidRefresh()
                 assertSame(page, activity.findViewById(R.id.information_query_page))
                 assertSame(body, content.getChildAt(0))
                 activity.findViewById<View>(R.id.information_query_exams_tab).performClick()
+            }
+            // This assertion concerns a completed publication, not the separate
+            // mid-entry defer contract. Do not race the enabled 220ms transition.
+            val deadline = android.os.SystemClock.elapsedRealtime() + 5_000
+            var entered = false
+            while (!entered && android.os.SystemClock.elapsedRealtime() < deadline) {
+                scenario.onActivity { activity ->
+                    val owner = checkNotNull(MainActivity::class.java.getDeclaredField("coursesPage")
+                        .apply { isAccessible = true }.get(activity))
+                    entered = owner.javaClass.getDeclaredField("modeTransitionBody").apply { isAccessible = true }.get(owner) == null
+                }
+                if (!entered) android.os.SystemClock.sleep(10)
+            }
+            assertTrue("Exam entry must actually finish before completed-publication assertions", entered)
+            scenario.onActivity { activity ->
                 val examBody = content.getChildAt(0)
                 activity.scheduleDidRefresh()
                 assertSame(page, activity.findViewById(R.id.information_query_page))
@@ -72,7 +122,7 @@ class QueryContentStabilityUiTest {
             navigation = activity.findViewById<View?>(R.id.phone_navigation)
                 ?: activity.findViewById(R.id.tablet_navigation)
             listOf(R.id.information_query_exams_tab, R.id.information_query_assignments_tab,
-                R.id.information_query_shuttle_tab, R.id.information_query_events_tab,
+                R.id.course_current_tab,
                 R.id.information_query_grades_tab).forEach { id ->
                 assertTrue(activity.findViewById<View>(id).performClick())
                 assertSame(page, activity.findViewById(R.id.information_query_page))
@@ -86,7 +136,8 @@ class QueryContentStabilityUiTest {
                     assertEquals(0f, stable.translationX)
                     assertEquals(0f, stable.translationY)
                 }
-                assertEquals("Only the replacement body starts its fade", 0f, content.getChildAt(0).alpha)
+                assertEquals("Only the replacement body starts its fade: ${activity.resources.getResourceEntryName(id)}",
+                    0f, content.getChildAt(0).alpha)
             }
             assertEquals("Selection never starts a private fetch", 1, fixture.gradeFetches.get())
             assertNull(fixture.events.allAssignments())
@@ -99,12 +150,12 @@ class QueryContentStabilityUiTest {
                 assertTextFits(label)
                 assertEquals("Query labels stay intact at the user's font scale", 1, label.layout.lineCount)
                 assertEquals("Accessibility keeps the complete query name",
-                    it.uiText(InformationQueryMode.entries[index].label), label.contentDescription)
+                    it.uiText(InformationQueryMode.courseModes[index].label), label.contentDescription)
             }
             val viewport = page.findViewWithTag<View>("information.query.mode.viewport")
             val visible = android.graphics.Rect().also(viewport::getGlobalVisibleRect)
             assertFalse("The fixed mode selector is never horizontally scrollable", viewport is android.widget.HorizontalScrollView)
-            assertEquals("All five modes fit the viewport at every font scale", viewport.width, selector.width)
+            assertEquals("All four course modes fit the viewport at every font scale", viewport.width, selector.width)
             labels.forEach { label ->
                 val location = IntArray(2).also(label::getLocationOnScreen)
                 assertTrue(location[0] >= visible.left && location[0] + label.width <= visible.right)
@@ -291,7 +342,7 @@ class QueryContentStabilityUiTest {
         try {
             ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
                 .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
-                scenario.onActivity { activity -> activity.findViewById<View>(R.id.navigation_query).performClick() }
+                scenario.onActivity { activity -> activity.findViewById<View>(R.id.navigation_courses).performClick() }
                 settled(scenario)
                 scenario.onActivity { activity ->
                     val original = activity.findViewById<View>(R.id.information_query_page)
@@ -301,7 +352,8 @@ class QueryContentStabilityUiTest {
                     owner.addView(InformationQueryPage(activity, fixture.shuttles, fixture.events, preferences,
                         (owner.width / activity.resources.displayMetrics.density).toInt(),
                         InformationQuerySessionState(InformationQueryMode.GRADES.name),
-                        activity.findViewById<View?>(R.id.phone_navigation) != null, grades, fixture.schedules).build(), params)
+                        activity.findViewById<View?>(R.id.phone_navigation) != null, grades, fixture.schedules,
+                        modes = InformationQueryMode.courseModes, pageTitleText = "课程").build(), params)
                 }
                 settled(scenario)
                 block(scenario, fixture)

@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BellRing,
   Building2,
+  BookOpen,
   CalendarDays,
   CalendarPlus,
   CalendarRange,
@@ -119,6 +120,7 @@ import {
   yearCourseOpacity,
 } from './planner-domain.js'
 import QueryHub from './QueryHub.jsx'
+import CourseHub from './CourseHub.jsx'
 import ColorThemeSettings, { useColorTheme } from './ColorThemeSettings.jsx'
 import { colorThemeHeatmap, resolvedColorTheme } from './color-themes.js'
 import './App.css'
@@ -126,11 +128,13 @@ import './App.css'
 const NAV_ITEMS = [
   { id: 'planner', label: '空教室', Icon: Home },
   { id: 'calendar', label: '教学日历', Icon: CalendarRange },
+  { id: 'courses', label: '课程', Icon: BookOpen },
   { id: 'query', label: '查询', Icon: Search },
   { id: 'settings', label: '设置', Icon: Settings },
 ]
 
 const EN_TEXT = Object.freeze({
+  '课程': 'Courses',
   '考试': 'Exam',
   '考试详情': 'Exam details',
   '考试安排来自学校教务服务，不支持本地删除。': 'Exam arrangements come from the university academic service and cannot be deleted locally.',
@@ -511,6 +515,10 @@ const PRIVACY_SECTIONS = [
     body: '应用仅把密码通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存令牌并从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\nThe password is submitted only to auth.bupt.edu.cn over HTTPS. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. The app reads no browser cookies, sends no password to UCloud APIs, persists no ticket, cookie, token, or assignment, and reuses results in memory for at most ten minutes.',
   },
   {
+    title: 'QMplus 独立连接 / Independent QMplus connection',
+    body: 'QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在自己的隔离 incognito 窗口打开官方 QMplus 页面，由用户直接完成 SSO／Microsoft MFA；应用没有 Microsoft 密码输入框，也不读取系统浏览器 Cookie。只读同步脚本返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业或开始测验，也不经过第三方 Worker 或本项目服务器。Windows/Linux 的会话与业务快照仅在进程内存中；部分同步失败会保留明确标注的上次资料。断开连接或清除本地数据会删除应用管理的会话与快照；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按其政策处理登录信息及网络元数据。\n\nQMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in its own isolated incognito window, where you complete SSO/Microsoft MFA directly. The app has no Microsoft password field and reads no system-browser cookies. Its read-only script returns a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML. It does not submit work, start quizzes, use a third-party Worker, or send data to this project’s server. On Windows/Linux the session and snapshot remain only in process memory; genuine partial failures retain clearly labelled prior data. Disconnecting or clearing local data removes the app-managed session and snapshot; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies.',
+  },
+  {
     title: '系统日历、通知与小组件 / Calendar, notifications, and widgets',
     body: '只有在你主动操作并授予权限后，应用才会写入系统日历或安排本地课程通知；只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供。相关数据不上传给维护者。\n\nCalendar writes and local course notifications require your action and permission, and only marked events are managed. Course widgets exist only on supported platforms. This data is not uploaded to the maintainer.',
   },
@@ -583,7 +591,7 @@ function PrivacyPolicyDialog({ onClose }) {
           <div>
             <p className="eyebrow">Where To Study</p>
             <h2 id="privacy-dialog-title">隐私声明 / Privacy Policy</h2>
-            <span>生效日期 / Effective date: 2026-10-02</span>
+            <span>生效日期 / Effective date: 2026-10-03</span>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
@@ -686,6 +694,10 @@ function browserPreviewCommand(name, payload = {}) {
       supports_calendar_import: false,
     }
   }
+  if (name === 'fetch_course_list') return [{id:'demo-course',name:'示例本学期课程（非实时数据）',teacher_names:['示例教师'],url:'https://ucloud.bupt.edu.cn/uclass/index.html#/student/homePage'}]
+  if (name === 'load_qmplus') return null
+  if (name === 'connect_qmplus') throw new Error('请使用原生客户端的官方 QMplus 登录窗口。')
+  if (name === 'disconnect_qmplus') return null
   if (name === 'load_saved_settings') {
     if (browserPreviewSavedSettings) return browserPreviewSavedSettings
     return {
@@ -1694,7 +1706,7 @@ function App() {
       const target = event.target instanceof Element ? event.target : null
       if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
       if (event.altKey && !event.ctrlKey && !event.metaKey) {
-        const destination = { '1': 'planner', '2': 'calendar', '3': 'query', '4': 'settings' }[event.key]
+        const destination = { '1': 'planner', '2': 'calendar', '3': 'courses', '4': 'query', '5': 'settings' }[event.key]
         if (destination) {
           event.preventDefault()
           setActivePage(destination)
@@ -2057,7 +2069,7 @@ function App() {
     let unlistenHideNotice = null
 
     listen('tray:navigate', (event) => {
-      if (['planner', 'calendar', 'query', 'settings'].includes(event.payload)) {
+      if (['planner', 'calendar', 'courses', 'query', 'settings'].includes(event.payload)) {
         setActivePage(event.payload)
       }
     }).then((dispose) => {
@@ -3939,6 +3951,8 @@ function App() {
                   ? calendarHeaderTitle
                   : activePage === 'query'
                     ? t('综合查询')
+                  : activePage === 'courses'
+                    ? t('课程')
                   : activePage === 'settings'
                     ? t('设置')
                     : t('联动查询')}</h1>
@@ -3991,6 +4005,12 @@ function App() {
               t={t}
             />
           ) : null}
+
+          {activePage === 'courses' ? <CourseHub
+            key={`courses:${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`}
+            command={command} language={uiLanguage} hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
+            examSnapshot={schedule?.exam_schedule} onOpenAccount={()=>setActivePage('settings')}
+          /> : null}
 
           {activePage === 'planner' ? (
         <>
@@ -4865,6 +4885,12 @@ function App() {
 
           {activePage === 'settings' && !favoriteManagerOpen ? (
         <section className="settings-layout">
+          <section className="panel"><div className="panel-title"><BookOpen size={18}/><h2>QMplus</h2></div>
+            <p>{uiLanguage==='en'?'Connect through the official QMplus login and complete SSO/MFA. Microsoft passwords are not stored. Only course and assessment data stays in this app.':'通过 QMplus 官方网页完成 SSO／MFA，不保存微软密码；仅同步课程和活动业务信息到本机。'}</p>
+            <div className="query-action-row"><button onClick={()=>command('connect_qmplus').catch(e=>setError(normalizeError(e)))}><ExternalLink size={16}/>{uiLanguage==='en'?'Connect / sync QMplus':'连接／同步 QMplus'}</button>
+            <button onClick={()=>command('disconnect_qmplus').catch(e=>setError(normalizeError(e)))}>{uiLanguage==='en'?'Disconnect and clear QMplus data':'退出并清除 QMplus 数据'}</button></div>
+            <small>{uiLanguage==='en'?'This isolated session may require sign-in again after closing the login window.':'隔离会话关闭后可能需要重新登录，课程快照在本次应用会话中保留。'}</small>
+          </section>
           <section className="panel settings-reference-notice" aria-label={t('数据参考提示')}>
             <strong>{t('显示数据仅供参考，请以实际情况为准。')}</strong>
             <span>{uiLanguage === 'en' ? '显示数据仅供参考，请以实际情况为准。' : 'Displayed data is for reference only; please rely on the actual official information.'}</span>

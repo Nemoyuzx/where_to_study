@@ -102,7 +102,7 @@ class MotionLifecycleAuditUiTest {
     }
 
     private fun queryPage(activity: MainActivity): InformationQueryPage =
-        MainActivity::class.java.getDeclaredField("informationQueryPage")
+        MainActivity::class.java.getDeclaredField("coursesPage")
             .apply { isAccessible = true }.get(activity) as InformationQueryPage
 
     @Test fun weatherDisclosureKeepsScrollAndViewportAcrossPublicationAndRapidReverse() =
@@ -188,10 +188,10 @@ class MotionLifecycleAuditUiTest {
             lateinit var examsBody: View
             lateinit var eventsBody: View
             scenario.onActivity { activity ->
-                assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
+                assertTrue(activity.findViewById<View>(R.id.navigation_courses).performClick())
                 root = activity.findViewById(R.id.information_query_page)
                 selector = activity.findViewById(R.id.information_query_mode_switch)
-                scroll = activity.findViewById(R.id.information_query_shuttle_scroll)
+                scroll = activity.findViewById(R.id.course_current_scroll)
                 content = activity.findViewById(R.id.information_query_content)
                 assertTrue(activity.findViewById<View>(R.id.information_query_exams_tab).performClick())
                 examsBody = content.getChildAt(0)
@@ -208,13 +208,13 @@ class MotionLifecycleAuditUiTest {
                     examsBody.alpha > 0f && examsBody.alpha < 1f)
                 assertTrue("Exams entry needs an intermediate offset",
                     examsBody.translationX > 0f && examsBody.translationX < activity.dp(16))
-                assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).performClick())
+                assertTrue(activity.findViewById<View>(R.id.course_current_tab).performClick())
                 eventsBody = content.getChildAt(0)
                 assertNotSame(examsBody, eventsBody)
                 assertTrue(eventsBody.translationX < 0f)
             }
             afterFrame(scenario) { activity ->
-                assertSame(scroll, activity.findViewById(R.id.information_query_events_scroll))
+                assertSame(scroll, activity.findViewById(R.id.course_current_scroll))
                 assertSame(eventsBody, content.getChildAt(0))
                 assertTrue("Reverse entry must have an intermediate opacity",
                     eventsBody.alpha > 0f && eventsBody.alpha < 1f)
@@ -225,12 +225,12 @@ class MotionLifecycleAuditUiTest {
             }
             SystemClock.sleep(340L)
             scenario.onActivity { activity ->
-                assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())
+                assertTrue(activity.findViewById<View>(R.id.navigation_courses).performClick())
                 val returned = activity.findViewById<FrameLayout>(R.id.information_query_content)
                 assertEquals(1, returned.childCount)
                 assertEquals(1f, returned.getChildAt(0).alpha, 0.01f)
                 assertEquals(0f, returned.getChildAt(0).translationX, 0.5f)
-                assertTrue(activity.findViewById<View>(R.id.information_query_events_tab).isSelected)
+                assertTrue(activity.findViewById<View>(R.id.course_current_tab).isSelected)
                 assertFalse(root.isAttachedToWindow)
             }
         }

@@ -26,6 +26,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".QmplusActivity"
+            android:exported="false"
+            android:process=":qmplus" />
+        <service
+            android:name=".QmplusClearService"
+            android:exported="false"
+            android:process=":qmplus" />
         <service
             android:name=".DailyClassroomRefreshJobService"
             android:exported="true"

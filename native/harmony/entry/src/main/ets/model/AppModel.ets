@@ -32,7 +32,7 @@ import {
   PublicDeadlineResponseParser, PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../net/CalendarDailyInfoClient';
 import {
-  AssignmentDeadlineFetching, UCloudAssignmentClient
+  AssignmentDeadlineFetching, UCloudAssignmentClient, UCloudCourse
 } from '../net/UCloudAssignmentClient';
 import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
 import { CalendarImporting, HarmonyCalendarImporter } from '../calendar/CalendarImporter';
@@ -266,6 +266,12 @@ export class AppModel implements CalendarViewportPreloadTarget {
   @Trace assignmentCatalogLoading: boolean = false;
   @Trace assignmentCatalogError: string = '';
   private assignmentCatalogRevision: number = 0;
+  @Trace cloudCourses: UCloudCourse[] = [];
+  @Trace cloudCoursesLoading: boolean = false;
+  @Trace cloudCoursesError: string = '';
+  @Trace cloudCoursesFetchedAt: string = '';
+  private cloudCoursesFetchedAtMillis: number = 0;
+  private cloudCoursesRevision: number = 0;
   @Trace statusMessage: string = '';
   @Trace classroomStatusMessage: string = '';
   @Trace calendarImportStatusMessage: string = '';
@@ -1919,6 +1925,43 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
   }
 
+  async loadCloudCourseDirectory(refresh: boolean = false): Promise<void> {
+    if (this.cloudCoursesLoading || (!refresh && this.cloudCoursesFetchedAtMillis > 0 &&
+      Date.now() - this.cloudCoursesFetchedAtMillis < 10 * 60 * 1000)) { return; }
+    if (this.isSampleMode()) {
+      this.cloudCoursesError = '示例模式不查询真实课程。';
+      return;
+    }
+    const revision: number = ++this.cloudCoursesRevision;
+    const generation: number = this.localDataGeneration;
+    const account: string = this.account.trim();
+    const password: string = this.password;
+    const cloudPassword: string = this.cloudPassword;
+    const current: () => boolean = (): boolean => revision === this.cloudCoursesRevision &&
+      generation === this.localDataGeneration && account === this.account.trim() &&
+      password === this.password && cloudPassword === this.cloudPassword;
+    this.cloudCoursesLoading = true;
+    this.cloudCoursesError = '';
+    try {
+      const credentials: Credentials = await this.assignmentCredentialsForRequest();
+      if (!current()) { return; }
+      if (this.assignmentClient.fetchCourseDirectory === undefined) {
+        throw new Error('教学云课程目录暂时不可用。');
+      }
+      const courses: UCloudCourse[] = await this.assignmentClient.fetchCourseDirectory(credentials, refresh);
+      if (!current()) { return; }
+      this.cloudCourses = courses;
+      this.cloudCoursesFetchedAtMillis = Date.now();
+      this.cloudCoursesFetchedAt = StrictDates.formatFetchedAt(this.cloudCoursesFetchedAtMillis);
+    } catch (e) {
+      if (current()) {
+        this.cloudCoursesError = e instanceof Error ? e.message : '教学云课程目录暂时不可用。';
+      }
+    } finally {
+      if (revision === this.cloudCoursesRevision) { this.cloudCoursesLoading = false; }
+    }
+  }
+
   async selectGradeTerm(termID: string): Promise<void> {
     this.gradeTermID = termID;
     await this.loadGrades(false);
@@ -2349,10 +2392,16 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private resetCalendarDailyInfoState(): void {
     this.calendarDailyInfoRevision++;
     this.assignmentCatalogRevision++;
+    this.cloudCoursesRevision++;
     this.assignmentCatalog = [];
     this.assignmentCatalogFetchedAt = '';
     this.assignmentCatalogLoading = false;
     this.assignmentCatalogError = '';
+    this.cloudCourses = [];
+    this.cloudCoursesLoading = false;
+    this.cloudCoursesError = '';
+    this.cloudCoursesFetchedAt = '';
+    this.cloudCoursesFetchedAtMillis = 0;
     this.almanacByDate = new Map<string, AlmanacInfo>();
     this.almanacErrors = new Map<string, string>();
     this.loadingAlmanacDates = new Set<string>();

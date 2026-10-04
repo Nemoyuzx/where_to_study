@@ -6,6 +6,9 @@ const text = (path) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 const app = text('../src/App.jsx')
 const queryHub = text('../src/QueryHub.jsx')
+const courseHub = text('../src/CourseHub.jsx')
+const appleCourses = text('../native/apple/Sources/Shared/CoursesView.swift')
+const harmonyCourses = text('../native/harmony/entry/src/main/ets/view/CourseView.ets')
 const queryDomain = text('../src/query-domain.js')
 const tauriDeadlines = text('../src-tauri/src/deadlines.rs')
 const tauriShuttle = text('../src-tauri/src/shuttle.rs')
@@ -56,16 +59,18 @@ const assertOrdered = (source, fragments) => {
   }
 }
 
-test('every graphical platform exposes query as a primary destination between calendar and settings', () => {
-  assertOrdered(app, ["id: 'planner'", "id: 'calendar'", "id: 'query'", "id: 'settings'"])
+test('every graphical platform separates courses from the public query destination', () => {
+  assertOrdered(app, ["id: 'planner'", "id: 'calendar'", "id: 'courses'", "id: 'query'", "id: 'settings'"])
   assert.match(app, /activePage === 'query'[\s\S]*<QueryHub/)
   assert.doesNotMatch(app, /openQueryHub|queryHubOpen|queryHubReturnPage/)
   assert.match(queryHub, /role="tab"[\s\S]*'班车查询'/)
   assert.match(queryHub, /role="tab"[\s\S]*'重要事件'/)
-  assert.match(queryHub, /role="tab"[\s\S]*'成绩查询'/)
-  assert.match(queryHub, /<GradesPanel[\s\S]*enabled=\{tab === 'grades'\}/)
+  assert.doesNotMatch(queryHub, /<GradesPanel|<PrivateQueriesPanel/)
+  assert.match(courseHub, /<GradesPanel/)
+  assert.match(courseHub, /<PrivateQueriesPanel/)
 
-  assertOrdered(appleAppModel, ['case planner', 'case calendar', 'case queries', 'case settings'])
+  assertOrdered(appleAppModel, ['case planner', 'case calendar', 'case courses', 'case queries', 'case settings'])
+  assert.match(appleRoot, /case \.courses:\s+CoursesView\(/)
   assert.match(appleRoot, /case \.queries:\s+InformationQueriesView\(/)
   assert.match(appleRoot, /shuttleStore: modeServices\.shuttle/)
   assert.match(appleRoot, /eventQueryStore: modeServices\.importantEvents/)
@@ -77,10 +82,11 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(appleQueryPicker, /Image\(systemName: mode\.systemImage\)/)
   assert.match(appleQueryPicker, /\.accessibilityLabel\(AppLocalization\.string\(mode\.titleKey/)
   assert.doesNotMatch(appleQueryPicker, /ScrollView|horizontalScroll/)
-  assert.match(appleQuery, /case grades/)
-  assert.match(appleQuery, /case \.grades:\s*GradeQueryView\(store: model\.gradeStore\)/)
+  assert.doesNotMatch(appleQuery, /case grades|GradeQueryView/)
+  assert.match(appleCourses, /case \.grades:\s*GradeQueryView\(store: model\.gradeStore\)/)
 
-  assertOrdered(androidMain, ['PLANNER("空教室"', 'CALENDAR("教学日历"', 'QUERY("查询"', 'SETTINGS("设置"'])
+  assertOrdered(androidMain, ['PLANNER("空教室"', 'CALENDAR("教学日历"', 'COURSES("课程"', 'QUERY("查询"', 'SETTINGS("设置"'])
+  assert.match(androidMain, /Destination\.COURSES ->/)
   assert.match(androidMain, /Destination\.QUERY ->[\s\S]*InformationQueryPage\(/)
   assert.doesNotMatch(androidSettings, /openInformationQuery|information_query_entry/)
   assert.doesNotMatch(androidCalendar, /openInformationQuery|calendar_information_query_menu_item/)
@@ -97,7 +103,8 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(androidQuery, /contentDescription = activity\.uiText\(mode\.label\)/)
   assert.match(androidQuery, /InformationQueryMode\.GRADES -> gradesContent\(\)/)
 
-  assertOrdered(harmonySections, ['AppSection.planner', 'AppSection.calendar', 'AppSection.query', 'AppSection.settings'])
+  assertOrdered(harmonySections, ['AppSection.planner', 'AppSection.calendar', 'AppSection.courses', 'AppSection.query', 'AppSection.settings'])
+  assert.match(harmonyRoot, /currentSection === AppSection\.courses[\s\S]{0,160}?CourseView\(/)
   assert.match(harmonyRoot, /currentSection === AppSection\.query[\s\S]{0,160}?QueryView\(\{\s*session: this\.querySession,\s*onOpenSettings:\s*\(\) => this\.selectSection\(AppSection\.settings\)\s*\}\)/)
   assert.ok((harmonyRoot.match(/QueryView\(\{\s*session: this\.querySession,\s*onOpenSettings:\s*\(\) => this\.selectSection\(AppSection\.settings\)\s*\}\)/g) || []).length >= 2)
   assert.doesNotMatch(harmonyRoot, /queryVisible|setQueryVisible/)
@@ -110,8 +117,9 @@ test('every graphical platform exposes query as a primary destination between ca
   assert.match(harmonyQuery, /tabPicker\(\)\s*\{\s*this\.tabPickerRow\(this\.iconOnlyTabs\(\)\)/)
   assert.match(harmonyLogic, /'班车查询'/)
   assert.match(harmonyLogic, /'重要事件'/)
-  assert.match(harmonyLogic, /tabs:\s*QueryPageTab\[\]\s*=\s*\[QueryPageTab\.shuttle,\s*QueryPageTab\.events,\s*QueryPageTab\.grades,\s*QueryPageTab\.exams,\s*QueryPageTab\.assignments\]/)
-  assert.match(harmonyQuery, /GradeQueryView\(/)
+  assert.match(harmonyLogic, /tabs:\s*QueryPageTab\[\]\s*=\s*\[QueryPageTab\.shuttle,\s*QueryPageTab\.events\]/)
+  assert.doesNotMatch(harmonyQuery, /GradeQueryView\(|AssignmentCatalogView\(/)
+  assert.match(harmonyCourses, /GradeQueryView\(/)
 })
 
 test('fixed shuttle clients reject redirects and show only an active timetable', () => {

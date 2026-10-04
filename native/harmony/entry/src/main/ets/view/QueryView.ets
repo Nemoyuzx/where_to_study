@@ -10,8 +10,6 @@ import { AppContext } from '../store/AppContext';
 import { QuerySession } from './QuerySession';
 import { PageTitle } from './SharedComponents';
 import { ShuttleQueryLayout } from './ShuttleQueryLayout';
-import { GradeQueryView } from './GradeQueryView';
-import { AssignmentQueryView, ExamQueryView } from './AcademicQueryViews';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
 } from '../common/QueryLogic';
@@ -189,9 +187,6 @@ export struct QueryView {
   }
 
   private selectedTab(): QueryPageTab {
-    if (this.session.selectedTabRawValue === QueryPageTab.assignments) { return QueryPageTab.assignments; }
-    if (this.session.selectedTabRawValue === QueryPageTab.exams) { return QueryPageTab.exams; }
-    if (this.session.selectedTabRawValue === QueryPageTab.grades) { return QueryPageTab.grades; }
     return this.session.selectedTabRawValue === QueryPageTab.events ? QueryPageTab.events : QueryPageTab.shuttle;
   }
 
@@ -318,15 +313,7 @@ export struct QueryView {
       if (this.selectedTab() !== QueryPageTab.events) {
         Scroll(this.regularScroller) {
           Column({ space: 16 }) {
-            if (this.selectedTab() === QueryPageTab.shuttle) {
-              this.shuttleContent()
-            } else if (this.selectedTab() === QueryPageTab.assignments) {
-              AssignmentQueryView({ onOpenSettings: this.onOpenSettings })
-            } else if (this.selectedTab() === QueryPageTab.exams) {
-              ExamQueryView({ onOpenSettings: this.onOpenSettings })
-            } else {
-              GradeQueryView({ onOpenSettings: this.onOpenSettings })
-            }
+            this.shuttleContent()
           }
           .width('100%')
           .constraintSize({ maxWidth: ShuttleQueryLayout.maximumPageWidthVp })

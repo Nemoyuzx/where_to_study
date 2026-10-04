@@ -517,6 +517,8 @@ pub struct AssignmentDeadlineItem {
     pub id: String,
     pub title: String,
     pub course_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub course_id: Option<String>,
     pub deadline: String,
     pub status: Option<String>,
 }

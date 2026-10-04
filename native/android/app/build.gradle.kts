@@ -28,8 +28,8 @@ android {
         applicationId = "com.nemoyu.wheretostudy.nativeapp"
         minSdk = 24
         targetSdk = 36
-        versionCode = 60
-        versionName = "0.3.2"
+        versionCode = 61
+        versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments["disableAnalytics"] = "true"
@@ -81,6 +81,7 @@ android {
 
     sourceSets {
         getByName("main").assets.srcDir(generatedLicenseAssets)
+        getByName("main").assets.srcDir(rootProject.file("../../contracts/qmplus"))
         getByName("test").resources.srcDir(rootProject.file("../../contracts/v1/fixtures"))
         getByName("test").resources.srcDir(rootProject.file("../../contracts/v1"))
     }

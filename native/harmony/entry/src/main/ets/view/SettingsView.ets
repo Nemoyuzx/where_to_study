@@ -8,6 +8,7 @@ import { AdaptiveLayoutPolicy, PhoneNavigationLayout } from '../common/DeviceSta
 import { AppContext } from '../store/AppContext';
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { SettingsSession } from './SettingsSession';
+import { QMPlusSession } from './QMPlusSession';
 import { ColorThemeSettingsCard } from './ColorThemeSettingsCard';
 import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
@@ -54,6 +55,7 @@ class SettingsLanguageAnchor {
 export struct SettingsView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: SettingsSession = new SettingsSession();
+  @Param qmPlusSession: QMPlusSession = new QMPlusSession();
   @Param favoriteManagerOnly: boolean = false;
   @Event onFavoriteManagerVisibilityChanged: (visible: boolean) => void = () => {
   };
@@ -201,6 +203,7 @@ export struct SettingsView {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
               this.accountSurface()
+              this.qmPlusConnectionSurface()
               this.removedCoursesSurface()
               this.semesterSurface()
             }
@@ -224,6 +227,7 @@ export struct SettingsView {
         } else {
           Column({ space: 16 }) {
             this.accountSurface()
+            this.qmPlusConnectionSurface()
             this.removedCoursesSurface()
             this.semesterSurface()
             this.notificationSurface()
@@ -374,17 +378,45 @@ export struct SettingsView {
   }
 
   @Builder
+  languageSegments() {
+    Row() {
+      ForEach(AppLanguageInfo.all, (language: AppLanguage, index: number) => {
+        Stack() {
+          // 只让这个独立底色节点过渡；语言改变导致的整页文字重排不进 animateTo。
+          Column() {}
+            .width('100%')
+            .height(32)
+            .borderRadius(6)
+            .backgroundColor(this.model.languageSetting() === language ?
+              AppTheme.segmentedSelection() : Color.Transparent)
+            .animation({ duration: 160, curve: Curve.EaseOut })
+          Text(AppLanguageInfo.label(language, this.model.resolvedLanguage()))
+            .id('settings.language.' + index.toString())
+            .fontSize(11)
+            .fontWeight(this.model.languageSetting() === language ? FontWeight.Bold : FontWeight.Regular)
+            .fontColor(AppTheme.text())
+            .textAlign(TextAlign.Center)
+            .maxLines(1)
+            .width('100%')
+            .height(32)
+            .onClick(() => this.selectLanguageAtCurrentPosition(language))
+        }
+        .layoutWeight(1)
+        .height(32)
+      }, (language: AppLanguage) => language)
+    }
+    .width('100%')
+    .height(38)
+    .padding(3)
+    .borderRadius(9)
+    .backgroundColor(AppTheme.surfaceVariant())
+  }
+
+  @Builder
   languageSurface() {
     Column({ space: 8 }) {
       this.sectionTitle('语言')
-      this.segmentedOptions([
-        AppLanguageInfo.label(AppLanguage.system, this.model.resolvedLanguage()),
-        AppLanguageInfo.label(AppLanguage.simplifiedChinese, this.model.resolvedLanguage()),
-        AppLanguageInfo.label(AppLanguage.english, this.model.resolvedLanguage())
-      ], () => AppLanguageInfo.all.indexOf(this.model.languageSetting()), (index: number): void => {
-          const target: AppLanguage = AppLanguageInfo.all[Math.min(Math.max(index, 0), 2)];
-          this.selectLanguageAtCurrentPosition(target);
-        }, 'settings.language', true)
+      this.languageSegments()
     }
     .padding(16)
     .width('100%')
@@ -435,6 +467,66 @@ export struct SettingsView {
           .width('100%')
         }, (record: CourseRemovalRecord): string => record.id)
       }
+    }
+    .padding(16)
+    .width('100%')
+    .borderRadius(8)
+    .backgroundColor(AppTheme.surface())
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  qmPlusConnectionSurface() {
+    Column({ space: 9 }) {
+      this.sectionTitle('连接 QMplus')
+      Text(this.model.text('在独立的官方网页完成 QMplus SSO/MFA；不向本应用输入或保存 Microsoft 密码。'))
+        .fontSize(12)
+        .fontColor(AppTheme.secondaryText())
+        .width('100%')
+      if (this.model.isSampleMode()) {
+        Text(this.model.text('示例模式不展示或连接真实 QMplus 数据。'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }
+      if (!this.model.isSampleMode() && this.qmPlusSession.snapshot !== null) {
+        Text(this.model.text('上次同步：') + (this.qmPlusSession.snapshot?.fetchedAt ?? ''))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }
+      if (!this.model.isSampleMode() && this.qmPlusSession.showingStalePartial) {
+        Text(this.model.text('本次仅部分同步成功，继续显示上次完整资料；时间仍以上次同步为准，仅供对照。'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+      }
+      if (!this.model.isSampleMode() && this.qmPlusSession.error.length > 0) {
+        Text(this.model.text(this.qmPlusSession.error) + (this.qmPlusSession.errorCode.length > 0 &&
+          this.qmPlusSession.errorCode !== 'QM_LOGIN_REQUIRED' ? ' (' + this.qmPlusSession.errorCode + ')' : ''))
+          .fontSize(12)
+          .fontColor(AppTheme.danger())
+          .width('100%')
+      }
+      Button(this.model.text(this.qmPlusSession.snapshot === null ? '连接 QMplus' : '重新同步 QMplus'))
+        .type(ButtonType.Normal)
+        .height(ControlMetrics.height)
+        .width('100%')
+        .borderRadius(6)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .fontColor(AppTheme.primary())
+        .id('settings.qmplus.connect')
+        .enabled(!this.model.isSampleMode())
+        .onClick(() => this.qmPlusSession.openLogin())
+      Button(this.model.text('退出并清除 QMplus 会话'))
+        .type(ButtonType.Normal)
+        .height(ControlMetrics.height)
+        .width('100%')
+        .borderRadius(6)
+        .backgroundColor(AppTheme.surfaceVariant())
+        .fontColor(AppTheme.danger())
+        .id('settings.qmplus.logout')
+        .onClick(() => { this.qmPlusSession.logout(); })
     }
     .padding(16)
     .width('100%')
@@ -1282,7 +1374,7 @@ export struct SettingsView {
         .onClick(() => {
           this.getUIContext().showAlertDialog({
             title: this.model.text('清除全部本地数据？'),
-            message: this.model.text('将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏和其它设置。此操作无法撤销。'),
+            message: this.model.text('将删除保存的账号、密码、个人课表、空教室缓存、自定义日程设置、收藏、QMplus 会话和其它设置。此操作无法撤销。'),
             primaryButton: {
               value: this.model.text('取消'),
               action: () => {
@@ -1292,10 +1384,15 @@ export struct SettingsView {
               value: this.model.text('确认清除'),
               fontColor: AppTheme.danger(),
               action: () => {
+                const qmPlusCleared: boolean = this.qmPlusSession.logout();
                 const work: Promise<void> = this.model.clearLocalData();
                 work.then(() => {
                   this.session.clearDrafts();
-                  this.dismissStatusMessageAfter(this.model.statusMessage);
+                  if (!qmPlusCleared) {
+                    this.model.statusMessage = this.qmPlusSession.error;
+                  } else {
+                    this.dismissStatusMessageAfter(this.model.statusMessage);
+                  }
                 }).catch(() => {
                   // 错误说明已由 AppModel 写入状态消息。
                 });

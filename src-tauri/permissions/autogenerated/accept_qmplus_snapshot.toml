@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-accept-qmplus-snapshot"
+description = "Enables the accept_qmplus_snapshot command without any pre-configured scope."
+commands.allow = ["accept_qmplus_snapshot"]
+
+[[permission]]
+identifier = "deny-accept-qmplus-snapshot"
+description = "Denies the accept_qmplus_snapshot command without any pre-configured scope."
+commands.deny = ["accept_qmplus_snapshot"]

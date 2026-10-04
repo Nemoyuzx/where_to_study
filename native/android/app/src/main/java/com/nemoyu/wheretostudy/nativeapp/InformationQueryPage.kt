@@ -40,6 +40,13 @@ internal enum class InformationQueryMode(
     GRADES("成绩查询", "成绩", "Grades", R.drawable.ic_section_summary),
     EXAMS("考试查询", "考试安排", "Exams", R.drawable.ic_nav_calendar),
     ASSIGNMENTS("课程作业", "作业", "Tasks", R.drawable.ic_section_check),
+    COURSES("我的课程", "课程", "Courses", R.drawable.ic_course_book),
+    QMPLUS("QMplus", "QMplus", "QMplus", R.drawable.ic_settings_language);
+
+    companion object {
+        val queryModes = listOf(SHUTTLE, IMPORTANT_EVENTS)
+        val courseModes = listOf(COURSES, GRADES, EXAMS, ASSIGNMENTS)
+    }
 }
 
 internal enum class ImportantEventCategory(val label: String) {
@@ -66,6 +73,13 @@ internal class InformationQuerySessionState(
     var visibleEventCount: Int = INITIAL_EVENT_COUNT
     var eventScrollY: Int = 0
     val modeScrollY = mutableMapOf<InformationQueryMode, Int>()
+    var visibleCourseCount = 20
+    var visibleQmplusRowCount = 20
+    var automaticCourseLoadAttempted = false
+    var showsOtherQmCourses = false
+    var courseDetailKey: String? = null
+    var courseDetailScrollY = 0
+    var courseDetailVisibleCount = 20
 
     companion object {
         const val INITIAL_EVENT_COUNT = 20
@@ -294,6 +308,9 @@ internal class InformationQueryPage(
     private val holidayRepository: HolidayRepository? = null,
     private val holidaySnapshotForYear: (Int) -> HolidaysSnapshot? =
         { year -> holidayRepository?.authoritativeSnapshot(year) },
+    private val modes: List<InformationQueryMode> = InformationQueryMode.queryModes,
+    private val pageTitleText: String = "信息查询",
+    private val qmplusRepository: QmplusRepository? = null,
 ) {
     private lateinit var root: LinearLayout
     private lateinit var content: FrameLayout
@@ -302,7 +319,16 @@ internal class InformationQueryPage(
     private var renderRevision = 0
     private var restoringScroll = false
     private var renderedAssignments: Triple<List<AssignmentDeadlineItem>?, Boolean, String?>? = null
+    private var renderedCourses: Triple<List<TeachingCloudCourse>?, Boolean, String?>? = null
     private var isAppendingImportantEventPage = false
+    private var qmplusRows: List<Pair<QmplusCourse, QmplusActivityItem?>> = emptyList()
+    private var courseDetailsDialog: AlertDialog? = null
+    private var courseDetailsScroll: ScrollView? = null
+    private var pendingCourseDetailRestore: Runnable? = null
+    private var detachingCourseDetails = false
+    private var restoringCourseDetails = false
+    private var detailCloudItems: List<AssignmentDeadlineItem> = emptyList()
+    private var detailQmItems: List<QmplusActivityItem> = emptyList()
     private val isCompact: Boolean
         get() = availableWidthDp < AdaptiveLayoutLogic.MEDIUM_BREAKPOINT_DP
     private val isPhone: Boolean
@@ -344,6 +370,11 @@ internal class InformationQueryPage(
             sessionState.selectedMode == InformationQueryMode.ASSIGNMENTS &&
             assignmentState() != renderedAssignments
         ) renderMode(animate = false)
+        if (::root.isInitialized && root.isAttachedToWindow && sessionState.selectedMode == InformationQueryMode.COURSES &&
+            (courseState() != renderedCourses || assignmentState() != renderedAssignments)) {
+            renderMode(animate = false)
+            refreshCourseDetails()
+        }
     }
     private val gradeObserver: () -> Unit = {
         if (::root.isInitialized && root.isAttachedToWindow && sessionState.selectedMode == InformationQueryMode.GRADES)
@@ -354,8 +385,17 @@ internal class InformationQueryPage(
             sessionState.selectedMode == InformationQueryMode.SHUTTLE
         ) renderMode(animate = false)
     }
+    private val qmplusObserver: () -> Unit = {
+        if (::root.isInitialized && root.isAttachedToWindow && sessionState.selectedMode in
+            listOf(InformationQueryMode.QMPLUS, InformationQueryMode.COURSES)) {
+            renderMode(animate = false)
+            refreshCourseDetails()
+        }
+    }
 
     fun build(): View {
+        require(modes.isNotEmpty())
+        if (sessionState.selectedMode !in modes) sessionState.selectedMode = modes.first()
         root = LinearLayout(activity).apply {
             id = R.id.information_query_page
             orientation = LinearLayout.VERTICAL
@@ -387,6 +427,14 @@ internal class InformationQueryPage(
                 if (renderedMode == InformationQueryMode.IMPORTANT_EVENTS &&
                     (getChildAt(0)?.height ?: 0) - height - scrollY <= activity.dp(240)
                 ) content.findViewById<LinearLayout?>(R.id.information_query_events_list)?.let(::appendImportantEventPage)
+                if ((getChildAt(0)?.height ?: 0) - height - scrollY <= activity.dp(240)) {
+                    if (renderedMode == InformationQueryMode.COURSES)
+                        content.findViewById<LinearLayout?>(R.id.course_current_list)?.let { appendCourseRows(it, true) }
+                    if (renderedMode == InformationQueryMode.COURSES)
+                        content.findViewById<LinearLayout?>(R.id.course_qmplus_list)?.let { appendQmplusCourseRows(it, true) }
+                    if (renderedMode == InformationQueryMode.QMPLUS)
+                        content.findViewById<LinearLayout?>(R.id.course_qmplus_list)?.let { appendQmplusRows(it, true) }
+                }
             }
         }
         root.addView(scroll, LinearLayout.LayoutParams(
@@ -396,17 +444,34 @@ internal class InformationQueryPage(
         ))
         root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
-                shuttleRepository.addObserver(shuttleObserver)
-                holidayRepository?.addObserver(root, holidayObserver)
+                if (InformationQueryMode.SHUTTLE in modes) {
+                    shuttleRepository.addObserver(shuttleObserver)
+                    holidayRepository?.addObserver(root, holidayObserver)
+                }
                 dailyInfoRepository.addObserver(root, deadlineObserver)
                 if (activity.allowsAutomaticPageLoads()) {
-                    shuttleRepository.load()
-                    holidayRepository?.ensure(Calendar.getInstance(shanghai).get(Calendar.YEAR))
-                    holidayRepository?.ensureAuthoritative(Calendar.getInstance(shanghai).get(Calendar.YEAR))
-                    dailyInfoRepository.loadImportantEvents()
+                    if (InformationQueryMode.SHUTTLE in modes) {
+                        shuttleRepository.load()
+                        holidayRepository?.ensure(Calendar.getInstance(shanghai).get(Calendar.YEAR))
+                        holidayRepository?.ensureAuthoritative(Calendar.getInstance(shanghai).get(Calendar.YEAR))
+                    }
+                    if (InformationQueryMode.IMPORTANT_EVENTS in modes) dailyInfoRepository.loadImportantEvents()
+                    if (sessionState.selectedMode == InformationQueryMode.COURSES && gradesRepository.hasCredentials &&
+                        !sessionState.automaticCourseLoadAttempted) {
+                        sessionState.automaticCourseLoadAttempted = true
+                        dailyInfoRepository.loadCurrentCourses()
+                    }
                 }
-                gradesRepository.addObserver(gradeObserver)
-                gradesRepository.reconcile()
+                if (InformationQueryMode.GRADES in modes) {
+                    gradesRepository.addObserver(gradeObserver)
+                    gradesRepository.reconcile()
+                }
+                qmplusRepository?.addObserver(root, qmplusObserver)
+                sessionState.courseDetailKey?.let { key ->
+                    val weakPage = java.lang.ref.WeakReference(this@InformationQueryPage)
+                    pendingCourseDetailRestore = Runnable { weakPage.get()?.showCourseDetails(key) }
+                    pendingCourseDetailRestore?.let(root::postOnAnimation)
+                }
             }
 
             override fun onViewDetachedFromWindow(view: View) {
@@ -419,6 +484,14 @@ internal class InformationQueryPage(
                 holidayRepository?.removeObserver(root)
                 dailyInfoRepository.removeObserver(root)
                 gradesRepository.removeObserver(gradeObserver)
+                qmplusRepository?.removeObserver(root)
+                pendingCourseDetailRestore?.let(root::removeCallbacks)
+                pendingCourseDetailRestore = null
+                detachingCourseDetails = true
+                courseDetailsDialog?.dismiss()
+                courseDetailsDialog = null; courseDetailsScroll = null
+                detailCloudItems = emptyList(); detailQmItems = emptyList(); restoringCourseDetails = false
+                detachingCourseDetails = false
             }
         })
         renderMode(animate = false)
@@ -438,7 +511,7 @@ internal class InformationQueryPage(
         setPadding(activity.dp(pagePaddingDp), activity.dp(16), activity.dp(pagePaddingDp), activity.dp(12))
         addView(pageTitle(
             activity,
-            "信息查询",
+            pageTitleText,
             titleSizeSp = if (isPhone) InformationQueryLayoutLogic.PHONE_TITLE_SIZE_SP else 34f,
         ).apply {
             setPadding(0, 0, 0, 0)
@@ -455,7 +528,7 @@ internal class InformationQueryPage(
         } else activity.uiText(mode.label)
 
     private fun modeSelector(): FrameLayout {
-        val labels = InformationQueryMode.entries
+        val labels = modes
         val control = FrameLayout(activity).apply {
             id = R.id.information_query_mode_switch
             val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
@@ -477,6 +550,8 @@ internal class InformationQueryPage(
                         InformationQueryMode.GRADES -> R.id.information_query_grades_tab
                         InformationQueryMode.EXAMS -> R.id.information_query_exams_tab
                         InformationQueryMode.ASSIGNMENTS -> R.id.information_query_assignments_tab
+                        InformationQueryMode.COURSES -> R.id.course_current_tab
+                        InformationQueryMode.QMPLUS -> R.id.course_qmplus_tab
                     }
                     text = modeSelectorLabel(mode)
                     UiText.preserveRawText(this)
@@ -496,17 +571,22 @@ internal class InformationQueryPage(
                     setOnClickListener { source ->
                         if (mode == sessionState.selectedMode) return@setOnClickListener
                         activity.performControlHaptic(source)
-                        val oldOrdinal = sessionState.selectedMode.ordinal
+                        val oldOrdinal = labels.indexOf(sessionState.selectedMode)
+                        if (mode != InformationQueryMode.COURSES) {
+                            sessionState.courseDetailKey = null
+                            courseDetailsDialog?.dismiss()
+                        }
                         sessionState.selectedMode = mode
                         val tabRow = parent as ViewGroup
                         repeat(tabRow.childCount) { index ->
                             (tabRow.getChildAt(index) as TextView).apply {
-                                isSelected = index == mode.ordinal
+                                isSelected = index == labels.indexOf(mode)
                                 setTypeface(Typeface.DEFAULT, if (isSelected) Typeface.BOLD else Typeface.NORMAL)
                             }
                         }
-                        moveModeThumb(control, thumb, mode.ordinal, animate = true)
-                        renderMode(animate = true, direction = mode.ordinal.compareTo(oldOrdinal))
+                        val index = labels.indexOf(mode)
+                        moveModeThumb(control, thumb, index, animate = true)
+                        renderMode(animate = true, direction = index.compareTo(oldOrdinal))
                     }
                 }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
             }
@@ -551,7 +631,7 @@ internal class InformationQueryPage(
                     if (paddingLeft != padding || paddingRight != padding) setPadding(padding, 0, padding, 0)
                 }
             }
-            moveModeThumb(control, thumb, sessionState.selectedMode.ordinal, animate = false)
+            moveModeThumb(control, thumb, labels.indexOf(sessionState.selectedMode), animate = false)
         }
         control.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
             if (right - left != oldRight - oldLeft) updateLabels()
@@ -572,8 +652,8 @@ internal class InformationQueryPage(
     private fun modeSelectorHeightPx(): Int {
         val inset = activity.dp(InformationQueryLayoutLogic.MODE_SELECTOR_INSET_DP)
         val labelWidth = ((activity.dp(availableWidthDp - pagePaddingDp * 2) - inset * 2) /
-            InformationQueryMode.entries.size).coerceAtLeast(1)
-        val labelHeight = InformationQueryMode.entries.maxOf { mode ->
+            modes.size).coerceAtLeast(1)
+        val labelHeight = modes.maxOf { mode ->
             TextView(activity).apply {
                 text = modeSelectorLabel(mode)
                 textSize = if (isCompact) 15f else 14f
@@ -594,7 +674,7 @@ internal class InformationQueryPage(
         val width = InformationQueryLayoutLogic.modeThumbWidthPx(
             controlWidthPx = control.width,
             horizontalPaddingPx = control.paddingStart,
-            itemCount = InformationQueryMode.entries.size,
+            itemCount = modes.size,
         )
         thumb.layoutParams = (thumb.layoutParams as FrameLayout.LayoutParams).apply {
             this.width = width
@@ -602,7 +682,7 @@ internal class InformationQueryPage(
         val target = InformationQueryLayoutLogic.modeThumbTranslationXPx(
             thumbWidthPx = width,
             index = index,
-            itemCount = InformationQueryMode.entries.size,
+            itemCount = modes.size,
         ).toFloat()
         thumb.animate().cancel()
         if (animate) {
@@ -634,6 +714,8 @@ internal class InformationQueryPage(
             InformationQueryMode.GRADES -> R.id.information_query_grades_scroll
             InformationQueryMode.EXAMS -> R.id.information_query_exams_scroll
             InformationQueryMode.ASSIGNMENTS -> R.id.information_query_assignments_scroll
+            InformationQueryMode.COURSES -> R.id.course_current_scroll
+            InformationQueryMode.QMPLUS -> R.id.course_qmplus_scroll
         }
         val page = when (sessionState.selectedMode) {
             InformationQueryMode.SHUTTLE -> shuttleContent()
@@ -641,6 +723,8 @@ internal class InformationQueryPage(
             InformationQueryMode.GRADES -> gradesContent()
             InformationQueryMode.EXAMS -> examsContent()
             InformationQueryMode.ASSIGNMENTS -> assignmentsContent()
+            InformationQueryMode.COURSES -> coursesContent()
+            InformationQueryMode.QMPLUS -> qmplusContent()
         }
         UiText.localizeTree(page)
         // Cancel and remove outgoing bodies immediately: rapid selections must
@@ -855,8 +939,331 @@ internal class InformationQueryPage(
         }
     }
 
+    private fun coursesContent(): LinearLayout = privateQueryContent {
+        val (courses, loading, error) = courseState().also { renderedCourses = it }
+        renderedAssignments = assignmentState()
+        addView(courseSectionHeader(activity.getString(R.string.course_source_teaching_cloud), courses?.size,
+            R.id.course_current_refresh, !loading, activity.getString(R.string.current_courses_refresh)) {
+                dailyInfoRepository.loadCurrentCourses(force = true)
+            })
+        if (!gradesRepository.hasCredentials) {
+            addView(statusCard("请先在个人账户中保存教务账号和密码。"))
+            addView(gradeAction("前往个人账户", R.drawable.ic_settings_account) {
+                activity.findViewById<View>(R.id.navigation_settings)?.performClick()
+            })
+        }
+        error?.let { addView(statusCard(it)) }
+        when {
+            courses != null && courses.isEmpty() -> addView(statusCard(activity.getString(R.string.current_courses_empty)))
+            courses != null -> addView(LinearLayout(activity).apply {
+                id = R.id.course_current_list; orientation = LinearLayout.VERTICAL
+                appendCourseRows(this, false)
+            })
+            loading -> addView(statusCard(activity.getString(R.string.qmplus_loading)))
+            else -> addView(statusCard(activity.getString(R.string.current_courses_hint)))
+        }
+        val repository = qmplusRepository
+        val snapshot = repository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val current = snapshot?.courses?.filter { it.currentTermStatus == "current" }
+        val others = snapshot?.courses?.filter { it.currentTermStatus != "current" }.orEmpty()
+        addView(courseSectionHeader("QMplus · EBU", current?.size, R.id.course_qmplus_refresh,
+            repository != null && !repository.isLoading && !repository.isClearingSession && repository.connection == null,
+            activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() })
+        repository?.error?.let { addView(statusCard(activity.uiText(it))) }
+        if (snapshot == null) addView(statusCard(activity.getString(
+            if (repository?.isLoading == true) R.string.qmplus_loading else R.string.qmplus_not_connected)))
+        else {
+            if (snapshot.partial) addView(statusCard(activity.getString(R.string.qmplus_partial)))
+            val visible = current.orEmpty() + if (sessionState.showsOtherQmCourses) others else emptyList()
+            qmplusRows = visible.map { it to null }
+            if (visible.isEmpty()) addView(statusCard(activity.getString(R.string.qmplus_no_courses)))
+            addView(LinearLayout(activity).apply {
+                id = R.id.course_qmplus_list; orientation = LinearLayout.VERTICAL
+                appendQmplusCourseRows(this, false)
+            })
+            if (others.isNotEmpty()) addView(gradeAction(activity.getString(
+                if (sessionState.showsOtherQmCourses) R.string.qmplus_hide_other_courses else R.string.qmplus_show_other_courses, others.size)) {
+                sessionState.showsOtherQmCourses = !sessionState.showsOtherQmCourses
+                renderMode(animate = false)
+            })
+        }
+    }
+
+    private fun courseSectionHeader(title: String, count: Int?, refreshID: Int, enabled: Boolean,
+        refreshLabel: String, refresh: () -> Unit): LinearLayout = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(TextView(activity).apply {
+                text = title; UiText.preserveRawText(this); textSize = 17f
+                includeFontPadding = false; setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
+            })
+            count?.let { addView(eventDetailText(activity.getString(R.string.course_directory_count, it), 1)) }
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(ImageView(activity).apply {
+            id = refreshID; setImageResource(R.drawable.ic_refresh); scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(activity.dp(7), activity.dp(7), activity.dp(7), activity.dp(7))
+            background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 8)
+            bindTheme("courseRefreshTint") { imageTintList = ColorStateList.valueOf(Palette.primaryText) }
+            contentDescription = refreshLabel; isEnabled = enabled; isClickable = true; isFocusable = true
+            setOnClickListener { if (root.isAttachedToWindow) { activity.performControlHaptic(it); refresh() } }
+        }, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp))
+            .apply { marginStart = activity.dp(12) })
+    }
+
+    private fun appendCourseRows(list: LinearLayout, advance: Boolean) {
+        if (advance && (!list.isAttachedToWindow || !root.isAttachedToWindow)) return
+        val courses = dailyInfoRepository.currentTeachingCloudCourses().orEmpty()
+        val assignments = dailyInfoRepository.allAssignments()
+        val target = if (advance) (list.childCount + 20).coerceAtMost(courses.size)
+            else sessionState.visibleCourseCount.coerceAtMost(courses.size)
+        for (index in list.childCount until target) {
+            val course = courses[index]
+            val key = "teaching-cloud.course.${course.id}"
+            list.addView(courseDirectoryRow(activity, key, course.name ?: activity.uiText("课程未标注"),
+                course.teacherNames, CourseDirectoryLogic.teachingCloudCounts(course.id, assignments)) {
+                showCourseDetails(key)
+            })
+        }
+        sessionState.visibleCourseCount = maxOf(20, target)
+    }
+
+    private fun appendQmplusCourseRows(list: LinearLayout, advance: Boolean) {
+        if (advance && (!list.isAttachedToWindow || !root.isAttachedToWindow)) return
+        val snapshot = qmplusRepository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly) ?: return
+        val target = if (advance) (list.childCount + 20).coerceAtMost(qmplusRows.size)
+            else sessionState.visibleQmplusRowCount.coerceAtMost(qmplusRows.size)
+        for (index in list.childCount until target) {
+            val course = qmplusRows[index].first
+            val key = "qmplus.course.${course.id}"
+            val term = if (course.currentTermStatus == "current") null else activity.getString(
+                if (course.currentTermStatus == "other") R.string.qmplus_term_other else R.string.qmplus_term_unknown)
+            list.addView(courseDirectoryRow(activity, key, course.name, emptyList(),
+                CourseDirectoryLogic.qmplusCounts(course.id, snapshot.activities), term) { showCourseDetails(key) })
+        }
+        sessionState.visibleQmplusRowCount = maxOf(20, target)
+    }
+
+    private fun showCourseDetails(key: String) {
+        if (!root.isAttachedToWindow || activity.isFinishing || activity.isDestroyed ||
+            sessionState.selectedMode != InformationQueryMode.COURSES) return
+        if (sessionState.courseDetailKey != key) {
+            sessionState.courseDetailScrollY = 0
+            sessionState.courseDetailVisibleCount = 20
+        }
+        val body = courseDetailsBody(key) ?: run { sessionState.courseDetailKey = null; return }
+        sessionState.courseDetailKey = key
+        courseDetailsDialog?.setOnDismissListener(null)
+        courseDetailsDialog?.dismiss()
+        val detailScroll = ScrollView(activity).apply {
+            id = R.id.course_detail_scroll; addView(body)
+            setOnScrollChangeListener { _, _, y, _, _ -> if (isAttachedToWindow && !restoringCourseDetails) {
+                sessionState.courseDetailScrollY = y
+                if ((getChildAt(0)?.height ?: 0) - height - y <= activity.dp(240)) appendCourseDetailPage(key)
+            } }
+        }
+        courseDetailsScroll = detailScroll
+        restoringCourseDetails = true
+        val dialog = AlertDialog.Builder(activity).setView(detailScroll)
+            .setNegativeButton(activity.getString(R.string.course_detail_back)) { _, _ -> sessionState.courseDetailKey = null }
+            .create()
+        courseDetailsDialog = dialog
+        dialog.setOnDismissListener {
+            if (courseDetailsDialog === dialog) {
+                if (!detachingCourseDetails) sessionState.courseDetailKey = null
+                courseDetailsDialog = null; courseDetailsScroll = null
+            }
+        }
+        dialog.show()
+        dialog.window?.let { bindWindowColorTheme(it, modal = true) }
+        detailScroll.postOnAnimation {
+            if (courseDetailsScroll !== detailScroll) return@postOnAnimation
+            if (detailScroll.isAttachedToWindow) detailScroll.scrollTo(0, sessionState.courseDetailScrollY)
+            restoringCourseDetails = false
+        }
+    }
+
+    private fun refreshCourseDetails() {
+        val key = sessionState.courseDetailKey ?: return
+        val detailScroll = courseDetailsScroll ?: return
+        val body = courseDetailsBody(key)
+        if (body == null) { sessionState.courseDetailKey = null; courseDetailsDialog?.dismiss(); return }
+        val y = detailScroll.scrollY
+        restoringCourseDetails = true
+        detailScroll.removeAllViews(); detailScroll.addView(body)
+        detailScroll.postOnAnimation {
+            if (courseDetailsScroll !== detailScroll) return@postOnAnimation
+            if (detailScroll.isAttachedToWindow) detailScroll.scrollTo(0, y)
+            restoringCourseDetails = false
+        }
+    }
+
+    private fun courseDetailsBody(key: String): LinearLayout? {
+        val cloud = dailyInfoRepository.currentTeachingCloudCourses()?.firstOrNull { "teaching-cloud.course.${it.id}" == key }
+        val snapshot = qmplusRepository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val qm = snapshot?.courses?.firstOrNull { "qmplus.course.${it.id}" == key }
+        if (cloud == null && qm == null) return null
+        return LinearLayout(activity).apply {
+            id = R.id.course_detail_content; orientation = LinearLayout.VERTICAL
+            setPadding(activity.dp(20), activity.dp(16), activity.dp(20), activity.dp(16))
+            setThemeBackgroundColor { Palette.surface }
+            addView(TextView(activity).apply {
+                id = R.id.course_detail_title
+                text = cloud?.name ?: qm?.name ?: activity.uiText("课程未标注")
+                UiText.preserveRawText(this); textSize = 17f; setTypeface(typeface, Typeface.BOLD)
+                setThemeTextColor { Palette.text }
+            })
+            cloud?.teacherNames?.forEach { addView(eventDetailText(it, 2)) }
+            if (cloud != null) {
+                val assignments = CourseDirectoryLogic.teachingCloudAssignments(cloud.id, dailyInfoRepository.allAssignments())
+                addView(eventDetailText(activity.getString(R.string.course_detail_assignments), 2))
+                if (assignments == null) addView(statusCard(activity.getString(R.string.course_assignments_not_loaded)))
+                else if (assignments.isEmpty()) addView(statusCard(activity.getString(R.string.course_no_cached_assignments)))
+                detailCloudItems = assignments.orEmpty(); detailQmItems = emptyList()
+                addView(LinearLayout(activity).apply {
+                    id = R.id.course_detail_list; orientation = LinearLayout.VERTICAL
+                    appendCourseDetailRows(this, false)
+                })
+                addView(gradeAction(activity.getString(R.string.course_open_assignments_query)) {
+                    sessionState.courseDetailKey = null; courseDetailsDialog?.dismiss()
+                    root.findViewById<View>(R.id.information_query_assignments_tab)?.performClick()
+                })
+                addView(gradeAction("打开教学云平台", R.drawable.ic_shuttle_external) { openURL(CalendarDailyInfoSources.assignments) })
+            } else if (qm != null && snapshot != null) {
+                if (snapshot.partial) addView(statusCard(activity.getString(R.string.qmplus_partial)))
+                val activities = snapshot.activities.filter { it.courseID == qm.id }
+                if (activities.isEmpty()) addView(statusCard(activity.getString(R.string.course_no_cached_activities)))
+                detailCloudItems = emptyList(); detailQmItems = activities
+                addView(LinearLayout(activity).apply {
+                    id = R.id.course_detail_list; orientation = LinearLayout.VERTICAL
+                    appendCourseDetailRows(this, false)
+                })
+                addView(gradeAction(activity.getString(R.string.qmplus_open_course), R.drawable.ic_shuttle_external) { activity.connectQmplus(qm.url) })
+            }
+        }
+    }
+
+    private fun appendCourseDetailPage(key: String) {
+        if (sessionState.courseDetailKey != key || courseDetailsScroll?.isAttachedToWindow != true) return
+        courseDetailsScroll?.findViewById<LinearLayout?>(R.id.course_detail_list)?.let { appendCourseDetailRows(it, true) }
+    }
+
+    private fun appendCourseDetailRows(list: LinearLayout, advance: Boolean) {
+        if (advance && (restoringCourseDetails || !list.isAttachedToWindow)) return
+        val total = detailCloudItems.size + detailQmItems.size
+        val target = if (advance) (list.childCount + 20).coerceAtMost(total)
+            else sessionState.courseDetailVisibleCount.coerceAtMost(total)
+        for (index in list.childCount until target) {
+            val card = if (detailCloudItems.isNotEmpty()) cloudAssignmentCard(detailCloudItems[index])
+                else qmplusActivityCard(detailQmItems[index])
+            list.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = activity.dp(10) })
+        }
+        sessionState.courseDetailVisibleCount = maxOf(20, target)
+    }
+
+    private fun cloudAssignmentCard(item: AssignmentDeadlineItem): LinearLayout = querySurface().apply {
+        tag = "course.detail.assignment.${item.id}"
+        addView(TextView(activity).apply {
+            text = item.title; UiText.preserveRawText(this); textSize = 17f
+            setThemeTextColor { Palette.text }; setTypeface(typeface, Typeface.BOLD)
+        })
+        addView(eventDetailText(item.deadline.replace('T', ' ').take(16), 2))
+        item.status?.takeIf { it.isNotBlank() }?.let { addView(eventDetailText(it, 2)) }
+    }
+
+    private fun qmplusActivityCard(item: QmplusActivityItem): LinearLayout = querySurface().apply {
+        tag = "course.detail.qmplus.${item.kind}.${item.id}"
+        addView(TextView(activity).apply {
+            text = item.title; UiText.preserveRawText(this); textSize = 17f
+            setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
+        })
+        addView(eventDetailText(activity.getString(if (item.kind == "quiz") R.string.qmplus_quiz else R.string.qmplus_assignment), 2))
+        QmplusActivityPresentation.timeFields(item).forEach { (field, value) ->
+            val label = when (field) {
+                "due_at" -> R.string.qmplus_due; "cutoff_at" -> R.string.qmplus_cutoff
+                "opens_at" -> R.string.qmplus_opens; else -> R.string.qmplus_closes
+            }
+            addView(eventDetailText(activity.getString(label) + ": " + value.replace('T', ' ').removeSuffix("Z") + " UTC", 3))
+        }
+        if (item.kind == "quiz") item.timeLimitSeconds?.let {
+            addView(eventDetailText(activity.getString(R.string.qmplus_time_limit, it), 2))
+        }
+        item.status?.takeIf { it.isNotBlank() && it != "unknown" }?.let { addView(eventDetailText(it, 2)) }
+        item.rawTimeText?.takeIf { it.isNotBlank() }?.let { addView(eventDetailText(it, 6)) }
+        addView(gradeAction(activity.getString(R.string.qmplus_open_activity), R.drawable.ic_shuttle_external) { activity.connectQmplus(item.url) })
+    }
+
+    private fun qmplusContent(): LinearLayout = privateQueryContent {
+        val repository = qmplusRepository
+        val snapshot = repository?.snapshot
+        addView(gradeAction(activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() }
+            .apply { id = R.id.course_qmplus_refresh
+                isEnabled = repository != null && !repository.isLoading && !repository.isClearingSession && repository.connection == null })
+        addView(querySourceFooter("QMplus · Queen Mary University of London", QmplusPolicy.START_URL))
+        repository?.error?.let { addView(statusCard(activity.uiText(it))) }
+        when {
+            snapshot == null -> addView(statusCard(activity.getString(
+                if (repository?.isLoading == true) R.string.qmplus_loading else R.string.qmplus_not_connected)))
+            else -> {
+                addView(eventDetailText(activity.getString(R.string.qmplus_fetched_at, snapshot.fetchedAt), 2))
+                if (snapshot.partial) addView(statusCard(activity.getString(R.string.qmplus_partial)))
+                snapshot.warnings.forEach { addView(eventDetailText(it, 2)) }
+                if (snapshot.courses.isEmpty()) addView(statusCard(activity.getString(R.string.qmplus_no_courses)))
+                val activities = snapshot.activities.groupBy { it.courseID }
+                qmplusRows = snapshot.courses.sortedBy { when (it.currentTermStatus) { "current" -> 0; "unknown" -> 1; else -> 2 } }
+                    .flatMap { course -> listOf(course to null) + activities[course.id].orEmpty().map { course to it } }
+                addView(LinearLayout(activity).apply {
+                    id = R.id.course_qmplus_list; orientation = LinearLayout.VERTICAL
+                    appendQmplusRows(this, false)
+                })
+            }
+        }
+    }
+
+    private fun appendQmplusRows(list: LinearLayout, advance: Boolean) {
+        if (advance && (!list.isAttachedToWindow || !root.isAttachedToWindow)) return
+        val target = if (advance) (list.childCount + 20).coerceAtMost(qmplusRows.size)
+            else sessionState.visibleQmplusRowCount.coerceAtMost(qmplusRows.size)
+        for (index in list.childCount until target) {
+            val (course, item) = qmplusRows[index]
+            list.addView(querySurface().apply {
+                tag = if (item == null) "qmplus.course.${course.id}" else "qmplus.activity.${item.kind}.${item.id}"
+                addView(TextView(activity).apply {
+                    text = item?.title ?: course.name; UiText.preserveRawText(this); textSize = 17f
+                    setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
+                })
+                if (item == null) {
+                    addView(eventDetailText(activity.getString(when (course.currentTermStatus) {
+                        "current" -> R.string.qmplus_term_current; "other" -> R.string.qmplus_term_other
+                        else -> R.string.qmplus_term_unknown
+                    }), 2))
+                    addView(gradeAction(activity.getString(R.string.qmplus_open_course), R.drawable.ic_shuttle_external) { activity.connectQmplus(course.url) })
+                } else {
+                    addView(eventDetailText(course.name, 2))
+                    addView(eventDetailText(activity.getString(if (item.kind == "quiz") R.string.qmplus_quiz else R.string.qmplus_assignment), 2))
+                    listOf(R.string.qmplus_due to item.dueAt, R.string.qmplus_opens to item.opensAt,
+                        R.string.qmplus_closes to item.closesAt, R.string.qmplus_cutoff to item.cutoffAt).forEach { (label, value) ->
+                        addView(eventDetailText(activity.getString(label) + ": " +
+                            (value?.let { it.replace('T', ' ').removeSuffix("Z") + " UTC" }
+                                ?: activity.getString(R.string.qmplus_not_published)), 3))
+                    }
+                    item.timeLimitSeconds?.let { addView(eventDetailText(activity.getString(R.string.qmplus_time_limit, it), 2)) }
+                    item.status?.let { addView(eventDetailText(it, 2)) }
+                    if (item.detailStatus != "available") addView(eventDetailText(activity.getString(R.string.qmplus_detail_unavailable), 3))
+                    item.rawTimeText?.takeIf { it.isNotBlank() }?.let { addView(eventDetailText(it, 6)) }
+                    addView(gradeAction(activity.getString(R.string.qmplus_open_activity), R.drawable.ic_shuttle_external) { activity.connectQmplus(item.url) })
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { if (index > 0) topMargin = activity.dp(10) })
+        }
+        sessionState.visibleQmplusRowCount = maxOf(20, target)
+    }
+
     private fun assignmentState() = Triple(dailyInfoRepository.allAssignments(),
         dailyInfoRepository.isLoadingAllAssignments(), dailyInfoRepository.allAssignmentsError())
+    private fun courseState() = Triple(dailyInfoRepository.currentTeachingCloudCourses(),
+        dailyInfoRepository.isLoadingCurrentCourses(), dailyInfoRepository.currentCoursesError())
 
     private fun examsContent(): LinearLayout = privateQueryContent {
         val exams = scheduleRepository.schedule?.examSchedule

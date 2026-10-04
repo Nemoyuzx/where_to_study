@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-disconnect-qmplus"
+description = "Enables the disconnect_qmplus command without any pre-configured scope."
+commands.allow = ["disconnect_qmplus"]
+
+[[permission]]
+identifier = "deny-disconnect-qmplus"
+description = "Denies the disconnect_qmplus command without any pre-configured scope."
+commands.deny = ["disconnect_qmplus"]

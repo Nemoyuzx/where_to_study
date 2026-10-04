@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, ClipboardList, ExternalLink, RefreshCw, Settings2 } from 'lucide-react'
 import { filterAssignmentQueries } from './query-domain.js'
+import {courseActivityKey} from './course-domain.js'
 
 // Kept mounted across Query segments. Opening/changing a segment never logs in;
 // explicit retrieval uses the existing native, credential-scoped services.
-export default function PrivateQueriesPanel({ kind, enabled, command, language, hasAccount, onOpenAccount, examSnapshot }) {
+export default function PrivateQueriesPanel({ kind, enabled, command, language, hasAccount, onOpenAccount, examSnapshot, assignmentSnapshot, onAssignmentSnapshot, onAssignmentRequest }) {
   const en = language === 'en'
   const assignments = kind === 'assignments'
   const title = assignments ? (en ? 'Assignment DDL' : '课程作业 DDL') : (en ? 'Exams' : '考试查询')
@@ -21,7 +22,7 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
     if (!hasAccount) { revision.current += 1; setItems(null); setError(''); setBusy(false) }
   }, [hasAccount])
   const snapshotState = !assignments && items == null && hasAccount ? examSnapshot?.status : null
-  const available = items ?? (!assignments && hasAccount && snapshotState !== 'failed' ? examSnapshot?.items : null)
+  const available = (assignments ? assignmentSnapshot ?? items : items) ?? (!assignments && hasAccount && snapshotState !== 'failed' ? examSnapshot?.items : null)
   const courses = useMemo(() => [...new Set((available || []).map(x => x.course_name).filter(Boolean))].sort(), [available])
   const filtered = useMemo(() => assignments ? filterAssignmentQueries(available || [], { query, course, range })
     : (available || []).filter(x => [x.name, x.room, x.seat, x.time_text].some(v => String(v || '').toLowerCase().includes(query.toLowerCase().trim()))), [assignments, available, course, query, range])
@@ -29,11 +30,13 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
   useEffect(() => setLimit(30), [query, course, range, available])
   const load = async () => {
     const id = ++revision.current
+    const snapshotRevision=assignments?onAssignmentRequest?.():null
     setBusy(true); setError('')
     try {
       const value = assignments ? await command('fetch_assignment_list', { force: true }) : await command('fetch_exams', { term_id: null })
       if (revision.current !== id) return
       setItems(assignments ? value : value.items)
+      if(assignments) onAssignmentSnapshot?.(value,snapshotRevision)
       setUpdated(new Intl.DateTimeFormat(en ? 'en-GB' : 'zh-CN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Shanghai' }).format(new Date()))
     } catch {
       if (revision.current === id) setError(en ? 'Unable to retrieve data. Check your connection and the corresponding account password in Settings, then retry.' : '读取失败，请检查网络及设置中对应的教务／教学云密码后重试。')
@@ -55,7 +58,7 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
       {snapshotState === 'stale' && <p role="status">{en ? 'Showing a previously cached exam schedule. Refresh and confirm against the university service.' : '正在显示此前缓存的考试安排，请刷新并以学校最新信息为准。'} {examSnapshot?.fetched_at}</p>}
       {available == null && !busy && <p className="query-grade-status">{en ? 'Use Fetch / refresh to retrieve your data. Switching tabs will not log you in again.' : '点击“获取／刷新”读取数据，切换查询栏目不会重复登录。'}</p>}
       {available != null && !filtered.length && <p className="query-grade-status">{en ? 'No matching records.' : '暂无符合条件的记录。'}</p>}
-      <div className="query-grade-list">{filtered.slice(0, limit).map(item => <article className="query-grade-card" key={item.id}>
+      <div className="query-grade-list">{filtered.slice(0, limit).map(item => <article className="query-grade-card" key={assignments?courseActivityKey(item):item.id}>
         <header><strong>{assignments ? item.title : item.name}</strong></header>
         {assignments ? <><p>{item.course_name}</p><strong>{item.deadline}</strong><small>{item.status || (en ? 'Status not provided' : '状态未提供')}</small></>
           : <><p>{item.date || (en ? 'Date pending' : '日期待定')} · {item.start_time ? `${item.start_time}–${item.end_time}` : item.time_text || (en ? 'Time pending' : '时间待定')}</p><small>{item.room || (en ? 'Room pending' : '地点待定')}{item.seat ? ` · ${en ? 'Seat' : '座位'} ${item.seat}` : ''}</small></>}

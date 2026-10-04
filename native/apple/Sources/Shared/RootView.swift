@@ -88,9 +88,16 @@ final class PrimaryNavigationState: ObservableObject {
 @MainActor
 final class CalendarModeDataServices {
     let dailyInfo = DailyInfoStore()
-    let deadlines = CalendarDeadlineStore()
+    let deadlines: CalendarDeadlineStore
+    let teachingCloudCourses: TeachingCloudCourseStore
     let shuttle = ShuttleBusStore()
     let importantEvents = ImportantEventQueryStore()
+
+    init() {
+        let teachingCloud = UCloudAssignmentClient()
+        deadlines = CalendarDeadlineStore(assignmentClient: teachingCloud)
+        teachingCloudCourses = TeachingCloudCourseStore(client: teachingCloud)
+    }
 }
 
 @MainActor
@@ -125,6 +132,7 @@ struct RootView: View {
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
     @StateObject private var calendarServices = CalendarDataServices()
     @State private var settingsSession = SettingsViewSession()
+    @State private var coursesSession = CoursesViewSession()
     #if os(macOS)
     @State private var macSidebarVisibility: NavigationSplitViewVisibility = .all
     #endif
@@ -304,11 +312,19 @@ struct RootView: View {
         }
         .onChange(of: model.account) { _ in
             calendarDeadlines.clearAssignments()
+            modeServices.teachingCloudCourses.invalidate()
         }
         .onChange(of: model.assignmentCredentialRevision) { _ in
             calendarDeadlines.clearAssignments()
+            modeServices.teachingCloudCourses.invalidate()
+        }
+        .onChange(of: model.courseDataClearRevision) { _ in
+            calendarDeadlines.clearAssignments()
+            modeServices.teachingCloudCourses.invalidate()
+            coursesSession.reset()
         }
         .onChange(of: model.isSampleMode) { sampleMode in
+            coursesSession.dismissDetails()
             // Live and built-in sample data use separate stores so an in-flight
             // live request can never overwrite the sample-mode query page (or
             // vice versa) when the runtime mode changes.
@@ -316,6 +332,7 @@ struct RootView: View {
         }
         .onChange(of: navigation.selectedSection) { section in
             if section != .settings { settingsSession.dismissPresentations() }
+            if section != .courses { coursesSession.dismissDetails() }
         }
         .onReceive(NotificationCenter.default.publisher(for: AppKeyboardCommandNotification.name)) {
             notification in
@@ -333,6 +350,19 @@ struct RootView: View {
             }
         }
         .background { SettingsPresentationHost(session: settingsSession) }
+        .background { QMplusConnectionPresentationHost(store: model.qmplus) }
+        .background {
+            CourseCatalogDetailPresentationHost(session: coursesSession,
+                teachingCloud: modeServices.teachingCloudCourses, assignments: calendarDeadlines, qmplus: model.qmplus)
+        }
+        #if DEBUG && os(iOS)
+        .background {
+            if (AppLaunchConfiguration.isUITesting || AppLaunchConfiguration.isReviewDemo),
+               ProcessInfo.processInfo.arguments.contains("--ui-test-language-geometry") {
+                LanguageLayoutFrameProbe(language: model.appLanguage)
+            }
+        }
+        #endif
         .environmentObject(dailyInfo)
         .environmentObject(calendarDeadlines)
         .environment(\.appTheme, theme)
@@ -576,6 +606,9 @@ struct RootView: View {
             #else
             TeachingCalendarView(session: teachingCalendarSession)
             #endif
+        case .courses:
+            CoursesView(session: coursesSession, teachingCloud: modeServices.teachingCloudCourses,
+                        assignmentStore: calendarDeadlines)
         case .queries:
             InformationQueriesView(
                 shuttleStore: modeServices.shuttle,

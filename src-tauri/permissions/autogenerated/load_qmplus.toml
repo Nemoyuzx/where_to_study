@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-qmplus"
+description = "Enables the load_qmplus command without any pre-configured scope."
+commands.allow = ["load_qmplus"]
+
+[[permission]]
+identifier = "deny-load-qmplus"
+description = "Denies the load_qmplus command without any pre-configured scope."
+commands.deny = ["load_qmplus"]

@@ -1,6 +1,6 @@
 # 隐私声明 / Privacy Policy
 
-生效日期 / Effective date: 2026-10-02
+生效日期 / Effective date: 2026-10-03
 
 Where To Study 是用于查看北京邮电大学个人课表、空教室及相关学习信息的独立非官方客户端，不由北京邮电大学运营，也不代表学校官方立场。
 
@@ -14,13 +14,13 @@ The account and password you enter are stored in the operating system's protecte
 
 ## 成绩与考试安排 / Grades and exam arrangements
 
-查询页还提供独立的考试安排与课程作业 DDL 页面；你可以主动获取或刷新，切换栏目本身不触发重复登录。作业使用设置中的教学云密码，留空则沿用教务密码。登录令牌仅在当前应用进程的内存中按账户及密码隔离复用，不写入磁盘或传给本应用服务端。优先遵守服务提供的令牌有效期；没有有效期信息时使用有界短期缓存。明确认证失效时最多重新登录重试一次；更改账户／密码、清除数据或切换示例模式会使对应会话失效。关闭进程后需重新登录。
+“课程”一级页面保留独立的成绩、考试安排与教学云作业 DDL 栏目；你可以主动获取或刷新，切换栏目本身不触发重复登录。作业使用设置中的教学云密码，留空则沿用教务密码。登录令牌仅在当前应用进程的内存中按账户及密码隔离复用，不写入磁盘或传给本应用服务端。优先遵守服务提供的令牌有效期；没有有效期信息时使用有界短期缓存。明确认证失效时最多重新登录重试一次；更改北邮账户／密码、清除数据或切换示例模式会使对应北邮会话失效。关闭进程后需重新登录。QMplus 官方网页登录是另一条独立链路，不使用这些北邮凭据。
 
-Query also provides separate exam and assignment-deadline pages with explicit fetch/refresh controls. Switching sections does not itself repeat login. Assignments use the separate Teaching Cloud password, or the academic password when it is blank. Login sessions are reused only in process memory, scoped to the account and password, never written to disk or sent to this app's server. Advertised token expiry is respected; tokens without expiry metadata use a bounded short lifetime. Explicit authentication expiry permits at most one login retry. Account/password changes, data clearing, or switching to demo mode invalidate the relevant session. Restarting the process requires a new login.
+The primary Courses page keeps separate Grades, Exams, and Teaching Cloud Assignments tabs with explicit fetch/refresh controls. Switching tabs does not itself repeat login. Assignments use the separate Teaching Cloud password, or the academic password when it is blank. Login sessions are reused only in process memory, scoped to the account and password, never written to disk or sent to this app's server. Advertised token expiry is respected; tokens without expiry metadata use a bounded short lifetime. Explicit authentication expiry permits at most one login retry. BUPT account/password changes, data clearing, or switching to demo mode invalidate the relevant BUPT session. Restarting the process requires a new login. Official QMplus web sign-in is independent and does not use these BUPT credentials.
 
-主动打开“查询 → 成绩”后，应用使用已保存的教务账号和教务密码直接通过 HTTPS 从 `jwglweixin.bupt.edu.cn` 获取学校学期列表、本人课程成绩及学校返回的绩点。教学云平台的独立密码不用于此查询；不会查询其他学生。成绩不写入磁盘、不上传至本项目服务端或参考项目的代理服务；图形端只在当前会话的有界内存中短期复用，并在账号或相关凭据变化、清除数据后失效。终端的显式打印／JSON 输出会显示用户主动请求的成绩，请勿分享包含个人成绩的终端记录。
+主动打开“课程 → 成绩”后，应用使用已保存的教务账号和教务密码直接通过 HTTPS 从 `jwglweixin.bupt.edu.cn` 获取学校学期列表、本人课程成绩及学校返回的绩点。教学云平台的独立密码不用于此查询；不会查询其他学生。成绩不写入磁盘、不上传至本项目服务端或参考项目的代理服务；图形端只在当前会话的有界内存中短期复用，并在账号或相关凭据变化、清除数据后失效。终端的显式打印／JSON 输出会显示用户主动请求的成绩，请勿分享包含个人成绩的终端记录。
 
-Opening Query → Grades uses the saved academic account and academic password over HTTPS directly with `jwglweixin.bupt.edu.cn` to retrieve university semesters, your course results, and university-provided GPA. It does not use the separate teaching cloud password or query other students. Grades are not saved to disk or sent to this project's server or a reference project's proxy. Graphical clients reuse them only briefly in bounded session memory, invalidated on account or relevant credential changes and clearing data. Explicit terminal/JSON output contains the grades you request; do not share terminal records containing private results.
+Opening Courses → Grades uses the saved academic account and academic password over HTTPS directly with `jwglweixin.bupt.edu.cn` to retrieve university semesters, your course results, and university-provided GPA. It does not use the separate teaching cloud password or query other students. Grades are not saved to disk or sent to this project's server or a reference project's proxy. Graphical clients reuse them only briefly in bounded session memory, invalidated on account or relevant credential changes and clearing data. Explicit terminal/JSON output contains the grades you request; do not share terminal records containing private results.
 
 个人课表刷新会在同次教务登录中同步读取考试安排，包括课程名称、日期／时间、地点和接口提供的座位等信息，并按账号、学期随原始课表缓存于本机。考试与课程重叠时，仅在本地有效日程中隐藏冲突的单次课程；不会修改学校记录。失败时可保留同账号同学期的旧考试并明确提示过期，成功返回空列表会清除旧安排；未知时间不会被虚构为某一节课。清除本地数据会同时删除考试缓存。
 
@@ -28,9 +28,9 @@ Timetable refresh retrieves exam arrangements in the same university login, incl
 
 ## 本地数据 / Local data
 
-个人课表、空教室结果、校区、学期和功能开关会缓存在设备上，以减少重复请求。收藏活动时，应用还会在设备上保存该日程的完整快照，使其在来源关闭、失败或删除条目后仍能显示；收藏不会上传或跨设备同步。受支持系统上的课程小组件只读取本地课表快照。你可以取消单条收藏，或在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室和节假日缓存、收藏、偏好设置及应用管理的提醒任务。
+个人课表、空教室结果、校区、学期和功能开关会缓存在设备上，以减少重复请求。收藏活动时，应用还会在设备上保存该日程的完整快照，使其在来源关闭、失败或删除条目后仍能显示；收藏不会上传或跨设备同步。受支持系统上的课程小组件只读取本地课表快照。你可以取消单条收藏，或在设置中使用“清除本地数据”删除应用保存的凭据、课表、空教室和节假日缓存、收藏、偏好设置、应用管理的提醒任务，以及 QMplus 会话和业务快照。
 
-Schedules, classroom results, campus, term, and feature preferences are cached on your device to reduce repeated requests. Favoriting an event also stores its complete snapshot on that device so it remains visible if its source is disabled, unavailable, or removes the item; favorites are neither uploaded nor synchronized between devices. Course widgets on supported systems read only a local schedule snapshot. You can remove individual favorites or use “Clear local data” in Settings to remove saved credentials, schedule, classroom and holiday caches, favorites, preferences, and app-managed reminder tasks.
+Schedules, classroom results, campus, term, and feature preferences are cached on your device to reduce repeated requests. Favoriting an event also stores its complete snapshot on that device so it remains visible if its source is disabled, unavailable, or removes the item; favorites are neither uploaded nor synchronized between devices. Course widgets on supported systems read only a local schedule snapshot. You can remove individual favorites or use “Clear local data” in Settings to remove saved credentials, schedule, classroom and holiday caches, favorites, preferences, app-managed reminder tasks, and the app-owned QMplus session and business snapshot.
 
 课程删除仅是本地课表编辑：可删除某日的一次课程，或本学期整门课程的排课。应用保留原始课表并另存按账号和学期隔离的删除记录，刷新时重新应用，用户可在设置中恢复。这些记录会影响本机课程显示、空闲节次、受支持的小组件与课程提醒，不修改学校选课、学校作业或先前独立导出的系统日历事件；清除本地数据会一并删除记录。图形客户端使用现有应用私有存储，终端客户端沿用其受文件权限保护的本地存储。
 
@@ -66,9 +66,23 @@ Requests to `https://where-to-study.cn/contest-ddl/data/competitions.json`, `htt
 
 Personal Account can store a separate teaching cloud password for the same student ID, used only for assignment authentication and kept in the same protected credential store as the academic password. If unset, the academic password is used. Leaving an edit blank for the same account retains its saved override; explicitly choosing and saving “Use academic password” clears that override. A different student ID never inherits the previous account's cloud password. Effective credential changes invalidate old assignment sessions and caches. Terminal clients use owner-only credential files, which are not equivalent to OS keychain encryption.
 
-日期详情请求课程作业时，应用会从安全存储临时读取已保存的教务账号和密码，只将其通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再用一次性票据换取仅存于内存的云课堂令牌，并从 `apiucloud.bupt.edu.cn` 读取课程与作业。应用不读取浏览器 Cookie 或 token，不向 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn` 发送密码，也不把认证票据、Cookie、令牌或作业写入磁盘。跨日期查询结果最多在内存复用 10 分钟，并在切换账号或清除本地数据时失效。
+当你查看教学云当前课程目录、课程作业或日期详情中的作业时，应用会从安全存储临时读取已保存的北邮账号和有效教学云密码，只将其通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再用一次性票据换取仅存于内存的云课堂令牌，并从 `apiucloud.bupt.edu.cn` 读取课程与作业。应用不读取浏览器 Cookie 或 token，不向 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn` 发送密码，也不把认证票据、Cookie、令牌或作业写入磁盘。跨日期查询结果最多在内存复用 10 分钟，并在切换账号或清除本地数据时失效。
 
-When date details request assignments, the app temporarily reads saved credentials from protected storage and submits them only to `auth.bupt.edu.cn` over HTTPS for unified authentication. It exchanges the one-time ticket for an in-memory UCloud token and reads courses and assignments from `apiucloud.bupt.edu.cn`. The app does not read browser cookies or tokens, does not send the password to `ucloud.bupt.edu.cn` or `apiucloud.bupt.edu.cn`, and does not persist authentication tickets, cookies, tokens, or assignments. Cross-date results may be reused in memory for up to ten minutes and are invalidated when the account changes or local data is cleared.
+When you view the current Teaching Cloud course directory, assignments, or assignment details for a date, the app temporarily reads saved BUPT credentials and the effective Teaching Cloud password from protected storage and submits them only to `auth.bupt.edu.cn` over HTTPS for unified authentication. It exchanges the one-time ticket for an in-memory UCloud token and reads courses and assignments from `apiucloud.bupt.edu.cn`. The app does not read browser cookies or tokens, does not send the password to `ucloud.bupt.edu.cn` or `apiucloud.bupt.edu.cn`, and does not persist authentication tickets, cookies, tokens, or assignments. Cross-date results may be reused in memory for up to ten minutes and are invalidated when the account changes or local data is cleared.
+
+## QMplus 独立连接 / Independent QMplus connection
+
+QMplus 与北邮账号独立。只有你主动点击“连接 QMplus”时，应用才在自己的隔离网页窗口打开 `https://qmplus.qmul.ac.uk/my/`；你直接在官方页面完成 SSO／Microsoft MFA。应用没有 Microsoft 密码输入框，不读取系统浏览器 Cookie，也不把北邮教务或教学云密码发送给 QMplus。共享只读脚本只在官方 QMplus 上读取当前课程、已发布 Assignment／Quiz 及其可验证的开放、截止、关闭、最终截止和限时信息；不会提交作业、开始测验、上传文件或访问答案与评分反馈。脚本只返回有界业务快照，不向原生层返回密码、Cookie、`sesskey`、令牌或完整 HTML，也不调用 YouXam 等第三方 Worker 代理。本项目服务器不会接收 QMplus 身份或课程数据。
+
+QMplus is independent of the BUPT account. Only when you select Connect QMplus does the app open `https://qmplus.qmul.ac.uk/my/` in its own isolated web view, where you complete official SSO/Microsoft MFA directly. The app has no Microsoft password field, reads no system-browser cookies, and sends no BUPT academic or Teaching Cloud password to QMplus. Its shared read-only script obtains current courses and published Assignment/Quiz information with verifiable open, due, close, cutoff and time-limit fields. It does not submit assignments, start quizzes, upload files, or access answers or grading feedback. The script returns only a bounded business snapshot, not passwords, cookies, Moodle session keys, tokens, or full HTML, and it does not use third-party Worker proxies such as YouXam. This project's server receives no QMplus identity or course data.
+
+课程被标为当前、其它或学期未确认；证据不足时不会猜为本学期。官方网页的伦敦时间按英国夏令时解析；不存在、重复或尚未公布的时间不会被猜成一个具体截止日期，原文可保留供核对。受限模块是正常权限状态，不等于同步失败；请求真正部分失败时，客户端会保留明确标注的已核实或上次成功资料，不把失败当成课程已删除。详情与准确截止时间请以 QMplus 官方课程页面为准。
+
+Courses are classified as current, other, or term unknown; weak evidence does not turn an old or uncertain course into a current one. London times follow UK daylight-saving rules. Nonexistent, ambiguous, or unpublished times are not replaced with invented deadlines; original wording may remain for verification. A restricted module is an ordinary permission state, not automatically a failed sync. On a genuine partial request failure, clients retain clearly marked verified or previously successful information rather than treating missing data as deleted. Rely on the official QMplus course page for definitive details and deadlines.
+
+QMplus 网页会话属于本应用，不与设备浏览器共享。Android 在应用私有存储中保存有界业务快照，并使用独立 WebView 进程／profile；iOS 17／macOS 14 及以上使用应用专属的隔离 WebKit data store，较旧的受支持 Apple 系统使用非持久 WebKit 会话；Tauri 桌面与 HarmonyOS 使用非持久的 incognito 网页会话。Apple、Tauri 和 HarmonyOS 的业务快照只在进程内存中，Android 的快照保存在应用私有存储中。会话能否跨重启保留因平台和系统版本而异。主动断开 QMplus 或清除本地数据，会清除应用管理的会话与快照；更换北邮账号或学期不会自动退出独立的 QMplus 身份。清除本地数据不能删除 QMplus 或 Microsoft 服务端已保存的记录。[接入细节](docs/qmplus-integration.md)
+
+The QMplus web session belongs to this app and is not shared with the device browser. Android keeps a bounded business snapshot in app-private storage and uses a separate WebView process/profile. iOS 17/macOS 14 and later use an app-specific isolated WebKit data store; older supported Apple systems use a nonpersistent WebKit session. Tauri desktop and HarmonyOS use nonpersistent incognito web sessions. Apple, Tauri and HarmonyOS keep the business snapshot only in process memory; Android stores it in app-private storage. Whether sign-in survives restart varies by platform and OS version. Disconnecting QMplus or clearing local data clears the app-managed session and snapshot; changing a BUPT account or term does not automatically sign out the separate QMplus identity. Clearing local data cannot delete records held by QMplus or Microsoft. [Integration details](docs/qmplus-integration.md)
 
 ## 系统日历、通知与小组件 / System calendar, notifications, and widgets
 
@@ -78,15 +92,15 @@ The app writes to the system calendar or schedules local course notifications, i
 
 ## 不收集的数据与第三方元数据 / Data not collected and third-party metadata
 
-本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。
+本项目只运营用于整理公开班车与活动数据的固定接口，不提供用户账户、云端同步、广告、分析或行为跟踪服务，也不收集 GPS 位置、联系人、广告标识符、诊断或使用行为。北邮服务、QMplus、Microsoft、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公开接口和用户选择的自定义日程服务器可能依据各自政策处理 IP 地址、请求时间等普通网络元数据。你在 QMplus／Microsoft 官方网页登录页主动输入的信息由其官方服务按自身政策处理，并非提交给本项目服务器。
 
-The project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies.
+The project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, QMplus, Microsoft, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies. Information you enter on official QMplus/Microsoft sign-in pages is handled by those services under their own policies, not submitted to this project's server.
 
 ## 保留与删除 / Retention and deletion
 
-凭据和缓存保留在你的设备上，直到被替换、在设置中清除或随卸载移除。清除本地数据不会删除北京邮电大学或其他第三方服务持有的记录。
+凭据和缓存保留在你的设备上，直到被替换、在设置中清除或随卸载移除；非持久 QMplus 网页会话还可能随进程结束而失效。清除本地数据不会删除北京邮电大学、QMplus／Microsoft 或其他第三方服务持有的记录。
 
-Credentials and caches remain on your device until replaced, cleared in Settings, or removed with the app. Clearing local data does not delete records held by BUPT or other third-party services.
+Credentials and caches remain on your device until replaced, cleared in Settings, or removed with the app; nonpersistent QMplus web sessions may also expire when the process ends. Clearing local data does not delete records held by BUPT, QMplus/Microsoft, or other third-party services.
 
 ## 安全与联系 / Security and contact
 

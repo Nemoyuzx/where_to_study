@@ -16,6 +16,7 @@ import { AuthenticatedSession, AuthenticationExpiredError, AuthenticationFailure
 export interface AssignmentDeadlineFetching {
   fetch(credentials: Credentials, date: string): Promise<AssignmentDeadlineItem[]>;
   fetchCatalog(credentials: Credentials, refresh?: boolean): Promise<AssignmentDeadlineItem[]>;
+  fetchCourseDirectory?(credentials: Credentials, refresh?: boolean): Promise<UCloudCourse[]>;
   reset(): void;
 }
 
@@ -41,13 +42,15 @@ class UCloudSession {
   }
 }
 
-class UCloudCourse {
+export class UCloudCourse {
   readonly id: string;
   readonly name: string | null;
+  readonly teacherNames: string[];
 
-  constructor(id: string, name: string | null) {
+  constructor(id: string, name: string | null, teacherNames: string[] = []) {
     this.id = id;
     this.name = name;
+    this.teacherNames = teacherNames;
   }
 }
 
@@ -57,6 +60,18 @@ class UCloudAssignmentCache {
   readonly items: AssignmentDeadlineItem[];
 
   constructor(account: string, fetchedAt: number, items: AssignmentDeadlineItem[]) {
+    this.account = account;
+    this.fetchedAt = fetchedAt;
+    this.items = items;
+  }
+}
+
+class UCloudCourseCache {
+  readonly account: string;
+  readonly fetchedAt: number;
+  readonly items: UCloudCourse[];
+
+  constructor(account: string, fetchedAt: number, items: UCloudCourse[]) {
     this.account = account;
     this.fetchedAt = fetchedAt;
     this.items = items;
@@ -79,18 +94,27 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
   private static readonly cacheLifetimeMs: number = 10 * 60 * 1000;
 
   private cache: UCloudAssignmentCache | null = null;
+  private courseCache: UCloudCourseCache | null = null;
   private readonly sessions: AuthenticatedSession<UCloudSession> = new AuthenticatedSession<UCloudSession>();
   private inFlight: Promise<AssignmentDeadlineItem[]> | null = null;
   private inFlightAccount: string = '';
+  private courseInFlight: Promise<UCloudCourse[]> | null = null;
+  private courseInFlightAccount: string = '';
+  private courseRecordsInFlight: Promise<UCloudCourse[]> | null = null;
+  private courseRecordsUserID: string = '';
   private revision: number = 0;
   private activeAccount: string = '';
   private activePassword: string = '';
   private readonly fetchAllProvider: ((credentials: Credentials) =>
     Promise<AssignmentDeadlineItem[]>) | null;
+  private readonly fetchDirectoryProvider: ((credentials: Credentials) =>
+    Promise<UCloudCourse[]>) | null;
 
   constructor(fetchAllProvider: ((credentials: Credentials) =>
-    Promise<AssignmentDeadlineItem[]>) | null = null) {
+    Promise<AssignmentDeadlineItem[]>) | null = null,
+    fetchDirectoryProvider: ((credentials: Credentials) => Promise<UCloudCourse[]>) | null = null) {
     this.fetchAllProvider = fetchAllProvider;
+    this.fetchDirectoryProvider = fetchDirectoryProvider;
   }
 
   async fetch(credentials: Credentials, date: string): Promise<AssignmentDeadlineItem[]> {
@@ -144,25 +168,64 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     return allItems;
   }
 
+  async fetchCourseDirectory(credentials: Credentials, refresh: boolean = false): Promise<UCloudCourse[]> {
+    const account: string = credentials.account.trim();
+    const password: string = credentials.effectiveCloudPassword();
+    if (account.length === 0 || password.length === 0) {
+      throw new Error('请先在设置中保存教务账号和密码。');
+    }
+    if (this.activeAccount !== account || this.activePassword !== password) {
+      this.reset();
+      this.activeAccount = account;
+      this.activePassword = password;
+    }
+    const now: number = Date.now();
+    if (!refresh && this.courseCache !== null && this.courseCache.account === account &&
+      now - this.courseCache.fetchedAt < UCloudAssignmentClient.cacheLifetimeMs) {
+      return this.courseCache.items;
+    }
+    if (this.courseInFlight !== null && this.courseInFlightAccount === account) {
+      return await this.courseInFlight;
+    }
+    const requestRevision: number = this.revision;
+    const normalized: Credentials = new Credentials(account, password);
+    const work: Promise<UCloudCourse[]> = this.fetchDirectoryProvider !== null ?
+      this.fetchDirectoryProvider(normalized) : this.sessions.run(account, password,
+        (): Promise<SessionLease<UCloudSession>> => this.authenticate(normalized),
+        (session: UCloudSession): Promise<UCloudCourse[]> => this.fetchCourseRecords(session));
+    this.courseInFlight = work;
+    this.courseInFlightAccount = account;
+    try {
+      const courses: UCloudCourse[] = await work;
+      if (requestRevision === this.revision) {
+        this.courseCache = new UCloudCourseCache(account, Date.now(), courses);
+      }
+      return courses;
+    } finally {
+      if (this.courseInFlight === work) {
+        this.courseInFlight = null;
+        this.courseInFlightAccount = '';
+      }
+    }
+  }
+
   reset(): void {
     this.revision++;
     this.sessions.reset();
     this.cache = null;
+    this.courseCache = null;
     this.inFlight = null;
     this.inFlightAccount = '';
+    this.courseInFlight = null;
+    this.courseInFlightAccount = '';
+    this.courseRecordsInFlight = null;
+    this.courseRecordsUserID = '';
     this.activeAccount = '';
     this.activePassword = '';
   }
 
   private async fetchAll(session: UCloudSession): Promise<AssignmentDeadlineItem[]> {
-    const courseQuery: Map<string, string> = new Map<string, string>();
-    courseQuery.set('size', '9999');
-    courseQuery.set('current', '1');
-    courseQuery.set('userId', session.userID);
-    courseQuery.set('siteRoleCode', '2');
-    const courseRoot: Record<string, Object> = await this.apiGet(
-      '/ykt-site/site/list/student/current', courseQuery, session);
-    const courses: UCloudCourse[] = UCloudAssignmentClient.courseRecords(courseRoot);
+    const courses: UCloudCourse[] = await this.fetchCourseRecords(session);
     const allItems: AssignmentDeadlineItem[] = [];
     let successfulCourseRequests: number = 0;
     let firstCourseError: Error | null = null;
@@ -190,7 +253,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
         successfulCourseRequests++;
         const courseItems: AssignmentDeadlineItem[] =
           AssignmentDeadlineResponseParser.parseAll(assignmentRoot, course.name);
-        for (const item of courseItems) {
+        for (const item of UCloudAssignmentClient.withKnownCourseID(courseItems, course.id)) {
           allItems.push(item);
         }
       } catch (e) {
@@ -219,6 +282,31 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       // 首页未完成列表仅用于补漏；课程作业列表成功时不因补漏失败而丢弃结果。
     }
     return UCloudAssignmentClient.merge(allItems);
+  }
+
+  private async fetchCourseRecords(session: UCloudSession): Promise<UCloudCourse[]> {
+    if (this.courseRecordsInFlight !== null && this.courseRecordsUserID === session.userID) {
+      return await this.courseRecordsInFlight;
+    }
+    const courseQuery: Map<string, string> = new Map<string, string>();
+    courseQuery.set('size', '9999');
+    courseQuery.set('current', '1');
+    courseQuery.set('userId', session.userID);
+    courseQuery.set('siteRoleCode', '2');
+    const work: Promise<UCloudCourse[]> = this.apiGet(
+      '/ykt-site/site/list/student/current', courseQuery, session)
+      .then((courseRoot: Record<string, Object>): UCloudCourse[] =>
+        UCloudAssignmentClient.courseRecords(courseRoot));
+    this.courseRecordsInFlight = work;
+    this.courseRecordsUserID = session.userID;
+    try {
+      return await work;
+    } finally {
+      if (this.courseRecordsInFlight === work) {
+        this.courseRecordsInFlight = null;
+        this.courseRecordsUserID = '';
+      }
+    }
   }
 
   private async authenticate(credentials: Credentials): Promise<SessionLease<UCloudSession>> {
@@ -561,7 +649,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       .replace(/&amp;/g, '&');
   }
 
-  private static courseRecords(root: Record<string, Object>): UCloudCourse[] {
+  static courseRecords(root: Record<string, Object>): UCloudCourse[] {
     const firstValue: Record<string, Object> = JsonUtil.record(root['data']);
     const first: Record<string, Object> = Object.keys(firstValue).length > 0 ? firstValue : root;
     const secondValue: Record<string, Object> = JsonUtil.record(first['data']);
@@ -569,16 +657,28 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     if (!Array.isArray(second['records'])) { throw new Error('教学云课程列表数据格式不正确。'); }
     const records: Object[] = JsonUtil.array(second['records']);
     const courses: UCloudCourse[] = [];
+    const seen: Set<string> = new Set<string>();
     for (const raw of records) {
+      if (courses.length >= UCloudAssignmentClient.maximumCourses) { break; }
       const item: Record<string, Object> = JsonUtil.record(raw);
       const id: string = UCloudAssignmentClient.firstString(
         item, ['id', 'siteId', 'courseId']);
-      if (id.length === 0) {
+      if (id.length === 0 || seen.has(id)) {
         continue;
       }
+      seen.add(id);
       const name: string = UCloudAssignmentClient.firstString(
         item, ['siteName', 'courseName', 'siteTitle', 'name']);
-      courses.push(new UCloudCourse(id, name.length > 0 ? name : null));
+      const teacherNames: string[] = [];
+      for (const rawTeacher of JsonUtil.array(item['teachers'])) {
+        if (teacherNames.length >= 4) { break; }
+        const teacherValue: Object | undefined = JsonUtil.record(rawTeacher)['name'];
+        const teacher: string = typeof teacherValue === 'string' ? teacherValue.trim().substring(0, 128) : '';
+        if (teacher.length > 0 && teacherNames.indexOf(teacher) < 0) {
+          teacherNames.push(teacher);
+        }
+      }
+      courses.push(new UCloudCourse(id, name.length > 0 ? name.substring(0, 512) : null, teacherNames));
     }
     return courses;
   }
@@ -593,6 +693,12 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     return '';
   }
 
+  static withKnownCourseID(items: AssignmentDeadlineItem[], courseID: string): AssignmentDeadlineItem[] {
+    return items.map((item: AssignmentDeadlineItem): AssignmentDeadlineItem =>
+      new AssignmentDeadlineItem(item.id, item.title, item.courseName, item.deadline,
+        item.status, courseID));
+  }
+
   private static merge(items: AssignmentDeadlineItem[]): AssignmentDeadlineItem[] {
     const merged: Map<string, AssignmentDeadlineItem> = new Map<string, AssignmentDeadlineItem>();
     const count: number = Math.min(items.length, UCloudAssignmentClient.maximumAssignments);
@@ -600,7 +706,8 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       const item: AssignmentDeadlineItem = items[index];
       const key: string = item.id + '\u001F' + item.deadline;
       const existing: AssignmentDeadlineItem | undefined = merged.get(key);
-      if (existing === undefined || (existing.courseName === null && item.courseName !== null)) {
+      if (existing === undefined || (existing.courseID === null && item.courseID !== null) ||
+        (existing.courseID === item.courseID && existing.courseName === null && item.courseName !== null)) {
         merged.set(key, item);
       }
     }

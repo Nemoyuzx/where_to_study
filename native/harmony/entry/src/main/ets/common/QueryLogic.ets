@@ -5,10 +5,7 @@ import {
 
 export enum QueryPageTab {
   shuttle = 'shuttle',
-  events = 'events',
-  grades = 'grades',
-  exams = 'exams',
-  assignments = 'assignments'
+  events = 'events'
 }
 
 export enum ImportantEventFilter {
@@ -23,8 +20,7 @@ export enum ImportantEventFilter {
 }
 
 export class QueryPageContract {
-  static readonly tabs: QueryPageTab[] = [QueryPageTab.shuttle, QueryPageTab.events, QueryPageTab.grades,
-    QueryPageTab.exams, QueryPageTab.assignments];
+  static readonly tabs: QueryPageTab[] = [QueryPageTab.shuttle, QueryPageTab.events];
   static readonly filters: ImportantEventFilter[] = [
     ImportantEventFilter.all,
     ImportantEventFilter.competition,
@@ -37,27 +33,23 @@ export class QueryPageContract {
   ];
 
   static tabTitle(tab: QueryPageTab): string {
-    if (tab === QueryPageTab.exams) { return '考试查询'; }
-    if (tab === QueryPageTab.assignments) { return '作业 DDL'; }
-    return tab === QueryPageTab.shuttle ? '班车查询' : tab === QueryPageTab.grades ? '成绩查询' : '重要事件';
+    return tab === QueryPageTab.shuttle ? '班车查询' : '重要事件';
   }
 
   static compactTabTitle(tab: QueryPageTab): string {
     if (tab === QueryPageTab.shuttle) { return '班车'; }
     if (tab === QueryPageTab.events) { return '事件'; }
-    if (tab === QueryPageTab.grades) { return '成绩'; }
-    return tab === QueryPageTab.exams ? '考试' : '作业';
+    return '事件';
   }
 
   // 原生 Symbol 与一级导航 AppSectionInfo 保持同一图标体系。
   static tabSymbol(tab: QueryPageTab): Resource {
     if (tab === QueryPageTab.shuttle) { return $r('sys.symbol.bus_fill'); }
     if (tab === QueryPageTab.events) { return $r('sys.symbol.calendar'); }
-    if (tab === QueryPageTab.grades) { return $r('sys.symbol.graduationcap'); }
-    return tab === QueryPageTab.exams ? $r('sys.symbol.doc_text') : $r('sys.symbol.list_bullet');
+    return $r('sys.symbol.calendar');
   }
 
-  // 使用实际文本测量宽度（包含系统字体缩放），五段始终保持等宽单行。
+  // 使用实际文本测量宽度（包含系统字体缩放），两段始终保持等宽单行。
   // pickerWidth 包含两侧 3vp 内边距；标签两侧各 6vp，图标为 20vp + 4vp 间距。
   static iconOnlyTabs(pickerWidth: number, maximumLabelWidth: number, includesIcons: boolean): boolean {
     if (!Number.isFinite(pickerWidth) || pickerWidth <= 0 ||

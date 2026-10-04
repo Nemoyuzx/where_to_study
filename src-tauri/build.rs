@@ -1,5 +1,9 @@
 fn main() {
     const COMMANDS: &[&str] = &[
+        "connect_qmplus",
+        "load_qmplus",
+        "disconnect_qmplus",
+        "accept_qmplus_snapshot",
         "get_metadata",
         "load_saved_settings",
         "save_saved_settings",
@@ -20,6 +24,7 @@ fn main() {
         "fetch_shuttle_bus",
         "fetch_assignments",
         "fetch_assignment_list",
+        "fetch_course_list",
         "fetch_exams",
         "fetch_grade_terms",
         "fetch_grades",

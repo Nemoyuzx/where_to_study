@@ -815,11 +815,11 @@ final class ScheduleLogicTests: XCTestCase {
     }
 
     func testPrimaryNavigationOrderTitlesAndAccessibilityIdentifiers() {
-        XCTAssertEqual(AppSection.allCases, [.planner, .calendar, .queries, .settings])
-        XCTAssertEqual(AppSection.allCases.map(\.titleKey), ["空教室", "教学日历", "查询", "设置"])
+        XCTAssertEqual(AppSection.allCases, [.planner, .calendar, .courses, .queries, .settings])
+        XCTAssertEqual(AppSection.allCases.map(\.titleKey), ["空教室", "教学日历", "课程", "查询", "设置"])
         XCTAssertEqual(
             AppSection.allCases.map(\.accessibilityIdentifier),
-            ["navigation.planner", "navigation.calendar", "navigation.queries", "navigation.settings"]
+            ["navigation.planner", "navigation.calendar", "navigation.courses", "navigation.queries", "navigation.settings"]
         )
     }
 
@@ -1435,8 +1435,9 @@ final class ScheduleLogicTests: XCTestCase {
         XCTAssertEqual(session.dismissOverlayGeneration, originalDismissGeneration + 1)
         XCTAssertEqual(AppSection.planner.keyboardShortcutDigit, "1")
         XCTAssertEqual(AppSection.calendar.keyboardShortcutDigit, "2")
-        XCTAssertEqual(AppSection.queries.keyboardShortcutDigit, "3")
-        XCTAssertEqual(AppSection.settings.keyboardShortcutDigit, "4")
+        XCTAssertEqual(AppSection.courses.keyboardShortcutDigit, "3")
+        XCTAssertEqual(AppSection.queries.keyboardShortcutDigit, "4")
+        XCTAssertEqual(AppSection.settings.keyboardShortcutDigit, "5")
     }
 
     func testMacKeyboardNotificationRejectsUnknownActions() {

@@ -3,6 +3,60 @@ import UIKit
 
 @MainActor
 final class InterfaceLanguageUITests: XCTestCase {
+    func testLanguageSwitchKeepsRootSafeAreaAndViewportGeometryDuringIntermediateFrames() {
+        continueAfterFailure = false
+        let app = application()
+        app.launchArguments.append("--ui-test-language-geometry")
+        app.launch()
+        defer { app.terminate() }
+        let tabs = app.tabBars.firstMatch
+        let compact = tabs.waitForExistence(timeout: 2)
+        if compact {
+            app.tabBars.buttons["设置"].tap()
+        } else {
+            let settings = app.descendants(matching: .any)["navigation.settings"].firstMatch
+            XCTAssertTrue(settings.waitForExistence(timeout: 5))
+            settings.tap()
+        }
+        let picker = app.segmentedControls["settings.language"].firstMatch
+        reveal(picker, app: app)
+        let probe = app.descendants(matching: .any)["debug.language-layout.frames"].firstMatch
+        XCTAssertTrue(probe.waitForExistence(timeout: 5))
+        picker.buttons["English"].tap()
+        assertFrameSamples(probe, language: "en", compact: compact, app: app)
+        XCTAssertTrue(picker.isHittable, "The language card must remain reachable without another reveal")
+        picker.buttons["Simplified Chinese"].tap()
+        assertFrameSamples(probe, language: "zh-Hans", compact: compact, app: app)
+        XCTAssertTrue(picker.isHittable)
+    }
+
+    private func assertFrameSamples(_ probe: XCUIElement, language: String, compact: Bool, app: XCUIApplication) {
+        let expectation = XCTNSPredicateExpectation(predicate: NSPredicate(
+            format: "value CONTAINS %@ AND value CONTAINS %@", "\"complete\":true", "\"language\":\"\(language)\""), object: probe)
+        let wait = XCTWaiter.wait(for: [expectation], timeout: 8)
+        if wait != .completed { attachGeometryFailure(app, value: probe.value) }
+        XCTAssertEqual(wait, .completed)
+        guard let text = probe.value as? String, let data = text.data(using: .utf8),
+              let values = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            XCTFail("Missing actual language layout samples"); return
+        }
+        XCTAssertEqual(values["hasTabBar"] as? Bool, compact, "Phone tabs and iPad sidebar must be distinguished")
+        XCTAssertGreaterThan((values["samples"] as? NSNumber)?.intValue ?? 0, 0)
+        for key in ["rootMaxDelta", "controllerMaxDelta", "safeAreaMaxDelta", "viewportMaxDelta"] + (compact ? ["barMaxDelta"] : []) {
+            guard let delta = values[key] as? NSNumber else { XCTFail("Missing geometry field: \(key)"); continue }
+            if delta.doubleValue > 1 { attachGeometryFailure(app, value: text) }
+            XCTAssertLessThanOrEqual(delta.doubleValue, 1, "Intermediate layout changed: \(key)")
+        }
+    }
+
+    private func attachGeometryFailure(_ app: XCUIApplication, value: Any?) {
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "language-intermediate-geometry"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+        print("LANGUAGE_INTERMEDIATE_GEOMETRY \(String(describing: value)) appFrame=\(app.frame)")
+    }
+
     func testLanguageRoundTripKeepsCurrentSettingsPositionAndUncommittedFields() {
         continueAfterFailure = false
         let app = application()
@@ -53,7 +107,7 @@ final class InterfaceLanguageUITests: XCTestCase {
         let monthState = app.descendants(matching: .any)["calendar.mobile.month-state"].firstMatch
         XCTAssertTrue(monthState.waitForExistence(timeout: 5))
         let previousMonthState = monthState.value as? String
-        app.tabBars.buttons["查询"].tap()
+        app.tabBars.buttons["课程"].tap()
         let assignments = app.segmentedControls.buttons["课程作业 DDL"].firstMatch
         XCTAssertTrue(assignments.waitForExistence(timeout: 5))
         assignments.tap()
@@ -65,8 +119,8 @@ final class InterfaceLanguageUITests: XCTestCase {
         let picker = app.segmentedControls["settings.language"].firstMatch
         reveal(picker, app: app)
         picker.buttons["English"].tap()
-        XCTAssertTrue(app.tabBars.buttons["Search"].waitForExistence(timeout: 5))
-        app.tabBars.buttons["Search"].tap()
+        XCTAssertTrue(app.tabBars.buttons["Courses"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Courses"].tap()
         XCTAssertTrue(app.segmentedControls.buttons["Assignment Deadlines"].isSelected)
         XCTAssertEqual(app.textFields["assignments.search"].value as? String, "示例", "Raw entered/API content must not be translated or reset")
         app.descendants(matching: .any)["navigation.calendar"].firstMatch.tap()

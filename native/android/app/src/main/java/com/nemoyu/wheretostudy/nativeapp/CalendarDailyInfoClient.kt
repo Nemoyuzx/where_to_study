@@ -108,6 +108,7 @@ data class AssignmentDeadlineItem(
     val courseName: String?,
     val deadline: String,
     val status: String?,
+    val courseID: String? = null,
 )
 
 internal object CalendarDailyInfoSources {
@@ -446,6 +447,7 @@ internal object AssignmentDeadlineResponseParser {
     fun parseAll(
         source: JSONObject,
         courseNameOverride: String?,
+        courseIDOverride: String? = null,
     ): List<AssignmentDeadlineItem> {
         val firstData = source.optJSONObject("data") ?: source
         val secondData = firstData.optJSONObject("data") ?: firstData
@@ -479,6 +481,7 @@ internal object AssignmentDeadlineResponseParser {
                     2 -> "已驳回"
                     else -> optionalString(item, "assignmentStatus")
                 },
+                courseID = courseIDOverride ?: firstString(item, "siteId", "courseId"),
             )
         }
     }
@@ -910,6 +913,7 @@ internal object FixedPublicJsonTransport {
 
 internal const val IMPORTANT_EVENTS_CHANGE_KEY = "__important_events__"
 internal const val ASSIGNMENTS_CHANGE_KEY = "__assignments__"
+internal const val COURSES_CHANGE_KEY = "__courses__"
 
 internal class CalendarDailyInfoRepository(
     private val client: CalendarDailyInfoClient = CalendarDailyInfoClient(),
@@ -943,6 +947,9 @@ internal class CalendarDailyInfoRepository(
     @Volatile private var queryAssignmentItems: List<AssignmentDeadlineItem>? = null
     @Volatile private var queryAssignmentError: String? = null
     private val loadingAllAssignments = AtomicBoolean(false)
+    @Volatile private var queryCourseItems: List<TeachingCloudCourse>? = null
+    @Volatile private var queryCourseError: String? = null
+    private val loadingCurrentCourses = AtomicBoolean(false)
     private val observers = ConcurrentHashMap<Any, (String) -> Unit>()
     private val closed = AtomicBoolean(false)
 
@@ -974,6 +981,35 @@ internal class CalendarDailyInfoRepository(
     fun assignmentError(date: String): String? = assignmentErrors[date]
     fun isLoadingAssignments(date: String): Boolean = date in loadingAssignments
     fun allAssignments(): List<AssignmentDeadlineItem>? = assignmentClient?.cached() ?: queryAssignmentItems
+    fun currentTeachingCloudCourses(): List<TeachingCloudCourse>? = assignmentClient?.cachedCourses() ?: queryCourseItems
+    fun currentCoursesError(): String? = queryCourseError
+    fun isLoadingCurrentCourses(): Boolean = loadingCurrentCourses.get()
+
+    fun loadCurrentCourses(force: Boolean = false) {
+        val requestRevision = synchronized(assignmentStateLock) {
+            if (closed.get() || (!force && currentTeachingCloudCourses() != null) ||
+                !loadingCurrentCourses.compareAndSet(false, true)) return
+            queryCourseError = null
+            assignmentRevision.get()
+        }
+        postCompletion(COURSES_CHANGE_KEY) {}
+        try {
+            worker.execute {
+                val result = runCatching {
+                    when {
+                        usesSampleData -> listOf(TeachingCloudCourse("demo-current", "Demo current course", "Demo teacher"))
+                        assignmentClient != null -> assignmentClient.fetchCurrentCourses(force)
+                        else -> throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
+                    }
+                }
+                publishAssignments(requestRevision) {
+                    result.onSuccess { queryCourseItems = it }.onFailure { queryCourseError = it.message ?: "课程获取失败。" }
+                    loadingCurrentCourses.set(false)
+                    postCompletion(COURSES_CHANGE_KEY) {}
+                }
+            }
+        } catch (_: RejectedExecutionException) { publishAssignments(requestRevision) { loadingCurrentCourses.set(false) } }
+    }
     fun allAssignmentsError(): String? = queryAssignmentError
     fun isLoadingAllAssignments(): Boolean = loadingAllAssignments.get()
 
@@ -1358,6 +1394,9 @@ internal class CalendarDailyInfoRepository(
         loadingAssignments.clear()
         queryAssignmentItems = null
         queryAssignmentError = null
+        queryCourseItems = null
+        queryCourseError = null
+        loadingCurrentCourses.set(false)
         loadingAllAssignments.set(false)
         assignmentClient?.reset()
     }

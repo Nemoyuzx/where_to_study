@@ -176,6 +176,16 @@ struct AssignmentDeadlineItem: Identifiable, Equatable, Sendable {
     let courseName: String?
     let deadline: String
     let status: String?
+    let courseID: String?
+
+    init(id: String, title: String, courseName: String?, deadline: String, status: String?, courseID: String? = nil) {
+        self.id = id
+        self.title = title
+        self.courseName = courseName
+        self.deadline = deadline
+        self.status = status
+        self.courseID = courseID
+    }
 }
 
 protocol PublicDeadlineFetching: Sendable {
@@ -858,7 +868,7 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
     }
 }
 
-actor UCloudAssignmentClient: AssignmentDeadlineFetching {
+actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFetching {
     private struct Cache {
         let account: String
         let fetchedAt: Date
@@ -885,6 +895,18 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
         let task: Task<[AssignmentDeadlineItem], Error>
     }
 
+    private struct CourseCache {
+        let account: String
+        let fetchedAt: Date
+        let courses: [TeachingCloudCourse]
+    }
+
+    private struct CourseFlight {
+        let id: UInt64
+        let revision: UInt64
+        let task: Task<[TeachingCloudCourse], Error>
+    }
+
     private static let casLoginURL = URL(
         string: "https://auth.bupt.edu.cn/authserver/login?service=https%3A%2F%2Fucloud.bupt.edu.cn"
     )!
@@ -902,9 +924,12 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     nonisolated static func resetSessions() { sessions.reset() }
 
     private let credentialStore: any CredentialStoring
-    private let fetchAllProvider: @Sendable (Credentials) async throws -> [AssignmentDeadlineItem]
+    private let fetchAllProvider: (@Sendable (Credentials) async throws -> [AssignmentDeadlineItem])?
+    private let fetchCoursesProvider: @Sendable (Credentials) async throws -> [TeachingCloudCourse]
     private let flightSelectionObserver: (@Sendable (Bool) -> Void)?
     private var cache: Cache?
+    private var courseCache: CourseCache?
+    private var courseFlight: CourseFlight?
     private var activeCredentials: Credentials?
     private var inFlightFetches = [String: InFlightFetch]()
     private var revision: UInt64 = 0
@@ -912,19 +937,20 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
 
     init(credentialStore: any CredentialStoring = KeychainCredentialStore()) {
         self.credentialStore = credentialStore
-        fetchAllProvider = { credentials in
-            try await Self.fetchAll(credentials: credentials)
-        }
+        fetchAllProvider = nil
+        fetchCoursesProvider = { try await Self.fetchCurrentCourses(credentials: $0) }
         flightSelectionObserver = nil
     }
 
     init(
         credentialStore: any CredentialStoring,
         fetchAll: @escaping @Sendable (Credentials) async throws -> [AssignmentDeadlineItem],
+        fetchCourses: (@Sendable (Credentials) async throws -> [TeachingCloudCourse])? = nil,
         flightSelectionObserver: (@Sendable (Bool) -> Void)? = nil
     ) {
         self.credentialStore = credentialStore
         fetchAllProvider = fetchAll
+        fetchCoursesProvider = fetchCourses ?? { try await Self.fetchCurrentCourses(credentials: $0) }
         self.flightSelectionObserver = flightSelectionObserver
     }
 
@@ -935,6 +961,48 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
 
     func fetchAll(force: Bool = false) async throws -> [AssignmentDeadlineItem] {
         try await accountWideItems(force: force)
+    }
+
+    func fetchCurrentCourses(force: Bool = false) async throws -> [TeachingCloudCourse] {
+        let credentials = try normalizedCurrentCredentials()
+        if !force, let courseCache, courseCache.account == credentials.account,
+           Date().timeIntervalSince(courseCache.fetchedAt) < Self.cacheLifetime {
+            return courseCache.courses
+        }
+        let selected: CourseFlight
+        if let courseFlight { selected = courseFlight } else {
+            nextFlightID &+= 1
+            let provider = fetchCoursesProvider
+            selected = CourseFlight(id: nextFlightID, revision: revision,
+                                    task: Task { try await provider(credentials) })
+            courseFlight = selected
+        }
+        do {
+            let courses = try await selected.task.value
+            guard selected.revision == revision,
+                  try normalizedCurrentCredentials() == credentials else { throw CancellationError() }
+            if courseFlight?.id == selected.id {
+                courseCache = CourseCache(account: credentials.account, fetchedAt: .now, courses: courses)
+                courseFlight = nil
+            }
+            return courses
+        } catch {
+            if courseFlight?.id == selected.id { courseFlight = nil }
+            throw error
+        }
+    }
+
+    private func normalizedCurrentCredentials() throws -> Credentials {
+        guard let credentials = try credentialStore.load(),
+              !credentials.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !credentials.effectiveTeachingCloudPassword.isEmpty else {
+            invalidateAuthentication()
+            throw CalendarDeadlineError.service("请先在设置中保存教务账号和密码。")
+        }
+        let normalized = Credentials(account: credentials.account.trimmingCharacters(in: .whitespacesAndNewlines),
+                                     password: credentials.effectiveTeachingCloudPassword)
+        if activeCredentials != normalized { invalidateAuthentication(); activeCredentials = normalized }
+        return normalized
     }
 
     func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]] {
@@ -958,22 +1026,8 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
     }
 
     private func accountWideItems(force: Bool = false) async throws -> [AssignmentDeadlineItem] {
-        guard let credentials = try credentialStore.load(),
-              !credentials.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !credentials.effectiveTeachingCloudPassword.isEmpty
-        else {
-            invalidateAuthentication()
-            throw CalendarDeadlineError.service("请先在设置中保存教务账号和密码。")
-        }
-        let account = credentials.account.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedCredentials = Credentials(
-            account: account,
-            password: credentials.effectiveTeachingCloudPassword
-        )
-        if activeCredentials != normalizedCredentials {
-            invalidateAuthentication()
-            activeCredentials = normalizedCredentials
-        }
+        let normalizedCredentials = try normalizedCurrentCredentials()
+        let account = normalizedCredentials.account
         let allItems: [AssignmentDeadlineItem]
         if !force, let cache,
            cache.account == account,
@@ -990,15 +1044,25 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
                 let flightID = nextFlightID
                 let requestRevision = revision
                 let fetchAllProvider = fetchAllProvider
-                flight = InFlightFetch(
-                    id: flightID,
-                    revision: requestRevision,
-                    task: Task {
-                        try await fetchAllProvider(normalizedCredentials)
-                    }
-                )
-                inFlightFetches[account] = flight
-                isFlightLeader = true
+                let currentCourses = fetchAllProvider == nil ? try await fetchCurrentCourses(force: force) : nil
+                guard requestRevision == revision else { throw CancellationError() }
+                // Course loading suspends this actor; a second caller may have
+                // selected the assignment flight before we resume.
+                if let existing = inFlightFetches[account], existing.revision == revision {
+                    flight = existing
+                    isFlightLeader = false
+                } else {
+                    flight = InFlightFetch(
+                        id: flightID,
+                        revision: requestRevision,
+                        task: Task {
+                            if let fetchAllProvider { return try await fetchAllProvider(normalizedCredentials) }
+                            return try await Self.fetchAll(credentials: normalizedCredentials, courses: currentCourses ?? [])
+                        }
+                    )
+                    inFlightFetches[account] = flight
+                    isFlightLeader = true
+                }
             }
             flightSelectionObserver?(isFlightLeader)
             do {
@@ -1032,21 +1096,32 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
         Self.sessions.reset()
         revision &+= 1
         cache = nil
+        courseCache = nil
+        courseFlight?.task.cancel()
+        courseFlight = nil
         activeCredentials = nil
         let invalidated = inFlightFetches.values.map(\.task)
         inFlightFetches.removeAll()
         invalidated.forEach { $0.cancel() }
     }
 
-    private static func fetchAll(credentials: Credentials) async throws -> [AssignmentDeadlineItem] {
+    private static func fetchAll(credentials: Credentials, courses: [TeachingCloudCourse]) async throws -> [AssignmentDeadlineItem] {
         try await sessions.perform(
             key: AuthenticationSessionPolicy.key(account: credentials.account, password: credentials.password),
             login: { try await authenticate(credentials: credentials) },
-            operation: { try await fetchAll(authenticated: $0) }
+            operation: { try await fetchAll(authenticated: $0, courses: courses) }
         )
     }
 
-    private static func fetchAll(authenticated: AuthenticatedSession) async throws -> [AssignmentDeadlineItem] {
+    private static func fetchCurrentCourses(credentials: Credentials) async throws -> [TeachingCloudCourse] {
+        try await sessions.perform(
+            key: AuthenticationSessionPolicy.key(account: credentials.account, password: credentials.password),
+            login: { try await authenticate(credentials: credentials) },
+            operation: { try await fetchCurrentCourses(authenticated: $0) }
+        )
+    }
+
+    private static func fetchCurrentCourses(authenticated: AuthenticatedSession) async throws -> [TeachingCloudCourse] {
         let courseRoot = try await getAPI(
             path: "/ykt-site/site/list/student/current",
             queryItems: [
@@ -1057,7 +1132,18 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
             ],
             authenticated: authenticated
         )
-        let courses = courseRecords(courseRoot).prefix(maximumCourses)
+        return parseCurrentCourses(courseRoot)
+    }
+
+    static func parseCurrentCourses(_ root: Any) -> [TeachingCloudCourse] {
+        var seen = Set<String>()
+        return courseRecords(root).prefix(maximumCourses).compactMap { course in
+            guard seen.insert(course.id).inserted else { return nil }
+            return TeachingCloudCourse(id: course.id, name: course.name, teacherNames: course.teacherNames)
+        }
+    }
+
+    private static func fetchAll(authenticated: AuthenticatedSession, courses: [TeachingCloudCourse]) async throws -> [AssignmentDeadlineItem] {
         var allItems = [AssignmentDeadlineItem]()
         var successfulCourseRequests = 0
         var firstCourseError: Error?
@@ -1084,7 +1170,8 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
                 successfulCourseRequests += 1
                 allItems.append(contentsOf: AssignmentDeadlineParser.parseAll(
                     root: root,
-                    courseNameOverride: course.name
+                    courseNameOverride: course.name,
+                    courseIDOverride: course.id
                 ))
             } catch AuthenticationSessionError.expired {
                 throw AuthenticationSessionError.expired
@@ -1399,7 +1486,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
         return result?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
     }
 
-    private static func courseRecords(_ root: Any) -> [(id: String, name: String?)] {
+    private static func courseRecords(_ root: Any) -> [(id: String, name: String?, teacherNames: [String])] {
         guard let object = root as? [String: Any] else { return [] }
         let firstData = object["data"] as? [String: Any] ?? object
         let secondData = firstData["data"] as? [String: Any] ?? firstData
@@ -1410,7 +1497,14 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
             let name = string(
                 record["siteName"] ?? record["courseName"] ?? record["siteTitle"] ?? record["name"]
             )
-            return (id, name)
+            var seenTeachers = Set<String>()
+            let teachers = (record["teachers"] as? [[String: Any]] ?? []).compactMap { teacher -> String? in
+                guard let rawName = teacher["name"] as? String,
+                      let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                      seenTeachers.insert(name).inserted else { return nil }
+                return name
+            }
+            return (id, name, teachers)
         }
     }
 
@@ -1420,7 +1514,9 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching {
             let key = "\(item.id)\u{1F}\(item.deadline)"
             if let existing = resultByKey[key] {
                 if existing.courseName == nil, item.courseName != nil {
-                    resultByKey[key] = item
+                    resultByKey[key] = AssignmentDeadlineItem(id: item.id, title: item.title, courseName: item.courseName,
+                                                             deadline: item.deadline, status: item.status,
+                                                             courseID: item.courseID ?? existing.courseID)
                 }
             } else {
                 resultByKey[key] = item
@@ -1455,7 +1551,8 @@ enum AssignmentDeadlineParser {
 
     static func parseAll(
         root: Any,
-        courseNameOverride: String?
+        courseNameOverride: String?,
+        courseIDOverride: String? = nil
     ) -> [AssignmentDeadlineItem] {
         collectRecords(root).compactMap { record in
             if let type = number(record["type"]), type != 3, type != 5 { return nil }
@@ -1474,7 +1571,8 @@ enum AssignmentDeadlineParser {
                 courseName: string(record, keys: ["siteName", "courseName", "siteTitle"])
                     ?? courseNameOverride?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
                 deadline: deadline,
-                status: assignmentStatus(record["assignmentStatus"])
+                status: assignmentStatus(record["assignmentStatus"]),
+                courseID: courseIDOverride ?? string(record, keys: ["siteId", "courseId"])
             )
         }
     }
@@ -1728,7 +1826,7 @@ private enum SampleCalendarDeadlineBuilder {
         Dictionary(uniqueKeysWithValues: dates.map { date in
             (date, [AssignmentDeadlineItem(
                 id: "sample-assignment", title: "示例课程作业", courseName: "示例课程",
-                deadline: "\(date) 23:59:00", status: "未提交"
+                deadline: "\(date) 23:59:00", status: "未提交", courseID: "sample-course"
             )])
         })
     }

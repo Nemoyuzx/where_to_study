@@ -5,10 +5,32 @@ import UIKit
 import AppKit
 #endif
 
+protocol QueryDestinationMode: CaseIterable, Identifiable, Hashable {
+    var systemImage: String { get }
+    var titleKey: String { get }
+}
+
 struct InformationQueryModePicker: View {
     @Binding var selection: InformationQueryMode
     let language: AppLanguage
     let availableWidth: CGFloat
+
+    var body: some View {
+        QueryDestinationPicker(selection: $selection, language: language,
+                               availableWidth: availableWidth, identifier: "queries.mode", titleKey: "查询类型")
+    }
+
+    static func minimumTextWidth(language: AppLanguage, fontSize: CGFloat) -> CGFloat {
+        QueryDestinationPicker<InformationQueryMode>.minimumTextWidth(language: language, fontSize: fontSize)
+    }
+}
+
+struct QueryDestinationPicker<Mode: QueryDestinationMode>: View {
+    @Binding var selection: Mode
+    let language: AppLanguage
+    let availableWidth: CGFloat
+    let identifier: String
+    let titleKey: String
     @ScaledMetric(relativeTo: .subheadline) private var titleFontSize: CGFloat = 13
 
     private var usesIcons: Bool {
@@ -23,8 +45,8 @@ struct InformationQueryModePicker: View {
     }
 
     var body: some View {
-        Picker(AppLocalization.string("查询类型", language: language), selection: $selection) {
-            ForEach(InformationQueryMode.allCases) { mode in
+        Picker(AppLocalization.string(titleKey, language: language), selection: $selection) {
+            ForEach(Array(Mode.allCases)) { mode in
                 Group {
                     if usesIcons {
                         Image(systemName: mode.systemImage)
@@ -42,7 +64,7 @@ struct InformationQueryModePicker: View {
         // with images. Recreate only the presentation, keeping its binding.
         .id(usesIcons)
         .background(ThemeSegmentedSurface())
-        .accessibilityIdentifier("queries.mode")
+        .accessibilityIdentifier(identifier)
     }
 
     static func minimumTextWidth(language: AppLanguage, fontSize: CGFloat) -> CGFloat {
@@ -51,12 +73,12 @@ struct InformationQueryModePicker: View {
         #else
         let font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
         #endif
-        let widestTitle = InformationQueryMode.allCases.map { mode in
+        let widestTitle = Mode.allCases.map { mode in
             (AppLocalization.string(mode.titleKey, language: language) as NSString)
                 .size(withAttributes: [.font: font]).width
         }.max() ?? 0
         // Native segments share equal widths; reserve insets on both sides
         // of the longest title, rather than estimating from character counts.
-        return ceil(widestTitle + 24) * CGFloat(InformationQueryMode.allCases.count)
+        return ceil(widestTitle + 24) * CGFloat(Mode.allCases.count)
     }
 }

@@ -79,6 +79,9 @@ class ThemeModeSmokeTest {
                     colors = colors,
                 )
 
+                activity.findViewById<View>(R.id.navigation_courses).performClick()
+                assertPageTheme(activity, R.id.page_courses, R.id.navigation_courses, "课程", colors)
+
                 activity.findViewById<View>(R.id.navigation_query).performClick()
                 assertPageTheme(activity, R.id.page_query, R.id.navigation_query, "查询", colors)
 

@@ -20,7 +20,7 @@ struct PrivacyPolicyView: View {
                             .font(.largeTitle.bold())
                             .foregroundStyle(theme.text)
                             .accessibilityIdentifier("screen.privacy-policy")
-                        Text("生效日期 / Effective date: 2026-10-02")
+                        Text("生效日期 / Effective date: 2026-10-03")
                             .font(.callout)
                             .foregroundStyle(theme.secondaryText)
                     }
@@ -56,6 +56,10 @@ struct PrivacyPolicyView: View {
                     privacySection(
                         title: "云课堂作业 / UCloud assignments",
                         body: "应用仅把密码通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存令牌并从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\nThe password is submitted only to auth.bupt.edu.cn over HTTPS. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. The app reads no browser cookies, sends no password to UCloud APIs, persists no ticket, cookie, token, or assignment, and reuses results in memory for at most ten minutes."
+                    )
+                    privacySection(
+                        title: "QMplus 独立连接 / Independent QMplus connection",
+                        body: "QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在自己的官方网页窗口打开 QMplus，由用户直接完成 SSO／Microsoft MFA；应用没有 Microsoft 密码输入框，也不读取系统浏览器 Cookie。只读脚本仅返回有界课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器。业务快照只在当前进程内存中；iOS 17／macOS 14 及以上使用应用专属的可持久隔离 WebKit 存储，较旧的受支持系统使用非持久会话。部分失败会保留并标明上次资料；断开连接或清除本地数据会清除应用管理的会话与快照，更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息和网络元数据。\n\nQMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in its own web view, where you complete SSO/Microsoft MFA directly. The app has no Microsoft password field and reads no system-browser cookies. Its read-only script returns only a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML; it never submits work, starts quizzes, or uses a third-party Worker or this project’s server. The snapshot stays in process memory. iOS 17/macOS 14 and later use an app-specific isolated persistent WebKit store; older supported systems use a nonpersistent session. Partial failures retain labelled prior data. Disconnecting or clearing local data removes the app-managed session and snapshot; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies."
                     )
                     privacySection(
                         title: "系统日历、通知与小组件 / Calendar, notifications, and widgets",

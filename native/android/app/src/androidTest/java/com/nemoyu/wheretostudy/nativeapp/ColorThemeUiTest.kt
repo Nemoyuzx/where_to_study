@@ -57,6 +57,7 @@ class ColorThemeUiTest {
                 ColorThemeSelection("custom", ThemeSeeds("#FFFFFF", "#000000", "#000000")),
                 ColorThemeSelection("custom", ThemeSeeds("#000000", "#FFFFFF", "#FFFFFF")))
             listOf(R.id.navigation_planner to R.id.page_planner, R.id.navigation_calendar to R.id.page_calendar,
+                R.id.navigation_courses to R.id.page_courses,
                 R.id.navigation_query to R.id.page_query, R.id.navigation_settings to R.id.page_settings).forEach { (navigation, pageID) ->
                 activity.findViewById<View>(navigation).performClick()
                 val page = activity.findViewById<View>(pageID)

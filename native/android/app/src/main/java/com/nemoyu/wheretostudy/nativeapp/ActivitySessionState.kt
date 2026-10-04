@@ -20,12 +20,15 @@ internal class ActivitySessionState(context: Context) {
     val grades by gradesDelegate
     private val dailyInfoDelegate = lazy { CalendarDailyInfoRepository(assignmentClient = UCloudAssignmentClient(credentials), preferences = preferences) }
     val dailyInfo by dailyInfoDelegate
+    private val qmplusDelegate = lazy { QmplusRepository(appContext) }
+    val qmplus by qmplusDelegate
     val holidayDelegate = lazy { HolidayRepository(appContext) }
     val holidays by holidayDelegate
     val uiOwner = CurrentActivityOwner()
     val planner = PlannerQueryState(preferences.campusID)
     var calendar: TeachingCalendarSessionState? = null
     var query: InformationQuerySessionState? = null
+    var courses: InformationQuerySessionState? = null
     var settings: SettingsPageDraft? = null
     val scrollAnchors = mutableMapOf<String, ScrollAnchor>()
     var automaticRefreshKey: AutomaticScheduleLaunchRefreshKey? = null
@@ -38,6 +41,7 @@ internal class ActivitySessionState(context: Context) {
         if (shuttlesDelegate.isInitialized()) shuttles.clearUiObservers()
         if (gradesDelegate.isInitialized()) grades.clearUiObservers()
         if (holidayDelegate.isInitialized()) holidays.clearUiObservers()
+        if (qmplusDelegate.isInitialized()) qmplus.clearUiObservers()
     }
 
     fun close() {
@@ -55,6 +59,7 @@ internal class ActivitySessionState(context: Context) {
         if (gradesDelegate.isInitialized()) grades.close()
         if (dailyInfoDelegate.isInitialized()) dailyInfo.close()
         if (holidayDelegate.isInitialized()) holidays.close()
+        if (qmplusDelegate.isInitialized()) qmplus.close()
     }
 }
 

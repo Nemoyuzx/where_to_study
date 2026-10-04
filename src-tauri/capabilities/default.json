@@ -4,6 +4,9 @@
   "description": "Business commands required by the main application window",
   "windows": ["main"],
   "permissions": [
+    "allow-connect-qmplus",
+    "allow-load-qmplus",
+    "allow-disconnect-qmplus",
     "core:event:default",
     "allow-get-metadata",
     "allow-load-saved-settings",
@@ -27,6 +30,7 @@
     "allow-fetch-shuttle-bus",
     "allow-fetch-assignments",
     "allow-fetch-assignment-list",
+    "allow-fetch-course-list",
     "allow-fetch-exams",
     "allow-fetch-deadline-calendar",
     "allow-fetch-custom-deadline-calendar",

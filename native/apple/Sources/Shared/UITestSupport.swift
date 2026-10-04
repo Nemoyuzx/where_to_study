@@ -7,6 +7,14 @@ enum AppLaunchConfiguration {
     static let slowCalendarAnimationArgument = "--ui-test-slow-calendar-animation"
     static let privacyConsentTestingArgument = "--ui-testing-privacy-consent"
 
+    static var usesQMplusToolbarFixture: Bool {
+        #if DEBUG
+        isUITesting && !isUITestingLive && ProcessInfo.processInfo.arguments.contains("--ui-test-qmplus-toolbar")
+        #else
+        false
+        #endif
+    }
+
     static var isUITesting: Bool {
         ProcessInfo.processInfo.arguments.contains(uiTestingArgument)
     }

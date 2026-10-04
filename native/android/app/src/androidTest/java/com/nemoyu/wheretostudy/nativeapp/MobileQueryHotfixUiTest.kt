@@ -43,7 +43,7 @@ class MobileQueryHotfixUiTest {
         assumeTrue(context.resources.configuration.smallestScreenWidthDp < 600)
         launch().use { scenario ->
             scenario.onActivity { activity ->
-                activity.findViewById<View>(R.id.navigation_query).performClick()
+                activity.findViewById<View>(R.id.navigation_courses).performClick()
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             }
             assertTrue(device.wait(Until.hasObject(By.res(context.packageName, "tablet_navigation")), 5_000))
@@ -57,11 +57,11 @@ class MobileQueryHotfixUiTest {
                 assertFalse(viewport.canScrollHorizontally(1))
                 descendants(selector).filterIsInstance<TextView>().forEachIndexed { index, tab ->
                     assertNotNull("A landscape phone still shows query icons", tab.compoundDrawablesRelative[0])
-                    assertEquals(activity.uiText(InformationQueryMode.entries[index].label), tab.contentDescription)
+                    assertEquals(activity.uiText(InformationQueryMode.courseModes[index].label), tab.contentDescription)
                     assertTrue(tab.paint.measureText(tab.text.toString()) <= tab.width - tab.compoundPaddingLeft - tab.compoundPaddingRight + 1)
                 }
                 val title = descendants(activity.findViewById(R.id.information_query_page)).filterIsInstance<TextView>()
-                    .first { it.text == activity.uiText("信息查询") }
+                    .first { it.text == activity.uiText("课程") }
                 assertEquals(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,
                     26f, activity.resources.displayMetrics), title.textSize, 1f)
             }
@@ -71,7 +71,7 @@ class MobileQueryHotfixUiTest {
 
     @Test fun fixedSegmentsHaveIconsAndFullAccessibilityAndIgnoreHorizontalDrags() = inBothLanguages { language ->
         launch().use { scenario ->
-            scenario.onActivity { it.findViewById<View>(R.id.navigation_query).performClick() }
+            scenario.onActivity { it.findViewById<View>(R.id.navigation_courses).performClick() }
             settled()
             var bounds = Rect()
             var positions = emptyList<Int>()
@@ -84,22 +84,21 @@ class MobileQueryHotfixUiTest {
                 assertFalse(viewport.canScrollHorizontally(-1))
                 assertEquals(viewport.width, selector.width)
                 val tabs = descendants(selector).filterIsInstance<TextView>()
-                assertEquals(5, tabs.size)
+                assertEquals(4, tabs.size)
                 val isPhone = activity.resources.configuration.smallestScreenWidthDp < 600
                 tabs.forEachIndexed { index, tab ->
-                    assertEquals(activity.uiText(InformationQueryMode.entries[index].label), tab.contentDescription)
+                    assertEquals(activity.uiText(InformationQueryMode.courseModes[index].label), tab.contentDescription)
                     assertEquals(1, tab.layout.lineCount)
                     assertEquals(0, tab.layout.getEllipsisCount(0))
                     if (isPhone) {
                         assertNotNull(tab.compoundDrawablesRelative[0])
-                        if (activity.resources.configuration.screenWidthDp <= 440) assertEquals("", tab.text.toString())
                     } else {
                         assertNull(tab.compoundDrawablesRelative[0])
                         assertTrue(tab.text.isNotEmpty())
                     }
                     assertTrue(tab.width >= activity.dp(44))
                 }
-                val title = descendants(page).filterIsInstance<TextView>().first { it.text == activity.uiText("信息查询") }
+                val title = descendants(page).filterIsInstance<TextView>().first { it.text == activity.uiText("课程") }
                 val expectedSp = if (isPhone) 26f else 34f
                 assertEquals(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,
                     expectedSp, activity.resources.displayMetrics), title.textSize, 1f)
@@ -140,8 +139,8 @@ class MobileQueryHotfixUiTest {
                 scenario.onActivity { activity ->
                     // Inject a synthetic network boundary only; the actual Activity owns,
                     // retains, reattaches and closes this repository in production code.
-                    repositoryDelegateField().set(activity, lazy { grades })
-                    activity.findViewById<View>(R.id.navigation_query).performClick()
+                    repositoryDelegateField().set(retainedSession(activity), lazy { grades })
+                    activity.findViewById<View>(R.id.navigation_courses).performClick()
                     activity.findViewById<View>(R.id.information_query_grades_tab).performClick()
                 }
                 settled()
@@ -168,7 +167,7 @@ class MobileQueryHotfixUiTest {
                         assertNotSame("System appearance must recreate the Activity", previousActivity, activity)
                         previousActivity = activity
                         assertEquals(night, activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
-                        assertSame(grades, (repositoryDelegateField().get(activity) as Lazy<*>).value)
+                        assertSame(grades, (repositoryDelegateField().get(retainedSession(activity)) as Lazy<*>).value)
                         assertSame("The cached snapshot must survive without refetching", snapshot, grades.snapshot)
                         assertEquals("past", grades.selectedTermID)
                         assertEquals("0", grades.recordType)
@@ -283,8 +282,10 @@ class MobileQueryHotfixUiTest {
         instrumentation.runOnMainSync { grades.removeObserver(observer) }
     }
 
-    private fun repositoryDelegateField() = MainActivity::class.java
-        .getDeclaredField("academicGradesRepository\$delegate").apply { isAccessible = true }
+    private fun retainedSession(activity: MainActivity) = MainActivity::class.java.getDeclaredMethod("getActivitySession")
+        .apply { isAccessible = true }.invoke(activity) as ActivitySessionState
+    private fun repositoryDelegateField() = ActivitySessionState::class.java
+        .getDeclaredField("gradesDelegate").apply { isAccessible = true }
 
     private fun launch() = ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
         .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true))

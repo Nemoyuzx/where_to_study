@@ -16,6 +16,7 @@ mod desktop_notifications;
 pub mod error;
 pub mod holidays;
 pub mod models;
+pub mod qmplus;
 #[cfg(not(mobile))]
 mod recommender;
 pub mod schedule;
@@ -1154,6 +1155,7 @@ fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 async fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
+    qmplus::disconnect_qmplus(app.clone(), app.state::<qmplus::QmState>());
     tauri::async_runtime::spawn_blocking(move || clear_local_data_sync(app))
         .await
         .map_err(|e| e.to_string())?
@@ -1754,6 +1756,35 @@ async fn fetch_assignment_list(
         .with_current_account(generation, || {
             assignments::ensure_credential_revision(revision)?;
             Ok(items)
+        })
+        .map_err(LocalDataAccessError::message)
+}
+
+#[tauri::command]
+async fn fetch_course_list(
+    payload: AssignmentQueryRequest,
+) -> Result<Vec<assignments::CourseRef>, String> {
+    let generation = LOCAL_DATA.begin();
+    let (credentials, revision) = LOCAL_DATA
+        .with_current_account(generation, || {
+            let credentials = load_saved_credentials_with_scope()?
+                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
+            Ok((credentials, assignments::credential_revision()))
+        })
+        .map_err(LocalDataAccessError::message)?;
+    let response = assignments::fetch_course_list(
+        &credentials.account,
+        credentials.assignment_password(),
+        &credentials.account_scope,
+        revision,
+        payload.force,
+    )
+    .await
+    .map_err(|e| e.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            assignments::ensure_credential_revision(revision)?;
+            Ok(response)
         })
         .map_err(LocalDataAccessError::message)
 }
@@ -3876,7 +3907,7 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().manage(qmplus::QmState::default());
     #[cfg(not(mobile))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
         if let Some(window) = app.get_webview_window("main") {
@@ -3904,6 +3935,10 @@ pub fn run() {
             let _ = (window, event);
         })
         .invoke_handler(tauri::generate_handler![
+            qmplus::connect_qmplus,
+            qmplus::load_qmplus,
+            qmplus::disconnect_qmplus,
+            qmplus::accept_qmplus_snapshot,
             get_metadata,
             load_saved_settings,
             save_saved_settings,
@@ -3927,6 +3962,7 @@ pub fn run() {
             fetch_shuttle_bus,
             fetch_assignments,
             fetch_assignment_list,
+            fetch_course_list,
             fetch_exams,
             fetch_grade_terms,
             fetch_grades,

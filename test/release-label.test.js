@@ -58,7 +58,7 @@ test("release validation treats shell metacharacters in paths and labels as data
   }
 });
 
-test("client versions consistently release 0.3.2 with fresh distribution build counters", () => {
+test("client versions consistently release 0.4.0 with fresh distribution build counters", () => {
   const packageMetadata = JSON.parse(readFileSync(path.join(root, "package.json")));
   const tauriMetadata = JSON.parse(
     readFileSync(path.join(root, "src-tauri", "tauri.conf.json")),
@@ -110,31 +110,31 @@ test("client versions consistently release 0.3.2 with fresh distribution build c
     "utf8",
   );
 
-  assert.equal(packageMetadata.version, "0.3.2");
-  assert.equal(tauriMetadata.version, "0.3.2");
-  assert.equal(tauriMetadata.bundle.android.versionCode, 2014);
-  assert.match(cargoManifest, /^version = "0\.3\.2"$/m);
-  assert.match(coreManifest, /^version = "0\.3\.2"$/m);
-  assert.match(cliManifest, /^version = "0\.3\.2"$/m);
-  assert.match(tuiManifest, /^version = "0\.3\.2"$/m);
-  assert.match(nativeAndroid, /versionName = "0\.3\.2"/);
-  assert.match(nativeAndroid, /versionCode = 60/);
-  assert.match(nativeApple, /MARKETING_VERSION: "0\.3\.2"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "101"/);
-  assert.match(nativeHarmony, /"versionName": "0\.3\.2"/);
-  assert.match(nativeHarmony, /"versionCode": 1002037/);
-  assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.3\.2'/);
-  assert.match(tauriApple, /CFBundleShortVersionString: 0\.3\.2/);
-  assert.match(tauriApple, /CFBundleVersion: "53"/);
-  assert.match(tauriAppleInfo, /<string>0\.3\.2<\/string>/);
-  assert.match(tauriAppleInfo, /<string>53<\/string>/);
-  assert.match(cliWorkflow, /grep -F '0\.3\.2'/);
-  assert.match(tuiWorkflow, /grep -F '0\.3\.2'/);
+  assert.equal(packageMetadata.version, "0.4.0");
+  assert.equal(tauriMetadata.version, "0.4.0");
+  assert.equal(tauriMetadata.bundle.android.versionCode, 2015);
+  assert.match(cargoManifest, /^version = "0\.4\.0"$/m);
+  assert.match(coreManifest, /^version = "0\.4\.0"$/m);
+  assert.match(cliManifest, /^version = "0\.4\.0"$/m);
+  assert.match(tuiManifest, /^version = "0\.4\.0"$/m);
+  assert.match(nativeAndroid, /versionName = "0\.4\.0"/);
+  assert.match(nativeAndroid, /versionCode = 61/);
+  assert.match(nativeApple, /MARKETING_VERSION: "0\.4\.0"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "102"/);
+  assert.match(nativeHarmony, /"versionName": "0\.4\.0"/);
+  assert.match(nativeHarmony, /"versionCode": 1002038/);
+  assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.4\.0'/);
+  assert.match(tauriApple, /CFBundleShortVersionString: 0\.4\.0/);
+  assert.match(tauriApple, /CFBundleVersion: "54"/);
+  assert.match(tauriAppleInfo, /<string>0\.4\.0<\/string>/);
+  assert.match(tauriAppleInfo, /<string>54<\/string>/);
+  assert.match(cliWorkflow, /grep -F '0\.4\.0'/);
+  assert.match(tuiWorkflow, /grep -F '0\.4\.0'/);
   assert.match(nativeWorkflow, /native-android-universal\.apk/);
   assert.doesNotMatch(nativeWorkflow, /native-android\.aab/);
-  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.2-prerelease\}"/);
-  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.2-prerelease\}"/);
-  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.3\.2-prerelease\}"/);
+  assert.match(androidPackageScript, /RELEASE_LABEL="\$\{1:-v0\.4\.0-prerelease\}"/);
+  assert.match(iosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.4\.0-prerelease\}"/);
+  assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.4\.0-prerelease\}"/);
 });
 
 test("native Android CI avoids the removed legacy SDK tools package", () => {

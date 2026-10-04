@@ -11,13 +11,10 @@ import {
 
 export default function queryLogicTest() {
   describe('QueryLogicTest', () => {
-    it('query_contract_has_five_segmented_tabs_and_all_categories', 0, () => {
-      expect(QueryPageContract.tabs.length).assertEqual(5);
+    it('query_contract_keeps_only_public_shuttle_and_events_tabs', 0, () => {
+      expect(QueryPageContract.tabs.length).assertEqual(2);
       expect(QueryPageContract.tabs[0]).assertEqual(QueryPageTab.shuttle);
       expect(QueryPageContract.tabs[1]).assertEqual(QueryPageTab.events);
-      expect(QueryPageContract.tabs[2]).assertEqual(QueryPageTab.grades);
-      expect(QueryPageContract.tabs[3]).assertEqual(QueryPageTab.exams);
-      expect(QueryPageContract.tabs[4]).assertEqual(QueryPageTab.assignments);
       expect(QueryPageContract.filters.indexOf(ImportantEventFilter.conference) >= 0).assertTrue();
       expect(QueryPageContract.filters.indexOf(ImportantEventFilter.schoolNotice) >= 0).assertTrue();
       expect(QueryPageContract.tabAccessibilityID(QueryPageTab.events))
@@ -25,21 +22,21 @@ export default function queryLogicTest() {
     });
 
     it('query_tabs_fit_equal_width_segments_with_icon_and_padding_reserved', 0, () => {
-      // 358vp selector yields five 70.4vp slots; Chinese short labels fit with the icon.
+      // Two segments preserve full labels on a normal phone; narrow floating windows use icons.
       expect(QueryPageContract.iconOnlyTabs(358, 28, true)).assertFalse();
-      expect(QueryPageContract.iconOnlyTabs(288, 28, true)).assertTrue();
-      // 60vp English / large-text labels do not fit the same phone selector.
-      expect(QueryPageContract.iconOnlyTabs(358, 60, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(128, 28, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(358, 60, true)).assertFalse();
+      expect(QueryPageContract.iconOnlyTabs(190, 60, true)).assertTrue();
       expect(QueryPageContract.iconOnlyTabs(568, 60, true)).assertFalse();
     });
 
     it('query_tabs_change_presentation_only_at_a_complete_label_boundary', 0, () => {
-      expect(QueryPageContract.iconOnlyTabs(326, 28, true)).assertFalse();
-      expect(QueryPageContract.iconOnlyTabs(325, 28, true)).assertTrue();
-      expect(QueryPageContract.iconOnlyTabs(326, 28.1, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(134, 28, true)).assertFalse();
+      expect(QueryPageContract.iconOnlyTabs(133, 28, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(134, 28.1, true)).assertTrue();
       // Wide layouts keep text until the actual localized label no longer fits.
       expect(QueryPageContract.iconOnlyTabs(992, 160, false)).assertFalse();
-      expect(QueryPageContract.iconOnlyTabs(568, 120, false)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(250, 120, false)).assertTrue();
     });
 
     it('query_tabs_use_icons_when_width_or_text_measurement_is_unavailable', 0, () => {
@@ -50,9 +47,9 @@ export default function queryLogicTest() {
     });
 
     it('query_tabs_keep_complete_accessibility_names_in_both_languages', 0, () => {
-      const chinese: string[] = ['班车查询', '重要事件', '成绩查询', '考试查询', '作业 DDL'];
-      const english: string[] = ['Shuttle Bus', 'Important Events', 'Grades', 'Exams', 'Assignments'];
-      const compactEnglish: string[] = ['Shuttle', 'Events', 'Grades', 'Exam', 'Assignment'];
+      const chinese: string[] = ['班车查询', '重要事件'];
+      const english: string[] = ['Shuttle Bus', 'Important Events'];
+      const compactEnglish: string[] = ['Shuttle', 'Events'];
       for (let index: number = 0; index < QueryPageContract.tabs.length; index++) {
         const tab: QueryPageTab = QueryPageContract.tabs[index];
         expect(AppLocalization.text(QueryPageContract.tabTitle(tab), AppLanguage.simplifiedChinese, 'zh-CN'))

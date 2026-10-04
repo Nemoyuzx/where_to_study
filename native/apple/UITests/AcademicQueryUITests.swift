@@ -10,8 +10,8 @@ final class AcademicQueryUITests: XCTestCase {
             app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = language
             app.launch()
             defer { app.terminate() }
-            navigate("queries", title: language == "en" ? "Search" : "查询", in: app)
-            let assignments = app.segmentedControls["queries.mode"].buttons[
+            navigate("courses", title: language == "en" ? "Courses" : "课程", in: app)
+            let assignments = app.segmentedControls["courses.mode"].buttons[
                 language == "en" ? "Assignment Deadlines" : "课程作业 DDL"
             ]
             XCTAssertTrue(assignments.waitForExistence(timeout: 5))
@@ -43,8 +43,8 @@ final class AcademicQueryUITests: XCTestCase {
                 let picker = app.segmentedControls["queries.mode"]
                 XCTAssertTrue(picker.waitForExistence(timeout: 10))
                 let names = language == "en"
-                    ? ["Shuttle Search", "Important Events", "Grades", "Exams", "Assignment Deadlines"]
-                    : ["班车查询", "重要事件", "成绩查询", "考试安排", "课程作业 DDL"]
+                    ? ["Shuttle Search", "Important Events"]
+                    : ["班车查询", "重要事件"]
                 for name in names {
                     let segment = picker.buttons[name]
                     XCTAssertTrue(segment.exists, "Missing full accessible title: \(name)")
@@ -61,7 +61,7 @@ final class AcademicQueryUITests: XCTestCase {
                     // The system appearance transition can outlive XCTest's
                     // idle check; capture the settled palette, not its first frame.
                     RunLoop.current.run(until: Date().addingTimeInterval(0.6))
-                    XCTAssertTrue(picker.buttons[names[4]].isSelected)
+                    XCTAssertTrue(picker.buttons[names[1]].isSelected)
                     capture("query-icons-\(language)-\(category)-\(appearance == .dark ? "dark" : "light")")
                 }
                 app.terminate()
@@ -75,7 +75,7 @@ final class AcademicQueryUITests: XCTestCase {
         app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "en"
         app.launch()
         defer { app.terminate() }
-        navigate("queries", title: "Search", in: app)
+        navigate("courses", title: "Courses", in: app)
         let assignments = app.segmentedControls.buttons["Assignment Deadlines"]
         XCTAssertTrue(assignments.waitForExistence(timeout: 10))
         assignments.tap()
@@ -89,7 +89,7 @@ final class AcademicQueryUITests: XCTestCase {
         let grades = app.segmentedControls.buttons["Grades"]
         XCTAssertTrue(grades.waitForExistence(timeout: 10))
         grades.tap()
-        XCTAssertTrue(app.staticTexts["Information Search"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Courses"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["Sample grades; no school connection"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.segmentedControls.buttons["All records"].exists)
         capture("synthetic-grades-query-english")
@@ -102,7 +102,7 @@ final class AcademicQueryUITests: XCTestCase {
         app.launchEnvironment["WHERE_TO_STUDY_UI_LANGUAGE"] = "zh-Hans"
         app.launch()
         defer { app.terminate() }
-        navigate("queries", title: "查询", in: app)
+        navigate("courses", title: "课程", in: app)
         let assignments = app.segmentedControls.buttons["课程作业 DDL"]
         XCTAssertTrue(assignments.waitForExistence(timeout: 10))
         assignments.tap()

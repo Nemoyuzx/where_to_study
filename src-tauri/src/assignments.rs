@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -11,6 +11,7 @@ use reqwest::header::{
 };
 use reqwest::{Client, Response, Url};
 use serde::Deserialize;
+use serde::Serialize;
 use serde_json::{json, Value};
 use zeroize::{Zeroize, Zeroizing};
 
@@ -57,10 +58,12 @@ struct TokenPayload {
     expires_in: Value,
 }
 
-#[derive(Clone)]
-struct CourseRef {
-    id: String,
-    name: Option<String>,
+#[derive(Clone, Serialize)]
+pub struct CourseRef {
+    pub id: String,
+    pub name: Option<String>,
+    pub teacher_names: Vec<String>,
+    pub url: String,
 }
 
 #[derive(Clone)]
@@ -157,9 +160,98 @@ impl AssignmentCache {
 static ASSIGNMENT_CACHE: AssignmentCache = AssignmentCache::new();
 static ASSIGNMENT_SESSION: SessionCache<AuthenticatedClient> = SessionCache::new();
 static ASSIGNMENT_FETCH: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+struct CachedCourses {
+    scope: String,
+    revision: u64,
+    fetched: Instant,
+    courses: Vec<CourseRef>,
+}
+impl Drop for CachedCourses {
+    fn drop(&mut self) {
+        self.scope.zeroize();
+        for course in &mut self.courses {
+            course.id.zeroize();
+            if let Some(name) = course.name.as_mut() {
+                name.zeroize();
+            }
+            course.teacher_names.zeroize();
+            course.url.zeroize();
+        }
+    }
+}
+
+struct CourseCache {
+    snapshot: Mutex<Option<CachedCourses>>,
+}
+
+impl CourseCache {
+    const fn new() -> Self {
+        Self {
+            snapshot: Mutex::new(None),
+        }
+    }
+
+    fn clear(&self) {
+        *self
+            .snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+
+    fn courses(
+        &self,
+        credentials: &AssignmentCache,
+        scope: &str,
+        revision: u64,
+    ) -> ServiceResult<Option<Vec<CourseRef>>> {
+        let cached = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        credentials.ensure_revision(revision)?;
+        Ok(cached
+            .as_ref()
+            .filter(|cached| {
+                cached.scope == scope
+                    && cached.revision == revision
+                    && cached.fetched.elapsed() < CACHE_TTL
+            })
+            .map(|cached| cached.courses.clone()))
+    }
+
+    fn save(
+        &self,
+        credentials: &AssignmentCache,
+        scope: &str,
+        courses: &[CourseRef],
+        revision: u64,
+    ) -> ServiceResult<()> {
+        let mut cached = self
+            .snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        credentials.ensure_revision(revision)?;
+        *cached = Some(CachedCourses {
+            scope: scope.into(),
+            revision,
+            fetched: Instant::now(),
+            courses: courses.to_vec(),
+        });
+        Ok(())
+    }
+}
+
+static COURSE_CACHE: CourseCache = CourseCache::new();
+
+fn clear_course_and_assignment_caches(assignments: &AssignmentCache, courses: &CourseCache) {
+    // Revoke first, before waiting for either result cache. A late course
+    // response must not use the pre-clear revision to refill an emptied cache.
+    assignments.clear();
+    courses.clear();
+}
 
 pub fn clear_cache() {
-    ASSIGNMENT_CACHE.clear();
+    clear_course_and_assignment_caches(&ASSIGNMENT_CACHE, &COURSE_CACHE);
     ASSIGNMENT_SESSION.clear();
 }
 
@@ -179,6 +271,9 @@ fn zeroize_items(items: &mut [AssignmentDeadlineItem]) {
         item.title.zeroize();
         if let Some(course_name) = item.course_name.as_mut() {
             course_name.zeroize();
+        }
+        if let Some(course_id) = item.course_id.as_mut() {
+            course_id.zeroize();
         }
         item.deadline.zeroize();
         if let Some(status) = item.status.as_mut() {
@@ -321,6 +416,14 @@ fn parse_assignment_record(
         id,
         title,
         course_name,
+        course_id: raw
+            .get("siteId")
+            .or_else(|| raw.get("courseId"))
+            .map(|v| text(Some(v)))
+            .map(|v| v.trim().to_string())
+            .filter(|v| {
+                !v.is_empty() && v.encode_utf16().count() <= 128 && !v.chars().any(char::is_control)
+            }),
         deadline,
         status: raw.get("assignmentStatus").and_then(assignment_status),
     })
@@ -704,8 +807,10 @@ async fn authenticate(account: &str, password: &str) -> ServiceResult<Authentica
 }
 
 fn parse_courses(payload: &Value) -> Vec<CourseRef> {
-    collect_records(payload)
+    let mut seen = BTreeSet::new();
+    course_records(payload)
         .into_iter()
+        .flatten()
         .filter_map(|record| {
             let id = text(
                 record
@@ -713,17 +818,43 @@ fn parse_courses(payload: &Value) -> Vec<CourseRef> {
                     .or_else(|| record.get("siteId"))
                     .or_else(|| record.get("courseId")),
             );
-            if id.trim().is_empty() {
+            let id = id.trim().to_string();
+            if id.is_empty()
+                || id.encode_utf16().count() > 128
+                || id.chars().any(char::is_control)
+                || !seen.insert(id.clone())
+            {
                 return None;
             }
-            let name = text(
-                record
-                    .get("siteName")
-                    .or_else(|| record.get("courseName"))
-                    .or_else(|| record.get("siteTitle"))
-                    .or_else(|| record.get("name")),
+            let name = bounded_course_text(
+                &text(
+                    record
+                        .get("siteName")
+                        .or_else(|| record.get("courseName"))
+                        .or_else(|| record.get("siteTitle"))
+                        .or_else(|| record.get("name")),
+                ),
+                512,
             );
+            let mut teacher_names = Vec::new();
+            for name in record
+                .get("teachers")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|teacher| teacher.get("name").and_then(Value::as_str))
+            {
+                let name = bounded_course_text(name, 200);
+                if !name.trim().is_empty() && !teacher_names.contains(&name) {
+                    teacher_names.push(name);
+                    if teacher_names.len() == 20 {
+                        break;
+                    }
+                }
+            }
             Some(CourseRef {
+                teacher_names,
+                url: "https://ucloud.bupt.edu.cn/uclass/index.html#/student/homePage".to_string(),
                 id,
                 name: (!name.trim().is_empty()).then_some(name),
             })
@@ -732,15 +863,46 @@ fn parse_courses(payload: &Value) -> Vec<CourseRef> {
         .collect()
 }
 
+fn bounded_course_text(value: &str, maximum_utf16: usize) -> String {
+    let mut used = 0;
+    value
+        .chars()
+        .take_while(|ch| {
+            used += ch.len_utf16();
+            used <= maximum_utf16
+        })
+        .collect()
+}
+
+fn course_records(payload: &Value) -> Option<&Vec<Value>> {
+    ["/data/records", "/data/data/records", "/records"]
+        .into_iter()
+        .find_map(|pointer| payload.pointer(pointer).and_then(Value::as_array))
+}
+
+fn validate_course_collection(payload: &Value) -> ServiceResult<()> {
+    if course_records(payload).is_some() {
+        Ok(())
+    } else {
+        Err(ServiceError::new(
+            "教学云课程列表格式不正确，保留上次结果。",
+        ))
+    }
+}
+
 fn merge_items(items: Vec<AssignmentDeadlineItem>) -> Vec<AssignmentDeadlineItem> {
     let mut merged = BTreeMap::<String, AssignmentDeadlineItem>::new();
     for item in items.into_iter().take(MAX_ASSIGNMENTS) {
         let key = format!("{}\u{1f}{}", item.id, item.deadline);
         match merged.get_mut(&key) {
-            Some(existing) if existing.course_name.is_none() && item.course_name.is_some() => {
-                *existing = item;
+            Some(existing) => {
+                if existing.course_name.is_none() {
+                    existing.course_name = item.course_name;
+                }
+                if existing.course_id.is_none() {
+                    existing.course_id = item.course_id;
+                }
             }
-            Some(_) => {}
             None => {
                 merged.insert(key, item);
             }
@@ -800,8 +962,8 @@ async fn fetch_all_with_session(
             ],
         )
         .await?;
+    validate_course_collection(&courses_payload)?;
     let courses = parse_courses(&courses_payload);
-    validate_record_collection(&courses_payload)?;
     let mut all_items = Vec::new();
     for course in &courses {
         let body = json!({
@@ -823,10 +985,14 @@ async fn fetch_all_with_session(
         {
             Ok(payload) => {
                 validate_record_collection(&payload)?;
-                all_items.extend(parse_all_assignment_deadlines(
-                    &payload,
-                    course.name.as_deref(),
-                ));
+                all_items.extend(
+                    parse_all_assignment_deadlines(&payload, course.name.as_deref())
+                        .into_iter()
+                        .map(|mut item| {
+                            item.course_id = Some(course.id.clone());
+                            item
+                        }),
+                );
             }
             Err(error) => {
                 // Never publish/cache an incomplete catalogue as an empty or
@@ -855,6 +1021,55 @@ async fn fetch_all_with_session(
         Err(_) => (),
     }
     Ok(merge_items(all_items))
+}
+
+/// Current-course directory uses the same protected session as assignments.
+pub async fn fetch_course_list(
+    account: &str,
+    password: &str,
+    scope: &str,
+    revision: u64,
+    force: bool,
+) -> ServiceResult<Vec<CourseRef>> {
+    let _guard = ASSIGNMENT_FETCH.lock().await;
+    ASSIGNMENT_CACHE.ensure_revision(revision)?;
+    if !force {
+        if let Some(courses) = COURSE_CACHE.courses(&ASSIGNMENT_CACHE, scope, revision)? {
+            return Ok(courses);
+        }
+    }
+    let items = ASSIGNMENT_SESSION
+        .run(
+            account,
+            password,
+            || async {
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                let client = authenticate(account, password).await?;
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                let ttl = client.ttl;
+                Ok((client, ttl))
+            },
+            |session| async move {
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                let payload = session
+                    .get(
+                        "/ykt-site/site/list/student/current",
+                        &[
+                            ("size", COURSE_PAGE_SIZE.to_string()),
+                            ("current", "1".to_string()),
+                            ("userId", session.user_id.clone()),
+                            ("siteRoleCode", "2".to_string()),
+                        ],
+                    )
+                    .await?;
+                ASSIGNMENT_CACHE.ensure_revision(revision)?;
+                validate_course_collection(&payload)?;
+                Ok(parse_courses(&payload))
+            },
+        )
+        .await?;
+    COURSE_CACHE.save(&ASSIGNMENT_CACHE, scope, &items, revision)?;
+    Ok(items)
 }
 
 /// Full course-assignment catalogue for Query. Shares the calendar data cache;
@@ -936,7 +1151,145 @@ pub async fn fetch_assignment_calendar(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn course_ids_are_preserved_without_guessing_from_names_and_old_snapshots_remain_readable() {
+        let payload = json!({"data":{"records":[{"id":"assignment-a","assignmentTitle":"Fixture",
+            "siteId":"course-a","siteName":"Same name","assignmentEndTime":"2026-10-09 12:00:00","assignmentStatus":0}]}});
+        let items = parse_all_assignment_deadlines(&payload, None);
+        assert_eq!(items[0].course_id.as_deref(), Some("course-a"));
+        let mut legacy = serde_json::to_value(&items[0]).unwrap();
+        legacy.as_object_mut().unwrap().remove("course_id");
+        let old: AssignmentDeadlineItem = serde_json::from_value(legacy).unwrap();
+        assert!(old.course_id.is_none());
+        let merged = merge_items(vec![old, items[0].clone()]);
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].course_id.as_deref(), Some("course-a"));
+    }
+
     use super::*;
+
+    #[test]
+    fn course_cache_rechecks_scope_revision_and_expiry_at_the_actual_read_and_write() {
+        let assignments = AssignmentCache::new();
+        let courses = CourseCache::new();
+        let old_revision = assignments.revision.load(Ordering::SeqCst);
+        let records = parse_courses(&json!({"data":{"records":[{"id":"one","siteName":"设置"}]}}));
+        courses
+            .save(&assignments, "account-a", &records, old_revision)
+            .unwrap();
+        assert_eq!(
+            courses
+                .courses(&assignments, "account-a", old_revision)
+                .unwrap()
+                .unwrap()[0]
+                .name
+                .as_deref(),
+            Some("设置")
+        );
+        assert!(courses
+            .courses(&assignments, "account-b", old_revision)
+            .unwrap()
+            .is_none());
+        clear_course_and_assignment_caches(&assignments, &courses);
+        assert!(courses
+            .courses(&assignments, "account-a", old_revision)
+            .is_err());
+        assert!(courses
+            .save(&assignments, "account-a", &records, old_revision)
+            .is_err());
+        assert!(courses.snapshot.lock().unwrap().is_none());
+        let current = assignments.revision.load(Ordering::SeqCst);
+        courses
+            .save(&assignments, "account-b", &records, current)
+            .unwrap();
+        assert!(courses
+            .save(&assignments, "account-a", &records, old_revision)
+            .is_err());
+        assert!(courses
+            .courses(&assignments, "account-b", current)
+            .unwrap()
+            .is_some());
+        courses.snapshot.lock().unwrap().as_mut().unwrap().fetched = Instant::now() - CACHE_TTL;
+        assert!(courses
+            .courses(&assignments, "account-b", current)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn clear_revokes_course_responses_before_waiting_for_the_course_cache_lock() {
+        use std::sync::Arc;
+        let assignments = Arc::new(AssignmentCache::new());
+        let courses = Arc::new(CourseCache::new());
+        let held_course_lock = courses.snapshot.lock().unwrap();
+        let owner = assignments.clone();
+        let result_cache = courses.clone();
+        let clear =
+            std::thread::spawn(move || clear_course_and_assignment_caches(&owner, &result_cache));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while assignments.revision.load(Ordering::SeqCst) == 0 && Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        let revision_while_clear_is_blocked = assignments.revision.load(Ordering::SeqCst);
+        drop(held_course_lock);
+        clear.join().unwrap();
+        assert_ne!(
+            revision_while_clear_is_blocked, 0,
+            "Credential revocation cannot wait behind the course cache lock"
+        );
+        assert!(courses.save(&assignments, "old-owner", &[], 0).is_err());
+        assert!(courses.snapshot.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn current_course_directory_requires_course_records_not_homepage_tasks() {
+        assert!(validate_course_collection(&json!({"data":{"data":{"records":[]}}})).is_ok());
+        assert!(validate_course_collection(&json!({"data":{"records":null}})).is_err());
+        assert!(validate_course_collection(&json!({"data":{"undoneList":[]}})).is_err());
+        assert!(parse_courses(
+            &json!({"data":{"undoneList":[{"id":"task","name":"Not a course"}]}})
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn course_names_teachers_and_directory_are_bounded_deduplicated_and_not_translated() {
+        let mut teachers = vec![
+            json!({"name":"Raw teacher 设置"}),
+            json!({"name":"Raw teacher 设置"}),
+            json!({"name":""}),
+            json!({"other":"not a name"}),
+        ];
+        teachers
+            .extend((1..=30).map(|index| json!({"name":format!("{index}{}", "😀".repeat(150))})));
+        let mut records = vec![
+            json!({"id":" one ","siteName":"设置","teachers":teachers,"url":"https://evil.test/"}),
+            json!({"siteId":"one","siteName":"duplicate"}),
+            json!({"id":"x".repeat(129),"siteName":"invalid ID"}),
+        ];
+        records.extend((1..=120).map(
+            |index| json!({"courseId":format!("course-{index}"),"courseName":"😀".repeat(300)}),
+        ));
+        let parsed = parse_courses(&json!({"data":{"records":records}}));
+        assert_eq!(parsed.len(), MAX_COURSES);
+        assert_eq!(parsed[0].id, "one");
+        assert_eq!(parsed[0].name.as_deref(), Some("设置"));
+        assert_eq!(parsed[0].teacher_names.len(), 20);
+        assert_eq!(parsed[0].teacher_names[0], "Raw teacher 设置");
+        assert!(parsed[0]
+            .teacher_names
+            .iter()
+            .all(|name| name.encode_utf16().count() <= 200));
+        assert!(parsed.iter().all(|course| course
+            .name
+            .as_ref()
+            .is_none_or(|name| name.encode_utf16().count() <= 512)));
+        assert!(parsed
+            .iter()
+            .all(|course| course.url
+                == "https://ucloud.bupt.edu.cn/uclass/index.html#/student/homePage"));
+        assert_eq!(bounded_course_text("😀", 1), ""); // Do not create a dangling surrogate while bounding API text.
+    }
 
     #[test]
     fn malformed_catalogue_is_not_successful_empty_data() {
@@ -954,6 +1307,7 @@ mod tests {
             id: "old-assignment".into(),
             title: "原凭据作业".into(),
             course_name: None,
+            course_id: None,
             deadline: "2026-09-11 12:00:00".into(),
             status: None,
         }];
@@ -1106,6 +1460,7 @@ mod tests {
                 id: "before".to_string(),
                 title: "范围前".to_string(),
                 course_name: None,
+                course_id: None,
                 deadline: "2026-08-16T23:59:00+08:00".to_string(),
                 status: None,
             },
@@ -1113,6 +1468,7 @@ mod tests {
                 id: "inside".to_string(),
                 title: "范围内".to_string(),
                 course_name: Some("课程".to_string()),
+                course_id: None,
                 deadline: "2026-08-18T23:59:00+08:00".to_string(),
                 status: None,
             },
@@ -1120,6 +1476,7 @@ mod tests {
                 id: "after".to_string(),
                 title: "范围后".to_string(),
                 course_name: None,
+                course_id: None,
                 deadline: "2026-08-24T23:59:00+08:00".to_string(),
                 status: None,
             },

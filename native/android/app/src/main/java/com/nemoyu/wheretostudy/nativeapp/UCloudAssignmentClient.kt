@@ -14,6 +14,9 @@ import java.util.concurrent.atomic.AtomicLong
 import org.json.JSONArray
 import org.json.JSONObject
 
+internal data class TeachingCloudCourse(val id: String, val name: String?, val teacher: String?,
+    val teacherNames: List<String> = listOfNotNull(teacher))
+
 internal class UCloudAssignmentClient internal constructor(
     private val loadCredentials: () -> Credentials?,
     private val fetchAllOverride: ((Credentials) -> List<AssignmentDeadlineItem>)? = null,
@@ -29,6 +32,8 @@ internal class UCloudAssignmentClient internal constructor(
         val fetchedAtElapsed: Long,
         val items: List<AssignmentDeadlineItem>,
     )
+    private data class CachedCourses(val credentialKey: String, val fetchedAtElapsed: Long, val courses: List<TeachingCloudCourse>)
+    private data class CourseFlight(val credentialKey: String, val revision: Long, val result: CompletableFuture<List<TeachingCloudCourse>>)
 
     internal data class AuthenticatedSession(
         val accessToken: String,
@@ -54,6 +59,8 @@ internal class UCloudAssignmentClient internal constructor(
 
     private val stateLock = Any()
     private var cachedAssignments: CachedAssignments? = null
+    private var cachedCourseRecords: CachedCourses? = null
+    private var courseFlight: CourseFlight? = null
     private val inFlightFetches = mutableMapOf<String, InFlightFetch>()
     private val revision = AtomicLong(0)
     private val sessions = AuthenticatedSessionCache<AuthenticatedSession>(
@@ -72,12 +79,32 @@ internal class UCloudAssignmentClient internal constructor(
         cachedAssignments?.takeIf { it.credentialKey == key }?.items
     }
 
+    fun cachedCourses(): List<TeachingCloudCourse>? = synchronized(stateLock) {
+        val key = loadCredentials()?.let(::credentialKey)
+        cachedCourseRecords?.takeIf { it.credentialKey == key }?.courses
+    }
+
+    fun fetchCurrentCourses(force: Boolean = false): List<TeachingCloudCourse> {
+        val requestRevision = revision.get()
+        val credentials = normalizedCredentials()
+        synchronized(stateLock) {
+            cachedCourseRecords?.takeIf { !force && it.credentialKey == credentialKey(credentials) &&
+                elapsedRealtime() - it.fetchedAtElapsed in 0 until CACHE_LIFETIME_MS }?.let { return it.courses }
+        }
+        return sessions.perform(credentialKey(credentials),
+            login = { authenticateOverride?.invoke(credentials) ?: authenticate(credentials) },
+            expiresSession = ::isSessionExpiry) { authenticated -> fetchCoursesSingleFlight(credentials, authenticated, force, requestRevision) }
+    }
+
+    private fun normalizedCredentials(): Credentials {
+        val saved = loadCredentials()?.takeIf {
+            it.account.trim().isNotEmpty() && it.effectiveTeachingCloudPassword.isNotEmpty()
+        } ?: throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
+        return Credentials(saved.account.trim(), saved.effectiveTeachingCloudPassword)
+    }
+
     fun fetchAll(force: Boolean = false): List<AssignmentDeadlineItem> {
-        val credentials = loadCredentials()
-            ?.takeIf { it.account.trim().isNotEmpty() && it.effectiveTeachingCloudPassword.isNotEmpty() }
-            ?: throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
-        val account = credentials.account.trim()
-        val normalizedCredentials = Credentials(account, credentials.effectiveTeachingCloudPassword)
+        val normalizedCredentials = normalizedCredentials()
         val credentialKey = credentialKey(normalizedCredentials)
         val now = elapsedRealtime()
         val cached = synchronized(stateLock) {
@@ -85,7 +112,7 @@ internal class UCloudAssignmentClient internal constructor(
                 !force && it.credentialKey == credentialKey && now - it.fetchedAtElapsed in 0 until CACHE_LIFETIME_MS
             }
         }
-        val allItems = cached?.items ?: fetchAllSingleFlight(normalizedCredentials)
+        val allItems = cached?.items ?: fetchAllSingleFlight(normalizedCredentials, force)
         return allItems
     }
 
@@ -94,6 +121,9 @@ internal class UCloudAssignmentClient internal constructor(
         val invalidated = synchronized(stateLock) {
             revision.incrementAndGet()
             cachedAssignments = null
+            cachedCourseRecords = null
+            courseFlight?.result?.completeExceptionally(DailyInfoClientException("课程请求已失效。"))
+            courseFlight = null
             inFlightFetches.values.toList().also { inFlightFetches.clear() }
         }
         invalidated.forEach {
@@ -103,6 +133,7 @@ internal class UCloudAssignmentClient internal constructor(
 
     private fun fetchAllSingleFlight(
         credentials: Credentials,
+        force: Boolean,
     ): List<AssignmentDeadlineItem> {
         val credentialKey = credentialKey(credentials)
         val selection = synchronized(stateLock) {
@@ -125,7 +156,7 @@ internal class UCloudAssignmentClient internal constructor(
         flightSelectionObserver?.invoke(selection.second)
         if (selection.second) {
             try {
-                val items = fetchAllOverride?.invoke(credentials) ?: fetchAll(credentials)
+                val items = fetchAllOverride?.invoke(credentials) ?: fetchAll(credentials, force, flight.revision)
                 val isCurrent = synchronized(stateLock) {
                     val current = revision.get() == flight.revision &&
                         inFlightFetches[credentialKey]?.result === flight.result &&
@@ -183,33 +214,24 @@ internal class UCloudAssignmentClient internal constructor(
         }
     }
 
-    private fun fetchAll(credentials: Credentials): List<AssignmentDeadlineItem> = sessions.perform(
+    private fun fetchAll(credentials: Credentials, force: Boolean, requestRevision: Long): List<AssignmentDeadlineItem> = sessions.perform(
         credentialKey(credentials),
         login = { authenticateOverride?.invoke(credentials) ?: authenticate(credentials) },
         expiresSession = ::isSessionExpiry,
     ) { authenticated ->
-        fetchAuthenticatedOverride?.invoke(authenticated) ?: fetchAllOnce(authenticated)
+        fetchAuthenticatedOverride?.invoke(authenticated) ?: fetchAllOnce(authenticated, credentials, force, requestRevision)
     }
 
-    private fun fetchAllOnce(authenticated: AuthenticatedSession): List<AssignmentDeadlineItem> {
-        val courseRoot = apiGet(
-            "/ykt-site/site/list/student/current",
-            mapOf(
-                "size" to "9999",
-                "current" to "1",
-                "userId" to authenticated.userID,
-                "siteRoleCode" to "2",
-            ),
-            authenticated,
-        )
-        val courses = courseRecords(courseRoot).take(MAXIMUM_COURSES)
+    private fun fetchAllOnce(authenticated: AuthenticatedSession, credentials: Credentials, force: Boolean,
+        requestRevision: Long): List<AssignmentDeadlineItem> {
+        val courses = fetchCoursesSingleFlight(credentials, authenticated, force, requestRevision)
         val allItems = mutableListOf<AssignmentDeadlineItem>()
         var successfulCourseRequests = 0
         var firstCourseError: Exception? = null
         courses.forEach { course ->
             if (allItems.size >= MAXIMUM_ASSIGNMENTS) return@forEach
             val body = JSONObject()
-                .put("siteId", course.first)
+                .put("siteId", course.id)
                 .put("userId", authenticated.userID)
                 .put("keyword", "")
                 .put("chapterId", "")
@@ -227,7 +249,7 @@ internal class UCloudAssignmentClient internal constructor(
                     authenticated,
                 )
                 successfulCourseRequests += 1
-                allItems += AssignmentDeadlineResponseParser.parseAll(root, course.second)
+                allItems += AssignmentDeadlineResponseParser.parseAll(root, course.name, course.id)
             } catch (error: Exception) {
                 if (isSessionExpiry(error)) throw error
                 if (firstCourseError == null) firstCourseError = error
@@ -250,6 +272,40 @@ internal class UCloudAssignmentClient internal constructor(
             if (isSessionExpiry(error)) throw error
         }
         return merge(allItems)
+    }
+
+    private fun fetchCoursesSingleFlight(credentials: Credentials, authenticated: AuthenticatedSession,
+        force: Boolean, requestRevision: Long): List<TeachingCloudCourse> {
+        val key = credentialKey(credentials)
+        val selection = synchronized(stateLock) {
+            check(revision.get() == requestRevision) { "课程请求已失效。" }
+            cachedCourseRecords?.takeIf { !force && it.credentialKey == key &&
+                elapsedRealtime() - it.fetchedAtElapsed in 0 until CACHE_LIFETIME_MS }?.let { return it.courses }
+            val existing = courseFlight?.takeIf { it.credentialKey == key && it.revision == revision.get() }
+            if (existing != null) existing to false else CourseFlight(key, revision.get(), CompletableFuture())
+                .also { courseFlight = it } to true
+        }
+        val flight = selection.first
+        if (selection.second) {
+            try {
+                val courses = courseRecords(apiGet("/ykt-site/site/list/student/current",
+                    mapOf("size" to "9999", "current" to "1", "userId" to authenticated.userID, "siteRoleCode" to "2"),
+                    authenticated)).take(MAXIMUM_COURSES)
+                synchronized(stateLock) {
+                    check(flight.revision == revision.get() && courseFlight === flight &&
+                        loadCredentials()?.let(::credentialKey) == key) { "课程请求已失效。" }
+                    cachedCourseRecords = CachedCourses(key, elapsedRealtime(), courses)
+                }
+                flight.result.complete(courses)
+            } catch (error: Exception) { flight.result.completeExceptionally(error) }
+            finally { synchronized(stateLock) { if (courseFlight === flight) courseFlight = null } }
+        }
+        return try { flight.result.get() }
+        catch (error: InterruptedException) {
+            Thread.currentThread().interrupt(); throw DailyInfoClientException("课程请求已中断。", error)
+        } catch (error: ExecutionException) {
+            throw (error.cause as? Exception) ?: DailyInfoClientException("课程请求失败。", error)
+        }
     }
 
     private fun authenticate(credentials: Credentials): AuthenticatedSession {
@@ -479,16 +535,22 @@ internal class UCloudAssignmentClient internal constructor(
         }
     }
 
-    private fun courseRecords(root: JSONObject): List<Pair<String, String?>> {
+    private fun courseRecords(root: JSONObject): List<TeachingCloudCourse> {
         val firstData = root.optJSONObject("data") ?: root
         val secondData = firstData.optJSONObject("data") ?: firstData
-        val records = secondData.optJSONArray("records") ?: JSONArray()
+        val records = secondData.optJSONArray("records")
+            ?: throw DailyInfoClientException("教学云平台当前课程接口格式不正确。")
         return (0 until records.length()).mapNotNull { index ->
             val record = records.optJSONObject(index) ?: return@mapNotNull null
             val id = firstValue(record, "id", "siteId", "courseId")
                 ?: return@mapNotNull null
-            id to firstValue(record, "siteName", "courseName", "siteTitle", "name")
-        }
+            val teachers = record.optJSONArray("teachers")?.let { rows -> (0 until rows.length()).mapNotNull { index ->
+                rows.optJSONObject(index)?.let { firstValue(it, "name") }
+            }.distinct().take(20) }
+            val legacyTeacher = firstValue(record, "teacherName", "teacherNames")
+            TeachingCloudCourse(id, firstValue(record, "siteName", "courseName", "siteTitle", "name"),
+                teachers?.firstOrNull() ?: legacyTeacher, teachers ?: listOfNotNull(legacyTeacher))
+        }.distinctBy(TeachingCloudCourse::id)
     }
 
     private fun merge(items: List<AssignmentDeadlineItem>): List<AssignmentDeadlineItem> {
@@ -497,7 +559,9 @@ internal class UCloudAssignmentClient internal constructor(
             val key = "${item.id}\u001F${item.deadline}"
             val existing = merged[key]
             if (existing == null || (existing.courseName == null && item.courseName != null)) {
-                merged[key] = item
+                merged[key] = item.copy(courseID = existing?.courseID ?: item.courseID)
+            } else if (existing.courseID == null && item.courseID != null) {
+                merged[key] = existing.copy(courseID = item.courseID)
             }
         }
         return merged.values.sortedWith(

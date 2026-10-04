@@ -3594,7 +3594,7 @@ button:disabled {
     align-items: center;
     gap: 4px;
     grid-auto-rows: 50px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     width: 100%;
   }
 
@@ -5387,6 +5387,7 @@ input:disabled {
 }
 
 .query-section-header > button,
+.course-actions > button,
 .query-error > button {
   align-items: center;
   background: var(--surface-muted);
@@ -6151,3 +6152,22 @@ input:disabled {
     scroll-behavior: auto;
   }
 }
+.course-hub { display: grid; gap: 18px; min-width: 0; }
+.course-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.course-card h3 { overflow-wrap: anywhere; }
+.course-activity { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px; overflow-wrap: anywhere; }
+.course-activity p { line-height: 1.5; }
+.course-list { min-width: 0; }
+.course-list-row { background: transparent; border: 0; border-radius: 0; border-bottom: 1px solid var(--border); width: 100%; min-height: 82px; height: auto; padding: 16px 0; display: flex; align-items: center; gap: 14px; text-align: left; color: var(--text-primary); }
+.course-list-row:hover { background: var(--primary-surface-soft); }
+.course-list-icon { width: 40px; height: 40px; border-radius: 12px; flex: 0 0 40px; background: var(--primary-surface-soft); color: var(--primary-text); display: grid; place-items: center; }
+.course-list-content { flex: 1; min-width: 0; display: grid; gap: 7px; }
+.course-list-content > strong { font-size: 16px; overflow-wrap: anywhere; }
+.course-list-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.course-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; padding: 3px 7px; border-radius: 7px; background: var(--primary-surface-soft); color: var(--primary-text); overflow-wrap: anywhere; max-width: 100%; }
+.course-list-chevron { color: var(--text-muted); flex: 0 0 auto; }
+.query-section-header > .course-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.course-detail-dialog { width: min(640px, 100%); }
+.course-detail-body { display: grid; gap: 14px; overflow: auto; max-height: min(500px, calc(100dvh - 160px)); padding: 16px 20px 24px; }
+.course-detail-body .course-activity { display: grid; gap: 8px; }
+.course-detail-body .course-activity:first-child { border-top: 0; }

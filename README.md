@@ -36,7 +36,8 @@ Linux 的 `x86_64` 对应普通 Intel/AMD 64 位电脑，`aarch64` 对应 ARM 64
 
 - **课表与空教室：** 个人课表通过移动教务 HTTPS 接口获取并缓存；空教室一次查询西土城与沙河两个校区，可按教学楼和个人空闲节次筛选。课程可仅在本地删除某次排课或本学期整门课，并在设置中恢复；不会向学校退课。[课程管理说明](./docs/course-management-v0.2.9.md)
 - **教学日历：** 日、周、月、年视图展示课程、期末考试和各类 DDL；公历周与教学周并列显示，Apple、Android 和鸿蒙客户端支持导入设备系统日历。月视图日期详情包含课程、云课堂作业、黄历宜忌与活动截止信息。日程可收藏为本地快照，也可接入符合[自定义日程接口规范](./docs/custom-schedule-api.md)的公开 HTTPS JSON 地址。
-- **信息查询：** 独立查询页提供班车、重要事件、成绩、考试和课程作业。从 0.3.2 起，班车除当日班次外还可查看完整的时段、方向和星期时刻表，法定节假日会提示以学校放假安排为准。班车与重要事件属于公开信息；个人成绩、考试和作业使用学校账号。教务密码应使用移动教务密码，可能与统一认证密码不同；可选的教学云密码通常使用统一认证密码，未单独设置时沿用教务密码。[成绩与考试说明](./docs/academic-query-contract.md)
+- **课程（0.4.0 预发布源码）：** 新增独立一级页面：默认查看教学云当前课程目录，以及 QMplus 中名称去空白后以 `EBU` 开头的英方课程及其已发布作业、测验；教学云原有中文课程目录不受此筛选影响。课程按图标、名称和已有资料的标签列出，点击行进入应用内详情，查看该课已同步的作业／测验时间及官方入口；教师和待交／已交数量只有接口字段与现有缓存能明确确认时才显示，不会为了计数额外拉取作业。原成绩、考试安排和课程作业 DDL 查询保留在此页。QMplus 需在应用设置中主动打开[官方网页登录窗口](https://qmplus.qmul.ac.uk/my/)完成 SSO/MFA，与北邮教务账号独立，不在应用中输入 Microsoft 密码。QMplus 课程可能被标为当前、其它或学期未确认；没有可靠截止时间的活动不会被填上猜测日期。[QMplus 接入与限制](./docs/qmplus-integration.md) · [成绩与考试说明](./docs/academic-query-contract.md)
+- **信息查询：** 独立查询页只保留公开的班车和重要事件。从 0.3.2 起，班车除当日班次外还可查看完整的时段、方向和星期时刻表，法定节假日会提示以学校放假安排为准。个人成绩、考试和作业使用学校账号，并在“课程”页查看；教务密码应使用移动教务密码，可能与统一认证密码不同；可选的教学云密码通常使用统一认证密码，未单独设置时沿用教务密码。
 - **提醒与小组件：** 每日课程摘要默认提醒时间为北京时间 07:30；课前提醒默认提前 10 分钟，可自定义 1–5 次。两类提醒都默认关闭。iOS、macOS、Android 小组件与鸿蒙服务卡片优先显示今日课程，有空间时补充明日课程；Windows/Linux 提供运行时通知，不提供课程小组件。[课前提醒与平台限制](./docs/pre-class-reminders.md)
 - **外观与语言：** 图形客户端支持简体中文和 English，以及多套预设和自定义颜色主题；第三方接口返回的课程、天气、黄历和活动文字保持原文。[主题说明](./docs/color-themes.md)
 
@@ -54,7 +55,7 @@ iOS/macOS 的 WidgetKit 小组件、Android 桌面小组件和鸿蒙服务卡片
 
 ### 个人账户与本地数据
 
-班车、活动等公开信息无需学校账号；个人课表、空教室、成绩、考试和作业查询需要学号与密码。图形客户端不会将密码写入普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Linux 图形端使用 Secret Service，Android 使用 Android Keystore，鸿蒙使用系统 Asset Store。课程和空教室缓存不包含密码、令牌或 Cookie；成绩结果只在当前进程内短期保留。旧版 Tauri `settings.json` 的凭据会迁移到系统安全存储；完整设计与限制见[安全说明](./docs/security.md)。
+班车、活动等公开信息无需学校账号；北邮个人课表、空教室、成绩、考试和教学云作业查询需要学号与密码。QMplus 使用独立的官方网页 SSO/MFA，不复用北邮账号密码。图形客户端不会将北邮密码写入普通设置文件：Windows 使用 Credential Manager，macOS/iOS 使用 Keychain，Linux 图形端使用 Secret Service，Android 使用 Android Keystore，鸿蒙使用系统 Asset Store。课程和空教室缓存不包含密码、令牌或 Cookie；成绩结果只在当前进程内短期保留。旧版 Tauri `settings.json` 的凭据会迁移到系统安全存储；完整设计与限制见[安全说明](./docs/security.md)。
 
 `where-to-study-cli` 与 `where-to-study-tui` 按终端客户端的独立约定，不调用系统密码库：
 账号和密码分别保存在用户配置目录下权限受限的专用本地文件中，且不会自动读取或迁移
@@ -87,6 +88,8 @@ Android 原生客户端在用户已授权系统日历访问时，可从设备自
 
 课程作业解析以[北邮云课堂官方作业页](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)的真实 `records` / `undoneList` 响应契约为准。查询作业或打开日期详情中的作业卡时，图形客户端从系统安全存储临时读取已保存的学号和教学云平台密码；未单独设置云密码时使用教务密码。仅通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再以内存中的一次性票据换取云课堂访问令牌并读取当前课程和作业；不会读取浏览器 Cookie/token，也不会把密码发送给 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn`。票据、Cookie 和令牌不写入磁盘；用于跨日期查询的全量作业结果最多复用 10 分钟，已显示的日期结果只保留在当前进程内，并在凭据改变、切换账号或清除本地数据时失效。旧凭据发起的请求不能覆盖新凭据的数据。
 
+QMplus 只在用户主动连接后，通过独立的应用内官方网页登录会话读取课程及当前课程中已发布的 Assignment/Quiz 业务信息。应用只读取白名单内的官方 HTTPS 页面和同源 AJAX，不提交作业、开始测验或使用第三方 Worker 转发账号；本项目服务器不接收 QMplus 凭据或课程快照。各平台本地会话是否跨重启保留不同，断开连接或清除本地数据会清除应用管理的 QMplus 会话与快照；详见 [QMplus 接入说明](./docs/qmplus-integration.md)和[隐私声明](./PRIVACY.md)。
+
 ## 反馈与交流群
 
 发现问题或有功能建议，可以提交 [GitHub Issue](https://github.com/Nemoyuzx/where_to_study/issues)，也可以加入 QQ 交流群获取更新信息。请勿在公开 Issue 或群聊中发送学号、密码、令牌或个人课表；安全问题请按 [Security Policy](./SECURITY.md) 中的流程报告。
@@ -106,6 +109,7 @@ Android 原生客户端在用户已授权系统日历访问时，可从设备自
 - [Yokumii/bupt-api-collected](https://github.com/Yokumii/bupt-api-collected)：微教学与教学云接口资料，包括成绩和考试安排。
 - [heimaolala/open-empty-classroom](https://github.com/heimaolala/open-empty-classroom)：空教室查询相关开放实现。
 - [Jraaay/EmptyClassroom](https://github.com/Jraaay/EmptyClassroom)：空教室查询相关实现与参考。
+- [YouXam/ucloud](https://github.com/YouXam/ucloud)：北邮教学云接口资料与实现参考；本应用不调用其 Cloudflare Worker，不向该项目提交学号、密码或作业。
 
 Where To Study 不会将学生凭据或成绩发送给这些参考项目或其代理服务；各项目的许可证归其作者所有。
 
@@ -181,7 +185,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 
 `native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙 0.3.1 已通过 AppGallery 测试渠道云测试；这不代表正式商店审核或上架。
 
-Android 仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri 或 WebView。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
+Android 主界面仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri；QMplus 官方 SSO/MFA 在独立进程的 WebView 中完成，不读取系统浏览器 Cookie。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
 生成本地签名 Android APK/AAB、macOS Universal ZIP/DMG 和无签名 iOS 真机 archive：
 

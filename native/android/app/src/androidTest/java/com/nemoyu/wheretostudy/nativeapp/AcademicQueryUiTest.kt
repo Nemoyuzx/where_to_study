@@ -64,7 +64,7 @@ class AcademicQueryUiTest {
                     ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
                         .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
                         scenario.onActivity { activity ->
-                            activity.findViewById<View>(R.id.navigation_query).performClick()
+                            activity.findViewById<View>(R.id.navigation_courses).performClick()
                         }
                         instrumentation.waitForIdleSync()
                         scenario.onActivity { activity ->
@@ -75,7 +75,8 @@ class AcademicQueryUiTest {
                             parent.addView(InformationQueryPage(activity, shuttles, events, AppPreferences(activity),
                                 (parent.width / activity.resources.displayMetrics.density).toInt(),
                                 InformationQuerySessionState(InformationQueryMode.GRADES.name),
-                                activity.findViewById<View?>(R.id.phone_navigation) != null, grades, schedules).build(), params)
+                                activity.findViewById<View?>(R.id.phone_navigation) != null, grades, schedules,
+                                modes = InformationQueryMode.courseModes, pageTitleText = "课程").build(), params)
                             assertFalse(grades.isLoading)
                             assertNull(grades.snapshot)
                             activity.findViewById<View>(R.id.information_query_grades_refresh).performClick()
@@ -85,8 +86,8 @@ class AcademicQueryUiTest {
                         instrumentation.waitForIdleSync()
                         scenario.onActivity { activity ->
                             val selector = activity.findViewById<ViewGroup>(R.id.information_query_mode_switch)
-                            assertTrue("Five segments must remain a compact control", selector.height <= activity.dp(100))
-                            assertEquals(5, (selector.getChildAt(1) as ViewGroup).childCount)
+                            assertTrue("Four course segments must remain a compact control", selector.height <= activity.dp(100))
+                            assertEquals(4, (selector.getChildAt(1) as ViewGroup).childCount)
                             descendants(selector).filterIsInstance<TextView>().forEach { label ->
                                 assertTrue("Query labels must not be clipped", label.layout.height <= label.height - label.compoundPaddingTop - label.compoundPaddingBottom)
                             }
@@ -109,7 +110,7 @@ class AcademicQueryUiTest {
         ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
             .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
             scenario.onActivity { activity ->
-                activity.findViewById<View>(R.id.navigation_query).performClick()
+                activity.findViewById<View>(R.id.navigation_courses).performClick()
                 activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
                 val page = activity.findViewById<View>(R.id.information_query_assignments_scroll)
                 assertTrue(descendants(page).filterIsInstance<TextView>().any {
@@ -139,7 +140,7 @@ class AcademicQueryUiTest {
                 ActivityScenario.launch<MainActivity>(Intent(context, MainActivity::class.java)
                     .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
                     scenario.onActivity { activity ->
-                        activity.findViewById<View>(R.id.navigation_query).performClick()
+                        activity.findViewById<View>(R.id.navigation_courses).performClick()
                         activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
                         val labels = descendants(activity.findViewById(R.id.information_query_assignments_scroll))
                             .filterIsInstance<TextView>()

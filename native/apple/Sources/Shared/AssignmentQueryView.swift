@@ -30,12 +30,22 @@ struct PersonalAccountQueryButton: View {
     }
 }
 
+@MainActor
+final class AssignmentQuerySession: ObservableObject {
+    @Published var query = ""
+    @Published var showsEnded = false
+}
+
 struct AssignmentQueryView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
     @ObservedObject var store: CalendarDeadlineStore
-    @State private var query = ""
-    @State private var showsEnded = false
+    @ObservedObject private var session: AssignmentQuerySession
+
+    init(store: CalendarDeadlineStore, session: AssignmentQuerySession? = nil) {
+        self.store = store
+        self.session = session ?? AssignmentQuerySession()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -48,10 +58,10 @@ struct AssignmentQueryView: View {
                     .disabled(store.isLoadingAssignmentQuery)
                     .accessibilityIdentifier("assignments.refresh")
             }
-            TextField(model.localized("搜索课程或作业"), text: $query)
+            TextField(model.localized("搜索课程或作业"), text: $session.query)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("assignments.search")
-            Toggle(model.localized("显示已截止作业"), isOn: $showsEnded)
+            Toggle(model.localized("显示已截止作业"), isOn: $session.showsEnded)
             if model.isSampleMode {
                 Label(model.localized("示例作业，未连接教学云"), systemImage: "info.circle")
                     .foregroundStyle(theme.secondaryText)
@@ -66,7 +76,7 @@ struct AssignmentQueryView: View {
                 PersonalAccountQueryButton(identifier: "assignments.account")
             }
             if let items = store.assignmentQueryItems {
-                let filtered = AssignmentQueryLogic.filtered(items, query: query, showsEnded: showsEnded,
+                let filtered = AssignmentQueryLogic.filtered(items, query: session.query, showsEnded: session.showsEnded,
                     today: StrictContractDateParser.string(from: .now))
                 if filtered.isEmpty {
                     Text(model.localized("暂无符合条件的课程作业")).foregroundStyle(theme.secondaryText)

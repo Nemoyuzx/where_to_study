@@ -232,6 +232,7 @@ class InformationQueryUiTest {
                 val navigationIDs = listOf(
                     R.id.navigation_planner,
                     R.id.navigation_calendar,
+                    R.id.navigation_courses,
                     R.id.navigation_query,
                     R.id.navigation_settings,
                 )
@@ -244,9 +245,9 @@ class InformationQueryUiTest {
                     if (navigation.id == R.id.phone_navigation) position[0] else position[1]
                 }
                 assertEquals(positions.sorted(), positions)
-                assertEquals(4, positions.distinct().size)
+                assertEquals(5, positions.distinct().size)
                 assertEquals(
-                    listOf("空教室", "教学日历", "查询", "设置").map(activity::uiText),
+                    listOf("空教室", "教学日历", "课程", "查询", "设置").map(activity::uiText),
                     navigationIDs.map { id -> activity.findViewById<View>(id).contentDescription.toString() },
                 )
                 assertTrue(activity.findViewById<View>(R.id.navigation_query).performClick())

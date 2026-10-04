@@ -153,7 +153,7 @@ class LanguageSessionUiTest {
                 .putExtra(DailyCourseNotificationRuntimeMode.UI_TEST_INTENT_EXTRA, true)).use { scenario ->
                 scenario.onActivity { activity ->
                     retained = session(activity) as ActivitySessionState
-                    activity.findViewById<View>(R.id.navigation_query).performClick()
+                    activity.findViewById<View>(R.id.navigation_courses).performClick()
                     activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
                     activity.findViewById<View>(R.id.information_query_assignments_refresh).performClick()
                 }
@@ -215,7 +215,7 @@ class LanguageSessionUiTest {
                     assertEquals(1, gradeCalls.get())
                     assertEquals("设置", retained.grades.snapshot!!.items.single().name)
                     assertNotNull(activity.findViewById<View?>(R.id.page_calendar))
-                    activity.findViewById<View>(R.id.navigation_query).performClick()
+                    activity.findViewById<View>(R.id.navigation_courses).performClick()
                     activity.findViewById<View>(R.id.information_query_grades_tab).performClick()
                     assertTrue(uiDescendants(activity.findViewById(R.id.information_query_grades_scroll)).filterIsInstance<TextView>()
                         .any { it.text.toString() == "设置" })

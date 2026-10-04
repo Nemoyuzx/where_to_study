@@ -8,8 +8,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.3.2"
-    CURRENT_PROJECT_VERSION: "101"
+    MARKETING_VERSION: "0.4.0"
+    CURRENT_PROJECT_VERSION: "102"
     CODE_SIGN_STYLE: Automatic
 targets:
   WhereToStudyMac:
@@ -21,6 +21,8 @@ targets:
       - path: Sources/macOS
       - path: Sources/WidgetShared
       - path: ../../src-tauri/icons/icon.icns
+        buildPhase: resources
+      - path: ../../contracts/qmplus/qmplus-sync.js
         buildPhase: resources
       - path: Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -104,6 +106,8 @@ targets:
       - path: Sources/iOS
       - path: Sources/WidgetShared
       - path: Resources/Assets.xcassets
+        buildPhase: resources
+      - path: ../../contracts/qmplus/qmplus-sync.js
         buildPhase: resources
       - path: Resources/PrivacyInfo.xcprivacy
         buildPhase: resources

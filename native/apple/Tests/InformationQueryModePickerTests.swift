@@ -11,7 +11,8 @@ import UIKit
 @MainActor
 final class InformationQueryModePickerTests: XCTestCase {
     func testAllQueryDestinationsHaveDistinctAvailableSymbolsAndTranslatedLabels() throws {
-        XCTAssertEqual(Set(InformationQueryMode.allCases.map(\.systemImage)).count, 5)
+        XCTAssertEqual(InformationQueryMode.allCases, [.shuttle, .importantEvents])
+        XCTAssertEqual(Set(InformationQueryMode.allCases.map(\.systemImage)).count, 2)
         for mode in InformationQueryMode.allCases {
             #if os(macOS)
             XCTAssertNotNil(NSImage(systemSymbolName: mode.systemImage, accessibilityDescription: nil))
@@ -63,7 +64,7 @@ final class InformationQueryModePickerTests: XCTestCase {
                     state.dark = dark
                     for width in [320.0, 358.0, 720.0, 900.0] {
                         state.width = width
-                        state.selection = .assignments
+                        state.selection = .importantEvents
                         #if os(iOS)
                         // Explicitly invalidate the hosted root as UIKit test
                         // windows do not always receive display-link updates.
@@ -73,11 +74,11 @@ final class InformationQueryModePickerTests: XCTestCase {
                         #if os(macOS)
                         host.layoutSubtreeIfNeeded()
                         let control = try XCTUnwrap(findSegment(host))
-                        XCTAssertEqual(control.segmentCount, 5)
-                        XCTAssertEqual(control.selectedSegment, 4)
+                        XCTAssertEqual(control.segmentCount, 2)
+                        XCTAssertEqual(control.selectedSegment, 1)
                         XCTAssertLessThanOrEqual(control.bounds.width, width + 1)
-                        if width == 320 {
-                            for index in 0..<5 { XCTAssertNotNil(control.image(forSegment: index)) }
+                        if control.image(forSegment: 0) != nil {
+                            for index in 0..<2 { XCTAssertNotNil(control.image(forSegment: index)) }
                         } else if width == 900 && size == .large {
                             for (index, mode) in InformationQueryMode.allCases.enumerated() {
                                 XCTAssertEqual(control.label(forSegment: index), AppLocalization.string(mode.titleKey, language: language))
@@ -89,14 +90,14 @@ final class InformationQueryModePickerTests: XCTestCase {
                         #else
                         host.view.layoutIfNeeded()
                         let control = try XCTUnwrap(findSegment(host.view))
-                        XCTAssertEqual(control.numberOfSegments, 5)
-                        XCTAssertEqual(control.selectedSegmentIndex, 4)
+                        XCTAssertEqual(control.numberOfSegments, 2)
+                        XCTAssertEqual(control.selectedSegmentIndex, 1)
                         XCTAssertEqual(control.bounds.width, width, accuracy: 1)
                         if UIDevice.current.userInterfaceIdiom == .phone || width == 320 {
-                            for index in 0..<5 {
+                            for index in 0..<2 {
                                 let icon = try XCTUnwrap(control.imageForSegment(at: index))
                                 XCTAssertLessThanOrEqual(icon.size.height, control.bounds.height)
-                                XCTAssertLessThanOrEqual(icon.size.width, control.bounds.width / 5)
+                                XCTAssertLessThanOrEqual(icon.size.width, control.bounds.width / 2)
                                 XCTAssertTrue((control.titleForSegment(at: index) ?? "").isEmpty)
                             }
                         } else if width == 900 && size == .large {

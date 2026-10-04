@@ -10,6 +10,7 @@ import { CalendarImportLogic, CalendarEventDraft } from '../main/ets/calendar/Ca
 import { DailyCourseNotificationPlanner } from '../main/ets/notify/DailyCoursePlanning';
 import { TodayCourseWidgetData, CoursePhase } from '../main/ets/widget/TodayCourseWidgetData';
 import { QueryPageContract } from '../main/ets/common/QueryLogic';
+import { CoursePageContract } from '../main/ets/common/CourseLogic';
 import { MobileCalendarTimelineLayout, MobileCalendarTimelineView } from '../main/ets/view/calendar/MobileCalendarTimelineView';
 import { CalendarTimelineDay } from '../main/ets/view/calendar/CalendarLogic';
 import { AppModel } from '../main/ets/model/AppModel';
@@ -19,7 +20,7 @@ import { FileClassroomStore } from '../main/ets/store/ClassroomStore';
 import { FileHolidayStore } from '../main/ets/store/HolidayStore';
 import { Credentials, CredentialStoring } from '../main/ets/store/CredentialStore';
 import { ExamFetching, GradeFetching, SJDExamClient } from '../main/ets/net/SjdGradeClient';
-import { AssignmentDeadlineFetching, UCloudAssignmentClient } from '../main/ets/net/UCloudAssignmentClient';
+import { AssignmentDeadlineFetching, UCloudAssignmentClient, UCloudCourse } from '../main/ets/net/UCloudAssignmentClient';
 import { AssignmentDeadlineItem } from '../main/ets/net/CalendarDailyInfoClient';
 
 const term: string = '2026-2027-1';
@@ -229,10 +230,19 @@ export default function academicQueryTest() {
       expect(requests[0].body.includes('考试 · 时间待定')).assertTrue();
     });
 
-    it('five_query_tabs_fit_phone_tablet_and_large_text_policy', 0, () => {
+    it('public_query_and_private_course_tabs_have_independent_english_and_width_policies', 0, () => {
+      // Two public tabs can keep their text on normal phones, but a long translated label
+      // or a genuinely narrow floating window still uses an icon instead of horizontal scrolling.
       expect(QueryPageContract.iconOnlyTabs(358, 28, true)).assertFalse();
-      expect(QueryPageContract.iconOnlyTabs(288, 56, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(358, 160, true)).assertTrue();
+      expect(QueryPageContract.iconOnlyTabs(186, 56, true)).assertTrue();
       expect(QueryPageContract.iconOnlyTabs(992, 160, false)).assertFalse();
+      // Four private course segments retain the old dense-phone/large-text policy.
+      expect(CoursePageContract.iconOnlyTabs(358, 28, true)).assertFalse();
+      expect(CoursePageContract.iconOnlyTabs(288, 56, true)).assertTrue();
+      expect(CoursePageContract.iconOnlyTabs(358, 60, true)).assertTrue();
+      expect(CoursePageContract.iconOnlyTabs(460, 60, true)).assertFalse();
+      expect(CoursePageContract.iconOnlyTabs(992, 160, false)).assertFalse();
     });
 
     it('exam_queries_require_explicit_refresh_and_retain_same_term_on_failure', 0, async () => {
@@ -278,6 +288,71 @@ export default function academicQueryTest() {
       expect(model.assignmentCatalog.length).assertEqual(1);
       expect(model.assignmentCatalogFetchedAt).assertEqual(timestamp);
       expect(model.assignmentCatalogError.length > 0).assertTrue();
+    });
+
+    it('teaching_cloud_directory_uses_the_current_site_list_and_a_bounded_single_flight', 0, async () => {
+      const parsed: UCloudCourse[] = UCloudAssignmentClient.courseRecords(JSON.parse(
+        '{"data":{"records":[{"siteId":"17","siteName":"合成课程 A",' +
+        '"teachers":[{"name":"Teacher A"},{"name":"Teacher A"}]},' +
+        '{"siteId":"17","siteName":"重复课程"},' +
+        '{"id":"18","courseName":"合成课程 B"}]}}') as Record<string, Object>);
+      expect(parsed.length).assertEqual(2);
+      expect(parsed[0].name).assertEqual('合成课程 A');
+      expect(parsed[0].teacherNames.length).assertEqual(1);
+      expect(parsed[0].teacherNames[0]).assertEqual('Teacher A');
+      const sourceItem: AssignmentDeadlineItem = new AssignmentDeadlineItem(
+        'assignment-1', 'Synthetic due', parsed[0].name, start + ' 23:59:00', '已提交');
+      expect(sourceItem.courseID).assertNull();
+      const bound: AssignmentDeadlineItem[] = UCloudAssignmentClient.withKnownCourseID([sourceItem], parsed[0].id);
+      expect(bound[0].courseID).assertEqual('17');
+      expect(sourceItem.courseID).assertNull();
+      let calls: number = 0;
+      let release: () => void = () => {};
+      let began: () => void = () => {};
+      const started: Promise<void> = new Promise<void>((resolve) => { began = resolve; });
+      const gate: Promise<void> = new Promise<void>((resolve) => { release = resolve; });
+      const client: UCloudAssignmentClient = new UCloudAssignmentClient(null,
+        async (credentials: Credentials): Promise<UCloudCourse[]> => {
+          calls++;
+          began();
+          await gate;
+          return parsed;
+        });
+      const credentials: Credentials = new Credentials('synthetic-account', 'fixture-only');
+      const first: Promise<UCloudCourse[]> = client.fetchCourseDirectory(credentials);
+      await started;
+      const second: Promise<UCloudCourse[]> = client.fetchCourseDirectory(credentials);
+      release();
+      expect((await first).length).assertEqual(2);
+      expect((await second).length).assertEqual(2);
+      expect(calls).assertEqual(1);
+      await client.fetchCourseDirectory(credentials);
+      expect(calls).assertEqual(1);
+      await client.fetchCourseDirectory(credentials, true);
+      expect(calls).assertEqual(2);
+    });
+
+    it('teaching_cloud_directory_preserves_last_good_and_rejects_late_account_results', 0, async () => {
+      let calls: number = 0;
+      let fail: boolean = false;
+      const client: UCloudAssignmentClient = new UCloudAssignmentClient(null,
+        async (credentials: Credentials): Promise<UCloudCourse[]> => {
+          calls++;
+          if (fail) { throw new Error('synthetic outage'); }
+          return [new UCloudCourse('17', '合成课程')];
+        });
+      const model: AppModel = modelFor(new AcademicClient(), client);
+      await model.loadCloudCourseDirectory();
+      expect(calls).assertEqual(1);
+      expect(model.cloudCourses.length).assertEqual(1);
+      fail = true;
+      await model.loadCloudCourseDirectory(true);
+      expect(calls).assertEqual(2);
+      expect(model.cloudCourses.length).assertEqual(1);
+      expect(model.cloudCoursesError.length > 0).assertTrue();
+      model.enterReviewDemo();
+      expect(model.cloudCourses.length).assertEqual(0);
+      expect(model.cloudCoursesFetchedAt).assertEqual('');
     });
 
     it('late_assignment_catalog_cannot_repopulate_after_mode_change', 0, async () => {

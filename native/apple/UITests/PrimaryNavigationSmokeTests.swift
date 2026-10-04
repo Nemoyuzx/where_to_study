@@ -220,7 +220,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         XCTAssertEqual(useAcademic.label, "改用教务密码")
         attachScreenshot(named: "account-password-action")
 
-        navigate(to: "查询", in: app)
+        navigate(to: "课程", in: app)
         let assignments = app.segmentedControls.buttons["课程作业 DDL"].firstMatch
         XCTAssertTrue(assignments.waitForExistence(timeout: 5))
         assignments.tap()
@@ -515,7 +515,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
             XCTAssertTrue(search.waitForExistence(timeout: 5))
             search.tap()
             search.typeText("2026")
-            modes.buttons["成绩查询"].tap()
+            modes.buttons["班车查询"].tap()
             events.tap()
             XCTAssertEqual(search.value as? String, "2026")
             XCTAssertTrue(app.staticTexts["示例学术会议"].waitForExistence(timeout: 5))
@@ -2119,6 +2119,7 @@ final class PrimaryNavigationSmokeTests: XCTestCase {
         switch title {
         case "空教室": return "planner"
         case "教学日历": return "calendar"
+        case "课程": return "courses"
         case "查询": return "queries"
         case "设置": return "settings"
         default:

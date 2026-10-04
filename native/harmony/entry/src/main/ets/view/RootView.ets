@@ -15,6 +15,10 @@ import { SettingsSession } from './SettingsSession';
 import { PrivacyPolicyView } from './PrivacyPolicyView';
 import { QueryView } from './QueryView';
 import { QuerySession } from './QuerySession';
+import { CourseView } from './CourseView';
+import { CourseSession } from './CourseSession';
+import { QMPlusSession } from './QMPlusSession';
+import { QMPlusConnectionView } from './QMPlusConnectionView';
 
 // 布局策略统一在 common/DeviceState.ets 中（含折叠屏半折叠降级规则），
 // 这里保留导出以兼容旧引用。
@@ -30,6 +34,8 @@ export struct RootView {
   @Local settingsFavoriteManagerVisible: boolean = false;
   @Local settingsSession: SettingsSession = new SettingsSession();
   @Local querySession: QuerySession = new QuerySession();
+  @Local courseSession: CourseSession = new CourseSession();
+  @Local qmPlusSession: QMPlusSession = new QMPlusSession();
   @Local phoneNavigationBottomMargin: number = PhoneNavigationLayout.minimumBottomClearanceVp;
   private deadlineRefreshTimer: number = -1;
   private navigationWindow: window.Window | null = null;
@@ -59,6 +65,7 @@ export struct RootView {
   aboutToDisappear(): void {
     this.navigationAvoidanceActive = false;
     this.querySession.dispose();
+    this.qmPlusSession.dispose();
     this.detachPhoneNavigationAvoidance();
     if (this.deadlineRefreshTimer >= 0) {
       clearInterval(this.deadlineRefreshTimer);
@@ -143,7 +150,8 @@ export struct RootView {
     }
     const index: number = event.keyCode === 2001 ? 0 :
       (event.keyCode === 2002 ? 1 :
-        (event.keyCode === 2003 ? 2 : (event.keyCode === 2004 ? 3 : -1)));
+        (event.keyCode === 2003 ? 2 :
+          (event.keyCode === 2004 ? 3 : (event.keyCode === 2005 ? 4 : -1))));
     const section: AppSection | undefined = this.sectionAt(index);
     if (section === undefined) {
       return false;
@@ -193,6 +201,14 @@ export struct RootView {
           .zIndex(110)
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
+
+      if (this.qmPlusSession.loginVisible) {
+        QMPlusConnectionView({ session: this.qmPlusSession })
+          .width('100%')
+          .height('100%')
+          .zIndex(120)
+          .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
+      }
     }
     .width('100%')
     .height('100%')
@@ -234,12 +250,16 @@ export struct RootView {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
+        } else if (this.currentSection === AppSection.courses) {
+          CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
+            onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else if (this.currentSection === AppSection.query) {
           QueryView({ session: this.querySession,
             onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
             session: this.settingsSession,
+            qmPlusSession: this.qmPlusSession,
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
               this.settingsFavoriteManagerVisible = visible;
             }
@@ -321,12 +341,16 @@ export struct RootView {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth })
+        } else if (this.currentSection === AppSection.courses) {
+          CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
+            onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else if (this.currentSection === AppSection.query) {
           QueryView({ session: this.querySession,
             onOpenSettings: () => this.selectSection(AppSection.settings) })
         } else {
           SettingsView({
             session: this.settingsSession,
+            qmPlusSession: this.qmPlusSession,
             onFavoriteManagerVisibilityChanged: (visible: boolean): void => {
               this.settingsFavoriteManagerVisible = visible;
             }
@@ -358,22 +382,31 @@ export struct RootView {
 
   @Builder
   phoneNavigationItem(section: AppSection) {
-    Column({ space: 2 }) {
-      SymbolGlyph(AppSectionInfo.symbol(section))
-        .fontSize(22)
-        .fontColor([this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText()])
-      Text(this.model.text(AppSectionInfo.title(section)))
-        .fontSize(11)
-        .fontWeight(this.currentSection === section ? FontWeight.Bold : FontWeight.Regular)
-        .fontColor(this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText())
+    Stack() {
+      // 背景单独动画，语言导致的文字宽度/换行不参与整列布局过渡。
+      Column() {}
+        .width('100%')
+        .height(50)
+        .borderRadius(26)
+        .backgroundColor(this.currentSection === section ? AppTheme.background() : Color.Transparent)
+        .animation({ duration: 160, curve: Curve.EaseOut })
+      Column({ space: 2 }) {
+        SymbolGlyph(AppSectionInfo.symbol(section))
+          .fontSize(22)
+          .fontColor([this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText()])
+          .animation({ duration: 160, curve: Curve.EaseOut })
+        Text(this.model.text(AppSectionInfo.title(section)))
+          .fontSize(11)
+          .fontWeight(this.currentSection === section ? FontWeight.Bold : FontWeight.Regular)
+          .fontColor(this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText())
+      }
+      .width('100%')
+      .height(50)
+      .justifyContent(FlexAlign.Center)
     }
     .layoutWeight(1)
     .height(50)
-    .justifyContent(FlexAlign.Center)
-    .borderRadius(26)
-    .backgroundColor(this.currentSection === section ? AppTheme.background() : Color.Transparent)
     .id(AppSectionInfo.accessibilityId(section))
-    .animation({ duration: 160, curve: Curve.EaseOut })
     .onClick(() => {
       this.selectSection(section);
     })
@@ -385,16 +418,22 @@ export struct RootView {
       PlannerView()
     } else if (section === AppSection.calendar) {
       CalendarSectionView({ containerWidth: this.containerWidth })
+    } else if (section === AppSection.courses) {
+      CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
+        onOpenSettings: () => this.selectSection(AppSection.settings) })
     } else if (section === AppSection.query) {
       QueryView({ session: this.querySession,
         onOpenSettings: () => this.selectSection(AppSection.settings) })
     } else {
-      SettingsView({ session: this.settingsSession })
+      SettingsView({ session: this.settingsSession, qmPlusSession: this.qmPlusSession })
     }
   }
 
   selectSection(section: AppSection): void {
     hilog.info(0x0000, 'RootView', 'selectSection -> %{public}s', section);
+    if (section !== this.currentSection && this.qmPlusSession.loginVisible) {
+      this.qmPlusSession.closeLogin();
+    }
     this.currentSection = section;
     if (section !== AppSection.settings) {
       this.settingsFavoriteManagerVisible = false;

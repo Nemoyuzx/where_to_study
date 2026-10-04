@@ -35,7 +35,7 @@ class LateQueryPublicationUiTest {
             delayedRequest(source, fails = false) { scenario, request ->
                 lateinit var shell: QueryShell
                 scenario.onActivity { activity ->
-                    activity.findViewById<View>(R.id.navigation_query).performClick()
+                    activity.findViewById<View>(R.id.navigation_courses).performClick()
                     activity.findViewById<View>(R.id.information_query_grades_tab).performClick()
                     shell = QueryShell(activity, R.id.information_query_grades_scroll)
                 }
@@ -54,7 +54,7 @@ class LateQueryPublicationUiTest {
             delayedRequest(source, fails = true) { scenario, request ->
                 lateinit var shell: QueryShell
                 scenario.onActivity { activity ->
-                    activity.findViewById<View>(R.id.navigation_query).performClick()
+                    activity.findViewById<View>(R.id.navigation_courses).performClick()
                     activity.findViewById<View>(R.id.information_query_exams_tab).performClick()
                     shell = QueryShell(activity, R.id.information_query_exams_scroll)
                     assertFalse("$source is still in flight", activity.findViewById<View>(R.id.information_query_exams_refresh).isEnabled)
@@ -88,7 +88,7 @@ class LateQueryPublicationUiTest {
         delayedRequest(Source.CLASSROOMS, fails = false) { scenario, request ->
             lateinit var shell: QueryShell
             scenario.onActivity { activity ->
-                activity.findViewById<View>(R.id.navigation_query).performClick()
+                activity.findViewById<View>(R.id.navigation_courses).performClick()
                 activity.findViewById<View>(R.id.information_query_exams_tab).performClick()
                 shell = QueryShell(activity, R.id.information_query_exams_scroll)
             }
@@ -187,7 +187,7 @@ class LateQueryPublicationUiTest {
                         lateinit var account: EditText
                         lateinit var password: EditText
                         scenario.onActivity { activity ->
-                            activity.findViewById<View>(R.id.navigation_query).performClick()
+                            activity.findViewById<View>(R.id.navigation_courses).performClick()
                             activity.findViewById<View>(R.id.navigation_settings).performClick()
                             settings = activity.findViewById(R.id.page_settings)
                             val loading = activity.uiText("正在获取…")
@@ -314,7 +314,7 @@ class LateQueryPublicationUiTest {
                         Source.STARTUP -> MainActivity::class.java.getDeclaredMethod("refreshScheduleAtStartup")
                             .apply { isAccessible = true }.invoke(activity)
                         Source.EXAMS -> {
-                            activity.findViewById<View>(R.id.navigation_query).performClick()
+                            activity.findViewById<View>(R.id.navigation_courses).performClick()
                             activity.findViewById<View>(R.id.information_query_exams_tab).performClick()
                             assertTrue(activity.findViewById<View>(R.id.information_query_exams_refresh).performClick())
                         }

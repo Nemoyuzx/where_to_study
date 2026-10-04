@@ -123,6 +123,7 @@ enum CredentialSettingsLogic {
 enum AppSection: String, CaseIterable, Identifiable {
     case planner
     case calendar
+    case courses
     case queries
     case settings
 
@@ -132,6 +133,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .planner: "空教室"
         case .calendar: "教学日历"
+        case .courses: "课程"
         case .queries: "查询"
         case .settings: "设置"
         }
@@ -141,6 +143,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .planner: "house"
         case .calendar: "calendar"
+        case .courses: "books.vertical"
         case .queries: "magnifyingglass"
         case .settings: "gearshape"
         }
@@ -154,8 +157,9 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .planner: "1"
         case .calendar: "2"
-        case .queries: "3"
-        case .settings: "4"
+        case .courses: "3"
+        case .queries: "4"
+        case .settings: "5"
         }
     }
 }
@@ -204,6 +208,7 @@ enum HolidayDisplayLogic {
 final class AppModel: ObservableObject {
     let navigation = PrimaryNavigationState()
     let gradeStore: GradeQueryStore
+    let qmplus: QMplusStore
     @Published private(set) var colorTheme: ColorThemeConfiguration
     @Published var account = "" {
         didSet {
@@ -221,6 +226,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var hasSavedTeachingCloudPassword = false
     @Published private(set) var useAcademicPasswordForTeachingCloud = false
     @Published private(set) var assignmentCredentialRevision = 0
+    @Published private(set) var courseDataClearRevision = 0
     @Published var termID: String
     @Published var termStartDate: String
     @Published private(set) var automaticTermDetectionEnabled: Bool
@@ -337,6 +343,7 @@ final class AppModel: ObservableObject {
         self.courseDeletionStore = courseDeletionStore
         self.scheduleClient = scheduleClient
         gradeStore = GradeQueryStore(client: gradeClient)
+        qmplus = QMplusStore(defaults: defaults)
         self.classroomStore = classroomStore
         self.classroomClient = classroomClient
         self.holidayStore = holidayStore
@@ -649,6 +656,7 @@ final class AppModel: ObservableObject {
         dailyClassroomRefreshTask?.cancel()
         dailyClassroomRefreshTask = nil
         runtimeMode = .sample(review: true)
+        qmplus.suspend()
         colorTheme = .default
 
         account = ""
@@ -1180,6 +1188,8 @@ final class AppModel: ObservableObject {
             return
         }
         invalidatePendingOperations()
+        qmplus.disconnect()
+        courseDataClearRevision &+= 1
         dailyClassroomRefreshTask?.cancel()
         dailyClassroomRefreshTask = nil
         dailyCourseNotificationsEnabled = false
@@ -1723,6 +1733,7 @@ final class AppModel: ObservableObject {
 
     private func clearAccountScopedData() throws {
         invalidatePendingAccountRequests()
+        courseDataClearRevision &+= 1
         cancelDailyCourseNotifications(includingDelivered: true)
         if dailyCourseNotificationsEnabled {
             dailyCourseNotificationStatusMessage = "账号已更改，获取课表后将重新安排摘要"

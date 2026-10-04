@@ -17,7 +17,7 @@ class InformationQueryLogicTest {
         assertFalse(InformationQueryLayoutLogic.usesIconOnlyTabs(110, 60f, 22, 4, 8))
         assertTrue(InformationQueryLayoutLogic.usesIconOnlyTabs(110, 90f, 22, 4, 8))
         assertFalse(InformationQueryLayoutLogic.usesIconOnlyTabs(102, 60f, 22, 4, 8))
-        assertEquals(5, InformationQueryMode.entries.map { it.iconResource }.distinct().size)
+        assertEquals(7, InformationQueryMode.entries.map { it.iconResource }.distinct().size)
     }
 
     @Test

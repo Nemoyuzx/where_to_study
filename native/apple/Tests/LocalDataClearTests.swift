@@ -6,6 +6,33 @@ import XCTest
 #endif
 
 final class LocalDataClearTests: XCTestCase {
+    @MainActor
+    func testIndependentQMplusSourceSurvivesBUPTAccountChangesAndClearsWithAllData() throws {
+        let suite = "IndependentQMplusModel.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let credentials = InMemoryCredentialStore(credentials: Credentials(account: "a", password: "academic"))
+        let model = AppModel(credentialStore: credentials,
+                             scheduleStore: InMemoryScheduleStore(schedule: Self.schedule),
+                             classroomStore: InMemoryClassroomStore(cache: nil),
+                             holidayStore: InMemoryHolidayStore(snapshot: nil),
+                             dailyCourseNotificationScheduler: NoopNotificationScheduler(),
+                             now: { Self.scheduleNow }, defaults: defaults)
+        let request = try XCTUnwrap(model.qmplus.beginSynchronization())
+        model.qmplus.receive(Data("""
+            {"schema_version":1,"source":"qmplus","fetched_at":"2026-10-03T12:00:00Z",
+             "ok":true,"partial":false,"courses":[],"activities":[],"warnings":[]}
+            """.utf8), request: request)
+        let original = try XCTUnwrap(model.qmplus.snapshot)
+        model.account = "b"
+        model.password = "fixture-new-academic-password"
+        XCTAssertTrue(model.saveSettings())
+        XCTAssertEqual(model.qmplus.snapshot, original, "BUPT and QMplus are independent identities")
+        model.clearLocalData()
+        XCTAssertNil(model.qmplus.snapshot)
+        XCTAssertFalse(model.qmplus.isSyncing)
+    }
+
     func testLegacyCredentialsDecodeAndCloudPasswordEditsAreAccountIsolated() throws {
         let legacy = try JSONDecoder().decode(Credentials.self, from: Data("{\"account\":\"a\",\"password\":\"academic\"}".utf8))
         XCTAssertNil(legacy.teachingCloudPassword)

@@ -45,7 +45,17 @@ private struct ConsentedApplicationRoot: View {
     }
 
     var body: some View {
-        RootView()
+        Group {
+            #if DEBUG
+            if AppLaunchConfiguration.usesQMplusToolbarFixture, model.isSampleMode {
+                QMplusToolbarUITestFixture(language: model.appLanguage)
+            } else {
+                RootView()
+            }
+            #else
+            RootView()
+            #endif
+        }
             .environmentObject(model)
             .environmentObject(model.navigation)
             .environment(\.locale, model.appLanguage.locale)
