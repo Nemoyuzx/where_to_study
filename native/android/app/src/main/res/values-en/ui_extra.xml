@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_11979c5c7acc">"Primary"</string>
+    <string name="ui_chrome_136e42c8ec73">"Custom RGB Colors"</string>
+    <string name="ui_chrome_1a0be4bd6722">"18 · Sample Course"</string>
+    <string name="ui_chrome_1a9a3e51eed7">"Credentials and caches stay on your device until replaced, cleared, or removed with the app. Clearing local data does not delete third-party records."</string>
+    <string name="ui_chrome_1fd32f10122e">"Could not save the color theme. Please try again."</string>
+    <string name="ui_chrome_29f63f7b210e">"Apply Custom Colors"</string>
+    <string name="ui_chrome_41fa6af5de9e">"Theme Preview"</string>
+    <string name="ui_chrome_437a23f5a691">"Enter 6 RGB digits, e.g. #166B5D"</string>
+    <string name="ui_chrome_4e62728c3d05">"QMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in a separate app-owned WebView process/profile, where you complete SSO/Microsoft MFA directly. The app has no Microsoft password field and reads no external-browser cookies. Its read-only script returns a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML; it never submits work, starts quizzes, or uses a third-party Worker or this project’s server. The snapshot is stored in app-private storage; genuine partial failures retain labelled known information. Disconnecting or clearing local data removes the app-managed web session and snapshot; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies."</string>
+    <string name="ui_chrome_4ee8a755167e">"Classic Teal"</string>
+    <string name="ui_chrome_5065fa9d9721">"View Schedule"</string>
+    <string name="ui_chrome_52466d500ebc">"Follow SECURITY.md for security reports. Open only non-sensitive privacy issues on GitHub, and never publish credentials, tokens, or personal schedules."</string>
+    <string name="ui_chrome_63fb443d8deb">"Highlighted Note"</string>
+    <string name="ui_chrome_6c4174ecc9fd">"The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."</string>
+    <string name="ui_chrome_822eb432b858">"Selected Date"</string>
+    <string name="ui_chrome_8387adc19d38">"The app may retrieve pinned holiday-calendar data through unpkg; Android may read the OS holiday calendar when permitted. Requests contain only CN and year. iOS marks rest days only from authoritative rest-day data."</string>
+    <string name="ui_chrome_85e2f87b9f51">"UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Public events use Contest DDL on GitHub first; the where-to-study.cn mirror is selected only when its generated data is newer, and the existing API is a fallback if both fail. Campus contest notices have a separate source. These public requests carry no personal credentials. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."</string>
+    <string name="ui_chrome_8e5c672defaa">"Credentials stay in protected OS storage. With valid saved credentials and automatic term detection enabled, the app refreshes the personal schedule once at launch to verify the term identifier and first Monday. Credentials are also used over HTTPS for schedules, classrooms, or assignments you request. Schedule and classroom requests go to jwglweixin.bupt.edu.cn; supported platforms may refresh today’s classrooms automatically. The maintainer cannot read credentials, and settings APIs never return a password."</string>
+    <string name="ui_chrome_9832e5677a6d">"The project operates only fixed endpoints that organize public shuttle and event data. It provides no user accounts, cloud synchronization, advertising, analytics, or behavioral tracking and does not collect GPS location, contacts, advertising identifiers, diagnostics, or usage behavior. BUPT services, unpkg, UAPI, Timeless, GitHub Pages, the fixed public Where To Study endpoints, and a user-selected custom schedule server may process ordinary network metadata such as IP address and request time under their own policies."</string>
+    <string name="ui_chrome_9cd555d72f1b">"Enter 6 hexadecimal digits, optionally starting with #. Text contrast adjusts automatically."</string>
+    <string name="ui_chrome_a2bb37329824">"Selected Date · 18"</string>
+    <string name="ui_chrome_a6664df1efc8">"Rose"</string>
+    <string name="ui_chrome_aa5c949544cd">"The primary color also shapes page, card and control backgrounds. Light and dark appearance still follows your system."</string>
+    <string name="ui_chrome_aed843d1bd0b">"Warm Amber"</string>
+    <string name="ui_chrome_b364d8185174">"Today\'s Schedule"</string>
+    <string name="ui_chrome_ba2e93e73037">"Restore Default"</string>
+    <string name="ui_chrome_c0902fbc988c">"Schedules, classroom results, campus, term, switches, the custom feed URL, and up to 500 favorite snapshots stay locally. Course widgets read only the local schedule. Course deletions are isolated by account and term, affect only the effective timetable on this device, and can be restored in Settings. Clear local data removes all of these items."</string>
+    <string name="ui_chrome_c2f43ebe2000">"Iris Violet"</string>
+    <string name="ui_chrome_c3b3e760e0ee">"Calendar writes and local course notifications require your action and permission, and only marked events are managed. Widgets exist only on supported platforms. This data is not uploaded."</string>
+    <string name="ui_chrome_dcdf1f46691c">"Ocean Blue"</string>
+    <string name="ui_chrome_ddb3b7159fd2">"Color Theme"</string>
+    <string name="ui_chrome_f84e05423960">"Accent"</string>
+    <string name="ui_chrome_fe6a96889808">"Independent QMplus Connection"</string>
+</resources>

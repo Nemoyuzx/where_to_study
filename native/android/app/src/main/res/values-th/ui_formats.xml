@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\nแอปอิสระที่ไม่เป็นทางการสำหรับดูตารางเรียนและห้องว่างของ BUPT ไม่ได้ดำเนินการโดยมหาวิทยาลัย"</string>
+    <string name="ui_format_calendar_synced">"ซิงค์รายวิชา %1$s วิชาไปยังปฏิทินระบบแล้ว"</string>
+    <string name="ui_format_calendar_teaching_week">"สัปดาห์ปฏิทินที่ %1$s สัปดาห์การสอนที่ %2$s"</string>
+    <string name="ui_format_calendar_upsert">"ซิงค์รายวิชา %1$s วิชาไปยัง “%2$s” แล้ว (เพิ่ม %3$s อัปเดต %4$s)"</string>
+    <string name="ui_format_calendar_week">"สัปดาห์ปฏิทินที่ %1$s"</string>
+    <string name="ui_format_calendar_week_unknown">"สัปดาห์ปฏิทินที่ %1$s ยังไม่มีข้อมูลสัปดาห์การสอน"</string>
+    <string name="ui_format_course_count">"%1$s วิชา"</string>
+    <string name="ui_format_courses">"%1$s วิชา"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · สัปดาห์การสอนที่ %2$s"</string>
+    <string name="ui_format_date_week">"%1$s · สัปดาห์ที่ %2$s"</string>
+    <string name="ui_format_day_courses">"ชั้นเรียนของวันนี้ (%1$s)"</string>
+    <string name="ui_format_departures">"วันนี้มีเวลาออกเดินทาง %1$s รอบ · รถ %2$s คัน"</string>
+    <string name="ui_format_directions">"วันนี้มี %1$s เส้นทาง และเที่ยวรถตามแผน %2$s เที่ยว"</string>
+    <string name="ui_format_ending">"กำลังเรียน · เลิก %1$s"</string>
+    <string name="ui_format_ends_at">"เลิกเรียน %1$s"</string>
+    <string name="ui_format_favorites">"จัดการรายการโปรด (%1$s)"</string>
+    <string name="ui_format_favorites_synced">"ซิงค์กิจกรรมโปรด %1$s รายการไปยัง “%2$s” แล้ว"</string>
+    <string name="ui_format_feed_saved">"บันทึกกำหนดการที่กำหนดเองแล้ว: %1$s, %2$s รายการ"</string>
+    <string name="ui_format_feed_source">"แหล่งที่กำหนดเอง: %1$s"</string>
+    <string name="ui_format_from">"ตั้งแต่ %1$s"</string>
+    <string name="ui_format_gpa">"เกรดเฉลี่ยสะสม: %1$s"</string>
+    <string name="ui_format_next_departure">"เที่ยวถัดไป %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"ประกาศฝ่ายสนับสนุน · %1$s"</string>
+    <string name="ui_format_period">"คาบที่ %1$s"</string>
+    <string name="ui_format_period_compact">"คาบที่ %1$s"</string>
+    <string name="ui_format_periods">"คาบที่ %1$s-%2$s"</string>
+    <string name="ui_format_results">"ผลลัพธ์ %1$s รายการ · เรียงตามกำหนดส่งจากใกล้ไปไกล"</string>
+    <string name="ui_format_schedule_updated">"อัปเดตตารางเรียนส่วนตัวแล้ว มี %1$s วิชา"</string>
+    <string name="ui_format_semester">"ภาคเรียน: %1$s"</string>
+    <string name="ui_format_teaching_week">"สัปดาห์การสอนที่ %1$s"</string>
+    <string name="ui_format_teaching_week_axis">"การสอน\nสัปดาห์ที่ %1$s"</string>
+    <string name="ui_format_today_courses">"ชั้นเรียนวันนี้ · %1$s วิชา"</string>
+    <string name="ui_format_updated">"อัปเดตข้อมูล: %1$s"</string>
+    <string name="ui_format_view_courses">"ดูทั้งหมด %1$s วิชา"</string>
+    <string name="ui_format_week">"สัปดาห์ที่ %1$s"</string>
+    <string name="ui_format_week_axis">"ปฏิทิน %1$s\nการสอน %2$s"</string>
+    <string name="ui_format_week_compact">"สัปดาห์\n%1$s"</string>
+    <string name="ui_format_weeks">"%1$s สัปดาห์"</string>
+    <string name="ui_format_widget_teaching_week">"สัปดาห์การสอนที่ %1$s"</string>
+</resources>

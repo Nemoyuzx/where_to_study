@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\nKlien bebas tidak rasmi untuk jadual kuliah dan bilik kosong BUPT; bukan dikendalikan oleh universiti."</string>
+    <string name="ui_format_calendar_synced">"%1$s kursus disegerakkan ke kalendar sistem."</string>
+    <string name="ui_format_calendar_teaching_week">"Minggu kalendar %1$s, minggu pengajaran %2$s"</string>
+    <string name="ui_format_calendar_upsert">"%1$s kursus disegerakkan ke \"%2$s\" (%3$s baharu, %4$s dikemas kini)"</string>
+    <string name="ui_format_calendar_week">"Minggu kalendar %1$s"</string>
+    <string name="ui_format_calendar_week_unknown">"Minggu kalendar %1$s; minggu pengajaran belum tersedia"</string>
+    <string name="ui_format_course_count">"%1$s kursus"</string>
+    <string name="ui_format_courses">"%1$s kursus"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · Minggu pengajaran %2$s"</string>
+    <string name="ui_format_date_week">"%1$s · Minggu %2$s"</string>
+    <string name="ui_format_day_courses">"Kelas pada hari ini (%1$s)"</string>
+    <string name="ui_format_departures">"Jadual hari ini: %1$s waktu pelepasan · %2$s bas"</string>
+    <string name="ui_format_directions">"Hari ini: %1$s laluan, %2$s pelepasan berjadual"</string>
+    <string name="ui_format_ending">"Sedang berlangsung · tamat pada %1$s"</string>
+    <string name="ui_format_ends_at">"Tamat pada %1$s"</string>
+    <string name="ui_format_favorites">"Pengurusan kegemaran (%1$s)"</string>
+    <string name="ui_format_favorites_synced">"%1$s acara kegemaran disegerakkan ke \"%2$s\""</string>
+    <string name="ui_format_feed_saved">"Jadual tersuai disimpan: %1$s, %2$s item"</string>
+    <string name="ui_format_feed_source">"Sumber tersuai: %1$s"</string>
+    <string name="ui_format_from">"Mulai %1$s"</string>
+    <string name="ui_format_gpa">"Purata PNGK: %1$s"</string>
+    <string name="ui_format_next_departure">"Seterusnya %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"Notis jabatan logistik · %1$s"</string>
+    <string name="ui_format_period">"Waktu kelas %1$s"</string>
+    <string name="ui_format_period_compact">"Waktu kelas %1$s"</string>
+    <string name="ui_format_periods">"Waktu kelas %1$s-%2$s"</string>
+    <string name="ui_format_results">"%1$s hasil · disusun mengikut tarikh akhir"</string>
+    <string name="ui_format_schedule_updated">"Jadual peribadi dikemas kini: %1$s kursus"</string>
+    <string name="ui_format_semester">"Semester: %1$s"</string>
+    <string name="ui_format_teaching_week">"Minggu pengajaran %1$s"</string>
+    <string name="ui_format_teaching_week_axis">"Pengajaran\nMinggu %1$s"</string>
+    <string name="ui_format_today_courses">"Kelas hari ini · %1$s kursus"</string>
+    <string name="ui_format_updated">"Data dikemas kini: %1$s"</string>
+    <string name="ui_format_view_courses">"Lihat semua %1$s kursus"</string>
+    <string name="ui_format_week">"Minggu %1$s"</string>
+    <string name="ui_format_week_axis">"Kalendar %1$s\nPengajaran %2$s"</string>
+    <string name="ui_format_week_compact">"%1$s\nminggu"</string>
+    <string name="ui_format_weeks">"%1$s minggu"</string>
+    <string name="ui_format_widget_teaching_week">"Minggu pengajaran %1$s"</string>
+</resources>

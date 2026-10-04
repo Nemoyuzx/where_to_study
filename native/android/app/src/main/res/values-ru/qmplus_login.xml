@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"Учётная запись QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_failed">"Не удалось защищённо сохранить вход QMplus. Повторите попытку. Новые данные автозаполнения не включены."</string>
+    <string name="qmplus_saved_login_invalid">"Введите аккаунт QMplus и пароль и явно выберите сохранение."</string>
+    <string name="qmplus_saved_login_manual">"Пройдите вход, CAPTCHA или MFA на официальной странице. Приложение не принимает риски или соглашения за вас и не обходит проверку."</string>
+    <string name="qmplus_saved_login_notice">"По умолчанию выключено. Лишь после выбора и сохранения аккаунт и пароль QMplus шифруются локально в отдельной области Keystore для одной попытки автозаполнения доверенной официальной страницы. Пароли BUPT не переиспользуются, данные не идут на сервер проекта. CAPTCHA, MFA, выбор аккаунта и подтверждение рисков вы проходите сами. Новые данные отключают прежний сеанс; отключение или очистка локальных данных также удаляет сохранённый вход."</string>
+    <string name="qmplus_saved_login_opt_in">"Я выбираю локальное шифрованное хранение и автозаполнение официальной страницы"</string>
+    <string name="qmplus_saved_login_password">"Пароль QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_remove">"Удалить и отключить"</string>
+    <string name="qmplus_saved_login_save">"Сохранить с шифрованием"</string>
+    <string name="qmplus_saved_login_title">"Необязательно: сохранить данные входа QMplus"</string>
+</resources>

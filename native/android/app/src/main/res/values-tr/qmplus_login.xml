@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"QMplus / Queen Mary hesabı"</string>
+    <string name="qmplus_saved_login_failed">"QMplus giriş bilgileri güvenle kaydedilemedi. Yeniden deneyin. Yeni otomatik doldurma bilgileri etkinleştirilmedi."</string>
+    <string name="qmplus_saved_login_invalid">"QMplus hesabınızı ve parolanızı girip kaydetmeyi açıkça seçin."</string>
+    <string name="qmplus_saved_login_manual">"Giriş, CAPTCHA veya MFA işlemini resmi sayfada tamamlayın. Uygulama sizin yerinize risk veya sözleşme onaylamaz, doğrulamayı aşmaz."</string>
+    <string name="qmplus_saved_login_notice">"Varsayılan olarak kapalıdır. Yalnızca seçip kaydettikten sonra QMplus hesabınız ve parolanız, güvenilir resmi giriş sayfasında bir otomatik doldurma denemesi için ayrı Keystore alanında yerel olarak şifrelenir. BUPT parolaları yeniden kullanılmaz; bilgiler proje sunucusuna gitmez. CAPTCHA, MFA, hesap seçimi ve risk onaylarını siz tamamlarsınız. Farklı bilgi kaydetmek eski oturumu keser; bağlantıyı kesmek veya yerel verileri temizlemek kayıtlı bilgileri de kaldırır."</string>
+    <string name="qmplus_saved_login_opt_in">"Yerel şifreli saklamayı ve resmi sayfa otomatik doldurmasını seçiyorum"</string>
+    <string name="qmplus_saved_login_password">"QMplus / Queen Mary parolası"</string>
+    <string name="qmplus_saved_login_remove">"Kaldır ve bağlantıyı kes"</string>
+    <string name="qmplus_saved_login_save">"Şifreleyerek kaydet"</string>
+    <string name="qmplus_saved_login_title">"İsteğe bağlı: QMplus giriş bilgilerini kaydet"</string>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"QMplus / Queen Mary 帳戶"</string>
+    <string name="qmplus_saved_login_failed">"無法安全儲存 QMplus 登入資訊，請重試。未啟用新的自動填寫資訊。"</string>
+    <string name="qmplus_saved_login_invalid">"請輸入 QMplus 帳戶和密碼，並明確選擇儲存。"</string>
+    <string name="qmplus_saved_login_manual">"請在官方網頁完成登入、驗證碼或 MFA。應用程式不會代你確認風險、同意條款或繞過驗證。"</string>
+    <string name="qmplus_saved_login_notice">"預設不儲存。只有勾選並儲存後，QMplus 帳戶和密碼才會加密儲存在本機獨立的 Keystore 範圍，僅用於受信官方登入網頁的一次自動填寫；不會重用北郵密碼或傳送至本專案伺服器。驗證碼、MFA、帳戶選擇和風險確認仍由你完成。變更儲存資訊會中斷舊 QMplus 連線；中斷連線或清除本機資料也會移除儲存資訊。"</string>
+    <string name="qmplus_saved_login_opt_in">"我選擇在本機加密儲存並用於官方網頁填寫"</string>
+    <string name="qmplus_saved_login_password">"QMplus / Queen Mary 密碼"</string>
+    <string name="qmplus_saved_login_remove">"移除並中斷連線"</string>
+    <string name="qmplus_saved_login_save">"加密儲存"</string>
+    <string name="qmplus_saved_login_title">"可選：儲存 QMplus 登入資訊"</string>
+</resources>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\n北郵課表與空教室查詢的獨立非官方客戶端，不由北京郵電大學運營。"</string>
+    <string name="ui_format_calendar_synced">"已同步 %1$s 條課程到系統日曆。"</string>
+    <string name="ui_format_calendar_teaching_week">"公曆第%1$s周，第%2$s教學周"</string>
+    <string name="ui_format_calendar_upsert">"已同步 %1$s 條課程到「%2$s」（新增 %3$s，更新 %4$s）"</string>
+    <string name="ui_format_calendar_week">"公曆第%1$s周"</string>
+    <string name="ui_format_calendar_week_unknown">"公曆第%1$s周，暫無教學周資訊"</string>
+    <string name="ui_format_course_count">"%1$s 門"</string>
+    <string name="ui_format_courses">"%1$s 門課"</string>
+    <string name="ui_format_date_teaching_week">"%1$s 第%2$s教學周"</string>
+    <string name="ui_format_date_week">"%1$s 第%2$s周"</string>
+    <string name="ui_format_day_courses">"當日課程（%1$s）"</string>
+    <string name="ui_format_departures">"今日安排 %1$s 個發車時刻 · %2$s 輛車"</string>
+    <string name="ui_format_directions">"今日共 %1$s 個方向、%2$s 個計劃班次"</string>
+    <string name="ui_format_ending">"進行中 · %1$s 下課"</string>
+    <string name="ui_format_ends_at">"%1$s 下課"</string>
+    <string name="ui_format_favorites">"收藏管理（%1$s）"</string>
+    <string name="ui_format_favorites_synced">"已同步 %1$s 條收藏日程到「%2$s」"</string>
+    <string name="ui_format_feed_saved">"自定義日程已儲存：%1$s，%2$s 項"</string>
+    <string name="ui_format_feed_source">"自定義來源：%1$s"</string>
+    <string name="ui_format_from">"%1$s 起"</string>
+    <string name="ui_format_gpa">"平均學分績點：%1$s"</string>
+    <string name="ui_format_next_departure">"下一班 %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"後勤部通知 · %1$s"</string>
+    <string name="ui_format_period">"第 %1$s 節"</string>
+    <string name="ui_format_period_compact">"第%1$s節"</string>
+    <string name="ui_format_periods">"第 %1$s-%2$s 節"</string>
+    <string name="ui_format_results">"%1$s 條結果 · 按 DDL 時間升序"</string>
+    <string name="ui_format_schedule_updated">"個人課表已更新，共 %1$s 門課程"</string>
+    <string name="ui_format_semester">"學期：%1$s"</string>
+    <string name="ui_format_teaching_week">"第%1$s教學周"</string>
+    <string name="ui_format_teaching_week_axis">"教學\n第%1$s周"</string>
+    <string name="ui_format_today_courses">"今日課程 · %1$s 門"</string>
+    <string name="ui_format_updated">"數據更新時間：%1$s"</string>
+    <string name="ui_format_view_courses">"查看全部 %1$s 門課程"</string>
+    <string name="ui_format_week">"第%1$s周"</string>
+    <string name="ui_format_week_axis">"公曆 %1$s\n教學 %2$s"</string>
+    <string name="ui_format_week_compact">"%1$s\n周"</string>
+    <string name="ui_format_weeks">"%1$s 周"</string>
+    <string name="ui_format_widget_teaching_week">"教學第%1$s周"</string>
+</resources>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\n北郵の時間割と空き教室を検索する独立した非公式クライアントです。北京郵電大学による運営ではありません。"</string>
+    <string name="ui_format_calendar_synced">"授業%1$s件をシステムカレンダーに同期しました。"</string>
+    <string name="ui_format_calendar_teaching_week">"暦の第%1$s週・授業第%2$s週"</string>
+    <string name="ui_format_calendar_upsert">"授業%1$s件を「%2$s」に同期しました（新規%3$s件、更新%4$s件）。"</string>
+    <string name="ui_format_calendar_week">"暦の第%1$s週"</string>
+    <string name="ui_format_calendar_week_unknown">"暦の第%1$s週（授業週の情報なし）"</string>
+    <string name="ui_format_course_count">"%1$s科目"</string>
+    <string name="ui_format_courses">"%1$s科目"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · 授業第%2$s週"</string>
+    <string name="ui_format_date_week">"%1$s · 第%2$s週"</string>
+    <string name="ui_format_day_courses">"この日の授業（%1$s）"</string>
+    <string name="ui_format_departures">"今日：%1$s件の出発時刻 · %2$s台"</string>
+    <string name="ui_format_directions">"今日：%1$s方向・%2$s便の運行予定"</string>
+    <string name="ui_format_ending">"授業中 · %1$sに終了"</string>
+    <string name="ui_format_ends_at">"%1$sに終了"</string>
+    <string name="ui_format_favorites">"お気に入り管理（%1$s）"</string>
+    <string name="ui_format_favorites_synced">"お気に入り日程%1$s件を「%2$s」に同期しました。"</string>
+    <string name="ui_format_feed_saved">"カスタム予定を保存しました：%1$s、%2$s件"</string>
+    <string name="ui_format_feed_source">"カスタム提供元：%1$s"</string>
+    <string name="ui_format_from">"%1$sから"</string>
+    <string name="ui_format_gpa">"平均GPA：%1$s"</string>
+    <string name="ui_format_next_departure">"次の便 %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"後勤部の通知 · %1$s"</string>
+    <string name="ui_format_period">"%1$s時限"</string>
+    <string name="ui_format_period_compact">"%1$s時限"</string>
+    <string name="ui_format_periods">"%1$s-%2$s時限"</string>
+    <string name="ui_format_results">"%1$s件 · 締切の早い順"</string>
+    <string name="ui_format_schedule_updated">"個人時間割を更新しました（%1$s科目）"</string>
+    <string name="ui_format_semester">"学期：%1$s"</string>
+    <string name="ui_format_teaching_week">"授業第%1$s週"</string>
+    <string name="ui_format_teaching_week_axis">"授業\n第%1$s週"</string>
+    <string name="ui_format_today_courses">"今日の授業 · %1$s科目"</string>
+    <string name="ui_format_updated">"データ更新日時：%1$s"</string>
+    <string name="ui_format_view_courses">"すべての%1$s科目を表示"</string>
+    <string name="ui_format_week">"第%1$s週"</string>
+    <string name="ui_format_week_axis">"暦 %1$s\n授業 %2$s"</string>
+    <string name="ui_format_week_compact">"%1$s\n週"</string>
+    <string name="ui_format_weeks">"%1$s週間"</string>
+    <string name="ui_format_widget_teaching_week">"授業第%1$s週"</string>
+</resources>

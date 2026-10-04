@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"QMplus / Queen Maryのアカウント"</string>
+    <string name="qmplus_saved_login_failed">"QMplusログイン情報を安全に保存できません。再試行してください。新しい自動入力情報は有効になっていません。"</string>
+    <string name="qmplus_saved_login_invalid">"QMplusアカウントとパスワードを入力し、保存を明示的に選択してください。"</string>
+    <string name="qmplus_saved_login_manual">"公式ページでログイン、CAPTCHA、MFAを完了してください。アプリは代わりにリスクを承認したり、規約に同意したり、認証を回避したりしません。"</string>
+    <string name="qmplus_saved_login_notice">"既定では保存しません。チェックを入れて保存した場合のみ、QMplusアカウントとパスワードをこのデバイスの独立したKeystore領域に暗号化して保存し、信頼された公式ログインページで1回の自動入力にのみ使用します。北郵のパスワードを再利用せず、本プロジェクトのサーバーにも送信しません。CAPTCHA、MFA、アカウント選択、リスク確認は引き続きユーザーが行います。保存情報を変更すると以前のQMplusセッションが切断されます。切断やローカルデータの消去でも保存情報は削除されます。"</string>
+    <string name="qmplus_saved_login_opt_in">"このデバイスに暗号化して保存し、公式ページへの入力に使用することを選択します"</string>
+    <string name="qmplus_saved_login_password">"QMplus / Queen Maryのパスワード"</string>
+    <string name="qmplus_saved_login_remove">"削除して切断"</string>
+    <string name="qmplus_saved_login_save">"暗号化して保存"</string>
+    <string name="qmplus_saved_login_title">"任意：QMplusのログイン情報を保存"</string>
+</resources>

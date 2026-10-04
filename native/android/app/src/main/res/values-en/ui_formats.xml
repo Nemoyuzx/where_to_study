@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\nIndependent unofficial BUPT schedule and classroom client; not operated by the university."</string>
+    <string name="ui_format_calendar_synced">"Synced %1$s courses to the system calendar."</string>
+    <string name="ui_format_calendar_teaching_week">"Calendar week %1$s, teaching week %2$s"</string>
+    <string name="ui_format_calendar_upsert">"Synced %1$s courses to \"%2$s\" (%3$s added, %4$s updated)."</string>
+    <string name="ui_format_calendar_week">"Calendar week %1$s"</string>
+    <string name="ui_format_calendar_week_unknown">"Calendar week %1$s, teaching week unavailable"</string>
+    <string name="ui_format_course_count">"%1$s courses"</string>
+    <string name="ui_format_courses">"%1$s courses"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · Teaching Week %2$s"</string>
+    <string name="ui_format_date_week">"%1$s · Week %2$s"</string>
+    <string name="ui_format_day_courses">"Courses for This Day (%1$s)"</string>
+    <string name="ui_format_departures">"Today: %1$s departure times · %2$s vehicles"</string>
+    <string name="ui_format_directions">"Today: %1$s directions, %2$s scheduled departures"</string>
+    <string name="ui_format_ending">"In progress · ends at %1$s"</string>
+    <string name="ui_format_ends_at">"Ends at %1$s"</string>
+    <string name="ui_format_favorites">"Favorite Management (%1$s)"</string>
+    <string name="ui_format_favorites_synced">"Synced %1$s favorite events to \"%2$s\"."</string>
+    <string name="ui_format_feed_saved">"Custom feed saved: %1$s, %2$s items"</string>
+    <string name="ui_format_feed_source">"Custom source: %1$s"</string>
+    <string name="ui_format_from">"From %1$s"</string>
+    <string name="ui_format_gpa">"Average grade point: %1$s"</string>
+    <string name="ui_format_next_departure">"Next %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"Logistics notice · %1$s"</string>
+    <string name="ui_format_period">"Period %1$s"</string>
+    <string name="ui_format_period_compact">"Period %1$s"</string>
+    <string name="ui_format_periods">"Periods %1$s–%2$s"</string>
+    <string name="ui_format_results">"%1$s results · sorted by deadline"</string>
+    <string name="ui_format_schedule_updated">"Personal schedule updated: %1$s courses"</string>
+    <string name="ui_format_semester">"Semester: %1$s"</string>
+    <string name="ui_format_teaching_week">"Teaching Week %1$s"</string>
+    <string name="ui_format_teaching_week_axis">"Teaching\nWeek %1$s"</string>
+    <string name="ui_format_today_courses">"Today\'s Courses · %1$s"</string>
+    <string name="ui_format_updated">"Updated: %1$s"</string>
+    <string name="ui_format_view_courses">"View all %1$s courses"</string>
+    <string name="ui_format_week">"Week %1$s"</string>
+    <string name="ui_format_week_axis">"Calendar %1$s\nTeaching %2$s"</string>
+    <string name="ui_format_week_compact">"W%1$s"</string>
+    <string name="ui_format_weeks">"%1$s weeks"</string>
+    <string name="ui_format_widget_teaching_week">"Teaching week %1$s"</string>
+</resources>

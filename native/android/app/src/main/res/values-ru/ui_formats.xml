@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\nНезависимый неофициальный клиент расписания и аудиторий BUPT; университет его не обслуживает."</string>
+    <string name="ui_format_calendar_synced">"В системный календарь синхронизировано курсов: %1$s."</string>
+    <string name="ui_format_calendar_teaching_week">"Календарная неделя %1$s, учебная неделя %2$s"</string>
+    <string name="ui_format_calendar_upsert">"В \"%2$s\" синхронизировано курсов: %1$s (добавлено %3$s, обновлено %4$s)."</string>
+    <string name="ui_format_calendar_week">"Календарная неделя %1$s"</string>
+    <string name="ui_format_calendar_week_unknown">"Календарная неделя %1$s, учебная неделя неизвестна"</string>
+    <string name="ui_format_course_count">"Курсов: %1$s"</string>
+    <string name="ui_format_courses">"Курсов: %1$s"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · Учебная неделя %2$s"</string>
+    <string name="ui_format_date_week">"%1$s · Неделя %2$s"</string>
+    <string name="ui_format_day_courses">"Занятия в этот день (%1$s)"</string>
+    <string name="ui_format_departures">"Сегодня: отправлений %1$s · автобусов %2$s"</string>
+    <string name="ui_format_directions">"Сегодня: направлений %1$s, запланированных рейсов %2$s"</string>
+    <string name="ui_format_ending">"Идёт · Окончание в %1$s"</string>
+    <string name="ui_format_ends_at">"Окончание в %1$s"</string>
+    <string name="ui_format_favorites">"Управление избранным (%1$s)"</string>
+    <string name="ui_format_favorites_synced">"В \"%2$s\" синхронизировано избранных событий: %1$s."</string>
+    <string name="ui_format_feed_saved">"Источник сохранён: %1$s, записей %2$s"</string>
+    <string name="ui_format_feed_source">"Свой источник: %1$s"</string>
+    <string name="ui_format_from">"С %1$s"</string>
+    <string name="ui_format_gpa">"Средний балл: %1$s"</string>
+    <string name="ui_format_next_departure">"Следующий %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"Объявление хозяйственного отдела · %1$s"</string>
+    <string name="ui_format_period">"Период %1$s"</string>
+    <string name="ui_format_period_compact">"Период %1$s"</string>
+    <string name="ui_format_periods">"Периоды %1$s–%2$s"</string>
+    <string name="ui_format_results">"Результатов: %1$s · по возрастанию срока"</string>
+    <string name="ui_format_schedule_updated">"Личное расписание обновлено: курсов %1$s"</string>
+    <string name="ui_format_semester">"Семестр: %1$s"</string>
+    <string name="ui_format_teaching_week">"Учебная неделя %1$s"</string>
+    <string name="ui_format_teaching_week_axis">"Учебная\nНеделя %1$s"</string>
+    <string name="ui_format_today_courses">"Занятия сегодня · %1$s"</string>
+    <string name="ui_format_updated">"Обновлено: %1$s"</string>
+    <string name="ui_format_view_courses">"Показать все %1$s курсов"</string>
+    <string name="ui_format_week">"Неделя %1$s"</string>
+    <string name="ui_format_week_axis">"Календарь %1$s\nУчебный %2$s"</string>
+    <string name="ui_format_week_compact">"Н%1$s"</string>
+    <string name="ui_format_weeks">"Недель: %1$s"</string>
+    <string name="ui_format_widget_teaching_week">"Учебная неделя %1$s"</string>
+</resources>

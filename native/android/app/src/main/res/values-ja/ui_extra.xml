@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_11979c5c7acc">"メインカラー"</string>
+    <string name="ui_chrome_136e42c8ec73">"カスタムRGBカラー"</string>
+    <string name="ui_chrome_1a0be4bd6722">"18日 · サンプル授業"</string>
+    <string name="ui_chrome_1a9a3e51eed7">"認証情報とキャッシュは、置き換え、消去、アプリのアンインストールまで端末に保存されます。ローカルデータの消去では、大学や第三者が保有する記録は削除されません。"</string>
+    <string name="ui_chrome_1fd32f10122e">"カラーテーマを保存できませんでした。再試行してください。"</string>
+    <string name="ui_chrome_29f63f7b210e">"カスタムカラーを適用"</string>
+    <string name="ui_chrome_41fa6af5de9e">"配色プレビュー"</string>
+    <string name="ui_chrome_437a23f5a691">"6桁のRGB値を入力してください（例：#166B5D）"</string>
+    <string name="ui_chrome_4e62728c3d05">"QMplusは北郵の教務アカウントとは独立しています。利用者が接続を選んだ場合のみ、アプリ専用の独立したWebViewプロセスとプロファイルでQMplus公式ページを開き、本人がSSO／Microsoft MFAを完了します。Microsoftパスワードの入力欄は設けず、外部ブラウザーのCookieも読み取りません。読み取り専用スクリプトは容量を制限した授業とAssignment／Quizの業務スナップショットのみを返し、パスワード、Cookie、sesskey、トークン、完全なHTMLは返しません。課題の提出や小テストの開始を行わず、第三者のWorkerや本プロジェクトのサーバーも経由しません。スナップショットはアプリ専用ストレージに保存され、一部取得に失敗した場合は以前の情報を明示して保持します。切断やローカルデータの消去でアプリが管理するウェブセッションとスナップショットを削除します。北郵のアカウントを変更してもQMplusの利用者は自動的には切り替わりません。QMplus／Microsoftは各社の方針に従ってログイン情報とネットワークメタデータを処理する場合があります。"</string>
+    <string name="ui_chrome_4ee8a755167e">"既定の青緑"</string>
+    <string name="ui_chrome_5065fa9d9721">"時間割を見る"</string>
+    <string name="ui_chrome_52466d500ebc">"セキュリティの問題はSECURITY.mdに従って報告してください。プライバシーの問題は、機密情報を含めずにGitHubのIssueへ投稿できます。アカウント、パスワード、トークン、個人時間割を公開しないでください。"</string>
+    <string name="ui_chrome_63fb443d8deb">"注目情報"</string>
+    <string name="ui_chrome_6c4174ecc9fd">"パスワードはHTTPSでauth.bupt.edu.cnにのみ送信し、ワンタイムチケットをメモリ内トークンに交換してからapiucloud.bupt.edu.cnの課題を取得します。教育クラウドプラットフォーム用の個別パスワードを同じ保護された認証情報ストレージに保存することもでき、未設定なら教務パスワードを使用します。ブラウザーのCookieは読み取らず、UCloud APIにパスワードを送信しません。チケット、Cookie、トークン、課題をディスクに保存せず、結果はメモリ内で最大10分間再利用します。"</string>
+    <string name="ui_chrome_822eb432b858">"選択日"</string>
+    <string name="ui_chrome_8387adc19d38">"アプリはunpkgからバージョン固定のholiday-calendarデータを取得する場合があります。Androidでは権限があればシステムの祝日カレンダーを読み取る場合もあります。リクエストに含まれるのはCNと年だけです。iOSは正式な休業日データに基づく場合のみ「休」を表示します。"</string>
+    <string name="ui_chrome_85e2f87b9f51">"UAPIはキャンパス所在地の行政区に基づく天気と基本的な暦情報を提供し、GPSは読み取りません。Timelessが宜忌の情報を補足する場合があります。公開イベントはGitHubのContest DDLを優先し、where-to-study.cnのミラーはデータの更新時刻が新しい場合のみ使用します。両方利用できない場合は既存の予備APIを使用します。学内コンテストの通知には別の情報源があります。これらの公開情報のリクエストに個人の認証情報は含まれません。カスタム日程は入力されたHTTPSアドレスに認証情報のないGETのみを送信し、リダイレクト、ローカルアドレス、プライベート／予約IPのリテラルを拒否します。応答の上限は2 MiBです。表示データは参考情報です。"</string>
+    <string name="ui_chrome_8e5c672defaa">"学籍番号とパスワードはOSの保護された認証情報ストレージに保存されます。有効な認証情報を保存し、自動学期検出を有効にすると、起動時に個人時間割を1回更新して学期IDと第1週の月曜日を確認します。時間割、空き教室、課題を手動で要求した場合も、各用途に応じてHTTPSで認証情報を使用します。時間割と空き教室のリクエストはjwglweixin.bupt.edu.cnに送信され、対応プラットフォームでは当日の空き教室を自動更新する場合もあります。開発者は認証情報を読み取れず、設定APIもパスワードを返しません。"</string>
+    <string name="ui_chrome_9832e5677a6d">"本プロジェクトは公開シャトルバス・活動データを整理する固定APIのみを運営しています。ユーザーアカウント、クラウド同期、広告、分析、行動追跡のサービスは提供せず、GPS位置情報、連絡先、広告識別子、診断情報、利用行動を収集しません。北郵のサービス、unpkg、UAPI、Timeless、GitHub Pages、Where To Studyの固定公開API、およびユーザーが選択したカスタム予定サーバーは、各自のポリシーに従ってIPアドレスやリクエスト時刻などの通常のネットワークメタデータを処理する場合があります。"</string>
+    <string name="ui_chrome_9cd555d72f1b">"6桁の16進数カラーを入力してください。先頭の#は任意です。文字のコントラストは自動調整されます。"</string>
+    <string name="ui_chrome_a2bb37329824">"選択日 · 18"</string>
+    <string name="ui_chrome_a6664df1efc8">"ローズ"</string>
+    <string name="ui_chrome_aa5c949544cd">"メインカラーに合わせてページ、カード、操作部品の背景色も変わります。ライト／ダーク表示は引き続きシステム設定に従います。"</string>
+    <string name="ui_chrome_aed843d1bd0b">"ウォームアンバー"</string>
+    <string name="ui_chrome_b364d8185174">"今日の予定"</string>
+    <string name="ui_chrome_ba2e93e73037">"既定に戻す"</string>
+    <string name="ui_chrome_c0902fbc988c">"時間割、空き教室、キャンパス、学期、スイッチ、カスタム予定のURL、最大500件のお気に入りスナップショットはデバイス上に保存されます。授業ウィジェットはローカルの時間割のみを読み取ります。授業の削除記録はアカウントと学期ごとに分離され、このデバイスの有効な時間割にのみ影響し、設定から復元できます。「ローカルデータを消去」でこれらすべてが削除されます。"</string>
+    <string name="ui_chrome_c2f43ebe2000">"アイリスバイオレット"</string>
+    <string name="ui_chrome_c3b3e760e0ee">"カレンダーへの書き込みとローカルの授業通知には、ユーザーの操作と権限が必要です。アプリはWhere To Studyの印が付いたイベントのみを管理します。授業ウィジェットは対応プラットフォームでのみ利用でき、関連データはアップロードされません。"</string>
+    <string name="ui_chrome_dcdf1f46691c">"オーシャンブルー"</string>
+    <string name="ui_chrome_ddb3b7159fd2">"カラーテーマ"</string>
+    <string name="ui_chrome_f84e05423960">"アクセント色"</string>
+    <string name="ui_chrome_fe6a96889808">"QMplusの独立した接続"</string>
+</resources>

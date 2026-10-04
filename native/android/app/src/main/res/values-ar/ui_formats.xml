@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\nعميل مستقل غير رسمي لجداول BUPT والقاعات الشاغرة؛ لا تديره الجامعة."</string>
+    <string name="ui_format_calendar_synced">"زُومنت %1$s مقررات إلى تقويم النظام."</string>
+    <string name="ui_format_calendar_teaching_week">"الأسبوع الميلادي %1$s، الأسبوع الدراسي %2$s"</string>
+    <string name="ui_format_calendar_upsert">"زُومنت %1$s مقررات إلى \"%2$s\" (أُضيف %3$s، حُدث %4$s)."</string>
+    <string name="ui_format_calendar_week">"الأسبوع الميلادي %1$s"</string>
+    <string name="ui_format_calendar_week_unknown">"الأسبوع الميلادي %1$s، الأسبوع الدراسي غير متاح"</string>
+    <string name="ui_format_course_count">"%1$s مقررات"</string>
+    <string name="ui_format_courses">"%1$s مقررات"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · الأسبوع الدراسي %2$s"</string>
+    <string name="ui_format_date_week">"%1$s · الأسبوع %2$s"</string>
+    <string name="ui_format_day_courses">"مقررات هذا اليوم (%1$s)"</string>
+    <string name="ui_format_departures">"اليوم: %1$s مواعيد انطلاق · %2$s حافلات"</string>
+    <string name="ui_format_directions">"اليوم: %1$s اتجاهات، %2$s رحلات مقررة"</string>
+    <string name="ui_format_ending">"جارٍ الآن · تنتهي في %1$s"</string>
+    <string name="ui_format_ends_at">"تنتهي في %1$s"</string>
+    <string name="ui_format_favorites">"إدارة المفضلة (%1$s)"</string>
+    <string name="ui_format_favorites_synced">"زُومنت %1$s فعاليات مفضلة إلى \"%2$s\"."</string>
+    <string name="ui_format_feed_saved">"حُفظ المصدر المخصص: %1$s، %2$s عناصر"</string>
+    <string name="ui_format_feed_source">"مصدر مخصص: %1$s"</string>
+    <string name="ui_format_from">"من %1$s"</string>
+    <string name="ui_format_gpa">"المعدل الدراسي (GPA): %1$s"</string>
+    <string name="ui_format_next_departure">"الحافلة التالية %1$s · من %2$s إلى %3$s"</string>
+    <string name="ui_format_notice">"إعلان إدارة الخدمات · %1$s"</string>
+    <string name="ui_format_period">"الحصة %1$s"</string>
+    <string name="ui_format_period_compact">"الحصة %1$s"</string>
+    <string name="ui_format_periods">"الحصص %1$s–%2$s"</string>
+    <string name="ui_format_results">"%1$s نتائج · مرتبة حسب الموعد النهائي"</string>
+    <string name="ui_format_schedule_updated">"حُدث الجدول الشخصي: %1$s مقررات"</string>
+    <string name="ui_format_semester">"الفصل الدراسي: %1$s"</string>
+    <string name="ui_format_teaching_week">"الأسبوع الدراسي %1$s"</string>
+    <string name="ui_format_teaching_week_axis">"دراسي\nالأسبوع %1$s"</string>
+    <string name="ui_format_today_courses">"مقررات اليوم · %1$s"</string>
+    <string name="ui_format_updated">"التحديث: %1$s"</string>
+    <string name="ui_format_view_courses">"عرض كل المقررات %1$s"</string>
+    <string name="ui_format_week">"الأسبوع %1$s"</string>
+    <string name="ui_format_week_axis">"ميلادي %1$s\nدراسي %2$s"</string>
+    <string name="ui_format_week_compact">"%1$s\nأسبوع"</string>
+    <string name="ui_format_weeks">"%1$s أسابيع"</string>
+    <string name="ui_format_widget_teaching_week">"الأسبوع الدراسي %1$s"</string>
+</resources>

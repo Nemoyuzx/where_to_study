@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"Akaun QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_failed">"Maklumat log masuk QMplus tidak dapat disimpan dengan selamat. Cuba lagi. Maklumat autofill baharu tidak dihidupkan."</string>
+    <string name="qmplus_saved_login_invalid">"Masukkan akaun dan kata laluan QMplus, kemudian pilih Simpan dengan jelas."</string>
+    <string name="qmplus_saved_login_manual">"Lengkapkan log masuk, CAPTCHA atau MFA pada laman rasmi. Aplikasi tidak akan menerima risiko, bersetuju dengan perjanjian atau memintas pengesahan bagi pihak anda."</string>
+    <string name="qmplus_saved_login_notice">"Tidak disimpan secara lalai. Hanya selepas anda menanda dan menyimpan, akaun serta kata laluan QMplus disulitkan dalam domain Keystore berasingan pada peranti ini untuk satu cubaan autofill di laman log masuk rasmi yang dipercayai. Kata laluan BUPT tidak digunakan semula dan maklumat ini tidak dihantar ke pelayan projek. CAPTCHA, MFA, pemilihan akaun dan pengesahan risiko tetap anda lakukan sendiri. Mengubah maklumat tersimpan memutuskan sesi QMplus lama; memutuskan sambungan atau mengosongkan data setempat juga memadam maklumat tersebut."</string>
+    <string name="qmplus_saved_login_opt_in">"Saya memilih penyimpanan tersulit pada peranti ini untuk mengisi laman rasmi"</string>
+    <string name="qmplus_saved_login_password">"Kata laluan QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_remove">"Buang dan putuskan sambungan"</string>
+    <string name="qmplus_saved_login_save">"Simpan secara tersulit"</string>
+    <string name="qmplus_saved_login_title">"Pilihan: simpan maklumat log masuk QMplus"</string>
+</resources>

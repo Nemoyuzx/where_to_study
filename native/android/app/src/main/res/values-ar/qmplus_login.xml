@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"حساب QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_failed">"تعذّر حفظ بيانات دخول QMplus بأمان. حاول مجددًا. لم تُفعّل بيانات التعبئة الجديدة."</string>
+    <string name="qmplus_saved_login_invalid">"أدخل حساب QMplus وكلمة مروره واختر الحفظ صراحةً."</string>
+    <string name="qmplus_saved_login_manual">"أكمل الدخول أو CAPTCHA أو MFA على الصفحة الرسمية. لا يقبل التطبيق مخاطر أو اتفاقيات نيابةً عنك ولا يتجاوز التحقق."</string>
+    <string name="qmplus_saved_login_notice">"متوقف افتراضيًا. لا يُشفر حساب QMplus وكلمة مروره محليًا في نطاق Keystore مستقل لمحاولة تعبئة واحدة على صفحة دخول رسمية موثوقة إلا بعد اختيارك وحفظك. لا تُعاد استخدام كلمات مرور BUPT ولا تُرسل البيانات إلى خادم المشروع. تبقى CAPTCHA وMFA واختيار الحساب وتأكيد المخاطر مسؤوليتك. يؤدي حفظ بيانات مختلفة إلى قطع الجلسة القديمة؛ كما يزيل قطع الاتصال أو مسح البيانات المحلية المعلومات المحفوظة."</string>
+    <string name="qmplus_saved_login_opt_in">"أختار الحفظ المحلي المشفّر والتعبئة على الموقع الرسمي"</string>
+    <string name="qmplus_saved_login_password">"كلمة مرور QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_remove">"إزالة وقطع الاتصال"</string>
+    <string name="qmplus_saved_login_save">"حفظ مشفّر"</string>
+    <string name="qmplus_saved_login_title">"اختياري: حفظ بيانات دخول QMplus"</string>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"บัญชี QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_failed">"บันทึกข้อมูลลงชื่อเข้าใช้ QMplus อย่างปลอดภัยไม่ได้ โปรดลองอีกครั้ง ข้อมูลกรอกอัตโนมัติใหม่ยังไม่เปิดใช้งาน"</string>
+    <string name="qmplus_saved_login_invalid">"กรอกบัญชีและรหัสผ่าน QMplus แล้วเลือกบันทึกอย่างชัดเจน"</string>
+    <string name="qmplus_saved_login_manual">"โปรดลงชื่อเข้าใช้ ทำ CAPTCHA หรือ MFA บนเว็บไซต์ทางการเอง แอปไม่ยืนยันความเสี่ยง ยอมรับข้อตกลง หรือข้ามการยืนยันแทนคุณ"</string>
+    <string name="qmplus_saved_login_notice">"ไม่บันทึกเป็นค่าเริ่มต้น เฉพาะเมื่อคุณเลือกและบันทึก บัญชีและรหัสผ่าน QMplus จึงเข้ารหัสในพื้นที่ Keystore แยกบนเครื่อง เพื่อกรอกอัตโนมัติหนึ่งครั้งบนหน้าเข้าสู่ระบบทางการที่เชื่อถือได้ ไม่ใช้รหัสผ่าน BUPT ซ้ำและไม่ส่งไปยังเซิร์ฟเวอร์โครงการ คุณยังต้องทำ CAPTCHA MFA เลือกบัญชี และยืนยันความเสี่ยงเอง การเปลี่ยนข้อมูลที่บันทึกจะตัดเซสชัน QMplus เดิม การยกเลิกการเชื่อมต่อหรือล้างข้อมูลในเครื่องจะลบข้อมูลที่บันทึกด้วย"</string>
+    <string name="qmplus_saved_login_opt_in">"ฉันเลือกบันทึกแบบเข้ารหัสบนเครื่องนี้เพื่อกรอกในเว็บไซต์ทางการ"</string>
+    <string name="qmplus_saved_login_password">"รหัสผ่าน QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_remove">"นำออกและยกเลิกการเชื่อมต่อ"</string>
+    <string name="qmplus_saved_login_save">"บันทึกแบบเข้ารหัส"</string>
+    <string name="qmplus_saved_login_title">"ไม่บังคับ: บันทึกข้อมูลลงชื่อเข้าใช้ QMplus"</string>
+</resources>

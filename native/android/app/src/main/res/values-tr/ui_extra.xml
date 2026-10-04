@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_11979c5c7acc">"Ana renk"</string>
+    <string name="ui_chrome_136e42c8ec73">"Özel RGB renkleri"</string>
+    <string name="ui_chrome_1a0be4bd6722">"18 · Örnek ders"</string>
+    <string name="ui_chrome_1a9a3e51eed7">"Giriş bilgileri ve önbellekler değiştirilene, temizlenene veya uygulamayla birlikte kaldırılana kadar cihazda kalır. Yerel verileri temizlemek üçüncü taraf kayıtlarını silmez."</string>
+    <string name="ui_chrome_1fd32f10122e">"Renk teması kaydedilemedi. Yeniden deneyin."</string>
+    <string name="ui_chrome_29f63f7b210e">"Özel renkleri uygula"</string>
+    <string name="ui_chrome_41fa6af5de9e">"Tema önizlemesi"</string>
+    <string name="ui_chrome_437a23f5a691">"6 RGB hanesi girin, örn. #166B5D"</string>
+    <string name="ui_chrome_4e62728c3d05">"QMplus, BUPT akademik hesabından bağımsızdır. Uygulama yalnızca siz bağlanmayı seçtiğinizde resmi QMplus sayfasını kendisine ait ayrı WebView süreci ve profilinde açar; SSO/Microsoft MFA işlemlerini doğrudan bu sayfada tamamlarsınız. Uygulamada Microsoft parola alanı yoktur ve dış tarayıcıların Cookie verileri okunmaz. Salt okunur betik; parola, Cookie, oturum anahtarı, belirteç veya tam HTML yerine boyutu sınırlı bir ders ve ödev/quiz anlık görüntüsü döndürür. Ödev göndermez, quiz başlatmaz ve üçüncü taraf Worker ya da bu projenin sunucusunu kullanmaz. Anlık görüntü uygulamaya özel depoda saklanır; gerçek kısmi hatalarda bilinen bilgiler açıklanarak korunur. Bağlantıyı kesmek veya yerel verileri temizlemek, uygulamanın yönettiği web oturumunu ve anlık görüntüyü kaldırır; BUPT bilgilerini değiştirmek QMplus kimliğini değiştirmez. Resmi QMplus/Microsoft hizmetleri, giriş bilgilerini ve ağ meta verilerini kendi politikalarına göre işleyebilir."</string>
+    <string name="ui_chrome_4ee8a755167e">"Klasik turkuaz"</string>
+    <string name="ui_chrome_5065fa9d9721">"Programı görüntüle"</string>
+    <string name="ui_chrome_52466d500ebc">"Güvenlik bildirimlerinde SECURITY.md dosyasını izleyin. GitHub\'da yalnızca hassas bilgi içermeyen gizlilik sorunları açın; giriş bilgisi, belirteç veya kişisel program yayımlamayın."</string>
+    <string name="ui_chrome_63fb443d8deb">"Vurgulanan not"</string>
+    <string name="ui_chrome_6c4174ecc9fd">"Parola yalnızca HTTPS üzerinden auth.bupt.edu.cn adresine gönderilir. İsteğe bağlı ayrı Teaching Cloud Platform parolası aynı korumalı depoda tutulur; belirtilmezse akademik parola kullanılır. apiucloud.bupt.edu.cn ile bellekteki belirteç kullanılır. Tarayıcı Cookie verileri, biletler, belirteçler veya ödevler diske kaydedilmez; sonuçlar bellekte en fazla on dakika yeniden kullanılır."</string>
+    <string name="ui_chrome_822eb432b858">"Seçilen tarih"</string>
+    <string name="ui_chrome_8387adc19d38">"Uygulama unpkg üzerinden sabit sürümlü holiday-calendar verilerini alabilir; Android izin verildiğinde sistemin tatil takvimini okuyabilir. İsteklerde yalnızca CN ve yıl bulunur. iOS, dinlenme günlerini yalnızca güvenilir verilere göre işaretler."</string>
+    <string name="ui_chrome_85e2f87b9f51">"UAPI, GPS okumadan kampüsün bulunduğu bölgeye göre hava durumunu ve temel geleneksel takvim verilerini sunar. Timeless ek geleneksel öneriler sağlayabilir. Herkese açık etkinlikler önce GitHub üzerindeki Contest DDL kaynağından alınır; where-to-study.cn aynası yalnızca daha güncel olduğunda, mevcut yedek API ise iki kaynak da erişilemediğinde kullanılır. Kampüs yarışma duyuruları ayrı kaynaktan gelir. Bu açık istekler kişisel giriş bilgisi içermez. Özel takvimler yalnızca sizin belirttiğiniz HTTPS adresine kimlik bilgisiz GET gönderir; yönlendirmeler, localhost ve özel/ayrılmış IP adresleri reddedilir, yanıt sınırı 2 MiB\'dır. Gösterilen bilgiler yalnızca referans içindir."</string>
+    <string name="ui_chrome_8e5c672defaa">"Giriş bilgileri işletim sisteminin korumalı deposunda kalır. Geçerli bilgiler kaydedilip otomatik dönem algılama açıldığında, dönem kimliğini ve ilk pazartesiyi doğrulamak için kişisel program açılışta bir kez yenilenir. Bilgiler, istediğiniz program, sınıf ve ödev isteklerinde HTTPS üzerinden de kullanılır. Program ve sınıf istekleri jwglweixin.bupt.edu.cn adresine gider; desteklenen platformlar bugünün boş sınıflarını otomatik yenileyebilir. Proje yöneticisi giriş bilgilerini okuyamaz; ayar API\'leri parola döndürmez."</string>
+    <string name="ui_chrome_9832e5677a6d">"Proje yalnızca herkese açık servis ve etkinlik verilerini düzenleyen sabit uç noktalar işletir. Kullanıcı hesabı, bulut eşitlemesi, reklam, analiz veya davranış takibi sunmaz; GPS konumu, kişiler, reklam kimlikleri, tanılama veya kullanım davranışı toplamaz. BUPT hizmetleri, unpkg, UAPI, Timeless, GitHub Pages, sabit Where To Study açık uç noktaları ve kullanıcının seçtiği özel takvim sunucusu; IP adresi ve istek zamanı gibi olağan ağ meta verilerini kendi politikalarına göre işleyebilir."</string>
+    <string name="ui_chrome_9cd555d72f1b">"İsteğe bağlı # ile başlayan 6 onaltılık hane girin. Metin kontrastı otomatik ayarlanır."</string>
+    <string name="ui_chrome_a2bb37329824">"Seçilen tarih · 18"</string>
+    <string name="ui_chrome_a6664df1efc8">"Gül"</string>
+    <string name="ui_chrome_aa5c949544cd">"Ana renk sayfa, kart ve denetimlerin arka planlarını da etkiler. Açık ve koyu görünüm yine sisteminizi izler."</string>
+    <string name="ui_chrome_aed843d1bd0b">"Sıcak kehribar"</string>
+    <string name="ui_chrome_b364d8185174">"Bugünün programı"</string>
+    <string name="ui_chrome_ba2e93e73037">"Varsayılanı geri yükle"</string>
+    <string name="ui_chrome_c0902fbc988c">"Program, sınıf sonuçları, kampüs, dönem, anahtarlar, özel kaynak URL\'si ve en fazla 500 favori anlık görüntüsü yerel kalır. Ders widget\'ları yalnızca yerel programı okur. Silme kayıtları hesap ve döneme göre yalıtılır, yalnızca bu cihazın etkin programını etkiler ve Ayarlardan geri yüklenebilir. Yerel Verileri Temizle bunların tümünü kaldırır."</string>
+    <string name="ui_chrome_c2f43ebe2000">"Süsen moru"</string>
+    <string name="ui_chrome_c3b3e760e0ee">"Takvime yazmak ve yerel ders bildirimleri sizin işleminizi ve izninizi gerektirir; yalnızca işaretlenmiş etkinlikler yönetilir. Widget\'lar desteklenen platformlarda bulunur. Bu veriler yüklenmez."</string>
+    <string name="ui_chrome_dcdf1f46691c">"Okyanus mavisi"</string>
+    <string name="ui_chrome_ddb3b7159fd2">"Renk teması"</string>
+    <string name="ui_chrome_f84e05423960">"Vurgu rengi"</string>
+    <string name="ui_chrome_fe6a96889808">"Bağımsız QMplus bağlantısı"</string>
+</resources>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\nBağımsız ve resmi olmayan BUPT ders programı ve boş sınıf istemcisi; üniversite tarafından işletilmez."</string>
+    <string name="ui_format_calendar_synced">"%1$s ders sistem takvimine eşitlendi."</string>
+    <string name="ui_format_calendar_teaching_week">"Takvim haftası %1$s, eğitim haftası %2$s"</string>
+    <string name="ui_format_calendar_upsert">"%1$s ders \"%2$s\" takvimine eşitlendi (%3$s eklendi, %4$s güncellendi)."</string>
+    <string name="ui_format_calendar_week">"Takvim haftası %1$s"</string>
+    <string name="ui_format_calendar_week_unknown">"Takvim haftası %1$s; eğitim haftası bilgisi yok"</string>
+    <string name="ui_format_course_count">"%1$s ders"</string>
+    <string name="ui_format_courses">"%1$s ders"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · %2$s. eğitim haftası"</string>
+    <string name="ui_format_date_week">"%1$s · %2$s. hafta"</string>
+    <string name="ui_format_day_courses">"Bu günün dersleri (%1$s)"</string>
+    <string name="ui_format_departures">"Bugün: %1$s kalkış saati · %2$s araç"</string>
+    <string name="ui_format_directions">"Bugün: %1$s yön, %2$s planlı sefer"</string>
+    <string name="ui_format_ending">"Sürüyor · Bitiş %1$s"</string>
+    <string name="ui_format_ends_at">"Bitiş: %1$s"</string>
+    <string name="ui_format_favorites">"Favori yönetimi (%1$s)"</string>
+    <string name="ui_format_favorites_synced">"%1$s favori etkinlik \"%2$s\" takvimine eşitlendi."</string>
+    <string name="ui_format_feed_saved">"Özel kaynak kaydedildi: %1$s, %2$s öğe"</string>
+    <string name="ui_format_feed_source">"Özel kaynak: %1$s"</string>
+    <string name="ui_format_from">"%1$s itibarıyla"</string>
+    <string name="ui_format_gpa">"Ortalama not puanı: %1$s"</string>
+    <string name="ui_format_next_departure">"Sonraki %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"İdari işler duyurusu · %1$s"</string>
+    <string name="ui_format_period">"Ders saati %1$s"</string>
+    <string name="ui_format_period_compact">"Ders saati %1$s"</string>
+    <string name="ui_format_periods">"Ders saatleri %1$s–%2$s"</string>
+    <string name="ui_format_results">"%1$s sonuç · son tarihe göre sıralı"</string>
+    <string name="ui_format_schedule_updated">"Kişisel ders programı güncellendi: %1$s ders"</string>
+    <string name="ui_format_semester">"Dönem: %1$s"</string>
+    <string name="ui_format_teaching_week">"Eğitim haftası %1$s"</string>
+    <string name="ui_format_teaching_week_axis">"Eğitim\n%1$s. hafta"</string>
+    <string name="ui_format_today_courses">"Bugünkü dersler · %1$s"</string>
+    <string name="ui_format_updated">"Güncellendi: %1$s"</string>
+    <string name="ui_format_view_courses">"%1$s dersin tümünü görüntüle"</string>
+    <string name="ui_format_week">"Hafta %1$s"</string>
+    <string name="ui_format_week_axis">"Takvim %1$s\nEğitim %2$s"</string>
+    <string name="ui_format_week_compact">"H%1$s"</string>
+    <string name="ui_format_weeks">"%1$s hafta"</string>
+    <string name="ui_format_widget_teaching_week">"Eğitim haftası %1$s"</string>
+</resources>

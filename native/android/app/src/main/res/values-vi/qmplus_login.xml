@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"Tài khoản QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_failed">"Không thể lưu an toàn thông tin đăng nhập QMplus. Hãy thử lại. Thông tin tự điền mới chưa được bật."</string>
+    <string name="qmplus_saved_login_invalid">"Hãy nhập tài khoản và mật khẩu QMplus rồi chủ động chọn Lưu."</string>
+    <string name="qmplus_saved_login_manual">"Hãy tự hoàn tất đăng nhập, CAPTCHA hoặc MFA trên trang chính thức. Ứng dụng sẽ không thay bạn xác nhận rủi ro, đồng ý điều khoản hay bỏ qua bước xác minh."</string>
+    <string name="qmplus_saved_login_notice">"Mặc định không lưu. Chỉ sau khi bạn chọn và lưu, tài khoản cùng mật khẩu QMplus mới được mã hóa trong miền Keystore riêng trên thiết bị để tự điền một lần trên trang đăng nhập chính thức đáng tin cậy; không dùng lại mật khẩu BUPT hoặc gửi tới máy chủ dự án. Bạn vẫn phải tự xử lý CAPTCHA, MFA, chọn tài khoản và xác nhận rủi ro. Thay đổi thông tin đã lưu sẽ ngắt phiên QMplus cũ; ngắt kết nối hoặc xóa dữ liệu cục bộ cũng xóa thông tin này."</string>
+    <string name="qmplus_saved_login_opt_in">"Tôi chọn lưu mã hóa trên thiết bị này và dùng để điền trên trang chính thức"</string>
+    <string name="qmplus_saved_login_password">"Mật khẩu QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_remove">"Xóa và ngắt kết nối"</string>
+    <string name="qmplus_saved_login_save">"Lưu có mã hóa"</string>
+    <string name="qmplus_saved_login_title">"Tùy chọn: lưu thông tin đăng nhập QMplus"</string>
+</resources>

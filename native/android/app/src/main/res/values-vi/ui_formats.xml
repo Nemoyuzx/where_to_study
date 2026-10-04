@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_format_about">"Where To Study  %1$s\nỨng dụng độc lập, không chính thức để xem lịch học và phòng trống BUPT; không do trường vận hành."</string>
+    <string name="ui_format_calendar_synced">"Đã đồng bộ %1$s môn học vào lịch hệ thống."</string>
+    <string name="ui_format_calendar_teaching_week">"Tuần dương lịch %1$s, tuần học %2$s"</string>
+    <string name="ui_format_calendar_upsert">"Đã đồng bộ %1$s môn học vào “%2$s” (thêm %3$s, cập nhật %4$s)"</string>
+    <string name="ui_format_calendar_week">"Tuần dương lịch %1$s"</string>
+    <string name="ui_format_calendar_week_unknown">"Tuần dương lịch %1$s, chưa có thông tin tuần học"</string>
+    <string name="ui_format_course_count">"%1$s môn học"</string>
+    <string name="ui_format_courses">"%1$s môn học"</string>
+    <string name="ui_format_date_teaching_week">"%1$s · Tuần học %2$s"</string>
+    <string name="ui_format_date_week">"%1$s · Tuần %2$s"</string>
+    <string name="ui_format_day_courses">"Lớp trong ngày (%1$s)"</string>
+    <string name="ui_format_departures">"Lịch hôm nay: %1$s giờ khởi hành · %2$s xe"</string>
+    <string name="ui_format_directions">"Hôm nay: %1$s tuyến, %2$s chuyến dự kiến"</string>
+    <string name="ui_format_ending">"Đang học · Kết thúc lúc %1$s"</string>
+    <string name="ui_format_ends_at">"Kết thúc lúc %1$s"</string>
+    <string name="ui_format_favorites">"Quản lý yêu thích (%1$s)"</string>
+    <string name="ui_format_favorites_synced">"Đã đồng bộ %1$s sự kiện yêu thích vào “%2$s”"</string>
+    <string name="ui_format_feed_saved">"Đã lưu lịch tùy chỉnh: %1$s, %2$s mục"</string>
+    <string name="ui_format_feed_source">"Nguồn tùy chỉnh: %1$s"</string>
+    <string name="ui_format_from">"Từ %1$s"</string>
+    <string name="ui_format_gpa">"Điểm trung bình tích lũy: %1$s"</string>
+    <string name="ui_format_next_departure">"Chuyến tiếp theo %1$s · %2$s → %3$s"</string>
+    <string name="ui_format_notice">"Thông báo hậu cần · %1$s"</string>
+    <string name="ui_format_period">"Tiết %1$s"</string>
+    <string name="ui_format_period_compact">"Tiết %1$s"</string>
+    <string name="ui_format_periods">"Tiết %1$s-%2$s"</string>
+    <string name="ui_format_results">"%1$s kết quả · sắp xếp theo hạn chót tăng dần"</string>
+    <string name="ui_format_schedule_updated">"Đã cập nhật lịch học cá nhân: %1$s môn học"</string>
+    <string name="ui_format_semester">"Học kỳ: %1$s"</string>
+    <string name="ui_format_teaching_week">"Tuần học thứ %1$s"</string>
+    <string name="ui_format_teaching_week_axis">"Tuần học\nTuần %1$s"</string>
+    <string name="ui_format_today_courses">"Lớp học hôm nay · %1$s môn"</string>
+    <string name="ui_format_updated">"Dữ liệu cập nhật: %1$s"</string>
+    <string name="ui_format_view_courses">"Xem tất cả %1$s môn học"</string>
+    <string name="ui_format_week">"Tuần thứ %1$s"</string>
+    <string name="ui_format_week_axis">"Dương lịch %1$s\nTuần học %2$s"</string>
+    <string name="ui_format_week_compact">"%1$s\ntuần"</string>
+    <string name="ui_format_weeks">"%1$s tuần"</string>
+    <string name="ui_format_widget_teaching_week">"Tuần học thứ %1$s"</string>
+</resources>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_11979c5c7acc">"Màu chính"</string>
+    <string name="ui_chrome_136e42c8ec73">"Màu RGB tùy chỉnh"</string>
+    <string name="ui_chrome_1a0be4bd6722">"Ngày 18 · Môn học mẫu"</string>
+    <string name="ui_chrome_1a9a3e51eed7">"Thông tin đăng nhập và bộ nhớ đệm ở lại trên thiết bị cho tới khi bị thay thế, xóa hoặc gỡ cùng ứng dụng; xóa dữ liệu cục bộ không xóa bản ghi do trường hoặc bên thứ ba lưu giữ."</string>
+    <string name="ui_chrome_1fd32f10122e">"Không lưu được chủ đề màu. Hãy thử lại."</string>
+    <string name="ui_chrome_29f63f7b210e">"Áp dụng màu tùy chỉnh"</string>
+    <string name="ui_chrome_41fa6af5de9e">"Xem trước bảng màu"</string>
+    <string name="ui_chrome_437a23f5a691">"Nhập 6 ký tự RGB, ví dụ #166B5D"</string>
+    <string name="ui_chrome_4e62728c3d05">"QMplus độc lập với tài khoản học vụ BUPT. Chỉ khi bạn chủ động kết nối, ứng dụng mới mở trang QMplus chính thức trong tiến trình và hồ sơ WebView riêng của ứng dụng. Bạn tự hoàn tất SSO/MFA Microsoft tại đó; ứng dụng không có ô nhập mật khẩu Microsoft và không đọc Cookie của trình duyệt bên ngoài. Tập lệnh chỉ đọc chỉ trả về bản tóm tắt dữ liệu môn học cùng Assignment/Quiz có giới hạn kích thước, không trả về mật khẩu, Cookie, sesskey, token hay toàn bộ HTML. Tập lệnh không nộp bài, bắt đầu bài kiểm tra hoặc sử dụng Worker bên thứ ba hay máy chủ của dự án này. Bản tóm tắt được lưu trong vùng lưu trữ riêng của ứng dụng; khi một phần yêu cầu thất bại, dữ liệu cũ đã biết vẫn được giữ lại và gắn nhãn. Ngắt kết nối hoặc xóa dữ liệu cục bộ sẽ xóa phiên web và bản tóm tắt do ứng dụng quản lý; đổi tài khoản BUPT không tự đổi danh tính QMplus. Dịch vụ QMplus/Microsoft chính thức có thể xử lý thông tin đăng nhập và siêu dữ liệu mạng theo chính sách riêng."</string>
+    <string name="ui_chrome_4ee8a755167e">"Xanh ngọc mặc định"</string>
+    <string name="ui_chrome_5065fa9d9721">"Xem thời khóa biểu"</string>
+    <string name="ui_chrome_52466d500ebc">"Hãy báo cáo vấn đề bảo mật theo SECURITY.md; với vấn đề quyền riêng tư, chỉ mở Issue trên GitHub khi không chứa thông tin nhạy cảm. Đừng công khai tài khoản, mật khẩu, mã thông báo hoặc thời khóa biểu cá nhân."</string>
+    <string name="ui_chrome_63fb443d8deb">"Ghi chú nổi bật"</string>
+    <string name="ui_chrome_6c4174ecc9fd">"Mật khẩu chỉ được gửi qua HTTPS tới auth.bupt.edu.cn. Bạn có thể đặt mật khẩu riêng cho nền tảng học tập trong cùng kho thông tin đăng nhập được bảo vệ; nếu không đặt, mật khẩu học vụ được dùng. Mã thông báo trong bộ nhớ được dùng với apiucloud.bupt.edu.cn. Ứng dụng không lưu Cookie trình duyệt, vé đăng nhập, mã thông báo hoặc bài tập xuống đĩa; kết quả được dùng lại trong bộ nhớ tối đa 10 phút."</string>
+    <string name="ui_chrome_822eb432b858">"Ngày đã chọn"</string>
+    <string name="ui_chrome_8387adc19d38">"Ứng dụng có thể lấy dữ liệu holiday-calendar phiên bản cố định qua unpkg; Android cũng có thể đọc lịch ngày nghỉ của hệ thống khi đã có quyền. Yêu cầu chỉ chứa CN và năm. iOS chỉ đánh dấu “Nghỉ” theo dữ liệu ngày nghỉ chính thức."</string>
+    <string name="ui_chrome_85e2f87b9f51">"UAPI cung cấp thời tiết theo quận tương ứng với cơ sở và thông tin cơ bản của lịch truyền thống mà không đọc GPS; Timeless có thể bổ sung việc nên và không nên làm. Hoạt động công khai ưu tiên Contest DDL trên GitHub. Bản sao where-to-study.cn chỉ được dùng khi thời điểm cập nhật dữ liệu mới hơn; nếu cả hai không khả dụng, API dự phòng cũ được sử dụng. Thông báo cuộc thi trong trường có nguồn riêng. Các yêu cầu công khai này không kèm thông tin đăng nhập cá nhân. Lịch tùy chỉnh chỉ gửi GET không kèm thông tin đăng nhập đến địa chỉ HTTPS do người dùng nhập; từ chối chuyển hướng, localhost và địa chỉ IP dạng số thuộc dải riêng hoặc dự trữ; phản hồi giới hạn 2 MiB. Mọi dữ liệu hiển thị chỉ để tham khảo."</string>
+    <string name="ui_chrome_8e5c672defaa">"Mã sinh viên và mật khẩu được lưu trong kho thông tin đăng nhập bảo vệ bởi hệ điều hành. Khi đã lưu thông tin hợp lệ và bật tự phát hiện học kỳ, ứng dụng làm mới thời khóa biểu cá nhân một lần lúc khởi động để xác minh mã học kỳ và thứ Hai của tuần đầu. Khi bạn yêu cầu thời khóa biểu, phòng học trống hoặc bài tập, thông tin đăng nhập cũng được dùng qua HTTPS cho đúng mục đích. Yêu cầu thời khóa biểu và phòng học trống gửi đến jwglweixin.bupt.edu.cn; nếu nền tảng cho phép, phòng học trống hôm nay cũng có thể tự làm mới. Nhà phát triển không thể đọc thông tin đăng nhập và API cài đặt không trả về mật khẩu."</string>
+    <string name="ui_chrome_9832e5677a6d">"Dự án chỉ vận hành các điểm cuối cố định để tổng hợp dữ liệu công khai về xe buýt trường và sự kiện. Dự án không cung cấp tài khoản người dùng, đồng bộ đám mây, quảng cáo, phân tích hoặc theo dõi hành vi; cũng không thu thập vị trí GPS, danh bạ, mã quảng cáo, dữ liệu chẩn đoán hay hành vi sử dụng. Dịch vụ BUPT, unpkg, UAPI, Timeless, GitHub Pages, các điểm cuối công khai cố định của Where To Study và máy chủ lịch tùy chỉnh do người dùng chọn có thể xử lý siêu dữ liệu mạng thông thường như địa chỉ IP và thời điểm yêu cầu theo chính sách riêng."</string>
+    <string name="ui_chrome_9cd555d72f1b">"Nhập 6 ký tự màu thập lục phân, có thể thêm # ở đầu. Độ tương phản chữ được tự điều chỉnh."</string>
+    <string name="ui_chrome_a2bb37329824">"Ngày đã chọn · 18"</string>
+    <string name="ui_chrome_a6664df1efc8">"Hồng"</string>
+    <string name="ui_chrome_aa5c949544cd">"Màu chính cũng điều chỉnh nền trang, thẻ và điều khiển. Giao diện sáng/tối vẫn theo hệ thống."</string>
+    <string name="ui_chrome_aed843d1bd0b">"Hổ phách ấm"</string>
+    <string name="ui_chrome_b364d8185174">"Lịch trình hôm nay"</string>
+    <string name="ui_chrome_ba2e93e73037">"Khôi phục mặc định"</string>
+    <string name="ui_chrome_c0902fbc988c">"Thời khóa biểu, kết quả phòng học trống, cơ sở, học kỳ, công tắc, URL lịch tùy chỉnh và tối đa 500 bản chụp yêu thích được lưu trên thiết bị. Tiện ích môn học chỉ đọc thời khóa biểu cục bộ. Bản ghi xóa môn học được tách theo tài khoản và học kỳ, chỉ ảnh hưởng thời khóa biểu hiệu lực trên thiết bị này và có thể khôi phục trong Cài đặt. “Xóa dữ liệu cục bộ” sẽ xóa tất cả các mục này."</string>
+    <string name="ui_chrome_c2f43ebe2000">"Tím diên vĩ"</string>
+    <string name="ui_chrome_c3b3e760e0ee">"Việc ghi lịch và gửi thông báo lớp học cục bộ cần thao tác và quyền của bạn; ứng dụng chỉ quản lý sự kiện được đánh dấu Where To Study. Tiện ích môn học chỉ có trên nền tảng hỗ trợ; dữ liệu liên quan không được tải lên."</string>
+    <string name="ui_chrome_dcdf1f46691c">"Xanh đại dương"</string>
+    <string name="ui_chrome_ddb3b7159fd2">"Chủ đề màu"</string>
+    <string name="ui_chrome_f84e05423960">"Màu nhấn"</string>
+    <string name="ui_chrome_fe6a96889808">"Kết nối QMplus độc lập"</string>
+</resources>

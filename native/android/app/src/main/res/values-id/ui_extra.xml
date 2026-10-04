@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_11979c5c7acc">"Warna utama"</string>
+    <string name="ui_chrome_136e42c8ec73">"Warna RGB khusus"</string>
+    <string name="ui_chrome_1a0be4bd6722">"Tanggal 18 · Mata kuliah contoh"</string>
+    <string name="ui_chrome_1a9a3e51eed7">"Kredensial dan cache tetap berada di perangkat sampai diganti, dihapus, atau terhapus saat aplikasi dicopot. Menghapus data lokal tidak menghapus catatan yang disimpan kampus atau pihak ketiga."</string>
+    <string name="ui_chrome_1fd32f10122e">"Tema warna tidak dapat disimpan. Coba lagi."</string>
+    <string name="ui_chrome_29f63f7b210e">"Terapkan warna khusus"</string>
+    <string name="ui_chrome_41fa6af5de9e">"Pratinjau palet warna"</string>
+    <string name="ui_chrome_437a23f5a691">"Masukkan 6 digit RGB, misalnya #166B5D"</string>
+    <string name="ui_chrome_4e62728c3d05">"QMplus terpisah dari akun akademik BUPT. Hanya saat Anda memilih untuk terhubung, aplikasi membuka situs resmi QMplus dalam proses dan profil WebView milik aplikasi yang terpisah. Anda menyelesaikan SSO/MFA Microsoft langsung di sana; aplikasi tidak memiliki kolom kata sandi Microsoft dan tidak membaca Cookie peramban lain. Skrip baca-saja hanya mengembalikan ringkasan data mata kuliah serta Assignment/Quiz yang dibatasi ukurannya, bukan kata sandi, Cookie, sesskey, token, atau HTML lengkap. Skrip tidak mengirim tugas, memulai kuis, atau menggunakan Worker pihak ketiga maupun server proyek ini. Ringkasan disimpan dalam penyimpanan privat aplikasi; bila hanya sebagian permintaan gagal, data lama yang diketahui tetap disimpan dengan penanda. Memutuskan koneksi atau menghapus data lokal menghapus sesi web dan ringkasan yang dikelola aplikasi; mengganti akun BUPT tidak otomatis mengganti identitas QMplus. Layanan resmi QMplus/Microsoft dapat memproses informasi masuk dan metadata jaringan sesuai kebijakannya masing-masing."</string>
+    <string name="ui_chrome_4ee8a755167e">"Hijau kebiruan klasik"</string>
+    <string name="ui_chrome_5065fa9d9721">"Lihat jadwal kuliah"</string>
+    <string name="ui_chrome_52466d500ebc">"Laporkan masalah keamanan sesuai SECURITY.md. Untuk masalah privasi, buat Issue di GitHub tanpa informasi sensitif. Jangan publikasikan akun, kata sandi, token, atau jadwal pribadi."</string>
+    <string name="ui_chrome_63fb443d8deb">"Catatan penting"</string>
+    <string name="ui_chrome_6c4174ecc9fd">"Kata sandi hanya dikirim melalui HTTPS ke auth.bupt.edu.cn. Tiket sekali pakai digunakan untuk memperoleh token dalam memori, lalu tugas dibaca dari apiucloud.bupt.edu.cn. Kata sandi Teaching Cloud yang terpisah dapat diatur dan disimpan dalam penyimpanan kredensial terlindung yang sama; jika tidak diatur, kata sandi akademik digunakan. Aplikasi tidak membaca Cookie peramban, tidak mengirim kata sandi ke API UCloud, dan tidak menyimpan tiket, Cookie, token, atau tugas ke disk. Hasilnya dapat digunakan kembali dalam memori paling lama 10 menit."</string>
+    <string name="ui_chrome_822eb432b858">"Tanggal terpilih"</string>
+    <string name="ui_chrome_8387adc19d38">"Aplikasi mungkin mengambil data holiday-calendar versi tetap melalui unpkg; Android juga dapat membaca kalender hari libur sistem jika izin tersedia. Permintaan hanya berisi CN dan tahun. iOS menandai hari istirahat hanya berdasarkan data hari libur resmi."</string>
+    <string name="ui_chrome_85e2f87b9f51">"UAPI menyediakan cuaca tingkat distrik dan informasi dasar penanggalan tradisional berdasarkan kampus tanpa membaca GPS; Timeless dapat melengkapi anjuran dan pantangan. Kegiatan publik memprioritaskan Contest DDL di GitHub. Cermin where-to-study.cn hanya digunakan jika tanggal pembaruan datanya lebih baru; bila keduanya tidak tersedia, API cadangan lama digunakan. Pengumuman kompetisi kampus memiliki sumber tersendiri. Permintaan publik ini tidak membawa kredensial pribadi. Jadwal khusus hanya mengirim GET tanpa kredensial ke alamat HTTPS yang dimasukkan pengguna; pengalihan, localhost, serta alamat IP literal privat atau cadangan ditolak, dan respons dibatasi 2 MiB. Semua data yang ditampilkan hanya sebagai referensi."</string>
+    <string name="ui_chrome_8e5c672defaa">"Nomor mahasiswa dan kata sandi disimpan dalam penyimpanan kredensial terlindung milik sistem operasi. Jika kredensial valid telah disimpan dan deteksi semester otomatis aktif, aplikasi menyegarkan jadwal pribadi satu kali saat mulai untuk memeriksa ID semester dan hari Senin pertama. Kredensial juga digunakan melalui HTTPS sesuai tujuan saat Anda meminta jadwal, ruang kosong, atau tugas. Permintaan jadwal dan ruang kosong dikirim ke jwglweixin.bupt.edu.cn; pada platform yang mendukung, ruang kosong hari ini juga dapat diperbarui otomatis. Pengelola tidak dapat membaca kredensial, dan antarmuka pengaturan tidak mengembalikan kata sandi."</string>
+    <string name="ui_chrome_9832e5677a6d">"Proyek ini hanya mengoperasikan endpoint tetap untuk mengelola data bus kampus dan kegiatan publik. Proyek ini tidak menyediakan akun pengguna, sinkronisasi awan, iklan, analitik, atau pelacakan perilaku, serta tidak mengumpulkan lokasi GPS, kontak, pengenal iklan, diagnostik, atau perilaku penggunaan. Layanan BUPT, unpkg, UAPI, Timeless, GitHub Pages, endpoint publik tetap Where To Study, dan server jadwal khusus pilihan pengguna dapat memproses metadata jaringan biasa seperti alamat IP dan waktu permintaan menurut kebijakan masing-masing."</string>
+    <string name="ui_chrome_9cd555d72f1b">"Masukkan enam digit warna heksadesimal, boleh diawali #. Kontras teks disesuaikan secara otomatis."</string>
+    <string name="ui_chrome_a2bb37329824">"Tanggal terpilih · 18"</string>
+    <string name="ui_chrome_a6664df1efc8">"Mawar"</string>
+    <string name="ui_chrome_aa5c949544cd">"Warna utama juga menyesuaikan latar halaman, kartu, dan kontrol. Tampilan terang atau gelap tetap mengikuti sistem."</string>
+    <string name="ui_chrome_aed843d1bd0b">"Ambar hangat"</string>
+    <string name="ui_chrome_b364d8185174">"Jadwal hari ini"</string>
+    <string name="ui_chrome_ba2e93e73037">"Pulihkan bawaan"</string>
+    <string name="ui_chrome_c0902fbc988c">"Jadwal kuliah, hasil ruang kosong, kampus, semester, sakelar, alamat jadwal khusus, dan paling banyak 500 salinan favorit disimpan di perangkat. Widget kelas hanya membaca jadwal lokal. Catatan penghapusan mata kuliah dipisahkan menurut akun dan semester, hanya memengaruhi jadwal efektif di perangkat ini, dan dapat dipulihkan di Pengaturan. Hapus Data Lokal juga menghapus semua informasi tersebut."</string>
+    <string name="ui_chrome_c2f43ebe2000">"Ungu iris"</string>
+    <string name="ui_chrome_c3b3e760e0ee">"Penulisan kalender dan pemberitahuan kelas lokal memerlukan tindakan serta izin Anda. Aplikasi hanya mengelola acara bertanda Where To Study. Widget kelas hanya tersedia pada platform yang mendukung; data terkait tidak diunggah."</string>
+    <string name="ui_chrome_dcdf1f46691c">"Biru laut"</string>
+    <string name="ui_chrome_ddb3b7159fd2">"Tema warna"</string>
+    <string name="ui_chrome_f84e05423960">"Warna aksen"</string>
+    <string name="ui_chrome_fe6a96889808">"Koneksi QMplus terpisah"</string>
+</resources>

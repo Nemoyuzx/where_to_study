@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"Cuenta de QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_failed">"No se pudieron guardar de forma segura los datos de inicio de sesión de QMplus. Reinténtalo. No se han activado los nuevos datos de autocompletado."</string>
+    <string name="qmplus_saved_login_invalid">"Introduce tu cuenta y contraseña de QMplus y elige explícitamente guardarlas."</string>
+    <string name="qmplus_saved_login_manual">"Completa el inicio de sesión, el CAPTCHA o la MFA en la página oficial. La aplicación no confirmará riesgos, aceptará acuerdos ni eludirá verificaciones por ti."</string>
+    <string name="qmplus_saved_login_notice">"No se guardan por defecto. Solo al marcar la opción y guardar se cifran la cuenta y contraseña de QMplus en un ámbito independiente de Keystore de este dispositivo, para un único autocompletado en una página oficial de confianza. No se reutiliza la contraseña de BUPT ni se envían los datos al servidor del proyecto. Debes completar el CAPTCHA, la MFA, la selección de cuenta y la confirmación de riesgos. Cambiar los datos guardados desconecta la sesión anterior de QMplus; desconectar o borrar los datos locales también elimina los datos guardados."</string>
+    <string name="qmplus_saved_login_opt_in">"Elijo guardar los datos cifrados en este dispositivo para completar la web oficial"</string>
+    <string name="qmplus_saved_login_password">"Contraseña de QMplus / Queen Mary"</string>
+    <string name="qmplus_saved_login_remove">"Eliminar y desconectar"</string>
+    <string name="qmplus_saved_login_save">"Guardar cifrado"</string>
+    <string name="qmplus_saved_login_title">"Opcional: guardar datos de acceso de QMplus"</string>
+</resources>

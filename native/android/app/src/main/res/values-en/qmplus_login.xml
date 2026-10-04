@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="qmplus_saved_login_account">"QMplus / Queen Mary account"</string>
+    <string name="qmplus_saved_login_failed">"Unable to securely save QMplus sign-in details. Please retry. New autofill details were not enabled."</string>
+    <string name="qmplus_saved_login_invalid">"Enter your QMplus account and password and explicitly choose to save."</string>
+    <string name="qmplus_saved_login_manual">"Complete sign-in, CAPTCHA or MFA on the official page. The app never accepts risks or agreements or bypasses verification for you."</string>
+    <string name="qmplus_saved_login_notice">"Off by default. Only after you select and save this option are your QMplus account and password encrypted locally in a separate Keystore domain, for one autofill attempt on a trusted official sign-in page. BUPT passwords are never reused and details never go to this project’s server. You still complete CAPTCHA, MFA, account selection and risk confirmation yourself. Saving different details disconnects the old QMplus session; disconnecting or clearing local data also removes the saved details."</string>
+    <string name="qmplus_saved_login_opt_in">"I choose local encrypted storage and official-page autofill"</string>
+    <string name="qmplus_saved_login_password">"QMplus / Queen Mary password"</string>
+    <string name="qmplus_saved_login_remove">"Remove and disconnect"</string>
+    <string name="qmplus_saved_login_save">"Save encrypted"</string>
+    <string name="qmplus_saved_login_title">"Optional: save QMplus sign-in details"</string>
+</resources>

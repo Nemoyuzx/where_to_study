@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_11979c5c7acc">"主色"</string>
+    <string name="ui_chrome_136e42c8ec73">"自定義 RGB 顏色"</string>
+    <string name="ui_chrome_1a0be4bd6722">"18 日 · 示例課程"</string>
+    <string name="ui_chrome_1a9a3e51eed7">"憑據與快取保留在設備上，直到被替換、清除或隨卸載移除；清除本地數據不會刪除學校或第三方持有的記錄。"</string>
+    <string name="ui_chrome_1fd32f10122e">"顏色主題儲存失敗，請重試。"</string>
+    <string name="ui_chrome_29f63f7b210e">"應用自定義顏色"</string>
+    <string name="ui_chrome_41fa6af5de9e">"配色預覽"</string>
+    <string name="ui_chrome_437a23f5a691">"請輸入 6 位 RGB，例如 #166B5D"</string>
+    <string name="ui_chrome_4e62728c3d05">"QMplus 與北郵教務賬號獨立。只有用戶主動連接時，應用才在獨立的應用內 WebView 進程和 profile 打開 QMplus 官方網頁，由用戶直接完成 SSO／Microsoft MFA；應用沒有 Microsoft 密碼輸入框，也不讀取外部瀏覽器 Cookie。只讀腳本返回有界的課程與 Assignment／Quiz 業務快照，不返回密碼、Cookie、sesskey、令牌或完整 HTML，不提交作業、開始測驗或經過第三方 Worker／本項目服務器。業務快照儲存在應用私有存儲中；真正部分失敗時保留並標注此前已知資料。斷開連接或清除本地數據會清除應用管理的網頁會話與快照；更換北郵賬號不會自動更換 QMplus 身份。官方 QMplus／Microsoft 可按自身政策處理登錄資訊及網絡元數據。"</string>
+    <string name="ui_chrome_4ee8a755167e">"預設青綠"</string>
+    <string name="ui_chrome_5065fa9d9721">"查看課表"</string>
+    <string name="ui_chrome_52466d500ebc">"請按 SECURITY.md 報告安全問題；隱私問題可在 GitHub 提交不含敏感資訊的 Issue。請勿公開賬號、密碼、令牌或個人課表。"</string>
+    <string name="ui_chrome_63fb443d8deb">"強調資訊"</string>
+    <string name="ui_chrome_6c4174ecc9fd">"密碼僅通過 HTTPS 提交給 auth.bupt.edu.cn，一次性票據換取內存令牌後從 apiucloud.bupt.edu.cn 讀取作業。可單獨設定教學雲平台密碼，並儲存在同一受保護憑據存儲中；未設定時使用教務密碼。應用不讀取瀏覽器 Cookie，不向 UCloud API 發送密碼，也不把票據、Cookie、令牌或作業寫入磁盤；結果最多在內存復用 10 分鐘。"</string>
+    <string name="ui_chrome_822eb432b858">"選中日期"</string>
+    <string name="ui_chrome_8387adc19d38">"應用可能通過 unpkg 獲取固定版本 holiday-calendar 數據；Android 在已有權限時也可能讀取系統節假日日曆。請求僅含 CN 與年份。iOS 只依據權威休息日數據顯示“休”。"</string>
+    <string name="ui_chrome_85e2f87b9f51">"UAPI 按校區行政區提供天氣與基礎黃曆，不讀取 GPS；Timeless 可補充宜忌。公開活動優先讀取 GitHub 上的 Contest DDL，where-to-study.cn 鏡像僅在數據更新時間較新時使用，兩者不可用時改用原有備用 API；校內競賽通知另有來源。這些公開請求均不附帶個人憑據。自定義日程只向用戶填寫的 HTTPS 地址發送無憑據 GET，拒絕重定向、本機和私有/保留 IP 字面量，響應上限 2 MiB。所有顯示數據僅供參考。"</string>
+    <string name="ui_chrome_8e5c672defaa">"學號和密碼儲存在操作系統的受保護憑據存儲中。儲存有效憑據且開啓自動學期檢測後，啓動時會自動刷新一次個人課表，用於校驗學期號和第一周週一。你主動請求課表、空教室或作業時也會按對應用途通過 HTTPS 使用憑據。課表和空教室請求發送到 jwglweixin.bupt.edu.cn；平台允許時還可能自動刷新當天空教室。維護者無法讀取憑據，設定接口也不會返回密碼。"</string>
+    <string name="ui_chrome_9832e5677a6d">"本項目只運營用於整理公開班車與活動數據的固定接口，不提供用戶帳戶、雲端同步、廣告、分析或行為跟蹤服務，也不收集 GPS 位置、聯繫人、廣告標識符、診斷或使用行為。北郵服務、unpkg、UAPI、Timeless、GitHub Pages、Where To Study 固定公開接口和用戶選擇的自定義日程服務器可能依據各自政策處理 IP 地址、請求時間等普通網絡元數據。"</string>
+    <string name="ui_chrome_9cd555d72f1b">"輸入 6 位十六進制顏色，可帶 #。文字對比度會自動調整。"</string>
+    <string name="ui_chrome_a2bb37329824">"已選日期 · 18"</string>
+    <string name="ui_chrome_a6664df1efc8">"玫瑰"</string>
+    <string name="ui_chrome_aa5c949544cd">"主色會同時調整頁面、卡片和控件的底色。淺色與深色外觀仍跟隨系統。"</string>
+    <string name="ui_chrome_aed843d1bd0b">"暖琥珀"</string>
+    <string name="ui_chrome_b364d8185174">"今天的日程"</string>
+    <string name="ui_chrome_ba2e93e73037">"恢復預設"</string>
+    <string name="ui_chrome_c0902fbc988c">"課表、空教室、校區、學期、開關、自定義日程地址和最多 500 條收藏快照儲存在設備上；課程小工具只讀取本地課表。課程刪除記錄按賬號和學期隔離，僅影響本機有效課表，可在設定中恢復。“清除本地數據”會一並移除這些內容。"</string>
+    <string name="ui_chrome_c2f43ebe2000">"鳶尾紫"</string>
+    <string name="ui_chrome_c3b3e760e0ee">"日曆寫入和本地課程通知需要你的操作與權限；應用只管理帶 Where To Study 標記的事件。課程小工具只在支持的平台提供，相關數據不上傳。"</string>
+    <string name="ui_chrome_dcdf1f46691c">"海洋藍"</string>
+    <string name="ui_chrome_ddb3b7159fd2">"顏色主題"</string>
+    <string name="ui_chrome_f84e05423960">"強調色"</string>
+    <string name="ui_chrome_fe6a96889808">"QMplus 獨立連接 / Independent QMplus connection"</string>
+</resources>

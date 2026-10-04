@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ui_chrome_11979c5c7acc">"Cor principal"</string>
+    <string name="ui_chrome_136e42c8ec73">"Cores RGB personalizadas"</string>
+    <string name="ui_chrome_1a0be4bd6722">"18 · Aula de exemplo"</string>
+    <string name="ui_chrome_1a9a3e51eed7">"As credenciais e os caches ficam no dispositivo até serem substituídos, apagados ou removidos com o aplicativo. Limpar os dados locais não exclui os registros da universidade ou de terceiros."</string>
+    <string name="ui_chrome_1fd32f10122e">"Não foi possível salvar o tema de cores. Tente novamente."</string>
+    <string name="ui_chrome_29f63f7b210e">"Aplicar cores personalizadas"</string>
+    <string name="ui_chrome_41fa6af5de9e">"Prévia da paleta"</string>
+    <string name="ui_chrome_437a23f5a691">"Insira 6 dígitos RGB, por exemplo #166B5D"</string>
+    <string name="ui_chrome_4e62728c3d05">"O QMplus é independente das credenciais acadêmicas da BUPT. Só quando você escolhe conectar, o aplicativo abre a página oficial do QMplus em um processo e perfil WebView próprios e separados, onde você conclui SSO／Microsoft MFA pessoalmente. O aplicativo não tem um campo de senha Microsoft nem lê cookies de navegadores externos. O script somente de leitura retorna apenas um instantâneo limitado de disciplinas e atividades Assignment／Quiz, sem senhas, Cookie, sesskey, tokens ou HTML completo. Ele nunca envia tarefas, inicia testes ou usa um Worker de terceiros ou o servidor deste projeto. O instantâneo fica no armazenamento privado do aplicativo; falhas parciais reais mantêm e identificam os dados anteriores. Desconectar ou limpar os dados locais remove as sessões web e os instantâneos gerenciados pelo aplicativo. Alterar a conta da BUPT não muda automaticamente a identidade do QMplus. Os serviços oficiais do QMplus／Microsoft podem tratar dados de acesso e metadados de rede conforme suas próprias políticas."</string>
+    <string name="ui_chrome_4ee8a755167e">"Verde-azulado clássico"</string>
+    <string name="ui_chrome_5065fa9d9721">"Ver grade"</string>
+    <string name="ui_chrome_52466d500ebc">"Siga SECURITY.md para relatar problemas de segurança. Problemas de privacidade podem ser relatados no GitHub sem informações sensíveis. Não publique contas, senhas, tokens nem grades pessoais."</string>
+    <string name="ui_chrome_63fb443d8deb">"Informação destacada"</string>
+    <string name="ui_chrome_6c4174ecc9fd">"A senha é enviada apenas por HTTPS a auth.bupt.edu.cn. Um ticket de uso único é trocado por um token em memória para ler tarefas de apiucloud.bupt.edu.cn. Uma senha independente da nuvem de ensino pode ser salva no mesmo armazenamento protegido; se não for definida, é usada a senha acadêmica. O aplicativo não lê cookies do navegador, não envia senhas às APIs do UCloud e não salva tickets, Cookie, tokens ou tarefas no disco. Os resultados são reutilizados em memória por no máximo 10 minutos."</string>
+    <string name="ui_chrome_822eb432b858">"Data selecionada"</string>
+    <string name="ui_chrome_8387adc19d38">"O aplicativo pode obter pelo unpkg dados do holiday-calendar com versão fixa; o Android também pode ler o calendário de feriados do sistema quando houver permissão. As solicitações incluem apenas CN e o ano. O iOS exibe “休” somente com base em dados oficiais de dias de descanso."</string>
+    <string name="ui_chrome_85e2f87b9f51">"A UAPI fornece previsão do tempo e informações básicas do almanaque para o distrito do campus, sem ler o GPS; o Timeless pode acrescentar recomendações. Os eventos públicos usam primeiro o Contest DDL no GitHub. O espelho where-to-study.cn só é usado quando seus dados são mais recentes; se ambos falharem, é usada a API de reserva existente. Os avisos de competições do campus têm outra fonte. Essas solicitações públicas não incluem credenciais pessoais. Os calendários personalizados enviam apenas GET sem credenciais ao endereço HTTPS informado, rejeitam redirecionamentos, endereços locais e IPs privados ou reservados literais, e limitam as respostas a 2 MiB. Os dados exibidos são apenas para referência."</string>
+    <string name="ui_chrome_8e5c672defaa">"O número de matrícula e a senha ficam no armazenamento protegido de credenciais do sistema. Com credenciais válidas salvas e detecção automática do semestre ativada, a grade pessoal é atualizada uma vez ao iniciar para verificar o identificador do semestre e a segunda-feira da primeira semana. As credenciais também são usadas via HTTPS quando você solicita grade, salas livres ou tarefas. As consultas de grade e salas são enviadas a jwglweixin.bupt.edu.cn; plataformas compatíveis também podem atualizar automaticamente as salas de hoje. O mantenedor não pode ler as credenciais e as APIs de configurações nunca retornam senhas."</string>
+    <string name="ui_chrome_9832e5677a6d">"O projeto opera apenas APIs fixas que organizam dados públicos de ônibus e atividades. Não oferece contas de usuário, sincronização na nuvem, publicidade, análise nem rastreamento de comportamento e não coleta localização GPS, contatos, identificadores de publicidade, diagnósticos ou hábitos de uso. Os serviços da BUPT, unpkg, UAPI, Timeless, GitHub Pages, as APIs públicas fixas do Where To Study e o servidor de agenda personalizada escolhido pelo usuário podem processar metadados comuns de rede, como endereço IP e horário da solicitação, de acordo com suas próprias políticas."</string>
+    <string name="ui_chrome_9cd555d72f1b">"Insira 6 dígitos hexadecimais, com # opcional. O contraste do texto é ajustado automaticamente."</string>
+    <string name="ui_chrome_a2bb37329824">"Data selecionada · 18"</string>
+    <string name="ui_chrome_a6664df1efc8">"Rosa"</string>
+    <string name="ui_chrome_aa5c949544cd">"A cor principal também ajusta o fundo de páginas, cartões e controles. Os modos claro e escuro continuam seguindo o sistema."</string>
+    <string name="ui_chrome_aed843d1bd0b">"Âmbar quente"</string>
+    <string name="ui_chrome_b364d8185174">"Agenda de hoje"</string>
+    <string name="ui_chrome_ba2e93e73037">"Restaurar padrão"</string>
+    <string name="ui_chrome_c0902fbc988c">"Grades, resultados de salas livres, campus, semestre, interruptores, URL da agenda personalizada e até 500 cópias de favoritos ficam salvos no dispositivo. Widgets de aulas leem apenas a grade local. Os registros de disciplinas excluídas são separados por conta e semestre, afetam apenas a grade efetiva deste dispositivo e podem ser restaurados em Configurações. Limpar dados locais remove todos esses itens."</string>
+    <string name="ui_chrome_c2f43ebe2000">"Violeta-íris"</string>
+    <string name="ui_chrome_c3b3e760e0ee">"Gravar no calendário e enviar notificações locais de aulas exige sua ação e permissão. O aplicativo gerencia apenas eventos marcados com Where To Study. Widgets de aulas só estão disponíveis em plataformas compatíveis, e seus dados não são enviados."</string>
+    <string name="ui_chrome_dcdf1f46691c">"Azul oceano"</string>
+    <string name="ui_chrome_ddb3b7159fd2">"Tema de cores"</string>
+    <string name="ui_chrome_f84e05423960">"Cor de destaque"</string>
+    <string name="ui_chrome_fe6a96889808">"Conexão independente do QMplus"</string>
+</resources>
