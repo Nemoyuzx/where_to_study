@@ -11,6 +11,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Condition
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Assert.*
@@ -119,16 +120,49 @@ class AcademicQueryUiTest {
                 activity.findViewById<View>(R.id.information_query_assignments_refresh).performClick()
             }
             val device = UiDevice.getInstance(instrumentation)
+            awaitAssignmentBody(scenario, device)
+            scenario.onActivity { activity ->
+                // The sample row follows credential/source/action cards. Wait
+                // for the actual deferred publication, then reveal it rather
+                // than treating an offscreen accessibility node as missing data.
+                activity.findViewById<ScrollView>(R.id.information_query_assignments_scroll)
+                    .fullScroll(View.FOCUS_DOWN)
+            }
             assertTrue(device.wait(Until.hasObject(By.text("示例课程作业")), 5_000))
             scenario.onActivity { activity ->
                 activity.findViewById<View>(R.id.information_query_exams_tab).performClick()
                 assertNotNull(activity.findViewById<View>(R.id.information_query_exams_refresh))
                 activity.findViewById<View>(R.id.information_query_assignments_tab).performClick()
+            }
+            awaitAssignmentBody(scenario, device)
+            scenario.onActivity { activity ->
                 assertEquals(1, descendants(activity.findViewById(R.id.information_query_assignments_scroll))
                     .count { it.tag == "assignment.query.row" })
                 assertTrue(activity.findViewById<View>(R.id.information_query_assignments_refresh).isEnabled)
             }
         }
+    }
+
+    private fun awaitAssignmentBody(scenario: ActivityScenario<MainActivity>, device: UiDevice) {
+        var diagnostic = "The current assignment body was not published"
+        val ready = device.wait(object : Condition<UiDevice, Boolean> {
+            override fun apply(args: UiDevice): Boolean {
+                var rendered = false
+                scenario.onActivity { activity ->
+                    val page = activity.findViewById<ScrollView?>(R.id.information_query_assignments_scroll)
+                    val rows = page?.let(::descendants).orEmpty().filter { it.tag == "assignment.query.row" }
+                    val body = (page?.getChildAt(0) as? ViewGroup)?.getChildAt(0)
+                    diagnostic = "Assignment publication rows=${rows.size} bodyAlpha=${body?.alpha} " +
+                        "attached=${page?.isAttachedToWindow} laidOut=${page?.isLaidOut} " +
+                        "texts=${page?.let(::descendants).orEmpty().filterIsInstance<TextView>().map { it.text.toString() }}"
+                    rendered = page?.isAttachedToWindow == true && page.isLaidOut && body?.alpha == 1f &&
+                        rows.size == 1 && rows.single().height > 0 &&
+                        descendants(rows.single()).filterIsInstance<TextView>().any { it.text.toString() == "示例课程作业" }
+                }
+                return rendered
+            }
+        }, 5_000)
+        assertTrue(diagnostic, ready == true)
     }
 
     @Test fun assignmentCloudActionUsesFullPlatformNameInBothLanguages() {

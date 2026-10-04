@@ -19,6 +19,7 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Condition
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Assert.*
@@ -46,7 +47,28 @@ class MobileQueryHotfixUiTest {
                 activity.findViewById<View>(R.id.navigation_courses).performClick()
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             }
-            assertTrue(device.wait(Until.hasObject(By.res(context.packageName, "tablet_navigation")), 5_000))
+            var diagnostic = "Landscape navigation was not laid out"
+            val ready = device.wait(object : Condition<UiDevice, Boolean> {
+                override fun apply(args: UiDevice): Boolean {
+                    var rendered = false
+                    scenario.onActivity { activity ->
+                        val config = activity.resources.configuration
+                        val rail = activity.findViewById<View?>(R.id.tablet_navigation)
+                        val selector = activity.findViewById<View?>(R.id.information_query_mode_switch)
+                        diagnostic = "Landscape readiness orientation=${config.orientation} " +
+                            "widthDp=${config.screenWidthDp} smallestWidthDp=${config.smallestScreenWidthDp} " +
+                            "rail=${rail != null} railWidth=${rail?.width} selectorWidth=${selector?.width}"
+                        // Rotation recreates the Activity and asynchronously
+                        // rebuilds its adaptive root. The passive native rail
+                        // container need not appear as an accessibility node.
+                        rendered = config.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                            rail?.isAttachedToWindow == true && rail.isLaidOut && rail.width > 0 &&
+                            selector?.isLaidOut == true && selector.width > 0
+                    }
+                    return rendered
+                }
+            }, 5_000)
+            assertTrue(diagnostic, ready == true)
             settled()
             scenario.onActivity { activity ->
                 assertEquals(Configuration.ORIENTATION_LANDSCAPE, activity.resources.configuration.orientation)
