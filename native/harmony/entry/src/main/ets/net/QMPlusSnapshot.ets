@@ -144,7 +144,8 @@ export class QMPlusSnapshotParser {
         throw new Error('QMplus 课程条目格式不正确。');
       }
       const url: string | null = QMPlusSnapshotParser.nullableString(course['url'], 200);
-      if (url !== null && !QMPlusURLPolicy.isCourseURL(url)) {
+      if (url !== null && (!QMPlusURLPolicy.isCourseURL(url) ||
+        url !== 'https://qmplus.qmul.ac.uk/course/view.php?id=' + id)) {
         throw new Error('QMplus 课程地址不安全。');
       }
       ids.add(id);
@@ -154,6 +155,8 @@ export class QMPlusSnapshotParser {
         QMPlusSnapshotParser.nullableUTC(course['end_at']), status));
     }
     const activities: QMPlusActivity[] = [];
+    // Moodle 的 cmid 是模块全局身份；不能让不同课程或类型复用同一 id。
+    const activityIDs: Set<string> = new Set<string>();
     for (const rawActivity of rawActivities) {
       const item: Record<string, Object> = JsonUtil.record(rawActivity);
       if (!QMPlusSnapshotParser.hasOnlyKeys(item,
@@ -167,10 +170,12 @@ export class QMPlusSnapshotParser {
       const url: string = QMPlusSnapshotParser.boundedString(item['url'], 200);
       const detailStatus: string = QMPlusSnapshotParser.boundedString(item['detail_status'], 20);
       if (!ids.has(courseID) || !['assignment', 'quiz'].includes(kind) ||
-        !QMPlusURLPolicy.isActivityURL(url, kind) ||
+        !QMPlusURLPolicy.isActivityURL(url, kind) || !url.endsWith('?id=' + id) ||
+        activityIDs.has(id) ||
         !['available', 'restricted', 'unavailable'].includes(detailStatus)) {
         throw new Error('QMplus 活动条目格式不正确。');
       }
+      activityIDs.add(id);
       const timeLimit: number | null = QMPlusSnapshotParser.nullableTimeLimit(item['time_limit_seconds']);
       activities.push(new QMPlusActivity(id, courseID,
         QMPlusSnapshotParser.boundedString(item['title'], 512), kind, url,

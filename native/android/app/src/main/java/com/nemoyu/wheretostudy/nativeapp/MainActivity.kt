@@ -905,9 +905,10 @@ class MainActivity : Activity() {
 
     private fun clearQmplusWebSession(): Boolean = runCatching {
         val repository = activitySession.qmplus
+        val attempt = checkNotNull(repository.pendingCookieClearAttempt)
         startService(Intent(this, QmplusClearService::class.java)
-            .putExtra(QmplusActivity.EXTRA_GENERATION, repository.generation)
-            .putExtra(QmplusClearService.EXTRA_RECEIVER, QmplusClearReceiver(repository)))
+            .putExtra(QmplusActivity.EXTRA_GENERATION, attempt.generation)
+            .putExtra(QmplusClearService.EXTRA_RECEIVER, QmplusClearReceiver(repository, attempt)))
     }.isSuccess
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

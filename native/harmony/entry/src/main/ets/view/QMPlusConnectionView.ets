@@ -145,7 +145,8 @@ export struct QMPlusConnectionView {
       }
     } catch (e) {
       if (this.samePage(owner, generation)) {
-        this.session.failSync(generation, e instanceof Error ? e.message : 'QMplus 同步失败。');
+        // ArkWeb 的原始异常可能附带带 sesskey 的请求 URL 或执行脚本文本。
+        this.session.failSync(generation, 'QMplus 同步失败。');
       }
     }
   }

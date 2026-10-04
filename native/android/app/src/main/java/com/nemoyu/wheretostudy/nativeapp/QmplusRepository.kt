@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
+import java.lang.ref.WeakReference
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.UUID
 
 internal data class QmplusConnection(val generation: Long, val token: String)
+internal data class QmplusCookieClearAttempt(val generation: Long, val token: Long)
 
 /** Application-owned business cache only. WebView cookies stay in its separate process/profile. */
 internal class QmplusRepository(context: Context,
@@ -19,6 +21,7 @@ internal class QmplusRepository(context: Context,
     private val beforeReadPublication: (() -> Unit)? = null,
     private val beforeSavePublication: (() -> Unit)? = null,
     private val afterSavePublication: (() -> Unit)? = null,
+    private val cookieClearDeadlineMillis: Long = 10_000,
 ) {
     private val appContext = context.applicationContext
     private val prefs by lazy { preferencesOverride ?: appContext.getSharedPreferences("qmplus_business_cache", Context.MODE_PRIVATE) }
@@ -41,6 +44,9 @@ internal class QmplusRepository(context: Context,
         private set
     @Volatile var connection: QmplusConnection? = null
         private set
+    @Volatile var pendingCookieClearAttempt: QmplusCookieClearAttempt? = null
+        private set
+    private var cookieClearDeadline: Runnable? = null
     private val observers = ConcurrentHashMap<Any, () -> Unit>()
 
     init {
@@ -77,6 +83,7 @@ internal class QmplusRepository(context: Context,
         // A second app Activity may have explicitly disconnected the shared QM profile.
         val storedGeneration = prefs.getLong(GENERATION, 0)
         if (storedGeneration != generation) {
+            cancelCookieClearDeadlineLocked()
             revision++; generation = storedGeneration; snapshot = null
             cookiesNeedClearing = prefs.getBoolean(COOKIE_CLEAR_PENDING, false)
         }
@@ -91,7 +98,7 @@ internal class QmplusRepository(context: Context,
 
     fun accept(bytes: ByteArray, expectedGeneration: Long) {
         val token = synchronized(stateLock) {
-            if (closed.get() || isLoading || generation != expectedGeneration ||
+            if (closed.get() || isLoading || isClearingSession || generation != expectedGeneration ||
                 bytes.size > QmplusPolicy.MAXIMUM_SNAPSHOT_BYTES) return
             isLoading = true; error = null; revision
         }
@@ -109,6 +116,7 @@ internal class QmplusRepository(context: Context,
                             check(prefs.edit().putString(SNAPSHOT, canonical).putLong(GENERATION, generation)
                                 .putBoolean(COOKIE_CLEAR_PENDING, false).commit()) { "QMplus cache save failed." }
                             snapshot = parsed; cookiesNeedClearing = false
+                            cancelCookieClearDeadlineLocked()
                     } }
                 }
                 val published = synchronized(stateLock) {
@@ -134,23 +142,27 @@ internal class QmplusRepository(context: Context,
         notifyObservers()
     }
 
-    fun cookiesCleared(expectedGeneration: Long) {
+    fun cookiesCleared(expectedGeneration: Long, expectedClearToken: Long? = null) {
         try {
             worker.execute {
                 synchronized(stateLock) { synchronized(prefs) {
                     if (closed.get() || expectedGeneration != generation || prefs.getLong(GENERATION, 0) != expectedGeneration) return@execute
+                    if (expectedClearToken != null && pendingCookieClearAttempt?.token != expectedClearToken) return@execute
                     if (prefs.edit().putBoolean(COOKIE_CLEAR_PENDING, false).commit()) cookiesNeedClearing = false
                     else error = "无法保存 QMplus 会话清除状态。"
                     isClearingSession = false
+                    cancelCookieClearDeadlineLocked()
                 } }
                 notifyObservers()
             }
         } catch (_: RejectedExecutionException) { /* Final owner is closed; no view callback. */ }
     }
 
-    fun cookieClearCouldNotStart(expectedGeneration: Long = generation) {
+    fun cookieClearCouldNotStart(expectedGeneration: Long = generation, expectedClearToken: Long? = null) {
         synchronized(stateLock) {
             if (closed.get() || generation != expectedGeneration) return
+            if (expectedClearToken != null && pendingCookieClearAttempt?.token != expectedClearToken) return
+            cancelCookieClearDeadlineLocked()
             isClearingSession = false
             error = "QMplus 网页会话尚未清除；再次连接前会先清除旧会话。"
         }
@@ -159,10 +171,12 @@ internal class QmplusRepository(context: Context,
 
     /** Full clear already uses the coordinator; invalidate before the durable removal. */
     fun clear() = synchronized(stateLock) { synchronized(prefs) {
+        cancelCookieClearDeadlineLocked()
         revision++
         connection = null
         generation = maxOf(generation, prefs.getLong(GENERATION, 0)) + 1
         snapshot = null; isLoading = false; error = null; cookiesNeedClearing = true; isClearingSession = true
+        armCookieClearDeadlineLocked()
         check(prefs.edit().remove(SNAPSHOT).putLong(GENERATION, generation)
             .putBoolean(COOKIE_CLEAR_PENDING, true).commit()) { "QMplus cache clear failed." }
         notifyObservers()
@@ -170,12 +184,35 @@ internal class QmplusRepository(context: Context,
 
     fun close() {
         if (!closed.compareAndSet(false, true)) return
-        synchronized(stateLock) { revision++; snapshot = null; connection = null }
+        synchronized(stateLock) {
+            revision++; snapshot = null; connection = null; isClearingSession = false
+            cancelCookieClearDeadlineLocked()
+        }
         observers.clear(); handler.removeCallbacksAndMessages(null); worker.shutdownNow()
     }
 
     private fun notifyObservers() {
         if (!closed.get()) handler.post { if (!closed.get()) observers.values.toList().forEach { it() } }
+    }
+
+    private fun armCookieClearDeadlineLocked() {
+        val attempt = QmplusCookieClearAttempt(generation, revision)
+        pendingCookieClearAttempt = attempt
+        val weakRepository = WeakReference(this)
+        val deadline = Runnable {
+            // A lost private-process ACK must not strand the retained owner.
+            // This does not claim the cookies were cleared: the durable pending
+            // marker remains true, so the next connection clears before login.
+            weakRepository.get()?.cookieClearCouldNotStart(attempt.generation, attempt.token)
+        }
+        cookieClearDeadline = deadline
+        handler.postDelayed(deadline, cookieClearDeadlineMillis.coerceAtLeast(1))
+    }
+
+    private fun cancelCookieClearDeadlineLocked() {
+        cookieClearDeadline?.let(handler::removeCallbacks)
+        cookieClearDeadline = null
+        pendingCookieClearAttempt = null
     }
 
     private companion object {

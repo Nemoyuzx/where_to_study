@@ -71,30 +71,32 @@ internal object QmplusSnapshotCodec {
         val rawWarnings = root.getJSONArray("warnings")
         require(rawCourses.length() <= 100 && rawActivities.length() <= 500 && rawWarnings.length() <= 40)
         val courses = (0 until rawCourses.length()).map { index -> rawCourses.getJSONObject(index).let { course ->
-            QmplusCourse(required(course, "id", 128), required(course, "name", 512),
+            val id = required(course, "id", 128)
+            QmplusCourse(id, required(course, "name", 512),
                 optional(course, "short_name", 512), required(course, "url", 2048).also {
-                    require(QmplusPolicy.isCourseURL(it))
+                    require(QmplusPolicy.isCourseURL(it) && URI(it).rawQuery == "id=$id")
                 }, date(course, "start_at"), date(course, "end_at"),
                 required(course, "current_term_status", 16).also { require(it in setOf("current", "other", "unknown")) })
         } }
         require(courses.map { it.id }.distinct().size == courses.size)
         val courseIDs = courses.map { it.id }.toSet()
         val activities = (0 until rawActivities.length()).map { index -> rawActivities.getJSONObject(index).let { item ->
+            val id = required(item, "id", 128)
             val kind = required(item, "kind", 16).also { require(it in setOf("assignment", "quiz")) }
             val timeLimit = if (item.isNull("time_limit_seconds")) null else item.getLong("time_limit_seconds").also {
                 require(it in 0..31_536_000)
             }
-            QmplusActivityItem(required(item, "id", 128), required(item, "course_id", 128).also {
+            QmplusActivityItem(id, required(item, "course_id", 128).also {
                 require(it in courseIDs)
             }, required(item, "title", 512), kind, required(item, "url", 2048).also {
-                require(QmplusPolicy.isActivityURL(it, kind))
+                require(QmplusPolicy.isActivityURL(it, kind) && URI(it).rawQuery == "id=$id")
             }, date(item, "due_at"), date(item, "opens_at"), date(item, "closes_at"), date(item, "cutoff_at"),
                 timeLimit, optional(item, "status", 1000), optional(item, "detail_status", 16).also {
                     require(it == null || it in setOf("available", "restricted", "unavailable"))
                 },
                 optional(item, "raw_time_text", 1000))
         } }
-        require(activities.map { "${it.kind}/${it.id}" }.distinct().size == activities.size)
+        require(activities.map { it.id }.distinct().size == activities.size)
         return QmplusSnapshot(fetchedAt, courses, activities, (0 until rawWarnings.length()).map {
             rawWarnings.getString(it).also { warning -> require(Regex("^[A-Z0-9_]{1,64}$").matches(warning)) }
         }, partial)
@@ -123,7 +125,7 @@ internal object QmplusSnapshotCodec {
         val allCourses = (incoming.courses + previous.courses).distinctBy { it.id }
         val courses = allCourses.take(100)
         val ids = courses.map { it.id }.toSet()
-        val allActivities = (incoming.activities + previous.activities).distinctBy { "${it.kind}/${it.id}" }
+        val allActivities = (incoming.activities + previous.activities).distinctBy { it.id }
             .filter { it.courseID in ids }
         val warnings = (if (allCourses.size > 100 || allActivities.size > 500) listOf("QM_NATIVE_CACHE_LIMIT") else emptyList()) +
             listOf("QM_PREVIOUS_ACTIVITIES_RETAINED") + incoming.warnings

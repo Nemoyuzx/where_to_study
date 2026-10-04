@@ -5,6 +5,9 @@ import { QMPlusSnapshot, QMPlusSnapshotParser, QMPlusURLPolicy } from '../net/QM
 
 @ObservedV2
 export class QMPlusSession {
+  // ArkWeb 文档要求先加载 Web 组件再调用 WebStorage；Root Session 重建不代表
+  // 本进程的 incognito profile 未被使用过。
+  private static ownedWebLoadedInProcess: boolean = false;
   @Trace loginVisible: boolean = false;
   @Trace targetURL: string = QMPlusURLPolicy.home;
   @Trace syncing: boolean = false;
@@ -13,10 +16,22 @@ export class QMPlusSession {
   @Trace error: string = '';
   @Trace errorCode: string = '';
   private generation: number = 0;
-  private webLoaded: boolean = false;
+  private readonly clearIncognitoData: () => void;
+
+  constructor(clearIncognitoData?: () => void) {
+    this.clearIncognitoData = clearIncognitoData ?? ((): void => {
+      webview.WebCookieManager.clearAllCookiesSync(true);
+      webview.WebStorage.deleteAllData(true);
+    });
+  }
+
+  // 仅测试夹具使用；不写入持久状态，也不影响普通会话。
+  static resetOwnedWebLoadedForTesting(): void {
+    QMPlusSession.ownedWebLoadedInProcess = false;
+  }
 
   noteWebLoaded(): void {
-    this.webLoaded = true;
+    QMPlusSession.ownedWebLoadedInProcess = true;
   }
 
   openLogin(url: string = QMPlusURLPolicy.home): void {
@@ -61,9 +76,10 @@ export class QMPlusSession {
     } catch (e) {
       // 部分失败保留上一份明确标注时间的快照，绝不把接口失败当空课程。
       const message: string = e instanceof Error ? e.message : 'QM_SYNC_FAILED';
-      this.errorCode = /^[A-Z0-9_]{1,80}$/.test(message) ? message : '';
+      // 上游页面的 error_code 仍属未信任数据；只保留明确识别的登录状态。
+      this.errorCode = message === 'QM_LOGIN_REQUIRED' ? message : '';
       this.error = this.errorCode === 'QM_LOGIN_REQUIRED' ? '请先在官方 QMplus 网页完成登录。' :
-        this.errorCode.length > 0 ? 'QMplus 同步失败。' : message;
+        'QMplus 同步失败。';
     }
     this.syncing = false;
   }
@@ -72,7 +88,8 @@ export class QMPlusSession {
     if (!this.isCurrent(generation)) { return; }
     this.syncing = false;
     this.errorCode = '';
-    this.error = message;
+    // 只呈现本地固定文案，避免未来调用者把 ArkWeb 异常、URL 或令牌原文传到 UI。
+    this.error = message === 'QMplus 同步已超时，请稍后重试。' ? message : 'QMplus 同步失败。';
   }
 
   cancelSync(): void {
@@ -88,14 +105,12 @@ export class QMPlusSession {
     this.showingStalePartial = false;
     this.error = '';
     this.errorCode = '';
-    if (!this.webLoaded) { return true; }
+    if (!QMPlusSession.ownedWebLoadedInProcess) { return true; }
     try {
       // 仅清除本应用 incognito ArkWeb profile 的 Cookie；不访问系统浏览器或其它应用。
-      webview.WebCookieManager.clearAllCookiesSync(true);
       // 当前应用只为 QMplus 使用 incognito Web；同时删除该 profile 的网页存储，
       // 清除 Microsoft SSO 页面可能留在 Web Storage 的临时身份状态。
-      webview.WebStorage.deleteAllData(true);
-      this.webLoaded = false;
+      this.clearIncognitoData();
       return true;
     } catch (e) {
       this.error = 'QMplus 浏览器会话未能清除，请稍后重试。';

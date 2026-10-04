@@ -60,6 +60,42 @@ class QmplusSnapshotCodecTest {
         assertThrows(IllegalArgumentException::class.java) { QmplusSnapshotCodec.decode(("[".repeat(13) + "]".repeat(13)).toByteArray()) }
     }
 
+    @Test fun courseAndActivityIDsMustMatchTheirCanonicalOfficialURLs() {
+        fun changed(array: String, key: String, value: String): ByteArray {
+            val root = JSONObject(String(QmplusSnapshotCodec.encode(sample()), StandardCharsets.UTF_8))
+            root.getJSONArray(array).getJSONObject(0).put(key, value)
+            return root.toString().toByteArray(StandardCharsets.UTF_8)
+        }
+        listOf("0", "other", "99").forEach { id ->
+            assertThrows(IllegalArgumentException::class.java) {
+                QmplusSnapshotCodec.decode(changed("courses", "id", id))
+            }
+            assertThrows(IllegalArgumentException::class.java) {
+                QmplusSnapshotCodec.decode(changed("activities", "id", id))
+            }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            QmplusSnapshotCodec.decode(changed("courses", "url", "https://qmplus.qmul.ac.uk/course/view.php?id=99"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            QmplusSnapshotCodec.decode(changed("activities", "url", "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=99"))
+        }
+    }
+
+    @Test fun activityIDsAreGloballyUniqueAcrossKindsIncludingPartialCacheMerges() {
+        val previous = sample()
+        val assignment = previous.activities.single().copy(kind = "assignment",
+            url = "https://qmplus.qmul.ac.uk/mod/assign/view.php?id=2")
+        val duplicate = previous.copy(activities = previous.activities + assignment)
+        assertThrows(IllegalArgumentException::class.java) {
+            QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(duplicate))
+        }
+        val incoming = previous.copy(activities = listOf(assignment), partial = true)
+        val merged = QmplusSnapshotCodec.preservingKnownActivities(incoming, previous)
+        assertEquals(listOf(assignment), merged.activities)
+        assertEquals(merged, QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(merged)))
+    }
+
     @Test fun partialSyncKeepsKnownActivitiesWhereasVerifiedFullSyncCanReplaceTheCatalog() {
         val old = sample()
         val partial = old.copy(activities = emptyList(), partial = true, warnings = listOf("QM_DETAIL_PARTIAL"))

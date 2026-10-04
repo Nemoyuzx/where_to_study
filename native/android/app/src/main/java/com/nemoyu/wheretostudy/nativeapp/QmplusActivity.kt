@@ -299,10 +299,13 @@ class QmplusClearService : Service() {
     }
 }
 
-internal class QmplusClearReceiver(private val repository: QmplusRepository) : ResultReceiver(Handler(Looper.getMainLooper())) {
+internal class QmplusClearReceiver(private val repository: QmplusRepository,
+    private val attempt: QmplusCookieClearAttempt,
+) : ResultReceiver(Handler(Looper.getMainLooper())) {
     override fun onReceiveResult(resultCode: Int, resultData: Bundle?) {
+        if (resultData?.getLong(QmplusActivity.EXTRA_GENERATION, -1) != attempt.generation) return
         if (resultCode == QmplusClearService.RESULT_CLEARED)
-            repository.cookiesCleared(resultData?.getLong(QmplusActivity.EXTRA_GENERATION, -1) ?: -1)
-        else repository.cookieClearCouldNotStart(resultData?.getLong(QmplusActivity.EXTRA_GENERATION, -1) ?: -1)
+            repository.cookiesCleared(attempt.generation, attempt.token)
+        else repository.cookieClearCouldNotStart(attempt.generation, attempt.token)
     }
 }

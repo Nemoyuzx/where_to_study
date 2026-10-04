@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.app.AlertDialog
 import android.os.SystemClock
+import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.ExecutorService
 import org.json.JSONObject
 
 /** Synthetic only: no SSO navigation, credential writes, private data or outside network. */
@@ -154,6 +156,96 @@ class CoursesNavigationUiTest {
         } finally { repository.close(); assertTrue(prefs.edit().clear().commit()) }
     }
 
+    @Test fun droppedCookieClearAckExitsBusyWithoutClaimingSuccessAndLateAckIsIgnored() {
+        val prefs = context.getSharedPreferences("qmplus_ui_dropped_ack_only", Context.MODE_PRIVATE)
+        assertTrue(prefs.edit().clear().commit())
+        lateinit var repository: QmplusRepository
+        instrumentation.runOnMainSync { repository = QmplusRepository(context, prefs, cookieClearDeadlineMillis = 100) }
+        try {
+            await { !repository.isLoading }
+            lateinit var receiver: QmplusClearReceiver
+            lateinit var attempt: QmplusCookieClearAttempt
+            instrumentation.runOnMainSync {
+                repository.clear()
+                attempt = checkNotNull(repository.pendingCookieClearAttempt)
+                receiver = QmplusClearReceiver(repository, attempt)
+                assertTrue(repository.isClearingSession)
+                assertNull(repository.beginConnection())
+            }
+            await { !repository.isClearingSession }
+            assertTrue(repository.cookiesNeedClearing)
+            assertTrue(prefs.getBoolean("cookie_clear_pending", false))
+            assertNotNull(repository.error)
+            assertNull(repository.pendingCookieClearAttempt)
+            receiver.send(QmplusClearService.RESULT_CLEARED,
+                Bundle().apply { putLong(QmplusActivity.EXTRA_GENERATION, attempt.generation) })
+            instrumentation.waitForIdleSync()
+            awaitWorker(repository)
+            assertTrue("A lost/late service ACK cannot clear the durable retry marker", repository.cookiesNeedClearing)
+            assertTrue(prefs.getBoolean("cookie_clear_pending", false))
+            assertNotNull(repository.error)
+            instrumentation.runOnMainSync {
+                assertNotNull(repository.beginConnection())
+                assertTrue("The retry must clear its own WebView session before login", repository.cookiesNeedClearing)
+            }
+        } finally { repository.close(); assertTrue(prefs.edit().clear().commit()) }
+    }
+
+    @Test fun replacingCookieCleanupRejectsOldAcksAndCanceledDeadlinesIncludingFinalClose() {
+        val prefs = context.getSharedPreferences("qmplus_ui_cleanup_owner_only", Context.MODE_PRIVATE)
+        assertTrue(prefs.edit().clear().commit())
+        lateinit var repository: QmplusRepository
+        instrumentation.runOnMainSync { repository = QmplusRepository(context, prefs) }
+        try {
+            await { !repository.isLoading }
+            lateinit var first: QmplusCookieClearAttempt
+            lateinit var current: QmplusCookieClearAttempt
+            lateinit var oldReceiver: QmplusClearReceiver
+            lateinit var receiver: QmplusClearReceiver
+            lateinit var oldDeadline: Runnable
+            lateinit var currentDeadline: Runnable
+            instrumentation.runOnMainSync {
+                repository.clear()
+                first = checkNotNull(repository.pendingCookieClearAttempt)
+                oldReceiver = QmplusClearReceiver(repository, first)
+                oldDeadline = cookieDeadline(repository)
+                repository.clear()
+                current = checkNotNull(repository.pendingCookieClearAttempt)
+                receiver = QmplusClearReceiver(repository, current)
+                currentDeadline = cookieDeadline(repository)
+                oldDeadline.run() // Simulate a callback already dequeued before cancellation.
+                assertTrue(repository.isClearingSession)
+                assertEquals(current, repository.pendingCookieClearAttempt)
+                assertTrue(current.generation > first.generation)
+            }
+            oldReceiver.send(QmplusClearService.RESULT_CLEARED,
+                Bundle().apply { putLong(QmplusActivity.EXTRA_GENERATION, first.generation) })
+            oldReceiver.send(QmplusClearService.RESULT_FAILED,
+                Bundle().apply { putLong(QmplusActivity.EXTRA_GENERATION, first.generation) })
+            instrumentation.waitForIdleSync(); awaitWorker(repository)
+            assertTrue(repository.isClearingSession); assertTrue(repository.cookiesNeedClearing)
+            assertNull(repository.error)
+            assertTrue(prefs.getBoolean("cookie_clear_pending", false))
+            receiver.send(QmplusClearService.RESULT_CLEARED,
+                Bundle().apply { putLong(QmplusActivity.EXTRA_GENERATION, current.generation) })
+            instrumentation.waitForIdleSync(); awaitWorker(repository)
+            assertFalse(repository.isClearingSession); assertFalse(repository.cookiesNeedClearing)
+            assertFalse(prefs.getBoolean("cookie_clear_pending", true)); assertNull(repository.pendingCookieClearAttempt)
+            instrumentation.runOnMainSync {
+                currentDeadline.run()
+                assertNull(repository.error)
+                repository.clear()
+                val finalDeadline = cookieDeadline(repository)
+                repository.close()
+                finalDeadline.run()
+                assertNull(repository.pendingCookieClearAttempt)
+                assertFalse(repository.isClearingSession)
+                assertNull(repository.beginConnection())
+                assertNull(repository.error)
+            }
+        } finally { repository.close(); assertTrue(prefs.edit().clear().commit()) }
+    }
+
     @Test fun cachedRowsOpenInternalCourseDetailsAndReturnWithoutAuthOrAssignmentRequests() {
         val preferences = AppPreferences(context)
         val oldLanguage = preferences.languageCode
@@ -268,6 +360,14 @@ class CoursesNavigationUiTest {
     private fun retained(activity: MainActivity) = MainActivity::class.java.getDeclaredMethod("getActivitySession")
         .apply { isAccessible = true }.invoke(activity) as ActivitySessionState
     private fun field(owner: Any, name: String, value: Any) { owner.javaClass.getDeclaredField(name).apply { isAccessible = true }.set(owner, value) }
+    private fun cookieDeadline(repository: QmplusRepository): Runnable = QmplusRepository::class.java
+        .getDeclaredField("cookieClearDeadline").apply { isAccessible = true }.get(repository) as Runnable
+    private fun awaitWorker(repository: QmplusRepository) {
+        val worker = QmplusRepository::class.java.getDeclaredField("worker").apply { isAccessible = true }
+            .get(repository) as ExecutorService
+        worker.submit(Runnable {}).get(5, TimeUnit.SECONDS)
+        instrumentation.waitForIdleSync()
+    }
     private fun details(activity: MainActivity): AlertDialog? {
         val page = checkNotNull(MainActivity::class.java.getDeclaredField("coursesPage").apply { isAccessible = true }.get(activity))
         return page.javaClass.getDeclaredField("courseDetailsDialog").apply { isAccessible = true }.get(page) as? AlertDialog

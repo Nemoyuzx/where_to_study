@@ -48,6 +48,17 @@ final class InterfaceLanguageUITests: XCTestCase {
         XCTAssertGreaterThan((values["samples"] as? NSNumber)?.intValue ?? 0, 0)
         XCTAssertEqual(values["baselineViewportReady"] as? Bool, true)
         XCTAssertGreaterThan((values["viewportSamples"] as? NSNumber)?.intValue ?? 0, 0)
+        if values["reduceMotion"] as? Bool != true {
+            XCTAssertGreaterThan((values["transitionOverlaySamples"] as? NSNumber)?.intValue ?? 0, 0,
+                                 "The actual full-window material must be present during intermediate frames")
+            XCTAssertLessThanOrEqual((values["transitionOverlayFrameDelta"] as? NSNumber)?.doubleValue ?? .infinity, 1,
+                                     "The blur must cover navigation, content and safe areas together")
+            XCTAssertGreaterThan((values["transitionBlurSamples"] as? NSNumber)?.intValue ?? 0, 0,
+                                 "Intermediate samples must include an active native blur, not just a transparent blocker")
+        } else {
+            XCTAssertEqual((values["transitionOverlaySamples"] as? NSNumber)?.intValue, 0)
+            XCTAssertEqual((values["transitionBlurSamples"] as? NSNumber)?.intValue, 0)
+        }
         for key in ["rootMaxDelta", "controllerMaxDelta", "safeAreaMaxDelta", "viewportMaxDelta"] + (compact ? ["barMaxDelta"] : []) {
             guard let delta = values[key] as? NSNumber else { XCTFail("Missing geometry field: \(key)"); continue }
             if delta.doubleValue > 1 { attachGeometryFailure(app, value: text) }
@@ -61,6 +72,13 @@ final class InterfaceLanguageUITests: XCTestCase {
         screenshot.lifetime = .keepAlways
         add(screenshot)
         print("LANGUAGE_INTERMEDIATE_GEOMETRY \(String(describing: value)) appFrame=\(app.frame)")
+    }
+
+    private func waitForLanguageTransitionToFinish(_ app: XCUIApplication) {
+        let cover = app.descendants(matching: .any)["overlay.language-transition"].firstMatch
+        let finished = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: cover)
+        XCTAssertEqual(XCTWaiter.wait(for: [finished], timeout: 3), .completed,
+                       "Wait for the actual full-window transition before testing interaction")
     }
 
     func testLanguageRoundTripKeepsCurrentSettingsPositionAndUncommittedFields() {
@@ -80,6 +98,7 @@ final class InterfaceLanguageUITests: XCTestCase {
         reveal(picker, app: app)
         picker.buttons["English"].tap()
         XCTAssertTrue(app.tabBars.buttons["Settings"].waitForExistence(timeout: 5))
+        waitForLanguageTransitionToFinish(app)
         XCTAssertTrue(app.tabBars.buttons["Settings"].isSelected)
         let english = app.segmentedControls["settings.language"].firstMatch
         XCTAssertTrue(english.waitForExistence(timeout: 5))
@@ -93,6 +112,7 @@ final class InterfaceLanguageUITests: XCTestCase {
         XCTAssertTrue(english.isHittable, "Language conversion must keep the current settings location, without another reveal")
         english.buttons["Simplified Chinese"].tap()
         XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 5))
+        waitForLanguageTransitionToFinish(app)
         XCTAssertTrue(app.tabBars.buttons["设置"].isSelected)
         XCTAssertTrue(app.segmentedControls["settings.language"].firstMatch.isHittable)
         reveal(reminder, app: app)
@@ -126,6 +146,7 @@ final class InterfaceLanguageUITests: XCTestCase {
         reveal(picker, app: app)
         picker.buttons["English"].tap()
         XCTAssertTrue(app.tabBars.buttons["Courses"].waitForExistence(timeout: 5))
+        waitForLanguageTransitionToFinish(app)
         app.tabBars.buttons["Courses"].tap()
         XCTAssertTrue(app.segmentedControls.buttons["Assignment Deadlines"].isSelected)
         XCTAssertEqual(app.textFields["assignments.search"].value as? String, "示例", "Raw entered/API content must not be translated or reset")
