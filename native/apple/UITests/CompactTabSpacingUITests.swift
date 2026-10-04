@@ -62,19 +62,34 @@ final class CompactTabSpacingUITests: XCTestCase {
         let bar = app.tabBars.firstMatch
         XCTAssertTrue(bar.waitForExistence(timeout: 5))
         let buttons = titles.map { bar.buttons[$0].firstMatch }
+        var previousFrames: [CGRect]?
         let equality = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             guard bar.buttons.count == titles.count,
-                  buttons.allSatisfy({ $0.exists && $0.isHittable && $0.frame.width > 0 }) else { return false }
+                  buttons.allSatisfy({ $0.exists && $0.frame.width > 0 && $0.frame.height > 0 }) else {
+                previousFrames = nil
+                return false
+            }
             let frames = buttons.map(\.frame)
+            let stable = previousFrames.map { previous in
+                zip(previous, frames).allSatisfy { pair in
+                    abs(pair.0.minX - pair.1.minX) <= 1 && abs(pair.0.minY - pair.1.minY) <= 1
+                        && abs(pair.0.width - pair.1.width) <= 1 && abs(pair.0.height - pair.1.height) <= 1
+                }
+            } ?? false
+            previousFrames = frames
             let widths = frames.map(\.width)
             let gaps = zip(frames, frames.dropFirst()).map { pair in pair.1.midX - pair.0.midX }
-            return (widths.max() ?? 0) - (widths.min() ?? 0) <= 1
+            return stable && (widths.max() ?? 0) - (widths.min() ?? 0) <= 1
                 && (gaps.max() ?? 0) - (gaps.min() ?? 0) <= 1
                 && gaps.allSatisfy { $0 > 0 }
         }, object: bar)
         let outcome = XCTWaiter.wait(for: [equality], timeout: 5)
         if outcome != .completed { attachFailure(app, phase: phase, buttons: buttons) }
         XCTAssertEqual(outcome, .completed, "Actual native items must have equal widths and adjacent center gaps in \(phase)")
+        let cover = app.descendants(matching: .any)["overlay.language-transition"].firstMatch
+        let uncovered = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: cover)
+        XCTAssertEqual(XCTWaiter.wait(for: [uncovered], timeout: 3), .completed,
+                       "Actual interaction is checked after the full-window language transition finishes")
         XCTAssertEqual(bar.buttons.count, 5)
         let frames = buttons.map(\.frame)
         guard frames.count == 5 else { XCTFail("Missing native tab items"); return frames }

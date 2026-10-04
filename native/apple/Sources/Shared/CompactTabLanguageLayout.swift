@@ -11,7 +11,7 @@ enum CompactTabTitlePolicy {
         }
         return switch section {
         case .planner: "Rooms"
-        case .calendar: "Schedule"
+        case .calendar: "Agenda"
         case .courses: "Courses"
         case .queries: "Search"
         case .settings: "Settings"

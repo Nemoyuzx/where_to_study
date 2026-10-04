@@ -127,13 +127,13 @@ final class CompactTabLanguageLayoutTests: XCTestCase {
 
     func testCompactEnglishTitlesLeaveFullPageAndAccessibilityNamesAvailable() {
         XCTAssertEqual(AppSection.allCases.map { CompactTabTitlePolicy.title(for: $0, language: .english) },
-                       ["Rooms", "Schedule", "Courses", "Search", "Settings"])
+                       ["Rooms", "Agenda", "Courses", "Search", "Settings"])
         XCTAssertEqual(AppSection.allCases.map { CompactTabTitlePolicy.title(for: $0, language: .simplifiedChinese) },
                        ["空教室", "教学日历", "课程", "查询", "设置"])
         XCTAssertEqual(AppLocalization.string(AppSection.planner.titleKey, language: .english), "Empty Rooms")
         XCTAssertEqual(AppLocalization.string(AppSection.calendar.titleKey, language: .english), "Academic Calendar")
         let expectedSystemTitles = AppLanguage.system.resolvedResourceName == "en"
-            ? ["Rooms", "Schedule", "Courses", "Search", "Settings"] : ["空教室", "教学日历", "课程", "查询", "设置"]
+            ? ["Rooms", "Agenda", "Courses", "Search", "Settings"] : ["空教室", "教学日历", "课程", "查询", "设置"]
         XCTAssertEqual(AppSection.allCases.map { CompactTabTitlePolicy.title(for: $0, language: .system) }, expectedSystemTitles)
     }
 
@@ -148,7 +148,7 @@ final class CompactTabLanguageLayoutTests: XCTestCase {
         let probe = CompactTabLanguageLayoutView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
         tabs.view.addSubview(probe)
         defer { probe.cancelPendingUpdate(); window.isHidden = true; window.rootViewController = nil }
-        let titles = ["Rooms", "Schedule", "Courses", "Search", "Settings"]
+        let titles = ["Rooms", "Agenda", "Courses", "Search", "Settings"]
         probe.update(titles: titles)
         try await waitUntil { probe.refreshCount == 1 }
         tabs.tabBar.itemPositioning = .automatic
