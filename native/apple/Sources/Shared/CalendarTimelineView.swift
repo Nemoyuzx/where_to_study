@@ -20,6 +20,8 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
     let kind: CalendarAllDayEventKind
     let destinationURL: URL?
     let deadlineItem: PublicDeadlineItem?
+    let courseSelection: CourseCatalogSelection?
+    let assignmentItem: AssignmentDeadlineItem?
 
     init(
         id: String,
@@ -27,7 +29,9 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
         time: String? = nil,
         kind: CalendarAllDayEventKind,
         destinationURL: URL? = nil,
-        deadlineItem: PublicDeadlineItem? = nil
+        deadlineItem: PublicDeadlineItem? = nil,
+        courseSelection: CourseCatalogSelection? = nil,
+        assignmentItem: AssignmentDeadlineItem? = nil
     ) {
         self.id = id
         self.title = title
@@ -35,6 +39,8 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
         self.kind = kind
         self.destinationURL = destinationURL
         self.deadlineItem = deadlineItem
+        self.courseSelection = courseSelection
+        self.assignmentItem = assignmentItem
     }
 }
 
@@ -180,6 +186,12 @@ struct CalendarTimelineDay: Identifiable {
     }
 
     var id: Date { date }
+
+    init(copying day: CalendarTimelineDay, allDayEvents: [CalendarAllDayEvent]) {
+        date = day.date; courses = day.courses; holidays = day.holidays
+        coursePlacements = day.coursePlacements; courseTrackCount = day.courseTrackCount
+        self.allDayEvents = allDayEvents
+    }
 }
 
 struct CalendarCoursePlacement: Identifiable, Equatable, Sendable {
@@ -310,6 +322,7 @@ struct CalendarTimelineView: View {
     let selectedDate: Date
     var onSelectDay: ((Date) -> Void)?
     var onSelectAllDayEvent: ((Date, CalendarAllDayEvent) -> Void)?
+    var onSelectAllDayOverflow: ((Date) -> Void)?
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -698,7 +711,8 @@ struct CalendarTimelineView: View {
                 if layout.hiddenEventCount > 0,
                    let first = day.allDayEvents.first {
                     Button {
-                        onSelectAllDayEvent?(day.date, first)
+                        if let onSelectAllDayOverflow { onSelectAllDayOverflow(day.date) }
+                        else { onSelectAllDayEvent?(day.date, first) }
                     } label: {
                         Text("+\(layout.hiddenEventCount)")
                             .font(.system(size: 9, weight: .semibold))
@@ -723,7 +737,8 @@ struct CalendarTimelineView: View {
 
     @ViewBuilder
     private func allDayHeaderEvent(_ event: CalendarAllDayEvent, on date: Date) -> some View {
-        if let destination = event.destinationURL ?? event.deadlineItem?.officialURL {
+        if event.kind != .assignment,
+           let destination = event.destinationURL ?? event.deadlineItem?.officialURL {
             Link(destination: destination) {
                 allDayHeaderEventLabel(event)
             }
@@ -756,7 +771,8 @@ struct CalendarTimelineView: View {
         .foregroundStyle(allDayTint(event.kind))
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, minHeight: allDayRowHeight, alignment: .leading)
-        .background(allDayTint(event.kind).opacity(0.10))
+        .background(allDayTint(event.kind).opacity(0.10),
+                    in: RoundedRectangle(cornerRadius: event.kind == .assignment ? 5 : 0))
         .contentShape(Rectangle())
         .accessibilityLabel("\(event.time ?? model.localized("全天"))，\(event.title)")
     }

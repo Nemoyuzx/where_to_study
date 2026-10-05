@@ -639,6 +639,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(theme.secondaryText)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityIdentifier("settings.language")
@@ -661,7 +662,20 @@ struct SettingsView: View {
         #if os(iOS) || os(macOS)
         session.languageTransition.request(
             current: model.appLanguage, target: language,
-            label: model.localized("正在切换界面语言"), reduceMotion: reduceMotion, change: apply
+            label: model.localized("正在切换界面语言"), reduceMotion: reduceMotion,
+            completionReady: { [weak model, weak scroll = session.languageScroll] in
+                model?.appLanguage == language && model?.languageUpdatePending == false &&
+                    model?.languageUpdateSucceeded == true &&
+                    scroll?.isSettled(for: language) == true
+            },
+            completionFailed: { [weak model] in
+                model?.appLanguage == language && model?.languageUpdatePending == false &&
+                    model?.languageUpdateSucceeded == false
+            },
+            completionGeometry: { [weak scroll = session.languageScroll] in
+                guard let scroll else { return [] }
+                return scroll.readinessGeometry
+            }, change: apply
         )
         #else
         guard language != model.appLanguage else { return }
@@ -1166,13 +1180,17 @@ struct SettingsView: View {
 private struct QMplusSettingsSurface: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var store: QMplusStore
+    @State private var detailsExpanded = false
 
     var body: some View {
         Surface {
             VStack(alignment: .leading, spacing: 10) {
                 sectionHeader
                 featureToggle
+                if detailsExpanded {
+                VStack(alignment: .leading, spacing: 10) {
                 Text(model.localized("请在官方网页完成 SSO 与 MFA；也可自愿保存独立的 QMplus 登录信息，用于官方网页自动填写。"))
                     .font(.callout).foregroundStyle(theme.secondaryText)
                 Text(model.localized(store.statusKey)).font(.caption).foregroundStyle(theme.secondaryText)
@@ -1186,8 +1204,16 @@ private struct QMplusSettingsSurface: View {
                     save: store.saveCredentials, disable: store.disableCredentialAutofill)
                 Text(model.localized("QMplus 会话与教务账号隔离；断开连接或清除本地数据会删除该会话和课程快照。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
-        }.accessibilityIdentifier("settings.qmplus")
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: detailsExpanded)
+        .onAppear { detailsExpanded = model.qmplusEnabled }
+        .onChange(of: model.qmplusEnabled) { detailsExpanded = $0 }
+        .accessibilityIdentifier("settings.qmplus")
     }
 
     private var sectionHeader: some View {
@@ -1195,6 +1221,16 @@ private struct QMplusSettingsSurface: View {
             Label("QMplus", systemImage: "network").font(.headline).fixedSize()
             Text(model.localized("仅适用国院")).font(.caption).foregroundStyle(theme.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button { detailsExpanded.toggle() } label: {
+                Image(systemName: "chevron.down")
+                    .rotationEffect(.degrees(detailsExpanded ? 180 : 0))
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(model.localized(detailsExpanded ? "收起" : "展开"))
+            .accessibilityIdentifier("settings.qmplus.details-toggle")
         }
     }
 

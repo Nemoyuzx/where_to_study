@@ -1,18 +1,33 @@
 import SwiftUI
 
-struct CourseCatalogRow: View {
+struct CourseCatalogRow<ExpandedContent: View>: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
     let metadata: String
     let metadataSymbol: String
     let counts: CourseSubmissionCounts
     let identifier: String
-    let action: () -> Void
+    let isExpanded: Bool
+    let toggle: () -> Void
+    let details: () -> Void
+    let expandedContent: ExpandedContent
+
+    init(title: String, metadata: String, metadataSymbol: String, counts: CourseSubmissionCounts,
+         identifier: String, isExpanded: Bool, toggle: @escaping () -> Void,
+         details: @escaping () -> Void, @ViewBuilder content: () -> ExpandedContent) {
+        self.title = title; self.metadata = metadata; self.metadataSymbol = metadataSymbol
+        self.counts = counts; self.identifier = identifier; self.isExpanded = isExpanded
+        self.toggle = toggle; self.details = details; self.expandedContent = content()
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Button(action: action) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 8) {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) { toggle() }
+                } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "book")
                         .font(.system(size: 18, weight: .medium))
@@ -22,37 +37,50 @@ struct CourseCatalogRow: View {
                         .accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 8) {
                         Text(title).font(.headline).foregroundStyle(theme.text)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                        if !metadata.isEmpty || counts.hasEvidence {
-                            ViewThatFits(in: .horizontal) {
-                                HStack(spacing: 6) { chips }.fixedSize(horizontal: true, vertical: false)
-                                VStack(alignment: .leading, spacing: 6) { chips }
-                            }
+                        if !summary.isEmpty {
+                            Text(summary).font(.caption).foregroundStyle(theme.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                    Image(systemName: "chevron.down").font(.caption.weight(.semibold))
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .foregroundStyle(theme.secondaryText).accessibilityHidden(true)
                 }
                 .padding(.vertical, 12)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier(identifier)
-            .accessibilityHint(model.localized("打开本课详情与已同步活动"))
-            Divider().padding(.leading, 52)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(identifier)
+                .accessibilityValue(model.localized(isExpanded ? "收起" : "展开"))
+                Button(action: details) {
+                    Image(systemName: "info.circle").font(.title3)
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.primaryOnSoftSurface)
+                .accessibilityLabel(model.localized("课程详情") + " · " + title)
+                .accessibilityHint(model.localized("打开本课详情与已同步活动"))
+                .accessibilityIdentifier(identifier + ".info")
+            }
+            if isExpanded {
+                expandedContent
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityIdentifier(identifier + ".activities")
+            }
         }
+        .padding(12)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .overlay { RoundedRectangle(cornerRadius: 14).stroke(theme.border, lineWidth: 1) }
     }
 
-    @ViewBuilder private var chips: some View {
-        if !metadata.isEmpty { chip(metadata, symbol: metadataSymbol) }
-        if counts.pending > 0 { chip(model.localizedFormat("待交 %d", counts.pending), symbol: "calendar.badge.clock") }
-        if counts.submitted > 0 { chip(model.localizedFormat("已交 %d", counts.submitted), symbol: "checkmark.circle") }
-    }
-
-    private func chip(_ text: String, symbol: String) -> some View {
-        Label(text, systemImage: symbol).font(.caption)
-            .foregroundStyle(theme.primaryOnSoftSurface)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(theme.primary.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+    private var summary: String {
+        [metadata.isEmpty ? nil : metadata,
+         counts.pending > 0 ? model.localizedFormat("待交 %d", counts.pending) : nil,
+         counts.submitted > 0 ? model.localizedFormat("已交 %d", counts.submitted) : nil]
+            .compactMap { $0 }.joined(separator: " · ")
     }
 }

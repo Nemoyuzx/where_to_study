@@ -29,12 +29,18 @@ enum CompactTabHeightPolicy {
 // local query state and appearance tasks. A managed bar's items are read-only.
 struct CompactTabLanguageLayout: UIViewRepresentable {
     let language: AppLanguage
+    var transition: LanguageChangeTransition? = nil
 
     func makeUIView(context: Context) -> CompactTabLanguageLayoutView {
-        CompactTabLanguageLayoutView(frame: .zero)
+        let view = CompactTabLanguageLayoutView(frame: .zero)
+        view.transition = transition
+        return view
     }
 
     func updateUIView(_ view: CompactTabLanguageLayoutView, context: Context) {
+        view.transition = transition
+        view.localeIdentifier = language.locale.identifier
+        if view.window != nil { transition?.attachNavigation(to: view) }
         view.update(
             titles: AppSection.allCases.map { CompactTabTitlePolicy.title(for: $0, language: language) },
             accessibilityLabels: AppSection.allCases.map { AppLocalization.string($0.titleKey, language: language) }
@@ -43,10 +49,13 @@ struct CompactTabLanguageLayout: UIViewRepresentable {
 
     static func dismantleUIView(_ view: CompactTabLanguageLayoutView, coordinator: ()) {
         view.cancelPendingUpdate()
+        view.transition?.detachNavigation(from: view)
     }
 }
 
 final class CompactTabLanguageLayoutView: UIView {
+    weak var transition: LanguageChangeTransition?
+    var localeIdentifier = ""
     private var titles: [String] = []
     private var accessibilityLabels: [String] = []
     private var appliedTitles: [String] = []
@@ -94,15 +103,33 @@ final class CompactTabLanguageLayoutView: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil {
+            transition?.detachNavigation(from: self)
             cancelPendingUpdate()
             appliedController = nil
             appliedTitles = []
             appliedAccessibilityLabels = []
             appliedViewSize = nil
         } else if !titles.isEmpty {
+            transition?.attachNavigation(to: self)
             remainingLookups = 2
             scheduleUpdate()
         }
+    }
+
+    func translationIsReady(for locale: String) -> Bool {
+        guard window != nil, localeIdentifier == locale, !titles.isEmpty,
+              pendingUpdate == nil, appliedTitles == titles,
+              appliedAccessibilityLabels == accessibilityLabels,
+              let bar = appliedController?.tabBar, bar.bounds.width > 0, bar.bounds.height > 0,
+              let items = bar.items, items.count == titles.count else { return false }
+        return zip(items, titles).allSatisfy { $0.title == $1 } &&
+            zip(items, accessibilityLabels).allSatisfy { $0.accessibilityLabel == $1 }
+    }
+
+    var languageCompletionGeometry: [Double] {
+        guard let window, let bar = appliedController?.tabBar else { return [] }
+        let frame = bar.convert(bar.bounds, to: window)
+        return [frame.minX, frame.minY, frame.width, frame.height].map(Double.init)
     }
 
     override func layoutSubviews() {

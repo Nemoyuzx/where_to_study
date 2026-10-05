@@ -89,21 +89,16 @@ struct GradeQueryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(model.localized("成绩查询")).font(.title2.bold())
-                Spacer()
-                Button { load(force: true) } label: { Label(model.localized("刷新"), systemImage: "arrow.clockwise") }
-                    .disabled(store.isLoading)
-                    .accessibilityIdentifier("grades.refresh")
-            }
-            if !store.terms.isEmpty {
-                Picker(model.localized("学期"), selection: $store.selectedTerm) {
-                    Text(model.localized("学校当前学期")).tag(String?.none)
-                    Text(model.localized("全部学期")).tag(String?.some(""))
-                    ForEach(store.terms) { term in Text(term.name).tag(String?.some(term.id)) }
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(model.localized("成绩查询")).font(.title2.bold()).fixedSize()
+                    Spacer(minLength: 8)
+                    gradeControls.fixedSize(horizontal: true, vertical: false)
                 }
-                .accessibilityIdentifier("grades.term")
-                .onChange(of: store.selectedTerm) { _ in load() }
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(model.localized("成绩查询")).font(.title2.bold())
+                    gradeControls
+                }
             }
             Picker(model.localized("成绩记录"), selection: $store.recordType) {
                 Text(model.localized("最好成绩")).tag("1")
@@ -123,13 +118,33 @@ struct GradeQueryView: View {
                 }
             }
             if let snapshot = store.snapshot {
-                GradeResultsView(snapshot: snapshot, language: model.appLanguage)
+                GradeResultsView(snapshot: snapshot, language: model.appLanguage, groupsByTerm: store.selectedTerm == "")
                 Text(model.localized("成绩仅保留在本次运行内，以学校公布结果为准。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
             }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("queries.grades")
+        .onChange(of: store.selectedTerm) { _ in load() }
+    }
+
+    private var gradeControls: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Picker(model.localized("学期"), selection: $store.selectedTerm) {
+                Text(model.localized("学校当前学期")).tag(String?.none)
+                Text(model.localized("全部学期")).tag(String?.some(""))
+                ForEach(store.terms) { term in Text(term.name).tag(String?.some(term.id)) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .accessibilityLabel(model.localized("学期"))
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("grades.term")
+            Button { load(force: true) } label: { Label(model.localized("刷新"), systemImage: "arrow.clockwise") }
+                .disabled(store.isLoading)
+                .fixedSize()
+                .accessibilityIdentifier("grades.refresh")
+        }
     }
 
     private func load(force: Bool = false) {
@@ -137,10 +152,37 @@ struct GradeQueryView: View {
     }
 }
 
+struct GradeTermGroup: Identifiable, Equatable {
+    let name: String?
+    let items: [GradeItem]
+    var id: String { name.map { "term:" + $0 } ?? "missing-term" }
+}
+
+enum GradeTermGrouping {
+    // Preserve published course order and first-appearance term order. Missing
+    // semester labels remain unknown rather than being guessed from the picker.
+    static func groups(_ items: [GradeItem]) -> [GradeTermGroup] {
+        var names = [String?]()
+        var grouped = [String: [GradeItem]]()
+        for item in items {
+            let trimmed = item.semesterName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = trimmed?.isEmpty == false ? trimmed : nil
+            let key = name.map { "term:" + $0 } ?? "missing-term"
+            if grouped[key] == nil { names.append(name) }
+            grouped[key, default: []].append(item)
+        }
+        return names.map { name in
+            let key = name.map { "term:" + $0 } ?? "missing-term"
+            return GradeTermGroup(name: name, items: grouped[key] ?? [])
+        }
+    }
+}
+
 struct GradeResultsView: View {
     @Environment(\.appTheme) private var theme
     let snapshot: GradeSnapshot
     let language: AppLanguage
+    var groupsByTerm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -164,8 +206,20 @@ struct GradeResultsView: View {
                 Text(AppLocalization.string("该学期暂无已公布成绩", language: language))
                     .foregroundStyle(theme.secondaryText)
             }
-            ForEach(snapshot.items) { item in
-                GradeCourseRow(item: item, language: language)
+            if groupsByTerm {
+                ForEach(GradeTermGrouping.groups(snapshot.items)) { group in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(group.name ?? AppLocalization.string("学期状态未确认", language: language))
+                            .font(.headline).fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("grades.group." + group.id)
+                        ForEach(group.items) { GradeCourseRow(item: $0, language: language) }
+                    }
+                    .padding(.top, 6)
+                }
+            } else {
+                ForEach(snapshot.items) { item in
+                    GradeCourseRow(item: item, language: language)
+                }
             }
         }
     }

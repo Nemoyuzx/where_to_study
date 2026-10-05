@@ -295,6 +295,8 @@ private struct CalendarAgendaDisplayItem: Identifiable {
     let kind: CalendarAgendaItemKind
     let destinationURL: URL?
     let deadlineItem: PublicDeadlineItem?
+    let courseSelection: CourseCatalogSelection?
+    let assignmentItem: AssignmentDeadlineItem?
 
     init(
         id: String,
@@ -303,7 +305,9 @@ private struct CalendarAgendaDisplayItem: Identifiable {
         categoryKey: String,
         kind: CalendarAgendaItemKind,
         destinationURL: URL? = nil,
-        deadlineItem: PublicDeadlineItem? = nil
+        deadlineItem: PublicDeadlineItem? = nil,
+        courseSelection: CourseCatalogSelection? = nil,
+        assignmentItem: AssignmentDeadlineItem? = nil
     ) {
         self.id = id
         self.title = title
@@ -312,6 +316,8 @@ private struct CalendarAgendaDisplayItem: Identifiable {
         self.kind = kind
         self.destinationURL = destinationURL
         self.deadlineItem = deadlineItem
+        self.courseSelection = courseSelection
+        self.assignmentItem = assignmentItem
     }
 }
 
@@ -1093,6 +1099,9 @@ struct TeachingCalendarView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var dailyInfo: DailyInfoStore
     @EnvironmentObject private var calendarDeadlines: CalendarDeadlineStore
+    @EnvironmentObject private var courseSession: CoursesViewSession
+    @EnvironmentObject private var teachingCloud: TeachingCloudCourseStore
+    @EnvironmentObject private var qmplus: QMplusStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var session: TeachingCalendarSessionState
     private let renderingCache: TeachingCalendarRenderingCache
@@ -1176,6 +1185,8 @@ struct TeachingCalendarView: View {
         .background(theme.background)
         .accessibilityIdentifier("screen.calendar")
         .coordinateSpace(name: Self.calendarCoordinateSpace)
+        .onChange(of: model.qmplusEnabled) { _ in presentedTimelineAgenda = nil }
+        .onChange(of: model.calendarDataOwnerRevision) { _ in presentedTimelineAgenda = nil }
         .onChange(of: mode) { _ in
             dismissYearPopover()
             presentedTimelineAgenda = nil
@@ -1442,11 +1453,16 @@ struct TeachingCalendarView: View {
             CalendarTimelineView(
                 days: cachedTimelineDays(for: [selectedDate]),
                 selectedDate: selectedDate,
-                onSelectAllDayEvent: { date, _ in
+                onSelectAllDayEvent: { date, event in
+                    if presentCourseDeadline(event) { return }
                     presentedTimelineAgenda = CalendarAgendaSelection(
                         date: date,
-                        events: allDayEvents(on: date).map(calendarAgendaDisplayItem)
+                        events: timelineAllDayEvents(on: date).map(calendarAgendaDisplayItem)
                     )
+                },
+                onSelectAllDayOverflow: { date in
+                    presentedTimelineAgenda = CalendarAgendaSelection(date: date,
+                        events: timelineAllDayEvents(on: date).map(calendarAgendaDisplayItem))
                 }
             )
             .environment(\.layoutDirection, .leftToRight)
@@ -1480,12 +1496,18 @@ struct TeachingCalendarView: View {
                         selectedDate = date
                     }
                 },
-                onSelectAllDayEvent: { date, _ in
+                onSelectAllDayEvent: { date, event in
                     selectedDate = date
+                    if presentCourseDeadline(event) { return }
                     presentedTimelineAgenda = CalendarAgendaSelection(
                         date: date,
-                        events: allDayEvents(on: date).map(calendarAgendaDisplayItem)
+                        events: timelineAllDayEvents(on: date).map(calendarAgendaDisplayItem)
                     )
+                },
+                onSelectAllDayOverflow: { date in
+                    selectedDate = date
+                    presentedTimelineAgenda = CalendarAgendaSelection(date: date,
+                        events: timelineAllDayEvents(on: date).map(calendarAgendaDisplayItem))
                 }
             )
             .environment(\.layoutDirection, .leftToRight)
@@ -3167,7 +3189,9 @@ struct TeachingCalendarView: View {
             categoryKey: allDayEventCategoryKey(event.kind),
             kind: kind,
             destinationURL: event.destinationURL,
-            deadlineItem: event.deadlineItem
+            deadlineItem: event.deadlineItem,
+            courseSelection: event.courseSelection,
+            assignmentItem: event.assignmentItem
         )
     }
 
@@ -3292,7 +3316,17 @@ struct TeachingCalendarView: View {
                                         .fill(tint)
                                         .frame(width: 8, height: 8)
                                         .padding(.top, 5)
-                                    if let destination = event.destinationURL
+                                    if event.kind == .assignment,
+                                       courseDeadlineSelection(selection: event.courseSelection, assignment: event.assignmentItem) != nil {
+                                        Button {
+                                            if presentCourseDeadline(selection: event.courseSelection, assignment: event.assignmentItem) {
+                                                dismiss()
+                                            }
+                                        } label: {
+                                            calendarAgendaRowContent(event)
+                                        }
+                                        .buttonStyle(.plain)
+                                    } else if let destination = event.destinationURL
                                         ?? event.deadlineItem?.officialURL {
                                         Link(destination: destination) {
                                             calendarAgendaRowContent(event)
@@ -3342,14 +3376,10 @@ struct TeachingCalendarView: View {
             Text(event.title)
                 .font(.subheadline.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 6) {
-                if let time = event.time {
-                    Text(time).monospacedDigit()
-                }
-                Text(model.localized(event.categoryKey))
-            }
-            .font(.caption)
-            .foregroundStyle(theme.secondaryText)
+            Text([event.time, model.localized(event.categoryKey), event.assignmentItem?.courseName,
+                  event.assignmentItem?.status.map { model.localized($0) }].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption).foregroundStyle(theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -3376,7 +3406,32 @@ struct TeachingCalendarView: View {
     private func cachedTimelineDays(for days: [Date]) -> [CalendarTimelineDay] {
         let firstDate = days.first.map { StrictContractDateParser.string(from: $0) } ?? "empty"
         let key = "\(firstDate)|\(days.count)"
-        return timelineSnapshotCache.value(for: key) { days.map(timelineDay) }
+        let cached = timelineSnapshotCache.value(for: key) { days.map(timelineDay) }
+        return CourseDeadlineCalendarProjection.applying(to: cached, snapshot: qmplus.snapshot,
+            enabled: model.qmplusEnabled, showsOtherTerms: courseSession.showsOtherQMplusTerms)
+    }
+
+    private func timelineAllDayEvents(on date: Date) -> [CalendarAllDayEvent] {
+        allDayEvents(on: date) + CourseDeadlineCalendarProjection.qmplusEvents(on: date, snapshot: qmplus.snapshot,
+            enabled: model.qmplusEnabled, showsOtherTerms: courseSession.showsOtherQMplusTerms)
+    }
+
+    private func presentCourseDeadline(_ event: CalendarAllDayEvent) -> Bool {
+        guard event.kind == .assignment else { return false }
+        return presentCourseDeadline(selection: event.courseSelection, assignment: event.assignmentItem)
+    }
+
+    private func presentCourseDeadline(selection: CourseCatalogSelection?, assignment: AssignmentDeadlineItem?) -> Bool {
+        guard let selected = courseDeadlineSelection(selection: selection, assignment: assignment) else { return false }
+        courseSession.presentDetails(source: selected.source, courseID: selected.courseID)
+        return true
+    }
+
+    private func courseDeadlineSelection(selection: CourseCatalogSelection?, assignment: AssignmentDeadlineItem?) -> CourseCatalogSelection? {
+        let event = CalendarAllDayEvent(id: "selection", title: "", kind: .assignment,
+                                       courseSelection: selection, assignmentItem: assignment)
+        return CourseDeadlineCalendarProjection.selection(for: event, roster: teachingCloud.courses ?? [],
+            snapshot: qmplus.snapshot, enabled: model.qmplusEnabled)
     }
 
     private func timelineDay(_ date: Date) -> CalendarTimelineDay {
@@ -3453,7 +3508,8 @@ struct TeachingCalendarView: View {
                 title: assignment.title,
                 time: deadlineTime(assignment.deadline),
                 kind: .assignment,
-                destinationURL: CalendarDeadlineSources.assignments
+                destinationURL: CalendarDeadlineSources.assignments,
+                assignmentItem: assignment
             )
         }
         let schoolNoticeEvents = schoolNotices.map { notice in

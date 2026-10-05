@@ -9,7 +9,8 @@ final class LanguageChangeTransition {
     static let coverDuration: TimeInterval = 0.12
     static let layoutDelay: TimeInterval = 0.06
     static let revealDuration: TimeInterval = 0.22
-    static let layoutTimeout: TimeInterval = 1
+    static let layoutTimeout: TimeInterval = 12
+    static let completionDuration: TimeInterval = 0.18
 
     // An explicitly requested DEBUG/demo slow-motion mode makes the native
     // material observable without screenshot capture inside the application.
@@ -28,6 +29,12 @@ final class LanguageChangeTransition {
     private var pendingChange: (() -> Void)?
     private var targetLocaleIdentifier: String?
     private var waitingForLayout = false
+    private var settledLocaleIdentifier: String?
+    private var completionReady: () -> Bool = { true }
+    private var completionFailed: () -> Bool = { false }
+    private var completionGeometry: () -> [Double] = { [] }
+    private var layoutGate = LanguageTransitionLayoutGate()
+    private var readinessDeadline: TimeInterval = 0
     private var revision = 0
     private(set) var isTransitioning = false
 
@@ -51,7 +58,9 @@ final class LanguageChangeTransition {
     }
 
     func request(current: AppLanguage, target: AppLanguage, label: String,
-                 reduceMotion: Bool, change: @escaping () -> Void) {
+                 reduceMotion: Bool, completionReady: @escaping () -> Bool = { true },
+                 completionFailed: @escaping () -> Bool = { false },
+                 completionGeometry: @escaping () -> [Double] = { [] }, change: @escaping () -> Void) {
         guard current != target else {
             cancelAnimationAndReveal()
             pendingChange = nil
@@ -59,7 +68,8 @@ final class LanguageChangeTransition {
             return
         }
         perform(label: label, reduceMotion: reduceMotion,
-                targetLocaleIdentifier: target.locale.identifier, change: change)
+                targetLocaleIdentifier: target.locale.identifier, completionReady: completionReady,
+                completionFailed: completionFailed, completionGeometry: completionGeometry, change: change)
     }
 
     func perform(label: String, reduceMotion: Bool, change: @escaping () -> Void) {
@@ -67,11 +77,19 @@ final class LanguageChangeTransition {
     }
 
     private func perform(label: String, reduceMotion: Bool, targetLocaleIdentifier: String?,
+                         completionReady: @escaping () -> Bool = { true },
+                         completionFailed: @escaping () -> Bool = { false },
+                         completionGeometry: @escaping () -> [Double] = { [] },
                          change: @escaping () -> Void) {
         cancelAnimationAndReveal()
         let currentRevision = revision
         pendingChange = change
         self.targetLocaleIdentifier = targetLocaleIdentifier
+        self.completionReady = completionReady
+        self.completionFailed = completionFailed
+        self.completionGeometry = completionGeometry
+        settledLocaleIdentifier = nil
+        layoutGate.reset()
         waitingForLayout = false
         trace("requested")
         guard !reduceMotion, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
@@ -92,6 +110,7 @@ final class LanguageChangeTransition {
             cover = effectView
         }
         effectView.setAccessibilityLabel(label)
+        effectView.showProgress()
         effectView.setAccessibilityValue("covering")
         isTransitioning = true
         trace("covering")
@@ -104,10 +123,10 @@ final class LanguageChangeTransition {
                 guard let self, self.revision == currentRevision, self.cover != nil else { return }
                 self.cover?.setAccessibilityValue("covered")
                 self.waitingForLayout = self.targetLocaleIdentifier != nil
-                if self.waitingForLayout { self.scheduleLayoutTimeout(revision: currentRevision) }
-                else { self.scheduleReveal(revision: currentRevision) }
                 self.applyPendingChange()
                 self.host?.needsLayout = true
+                self.readinessDeadline = ProcessInfo.processInfo.systemUptime + Self.layoutTimeout
+                self.scheduleReadinessProbe(revision: currentRevision)
             }
         }
     }
@@ -116,18 +135,36 @@ final class LanguageChangeTransition {
         trace("layout")
         guard waitingForLayout, targetLocaleIdentifier == localeIdentifier,
               pendingChange == nil, cover != nil else { return }
-        waitingForLayout = false
-        scheduleReveal(revision: revision)
+        settledLocaleIdentifier = localeIdentifier
     }
 
-    private func scheduleLayoutTimeout(revision currentRevision: Int) {
-        let timeout = DispatchWorkItem { [weak self] in
-            guard let self, self.revision == currentRevision, self.waitingForLayout else { return }
-            // Failure cleanup is not a claim that translated layout is ready.
-            self.finishImmediately()
+    private func scheduleReadinessProbe(revision currentRevision: Int, delay: TimeInterval = 1.0 / 60.0) {
+        pendingReveal?.cancel()
+        let probe = DispatchWorkItem { [weak self] in
+            guard let self, self.revision == currentRevision, let host = self.host,
+                  let content = host.window?.contentView, let cover = self.cover else { return }
+            self.pendingReveal = nil
+            if self.completionFailed() { self.finishImmediately(); return }
+            if ProcessInfo.processInfo.systemUptime >= self.readinessDeadline {
+                self.finishImmediately(); return
+            }
+            guard self.completionReady() else {
+                self.layoutGate.reset()
+                self.scheduleReadinessProbe(revision: currentRevision, delay: 0.05)
+                return
+            }
+            content.layoutSubtreeIfNeeded()
+            let geometry = [Double(content.bounds.width), Double(content.bounds.height)] + self.completionGeometry()
+            let matches = self.targetLocaleIdentifier == nil || self.settledLocaleIdentifier == self.targetLocaleIdentifier
+            if self.layoutGate.observe(tasksComplete: true, localeMatches: matches, geometry: geometry) {
+                self.waitingForLayout = false
+                cover.showCompletion()
+                cover.setAccessibilityValue("completed")
+                self.scheduleReveal(revision: currentRevision)
+            } else { self.scheduleReadinessProbe(revision: currentRevision) }
         }
-        pendingReveal = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.layoutTimeout, execute: timeout)
+        pendingReveal = probe
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: probe)
     }
 
     private func scheduleReveal(revision currentRevision: Int) {
@@ -148,7 +185,7 @@ final class LanguageChangeTransition {
             }
         }
         pendingReveal = reveal
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.layoutDelay * Self.previewScale, execute: reveal)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.completionDuration * Self.previewScale, execute: reveal)
     }
 
     func finishImmediately() {
@@ -181,11 +218,18 @@ final class LanguageChangeTransition {
         cover = nil
         targetLocaleIdentifier = nil
         waitingForLayout = false
+        settledLocaleIdentifier = nil
+        completionReady = { true }
+        completionFailed = { false }
+        completionGeometry = { [] }
+        layoutGate.reset()
         isTransitioning = false
     }
 }
 
 private final class LanguageTransitionEffectView: NSVisualEffectView {
+    private let progressLabel = NSTextField(labelWithString: "Switching…")
+    private let completionImage = NSImageView()
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -196,7 +240,25 @@ private final class LanguageTransitionEffectView: NSVisualEffectView {
         setAccessibilityRole(.group)
         setAccessibilityModal(true)
         setAccessibilityIdentifier("overlay.language-transition")
+        progressLabel.font = .systemFont(ofSize: 22, weight: .semibold)
+        progressLabel.textColor = .labelColor
+        progressLabel.translatesAutoresizingMaskIntoConstraints = false
+        completionImage.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
+        completionImage.contentTintColor = .labelColor
+        completionImage.translatesAutoresizingMaskIntoConstraints = false
+        completionImage.isHidden = true
+        addSubview(progressLabel); addSubview(completionImage)
+        NSLayoutConstraint.activate([
+            progressLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            progressLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            progressLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
+            completionImage.centerXAnchor.constraint(equalTo: centerXAnchor),
+            completionImage.centerYAnchor.constraint(equalTo: centerYAnchor),
+            completionImage.widthAnchor.constraint(equalToConstant: 36), completionImage.heightAnchor.constraint(equalToConstant: 36)
+        ])
     }
+    func showProgress() { progressLabel.isHidden = false; completionImage.isHidden = true }
+    func showCompletion() { progressLabel.isHidden = true; completionImage.isHidden = false }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
     override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(convert(point, from: superview)) ? self : nil }
     override func mouseDown(with _: NSEvent) {}

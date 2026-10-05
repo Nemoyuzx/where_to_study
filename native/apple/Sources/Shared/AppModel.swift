@@ -306,6 +306,14 @@ final class AppModel: ObservableObject {
     private var calendarImportToken = 0
     private var dailyCourseNotificationRevision: UInt64 = 0
     private var courseNotificationTask: Task<Void, Never>?
+    private var widgetPersistenceTask: Task<Bool, Never>?
+    private var languageUpdateTask: Task<Void, Never>?
+    private var languageUpdateRevision: UInt64 = 0
+    // Read by the transition barrier; publishing this would re-render the
+    // whole app again merely because the completion badge changed.
+    private(set) var languageUpdatePending = false
+    private(set) var languageUpdateSucceeded = true
+    private var courseNotificationCompletedRevision: UInt64?
     private var dailyClassroomRefreshTask: Task<Void, Never>?
     private var statusMessageDismissTask: Task<Void, Never>?
     private var statusMessageRevision: UInt64 = 0
@@ -1162,12 +1170,40 @@ final class AppModel: ObservableObject {
 
     func setAppLanguage(_ language: AppLanguage) {
         guard appLanguage != language else { return }
+        languageUpdateRevision &+= 1
+        let revision = languageUpdateRevision
+        languageUpdateTask?.cancel()
+        languageUpdatePending = true
+        languageUpdateSucceeded = false
         appLanguage = language
         defaults.set(language.rawValue, forKey: AppLocalization.defaultsKey)
         synchronizeWidgetSchedule()
         if !isSampleMode, dailyCourseNotificationsEnabled || preClassNotificationsEnabled {
             cancelDailyCourseNotifications()
             reconcileDailyCourseNotifications(requestPermissionIfNeeded: false)
+        }
+        // Completion covers this application's local language work, not the
+        // OS's eventual display of a Widget/notification outside the app.
+        languageUpdateTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled && revision == self.languageUpdateRevision && self.appLanguage == language {
+                let widgetGeneration = self.widgetDataGeneration
+                let notificationRevision = self.dailyCourseNotificationRevision
+                let widgetWork = self.widgetPersistenceTask
+                let notificationWork = self.courseNotificationTask
+                let widgetSucceeded = await widgetWork?.value ?? true
+                await notificationWork?.value
+                let removalSucceeded = await self.dailyCourseNotificationScheduler.awaitLocalRemovals(revision: notificationRevision)
+                guard !Task.isCancelled, revision == self.languageUpdateRevision, self.appLanguage == language else { return }
+                if widgetGeneration == self.widgetDataGeneration && notificationRevision == self.dailyCourseNotificationRevision {
+                    let notificationsRequired = !self.isSampleMode &&
+                        (self.dailyCourseNotificationsEnabled || self.preClassNotificationsEnabled)
+                    self.languageUpdateSucceeded = widgetSucceeded && removalSucceeded &&
+                        (!notificationsRequired || self.courseNotificationCompletedRevision == notificationRevision)
+                    self.languageUpdatePending = false
+                    return
+                }
+            }
         }
     }
 
@@ -1939,13 +1975,17 @@ final class AppModel: ObservableObject {
         let generation = widgetDataGeneration
         let persistence = widgetDataPersistence
         persistence.invalidate(generation: generation)
-        Task.detached(priority: .utility) {
-            _ = persistence.perform(ifGeneration: generation) {
-                Self.writeWidgetSchedule(
+        widgetPersistenceTask = Task.detached(priority: .utility) {
+            do {
+                return try persistence.perform(ifGeneration: generation) {
+                    try Self.writeWidgetSchedule(
                     snapshot,
                     preferences: preferences,
                     languageRawValue: languageRawValue
-                )
+                    )
+                }
+            } catch {
+                return false
             }
         }
         #endif
@@ -1956,14 +1996,16 @@ final class AppModel: ObservableObject {
         _ schedule: ScheduleSnapshot?,
         preferences: TodayCourseWidgetData.Preferences,
         languageRawValue: String
-    ) {
+    ) throws {
         guard !AppLaunchConfiguration.isXCTestRunning else { return }
-        TodayCourseWidgetData.saveLanguage(rawValue: languageRawValue)
-        try? TodayCourseWidgetData.save(preferences: preferences)
+        guard TodayCourseWidgetData.saveLanguage(rawValue: languageRawValue) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        try TodayCourseWidgetData.save(preferences: preferences)
         if let schedule {
-            try? TodayCourseWidgetData.save(schedule: schedule)
+            try TodayCourseWidgetData.save(schedule: schedule)
         } else {
-            TodayCourseWidgetData.clear()
+            guard TodayCourseWidgetData.clearTracked() else { throw CocoaError(.fileWriteUnknown) }
         }
         WidgetCenter.shared.reloadTimelines(ofKind: "TodayCourseWidget")
     }
@@ -1994,6 +2036,7 @@ final class AppModel: ObservableObject {
         courseNotificationTask?.cancel()
         dailyCourseNotificationRevision &+= 1
         let revision = dailyCourseNotificationRevision
+        courseNotificationCompletedRevision = nil
         dailyCourseNotificationScheduler.invalidate(revision: revision)
         guard dailyCourseNotificationsEnabled || preClassNotificationsEnabled else {
             dailyCourseNotificationScheduler.cancelPending(revision: revision)
@@ -2075,6 +2118,7 @@ final class AppModel: ObservableObject {
                         ? "课前提醒已开启，当前没有待提醒的课程或考试"
                         : localizedFormat("已安排 %d 条课前提醒，重新打开应用时自动补充", preClass)
                 }
+                courseNotificationCompletedRevision = revision
             } catch {
                 guard revision == dailyCourseNotificationRevision else { return }
                 if error is DailyCourseNotificationAuthorizationError {

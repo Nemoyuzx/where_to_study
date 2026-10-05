@@ -25,9 +25,21 @@ enum CourseQueryMode: String, QueryDestinationMode {
 final class CoursesViewSession: ObservableObject {
     @Published var selectedMode = CourseQueryMode.currentCourses
     @Published var showsOtherQMplusTerms = false
+    @Published private(set) var expandedCourseKeys = Set<String>()
     let assignments = AssignmentQuerySession()
     let detailPresentation = InAppPresentationState()
     private(set) var detailSelection: CourseCatalogSelection?
+
+    func isExpanded(source: CourseCatalogSource, courseID: String) -> Bool {
+        expandedCourseKeys.contains(source.rawValue + "|" + courseID)
+    }
+
+    func toggleExpansion(source: CourseCatalogSource, courseID: String) {
+        let key = source.rawValue + "|" + courseID
+        if !expandedCourseKeys.insert(key).inserted { expandedCourseKeys.remove(key) }
+    }
+
+    func collapseQMplus() { expandedCourseKeys = expandedCourseKeys.filter { !$0.hasPrefix("qmplus|") } }
 
     func presentDetails(source: CourseCatalogSource, courseID: String) {
         detailSelection = CourseCatalogSelection(source: source, courseID: courseID)
@@ -43,6 +55,7 @@ final class CoursesViewSession: ObservableObject {
         dismissDetails()
         selectedMode = .currentCourses
         showsOtherQMplusTerms = false
+        expandedCourseKeys.removeAll()
         assignments.query = ""
         assignments.showsEnded = false
     }
@@ -115,6 +128,7 @@ struct CoursesView: View {
     }
 
     private func dismissDisabledQMplusDetails() {
+        if !model.qmplusEnabled { session.collapseQMplus() }
         if !model.qmplusEnabled, session.detailSelection?.source == .qmplus { session.dismissDetails() }
     }
 
@@ -153,8 +167,25 @@ struct CoursesView: View {
                         CourseCatalogRow(title: model.isSampleMode ? model.localized(course.name ?? course.id) : course.name ?? course.id,
                                          metadata: course.teacherNames.map { model.isSampleMode ? model.localized($0) : $0 }.joined(separator: " · "),
                                          metadataSymbol: "person", counts: CourseListEvidence.submissionCounts(statuses: assignments.map(\.status)),
-                                         identifier: "courses.ucloud.course.\(course.id)") {
+                                         identifier: "courses.ucloud.course.\(course.id)",
+                                         isExpanded: session.isExpanded(source: .teachingCloud, courseID: course.id),
+                                         toggle: { session.toggleExpansion(source: .teachingCloud, courseID: course.id) }, details: {
                             session.presentDetails(source: .teachingCloud, courseID: course.id)
+                        }) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                if assignments.isEmpty {
+                                    Text(model.localized("当前缓存没有可关联的本课作业。"))
+                                        .font(.caption).foregroundStyle(theme.secondaryText)
+                                }
+                                ForEach(assignments) { TeachingCloudCachedAssignmentRow(item: $0) }
+                                Button(model.localized("刷新教学云作业")) {
+                                    Task { await assignmentStore.loadAssignmentQuery(sampleMode: model.isSampleMode, force: true) }
+                                }
+                                .disabled(assignmentStore.isLoadingAssignmentQuery)
+                                .accessibilityIdentifier("courses.ucloud.course.\(course.id).refresh-assignments")
+                                Text(model.localized("以下内容仅来自本机已同步缓存；未列出不代表已经提交或没有作业。"))
+                                    .font(.caption).foregroundStyle(theme.secondaryText)
+                            }
                         }
                     }
                     Text(model.localized("待交／已交仅统计已同步且提交状态明确的作业。"))
@@ -218,8 +249,20 @@ private struct QMplusCourseSection: View {
                     let activities = CourseListEvidence.qmplusActivities(courseID: course.id, snapshot: snapshot)
                     CourseCatalogRow(title: course.name, metadata: model.localized(termKey(course.currentTermStatus)),
                                      metadataSymbol: "calendar", counts: CourseListEvidence.qmplusCounts(activities: activities),
-                                     identifier: "courses.qmplus.course.\(course.id)") {
+                                     identifier: "courses.qmplus.course.\(course.id)",
+                                     isExpanded: session.isExpanded(source: .qmplus, courseID: course.id),
+                                     toggle: { session.toggleExpansion(source: .qmplus, courseID: course.id) }, details: {
                         session.presentDetails(source: .qmplus, courseID: course.id)
+                    }) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            if activities.isEmpty {
+                                Text(model.localized("当前缓存没有本课活动；无截止日期的活动也会保留。"))
+                                    .font(.caption).foregroundStyle(theme.secondaryText)
+                            }
+                            ForEach(activities) { QMplusCachedActivityRow(activity: $0) }
+                            Text(model.localized("以下内容仅来自本机已同步缓存；未列出不代表已经提交或没有作业。"))
+                                .font(.caption).foregroundStyle(theme.secondaryText)
+                        }
                     }
                 }
                 Text(model.localized("待交／已交仅统计已同步且提交状态明确的作业。"))

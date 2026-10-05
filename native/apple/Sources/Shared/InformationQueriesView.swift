@@ -494,22 +494,25 @@ struct InformationQueriesView: View {
     private func shuttleFullTimetable(_ snapshot: ShuttleBusSnapshot) -> some View {
         if let notice = ShuttleBusTodayLogic.scheduleNotice(in: snapshot),
            !notice.schedules.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                Label("完整班车时刻表", systemImage: "bus.doubledecker")
-                    .font(.headline)
-                Text("按运行时段、方向和星期展示学校公布的计划班次；实际运行以官方通知为准。")
-                    .font(.caption)
-                    .foregroundStyle(theme.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 280, maximum: 560), spacing: 16)],
-                    alignment: .leading,
-                    spacing: 16
-                ) {
-                    ForEach(notice.schedules) { schedule in
-                        shuttleFullScheduleCard(schedule)
+            ShuttleFullTimetableDisclosure(language: model.appLanguage) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("按运行时段、方向和星期展示学校公布的计划班次；实际运行以官方通知为准。")
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 280, maximum: 560), spacing: 16)],
+                        alignment: .leading,
+                        spacing: 16
+                    ) {
+                        ForEach(notice.schedules) { schedule in
+                            shuttleFullScheduleCard(schedule)
+                        }
                     }
                 }
+            } label: {
+                Label("完整班车时刻表", systemImage: "bus.doubledecker")
+                    .font(.headline)
             }
             .accessibilityIdentifier("queries.shuttle.full-timetable")
         }

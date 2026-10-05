@@ -368,6 +368,9 @@ struct RootView: View {
         #endif
         .environmentObject(dailyInfo)
         .environmentObject(calendarDeadlines)
+        .environmentObject(coursesSession)
+        .environmentObject(modeServices.teachingCloudCourses)
+        .environmentObject(model.qmplus)
         .environment(\.appTheme, theme)
         .tint(theme.configuration.preset == .default ? nil : theme.primary)
         .foregroundStyle(theme.text)
@@ -567,7 +570,7 @@ struct RootView: View {
         .id(AdaptiveLayoutPolicy.compactTabIdentity(
             languageRawValue: model.appLanguage.rawValue
         ))
-        .background(CompactTabLanguageLayout(language: model.appLanguage))
+        .background(CompactTabLanguageLayout(language: model.appLanguage, transition: settingsSession.languageTransition))
         .accessibilityIdentifier("layout.compact-tabs")
     }
 

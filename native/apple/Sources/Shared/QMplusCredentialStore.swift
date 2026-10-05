@@ -34,6 +34,8 @@ protocol QMplusCredentialAuthorizationJournaling: Sendable {
 
 enum QMplusCredentialStorageError: Error { case invalidRecord, verificationFailed, keychain(OSStatus) }
 
+enum QMplusCredentialSaveDisposition: Equatable, Sendable { case unchanged, replaced, failed }
+
 struct QMplusKeychainCredentialStore: QMplusCredentialStoring {
     static let service = "com.nemoyu.wheretostudy.native.qmplus.microsoft-credentials"
     static let account = "qmplus-microsoft"
@@ -121,6 +123,7 @@ final class QMplusCredentialAuthorization: ObservableObject {
     private let allowsStorage: Bool
     private var hasLoaded = false
     private var authorizedMarker: QMplusCredentialAuthorizationMarker?
+    var allowsCredentialStorage: Bool { allowsStorage }
 
     init(storage: any QMplusCredentialStoring, journal: any QMplusCredentialAuthorizationJournaling, allowsStorage: Bool = true) {
         self.storage = storage; self.journal = journal; self.allowsStorage = allowsStorage
@@ -150,8 +153,8 @@ final class QMplusCredentialAuthorization: ObservableObject {
         if previouslyEnabled != isEnabled || previousMarker != authorizedMarker { credentialRevision &+= 1 }
     }
 
-    // Only the guarded official-main-document pipeline calls this. Every read
-    // revalidates the specific opt-in record, not merely an enabled Boolean.
+    // The guarded official pipeline and explicit unchanged-save comparison use
+    // this boundary. Every read revalidates the specific opt-in record.
     func loadAuthorizedCredentials(expectedRevision: UInt64) -> QMplusSavedCredentials? {
         guard allowsStorage, isEnabled, credentialRevision == expectedRevision, let authorizedMarker else { return nil }
         do {
@@ -169,10 +172,33 @@ final class QMplusCredentialAuthorization: ObservableObject {
 
     @discardableResult
     func saveAndAuthorize(account: String, password: String) -> Bool {
-        guard allowsStorage else { return false }
+        saveAndAuthorizeWithDisposition(account: account, password: password) != .failed
+    }
+
+    @discardableResult
+    func saveAndAuthorizeWithDisposition(account: String, password: String) -> QMplusCredentialSaveDisposition {
+        guard allowsStorage else { return .failed }
         let record = QMplusSavedCredentials(marker: .init(recordID: UUID(), authorizationNonce: UUID()),
             account: account.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
-        guard record.isValid else { statusKey = "请填写有效的 QMplus 账号和密码。"; return false }
+        guard record.isValid else { statusKey = "请填写有效的 QMplus 账号和密码。"; return .failed }
+        let revision = credentialRevision
+        if let saved = loadAuthorizedCredentials(expectedRevision: revision),
+           saved.account == record.account, saved.password == record.password {
+            do {
+                // Recheck the nonsecret binding after the secure read. Ordinary
+                // preferences or a saved account name never authorize this path.
+                guard isEnabled, credentialRevision == revision, authorizedMarker == saved.marker,
+                      try journal.load() == saved.marker, try storage.authorizationMarker() == saved.marker else {
+                    throw QMplusCredentialStorageError.verificationFailed
+                }
+                removalNeedsAttention = false
+                statusKey = "已保存 QMplus 登录信息并授权官方网页自动填写"
+                return .unchanged
+            } catch {
+                // An unverifiable record goes through the original fresh-marker
+                // replacement protocol, never through the preserved-session path.
+            }
+        }
         stopInMemory()
         // Withdraw old authority before replacing a secret. A fresh random
         // record/nonce pair cannot match an older journal after a crash.
@@ -188,11 +214,11 @@ final class QMplusCredentialAuthorization: ObservableObject {
             authorizedMarker = record.marker
             removalNeedsAttention = false
             statusKey = "已保存 QMplus 登录信息并授权官方网页自动填写"
-            return true
+            return .replaced
         } catch {
             let removed = withdrawAndDelete()
             if removed { statusKey = "无法保存 QMplus 登录信息，自动填写未启用。" }
-            return false
+            return .failed
         }
     }
 

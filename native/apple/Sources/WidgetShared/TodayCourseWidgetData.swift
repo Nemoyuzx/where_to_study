@@ -42,8 +42,14 @@ enum TodayCourseWidgetData {
         }
     }
 
-    static func saveLanguage(rawValue: String) {
-        UserDefaults(suiteName: appGroupIdentifier)?.set(rawValue, forKey: languageDefaultsKey)
+    @discardableResult
+    static func saveLanguage(rawValue: String) -> Bool {
+        #if APP_STORE_BUILD
+        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) != nil else { return false }
+        #endif
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else { return false }
+        defaults.set(rawValue, forKey: languageDefaultsKey)
+        return defaults.string(forKey: languageDefaultsKey) == rawValue
     }
 
     static func loadLanguage(
@@ -197,9 +203,11 @@ enum TodayCourseWidgetData {
             examSchedule: schedule.examSchedule
         )
         let data = try JSONEncoder().encode(archive)
+        let targets = writableFileURLs(named: archiveFileName)
+        guard !targets.isEmpty else { throw CocoaError(.fileWriteUnknown) }
         var saved = false
         var lastError: Error?
-        for fileURL in writableFileURLs(named: archiveFileName) {
+        for fileURL in targets {
             do {
                 try FileManager.default.createDirectory(
                     at: fileURL.deletingLastPathComponent(),
@@ -227,17 +235,28 @@ enum TodayCourseWidgetData {
     }
 
     static func clear() {
-        for fileURL in writableFileURLs(named: archiveFileName)
-        where FileManager.default.fileExists(atPath: fileURL.path) {
-            try? FileManager.default.removeItem(at: fileURL)
+        _ = clearTracked()
+    }
+
+    static func clearTracked() -> Bool {
+        let targets = writableFileURLs(named: archiveFileName)
+        guard !targets.isEmpty else { return false }
+        var success = true
+        for fileURL in targets {
+            do { try FileManager.default.removeItem(at: fileURL) }
+            catch let error as CocoaError where error.code == .fileNoSuchFile { continue }
+            catch { success = false }
         }
+        return success
     }
 
     static func save(preferences: Preferences) throws {
         let data = try JSONEncoder().encode(preferences.normalized)
+        let targets = writableFileURLs(named: preferencesFileName)
+        guard !targets.isEmpty else { throw CocoaError(.fileWriteUnknown) }
         var saved = false
         var lastError: Error?
-        for fileURL in writableFileURLs(named: preferencesFileName) {
+        for fileURL in targets {
             do {
                 try FileManager.default.createDirectory(
                     at: fileURL.deletingLastPathComponent(),

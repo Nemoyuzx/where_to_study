@@ -10,6 +10,14 @@ final class SettingsLanguageScrollState {
     private var targetLanguage: AppLanguage?
     private var pendingWork: DispatchWorkItem?
     private var revision = 0
+    func isSettled(for language: AppLanguage) -> Bool {
+        pendingWork == nil && pendingAnchor == nil && targetLanguage == nil &&
+            cardFrame.width > 0 && cardFrame.height > 0 && viewportSize.width > 0 && viewportSize.height > 0
+    }
+    var readinessGeometry: [Double] {
+        [cardFrame.minX, cardFrame.minY, cardFrame.width, cardFrame.height,
+         viewportSize.width, viewportSize.height].map(Double.init)
+    }
     #if DEBUG
     private var debugMessages = 0
 

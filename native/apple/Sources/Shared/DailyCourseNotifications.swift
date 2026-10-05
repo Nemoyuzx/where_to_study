@@ -194,6 +194,7 @@ protocol DailyCourseNotificationScheduling: Sendable {
     func clearPending(revision: UInt64)
     func cancelPending(category: CourseNotificationCategory, revision: UInt64, includingDelivered: Bool)
     func invalidate(revision: UInt64)
+    func awaitLocalRemovals(revision: UInt64) async -> Bool
 }
 
 extension DailyCourseNotificationScheduling {
@@ -205,6 +206,9 @@ extension DailyCourseNotificationScheduling {
         cancelPending(category: category, revision: revision, includingDelivered: true)
     }
     func invalidate(revision _: UInt64) {}
+    // Existing synchronous/mock schedulers do not own deferred cleanup work.
+    // Production's scheduler overrides this with its tracked native work ACK.
+    func awaitLocalRemovals(revision _: UInt64) async -> Bool { !Task.isCancelled }
 }
 
 protocol CourseNotificationCenter: Sendable {
@@ -353,6 +357,8 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
     private let now: @Sendable () -> Date
     private let revisionLock = NSLock()
     private var currentRevision: UInt64 = 0
+    private var localRemovals = [UUID: Task<Bool, Never>]()
+    private var failedRemovalRevision: UInt64?
 
     init(
         center: any CourseNotificationCenter = SystemCourseNotificationCenter(),
@@ -421,8 +427,9 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
             return
         }
         let center = center
-        Task.detached(priority: .utility) {
+        trackLocalRemoval {
             Self.removeNotifications(identifiersToRemove, center: center)
+            return true
         }
         removeRetiredDeliveredNotifications(category: nil)
     }
@@ -434,7 +441,10 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
     func clearPending(revision: UInt64) {
         guard let identifiers = prepareRevision(revision, replacementIdentifiers: []) else { return }
         let center = center
-        Task.detached(priority: .utility) { center.removePending(withIdentifiers: identifiers) }
+        trackLocalRemoval {
+            center.removePending(withIdentifiers: identifiers)
+            return true
+        }
     }
 
     func cancelPending(category: CourseNotificationCategory, revision: UInt64, includingDelivered: Bool) {
@@ -448,9 +458,10 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         }
         guard let identifiers else { return }
         let center = center
-        Task.detached(priority: .utility) {
+        trackLocalRemoval {
             center.removePending(withIdentifiers: identifiers)
             if includingDelivered { center.removeDelivered(withIdentifiers: identifiers) }
+            return true
         }
         if includingDelivered { removeRetiredDeliveredNotifications(category: category) }
     }
@@ -476,6 +487,44 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         return revision == currentRevision
     }
 
+    func awaitLocalRemovals(revision: UInt64) async -> Bool {
+        while !Task.isCancelled {
+            let work: [Task<Bool, Never>]? = revisionLock.withLock {
+                guard currentRevision == revision, failedRemovalRevision != revision else { return nil }
+                // The language replan follows a cancellation revision. Include
+                // that still-running old cleanup too, not only the latest plan.
+                return Array(localRemovals.values)
+            }
+            guard let work else { return false }
+            if work.isEmpty { return true }
+            for task in work {
+                guard await task.value, !Task.isCancelled else { return false }
+            }
+        }
+        return false
+    }
+
+    @discardableResult
+    private func trackLocalRemoval(_ operation: @escaping @Sendable () async -> Bool) -> Task<Bool, Never> {
+        revisionLock.withLock {
+            let id = UUID()
+            let work = Task.detached(priority: .utility) { [weak self] in
+                let succeeded = await operation()
+                if let self {
+                    self.revisionLock.withLock {
+                        self.localRemovals.removeValue(forKey: id)
+                        if !succeeded { self.failedRemovalRevision = self.currentRevision }
+                    }
+                }
+                return succeeded
+            }
+            // Register under the same lock that retires work. A very fast
+            // completion cannot disappear before registration or evade the ACK.
+            localRemovals[id] = work
+            return work
+        }
+    }
+
     private func systemIdentifier(
         for request: DailyCourseNotificationRequest,
         revision: UInt64
@@ -495,8 +544,9 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
 
     private func removePendingNotifications(_ identifiers: [String]) async {
         let center = center
-        await Task.detached(priority: .utility) {
+        _ = await trackLocalRemoval {
             center.removePending(withIdentifiers: identifiers)
+            return true
         }.value
     }
 
@@ -505,17 +555,29 @@ final class UserNotificationCourseScheduler: DailyCourseNotificationScheduling, 
         // cancellation boundary also remove delivered IDs from older batches,
         // which are no longer in the persisted pending set. A newer batch may
         // arrive while the asynchronous system lookup is in flight; retain it.
-        center.deliveredIdentifiers { [weak self] identifiers in
-            guard let self else { return }
-            let removed = self.revisionLock.withLock {
-                let active = self.storedIdentifiers()
-                return identifiers.filter { identifier in
-                    CourseNotificationCategory.owns(identifier)
-                        && (category.map { identifier.hasPrefix($0.identifierPrefix) } ?? true)
-                        && !active.contains(identifier)
+        let center = center
+        trackLocalRemoval { [weak self] in
+            guard let self else { return false }
+            do {
+                return try await callbackValueBeforeTimeout(.seconds(8)) { [weak self] completion in
+                    center.deliveredIdentifiers { [weak self] identifiers in
+                        guard let self else { completion(.success(false)); return }
+                        let removed = self.revisionLock.withLock {
+                            let active = self.storedIdentifiers()
+                            return identifiers.filter { identifier in
+                                CourseNotificationCategory.owns(identifier)
+                                    && (category.map { identifier.hasPrefix($0.identifierPrefix) } ?? true)
+                                    && !active.contains(identifier)
+                            }
+                        }
+                        if !removed.isEmpty { self.center.removeDelivered(withIdentifiers: removed) }
+                        // Keep the original guarded cleanup even if the SDK
+                        // callback is late. A timed-out ACK stays failed; this
+                        // callback cannot turn the language barrier successful.
+                        completion(.success(true))
+                    }
                 }
-            }
-            if !removed.isEmpty { self.center.removeDelivered(withIdentifiers: removed) }
+            } catch { return false }
         }
     }
 

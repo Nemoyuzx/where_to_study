@@ -277,6 +277,9 @@ final class MobileMonthDetailsScrollState {
 struct MobileTeachingCalendarView: View {
     @Environment(\.appTheme) private var theme
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var courseSession: CoursesViewSession
+    @EnvironmentObject private var teachingCloud: TeachingCloudCourseStore
+    @EnvironmentObject private var qmplus: QMplusStore
     let calendarDeadlines: CalendarDeadlineStore
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -383,6 +386,8 @@ struct MobileTeachingCalendarView: View {
             snapshotCache.bind(model: model, deadlineStore: calendarDeadlines)
         }
         .onChange(of: model.calendarDataOwnerRevision) { _ in
+            presentedWeekAgenda = nil
+            presentedDetail = nil
             rebaseMonthPages()
             rebaseYearPages()
             snapshotCache.invalidate()
@@ -395,6 +400,7 @@ struct MobileTeachingCalendarView: View {
             if mode == .year, yearPageWindow?.selectedDate != selectedDate { rebaseYearPages() }
         }
         .onChange(of: mode) { _ in rebaseMonthPages(); rebaseYearPages() }
+        .onChange(of: model.qmplusEnabled) { _ in presentedWeekAgenda = nil }
         .onDisappear { rebaseMonthPages(); rebaseYearPages() }
         .onChange(of: verticalSizeClass) { _ in
             rebaseMonthPages()
@@ -645,7 +651,9 @@ struct MobileTeachingCalendarView: View {
 
     private func timelineContent(days: [Date]) -> some View {
         let key = snapshotCacheKey(for: days, scope: "timeline")
-        let timelineDays = snapshotCache.timelineValues(for: key) { days.map(timelineDay) }
+        let cached = snapshotCache.timelineValues(for: key) { days.map(timelineDay) }
+        let timelineDays = CourseDeadlineCalendarProjection.applying(to: cached, snapshot: qmplus.snapshot,
+            enabled: model.qmplusEnabled, showsOtherTerms: courseSession.showsOtherQMplusTerms)
         return VStack(spacing: 0) {
             selectedDateSummary
                 .contentShape(Rectangle())
@@ -748,20 +756,24 @@ struct MobileTeachingCalendarView: View {
                         .foregroundStyle(theme.secondaryText)
                     ForEach(Array(day.allDayEvents.prefix(3))) { item in
                         Button {
-                            present(.day, on: day.date)
+                            if !presentCourseDeadline(item) { present(.day, on: day.date) }
                         } label: {
                             Text("\(monthDayCompactFormatter.string(from: day.date)) · \(item.kind == .exam ? model.localized("考试 · 时间待定") + " · " : "")\(item.title)")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(allDayEventTint(item.kind))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background(allDayEventTint(item.kind).opacity(0.10), in: Capsule())
+                                .background {
+                                    if item.kind == .assignment {
+                                        RoundedRectangle(cornerRadius: 6).fill(allDayEventTint(item.kind).opacity(0.10))
+                                    } else { Capsule().fill(allDayEventTint(item.kind).opacity(0.10)) }
+                                }
                         }
                         .buttonStyle(.plain)
                     }
                     if day.allDayEvents.count > 3 {
                         Button("+\(day.allDayEvents.count - 3)") {
-                            present(.day, on: day.date)
+                            presentedWeekAgenda = MobileWeekAgendaSelection(date: day.date, events: day.allDayEvents)
                         }
                         .font(.caption.weight(.semibold))
                         .buttonStyle(.bordered)
@@ -778,7 +790,9 @@ struct MobileTeachingCalendarView: View {
     }
 
     private func weekAllDayItems(days: [CalendarTimelineDay]) -> some View {
-        let labels = MobileCalendarAllDayLayout.labels(for: days)
+        let rowHeight: CGFloat = 26
+        let rowCount = max(days.map { CalendarTimelineLogic.allDayHeaderLayout(eventCount: $0.allDayEvents.count).rowCount }.max() ?? 0, 1)
+        let height = CGFloat(rowCount) * rowHeight
         return GeometryReader { proxy in
             let dayWidth = MobileCalendarAllDayLayout.dayWidth(
                 availableWidth: proxy.size.width,
@@ -790,45 +804,49 @@ struct MobileTeachingCalendarView: View {
                     .foregroundStyle(theme.secondaryText)
                     .frame(
                         width: MobileCalendarTimelineLayout.axisWidth,
-                        height: MobileCalendarAllDayLayout.height
+                        height: height
                     )
                     .overlay(alignment: .trailing) { Divider() }
 
                 HStack(spacing: 0) {
-                    ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+                    ForEach(days) { day in
                         if day.allDayEvents.isEmpty {
                             Color.clear
-                                .frame(width: dayWidth, height: MobileCalendarAllDayLayout.height)
+                                .frame(width: dayWidth, height: height)
                                 .accessibilityHidden(true)
                         } else {
-                            Button {
-                                AppHaptics.selection()
-                                presentedWeekAgenda = MobileWeekAgendaSelection(
-                                    date: day.date,
-                                    events: day.allDayEvents
-                                )
-                            } label: {
-                                Text(labels[index])
-                                    .font(.system(size: 9.5, weight: .semibold))
-                                    .foregroundStyle(allDayEventTint(day.allDayEvents[0].kind))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.72)
-                                    .padding(.horizontal, 3)
-                                    .frame(
-                                        width: max(dayWidth - 4, 1),
-                                        height: MobileCalendarAllDayLayout.height - 4
-                                    )
-                                    .background(
-                                        allDayEventTint(day.allDayEvents[0].kind).opacity(0.10),
-                                        in: RoundedRectangle(cornerRadius: 4)
-                                    )
-                                    .padding(2)
+                            VStack(spacing: 0) {
+                                let layout = CalendarTimelineLogic.allDayHeaderLayout(eventCount: day.allDayEvents.count)
+                                ForEach(Array(day.allDayEvents.prefix(layout.visibleEventCount))) { event in
+                                    Button {
+                                        AppHaptics.selection()
+                                        if !presentCourseDeadline(event) {
+                                            presentedWeekAgenda = MobileWeekAgendaSelection(date: day.date, events: day.allDayEvents)
+                                        }
+                                    } label: {
+                                        Text(event.title)
+                                            .font(.system(size: 9.5, weight: .semibold))
+                                            .foregroundStyle(allDayEventTint(event.kind))
+                                            .lineLimit(1)
+                                            .minimumScaleFactor(0.72)
+                                            .padding(.horizontal, 3)
+                                            .frame(width: max(dayWidth - 4, 1), height: rowHeight - 4)
+                                            .background(allDayEventTint(event.kind).opacity(0.10), in: RoundedRectangle(cornerRadius: 4))
+                                            .padding(2)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(event.title + " · " + (event.time ?? model.localized("全天")))
+                                    .accessibilityIdentifier("calendar.mobile.all-day.event." + event.id)
+                                }
+                                if layout.hiddenEventCount > 0 {
+                                    Button("+\(layout.hiddenEventCount)") {
+                                        presentedWeekAgenda = MobileWeekAgendaSelection(date: day.date, events: day.allDayEvents)
+                                    }
+                                    .font(.caption).buttonStyle(.plain).frame(height: rowHeight)
+                                }
+                                Spacer(minLength: 0)
                             }
-                            .buttonStyle(.plain)
-                            .frame(width: dayWidth, height: MobileCalendarAllDayLayout.height)
-                            .accessibilityLabel(
-                                "\(monthDayCompactFormatter.string(from: day.date))，全天，\(labels[index])"
-                            )
+                            .frame(width: dayWidth, height: height, alignment: .top)
                             .accessibilityIdentifier(
                                 "calendar.mobile.all-day.day.\(StrictContractDateParser.string(from: day.date))"
                             )
@@ -837,9 +855,9 @@ struct MobileTeachingCalendarView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             }
-            .frame(width: proxy.size.width, height: MobileCalendarAllDayLayout.height)
+            .frame(width: proxy.size.width, height: height)
         }
-        .frame(height: MobileCalendarAllDayLayout.height)
+        .frame(height: height)
         .background(theme.surface)
         .overlay(alignment: .bottom) { Divider() }
         .accessibilityIdentifier("calendar.mobile.all-day.week")
@@ -1614,18 +1632,30 @@ struct MobileTeachingCalendarView: View {
 
     private func weekAgendaDialog(_ selection: MobileWeekAgendaSelection) -> some View {
         centeredAgendaDialog(
-            titleKey: "周视图全天日程",
+            titleKey: mode == .week ? "周视图全天日程" : "全天日程",
             date: selection.date,
             accessibilityIdentifier: "calendar.mobile.week-agenda-dialog",
             dismiss: { presentedWeekAgenda = nil }
         ) {
             ForEach(selection.events) { event in
+                if event.kind == .assignment {
+                    Button {
+                        presentedWeekAgenda = nil
+                        if !presentCourseDeadline(event) { present(.day, on: selection.date) }
+                    } label: {
+                        agendaRow(title: event.title,
+                                  categoryKey: "课程作业 DDL", tint: allDayEventTint(event.kind),
+                                  detailText: [event.time, event.assignmentItem?.courseName,
+                                               event.assignmentItem?.status.map { model.localized($0) }].compactMap { $0 }.joined(separator: " · "))
+                    }.buttonStyle(.plain)
+                } else {
                 agendaRow(
                     title: event.title,
                     categoryKey: allDayEventCategoryKey(event.kind),
                     tint: allDayEventTint(event.kind),
                     deadlineItem: event.deadlineItem
                 )
+                }
             }
         }
     }
@@ -1693,6 +1723,7 @@ struct MobileTeachingCalendarView: View {
         title: String,
         categoryKey: String,
         tint: Color,
+        detailText: String? = nil,
         deadlineItem: PublicDeadlineItem? = nil
     ) -> some View {
         HStack(alignment: .top, spacing: 9) {
@@ -1704,9 +1735,10 @@ struct MobileTeachingCalendarView: View {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(model.localized(categoryKey))
+                Text([model.localized(categoryKey), detailText].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(theme.secondaryOnSoftSurface)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let deadlineItem {
                 favoriteButton(deadlineItem)
@@ -2025,6 +2057,14 @@ struct MobileTeachingCalendarView: View {
         calendarDeadlines.assignmentsByDate[StrictContractDateParser.string(from: date)] ?? []
     }
 
+    private func presentCourseDeadline(_ event: CalendarAllDayEvent) -> Bool {
+        guard let selection = CourseDeadlineCalendarProjection.selection(for: event, roster: teachingCloud.courses ?? [],
+            snapshot: qmplus.snapshot, enabled: model.qmplusEnabled) else { return false }
+        presentedWeekAgenda = nil
+        courseSession.presentDetails(source: selection.source, courseID: selection.courseID)
+        return true
+    }
+
     private func schoolNoticeItems(on date: Date) -> [PublicDeadlineItem] {
         let dateKey = StrictContractDateParser.string(from: date)
         return model.visibleDeadlineItems(
@@ -2072,7 +2112,8 @@ struct MobileTeachingCalendarView: View {
                 title: assignment.title,
                 time: deadlineTime(assignment.deadline),
                 kind: .assignment,
-                destinationURL: CalendarDeadlineSources.assignments
+                destinationURL: CalendarDeadlineSources.assignments,
+                assignmentItem: assignment
             )
         }
         let schoolNoticeEvents = schoolNotices.map { notice in

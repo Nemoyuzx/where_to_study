@@ -133,10 +133,13 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     @discardableResult
     func saveCredentials(account: String, password: String) -> Bool {
         endPresentation()
-        let saved = credentialAuthorization.saveAndAuthorize(account: account, password: password)
+        guard credentialAuthorization.allowsCredentialStorage else { credentialDraft.clear(); return false }
+        let disposition = credentialAuthorization.saveAndAuthorizeWithDisposition(account: account, password: password)
         credentialDraft.clear()
-        if saved { clearOfficialSession() }
-        return saved
+        // Only a verified unchanged authorization may retain this profile.
+        // Failed verification/replacement must not keep an old signed-in identity.
+        if disposition != .unchanged { clearOfficialSession() }
+        return disposition != .failed
     }
 
     func disableCredentialAutofill() {

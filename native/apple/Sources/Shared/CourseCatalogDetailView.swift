@@ -109,12 +109,7 @@ private struct CourseCatalogDetailView: View {
                     .font(.callout).foregroundStyle(theme.secondaryText)
             }
             ForEach(items) { item in
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(model.isSampleMode ? model.localized(item.title) : item.title).font(.headline)
-                    Label(item.deadline, systemImage: "calendar.badge.clock").font(.caption)
-                    if let status = item.status { Text(model.localized(status)).font(.caption).foregroundStyle(theme.secondaryText) }
-                    Divider()
-                }.accessibilityIdentifier("course-detail.assignment.\(item.id)")
+                TeachingCloudCachedAssignmentRow(item: item)
             }
         } else { unavailableContent }
     }
@@ -168,7 +163,27 @@ private struct CourseCatalogDetailView: View {
     }
 }
 
-private struct QMplusCachedActivityRow: View {
+struct TeachingCloudCachedAssignmentRow: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.appTheme) private var theme
+    let item: AssignmentDeadlineItem
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(model.isSampleMode ? model.localized(item.title) : item.title).font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+            Text([item.deadline, item.status.map { model.localized($0) }].compactMap { $0 }.joined(separator: " · "))
+                .font(.caption).foregroundStyle(theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(AppTheme.assignment.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("course-detail.assignment.\(item.id)")
+    }
+}
+
+struct QMplusCachedActivityRow: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.appTheme) private var theme
     let activity: QMplusActivity
@@ -176,30 +191,43 @@ private struct QMplusCachedActivityRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Link(activity.title, destination: activity.url).font(.headline)
-            Text(activity.kind == .assignment ? "Assignment" : "Quiz").font(.caption)
-            switch activity.kind {
-            case .assignment:
-                timeRow("截止时间", value: activity.dueAt)
-                if let cutoff = activity.cutoffAt { timeRow("最终提交时间", value: cutoff) }
-            case .quiz:
-                timeRow("开放时间", value: activity.opensAt)
-                timeRow("关闭时间", value: activity.closesAt)
-                if let seconds = activity.timeLimitSeconds { Text(model.localized("时间限制（秒）") + ": \(seconds)").font(.caption) }
+                .fixedSize(horizontal: false, vertical: true)
+            Text(metadata.joined(separator: " · ")).font(.caption).foregroundStyle(theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            if activity.kind == .quiz {
                 Text(model.localized("Quiz 开放区间不是固定考试时段。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            if let status = activity.status, status != "unknown" { Text(status).font(.caption) }
             if activity.detailStatus != "available" {
                 Text(model.localized("活动详情受限或暂不可用，请以官方页面为准。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
             }
             if let raw = activity.rawTimeText, !raw.isEmpty { Text(raw).font(.caption).foregroundStyle(theme.secondaryText) }
-            Divider()
-        }.accessibilityIdentifier("courses.qmplus.activity.\(activity.id)")
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(AppTheme.assignment.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .accessibilityIdentifier("courses.qmplus.activity.\(activity.id)")
     }
 
-    private func timeRow(_ key: String, value: String?) -> some View {
-        Text(model.localized(key) + ": " + (CourseListEvidence.qmplusShanghaiTime(value) ?? model.localized("未公布")))
-            .font(.caption).foregroundStyle(theme.secondaryText)
+    private var metadata: [String] {
+        var values = [activity.kind == .assignment ? "Assignment" : "Quiz"]
+        switch activity.kind {
+        case .assignment:
+            values.append(timeText("截止时间", activity.dueAt))
+            if let cutoff = activity.cutoffAt { values.append(timeText("最终提交时间", cutoff)) }
+        case .quiz:
+            values.append(timeText("开放时间", activity.opensAt))
+            values.append(timeText("关闭时间", activity.closesAt))
+            if let seconds = activity.timeLimitSeconds { values.append(model.localized("时间限制（秒）") + ": \(seconds)") }
+        }
+        if let status = activity.status, status != "unknown" { values.append(status) }
+        return values
+    }
+
+    private func timeText(_ key: String, _ value: String?) -> String {
+        model.localized(key) + ": " + (CourseListEvidence.qmplusShanghaiTime(value) ?? model.localized("未公布"))
     }
 }

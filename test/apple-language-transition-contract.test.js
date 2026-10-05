@@ -24,3 +24,28 @@ test('iOS language transition uses a bounded native window material without priv
   assert.match(settings, /session\.languageTransition\.request\(/)
   assert.match(source, /guard current != target else \{[\s\S]*?pendingChange = nil[\s\S]*?removeCover\(\)/)
 })
+
+// Specifications only: not run during this change because local automated
+// testing has been disabled at the user's request.
+test('completion waits for local language work, scroll and an acknowledged native tab layout', () => {
+  const ios = read('native/apple/Sources/Shared/LanguageChangeTransition.swift')
+  const mac = read('native/apple/Sources/Shared/MacLanguageChangeTransition.swift')
+  const settings = read('native/apple/Sources/Shared/SettingsView.swift')
+  const model = read('native/apple/Sources/Shared/AppModel.swift')
+  const tabs = read('native/apple/Sources/Shared/CompactTabLanguageLayout.swift')
+  const gate = read('native/apple/Sources/Shared/LanguageTransitionLayoutGate.swift')
+  assert.match(settings, /languageUpdateSucceeded == true/)
+  assert.match(settings, /scroll\?\.isSettled\(for: language\)/)
+  assert.match(model, /await widgetWork\?\.value/)
+  assert.match(model, /await notificationWork\?\.value/)
+  assert.match(model, /awaitLocalRemovals/)
+  assert.match(ios, /navigation\.translationIsReady\(for: target\)/)
+  assert.match(tabs, /appliedAccessibilityLabels == accessibilityLabels/)
+  assert.match(gate, /stableSamples >= 3/)
+  for (const source of [ios, mac]) {
+    assert.match(source, /Switching…/)
+    assert.match(source, /completionFailed\(\).*finishImmediately\(\)/)
+    assert.match(source, /readinessDeadline/)
+    assert.match(source, /"completed"/)
+  }
+})

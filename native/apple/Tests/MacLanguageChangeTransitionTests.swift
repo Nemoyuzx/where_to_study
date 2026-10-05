@@ -116,7 +116,9 @@ final class MacLanguageChangeTransitionTests: XCTestCase {
     }
 
     private func waitUntil(_ condition: () -> Bool) async throws {
-        for _ in 0..<250 {
+        // Production now also waits for local notification/widget language
+        // work. Timeout is failure cleanup, never a successful checkmark.
+        for _ in 0..<1500 {
             if condition() { return }
             try await Task.sleep(for: .milliseconds(10))
         }
