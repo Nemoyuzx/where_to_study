@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import test from 'node:test'
+
+test('course refresh clears every exit only for the selected flight',()=>{
+  const source=readFileSync(new URL('../native/apple/Sources/Shared/TeachingCloudCourseStore.swift',import.meta.url),'utf8')
+  assert.match(source,/defer \{[\s\S]*flight\?\.id == selected\.id[\s\S]*isRefreshing = false/)
+  assert.match(source,/selected\.task\.value/)
+  assert.match(source,/flight\?\.task\.cancel\(\)/)
+})
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8')
 // Specifications only. No local automated execution was performed.
 test('course controls share a center line and disclosure retains a clipped top-anchored subtree',()=>{

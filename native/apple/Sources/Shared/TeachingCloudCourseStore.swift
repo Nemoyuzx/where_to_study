@@ -50,7 +50,12 @@ final class TeachingCloudCourseStore: ObservableObject {
     private let client: any TeachingCloudCourseFetching
     private var owner: String?
     private var generation: UInt64 = 0
-    private var flight: Task<TeachingCloudCourseResult, Error>?
+    private struct Flight {
+        let id: UInt64
+        let task: Task<TeachingCloudCourseResult, Error>
+    }
+    private var flight: Flight?
+    private var nextFlightID: UInt64 = 0
     private var attempted = false
 
     init(client: any TeachingCloudCourseFetching) { self.client = client }
@@ -94,20 +99,30 @@ final class TeachingCloudCourseStore: ObservableObject {
             if revision == generation, owner == nextOwner { attempted = false }
             return
         }
-        let selected: Task<TeachingCloudCourseResult, Error>
+        let selected: Flight
         if let flight { selected = flight } else {
             let client = client
-            selected = Task { try await client.fetchCourseResult(force: force) }
+            nextFlightID &+= 1
+            selected = Flight(id: nextFlightID, task: Task { try await client.fetchCourseResult(force: force) })
             flight = selected
             isRefreshing = true
             isLoading = courses == nil
             errorMessage = ""
         }
+        defer {
+            // Every exit releases only the same flight. A late waiter must not
+            // clear a new refresh that started for the unchanged account.
+            if revision == generation, owner == nextOwner, flight?.id == selected.id {
+                flight = nil; isLoading = false; isRefreshing = false
+                if Task.isCancelled { attempted = false }
+            }
+        }
         do {
-            let result = try await selected.value
+            let result = try await selected.task.value
             guard revision == generation, owner == nextOwner, !Task.isCancelled,
+                  flight?.id == selected.id,
                   accepts(result, owner: nextOwner) else {
-                if revision == generation { flight = nil; isLoading = false; isRefreshing = false; attempted = false }
+                if revision == generation, owner == nextOwner, flight?.id == selected.id { attempted = false }
                 return
             }
             courses = result.courses
@@ -117,12 +132,13 @@ final class TeachingCloudCourseStore: ObservableObject {
                 ? "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。" : ""
         } catch is CancellationError {
             // A cleared/switched owner must never publish a late result.
+            if revision == generation, owner == nextOwner, flight?.id == selected.id { attempted = false }
         } catch {
-            guard revision == generation, owner == nextOwner, !Task.isCancelled else { return }
+            guard revision == generation, owner == nextOwner, !Task.isCancelled,
+                  flight?.id == selected.id else { return }
             errorMessage = error.localizedDescription
             isRetainingPreviousSnapshot = courses != nil
         }
-        if revision == generation { flight = nil; isLoading = false; isRefreshing = false }
     }
 
     private func accepts(_ result: TeachingCloudCourseResult, owner: String) -> Bool {
@@ -135,7 +151,7 @@ final class TeachingCloudCourseStore: ObservableObject {
 
     func invalidate() {
         generation &+= 1
-        flight?.cancel()
+        flight?.task.cancel()
         flight = nil
         courses = nil
         fetchedAt = nil
