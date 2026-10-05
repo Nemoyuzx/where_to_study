@@ -294,4 +294,6 @@ QMplus 在主文档提交后开始有限的 DOM 就绪检查；已渲染的官�
 
 macOS 和通用 iOS Simulator 的严格并发／警告编译通过，未启动模拟器；生成资源与源码检查通过。新增首次目录／业务缓存缺失及已有待清理／损坏 guard 的回归规格，仅编写、未执行。遵守用户禁止本机自动化测试的要求，未做真实账号或设备登录验证；DOM 等待缺口与截图现象相符，不能把静态分析写成已经真机复现。
 
-本轮继续上传 iOS／iPadOS 和 macOS **0.4.0（112）** 测试包，成功回执后记录；不提交正式审核。日志保存在 `release-artifacts/v0.4.0-build112-login-fix/`。
+包源码为 `80e0b2f2`，已推送 `codex/v040-localization`。macOS **0.4.0（112）** 于 **2026-10-05 17:17:21 +0800**、iOS／iPadOS **0.4.0（112）** 于 **17:23:56 +0800** 分别取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`。沿用本地 Xcode 的 macOS Manual／iOS Automatic 签名与既有测试上传脚本；未提交正式审核，成功后未检查 App Store Connect 处理状态。
+
+日志保存在 `release-artifacts/v0.4.0-build112-login-fix/`：`macos-upload.log`、`ios-upload.log` 为实际上传回执，`macos-compile.log`、`ios-compile.log` 为仅编译记录。未执行本机自动化测试或真实账号登录，112 真机效果仍待实际使用确认。
