@@ -884,6 +884,16 @@
     <string name="ui_generated_fee09598ad7872">"後勤部の最新通知と現在有効な時刻表を確認中です。"</string>
     <string name="ui_generated_ff89a1a38ca3a7">"カスタム予定の最上位はオブジェクトである必要があります。"</string>
     <string name="ui_generated_ff93bd2c081d35">"ブラウザーで教育クラウドプラットフォームの課題一覧を開く"</string>
+    <string name="ui_generated_b63c257717353e">"公式ウィンドウで CAPTCHA または MFA を完了してください。完了後に同期を続行します。"</string>
+    <string name="ui_generated_81a90adf66f769">"自動ログインを一時停止しました。「手動で続行」から公式ページを開けます。"</string>
+    <string name="ui_generated_2042efadd2c35a">"手動で続行"</string>
+    <string name="ui_generated_5d364751ceb578">"保存したアカウントとパスワードで公式ログインを自動的に完了します。CAPTCHA または MFA のみ操作が必要です。不明なページでは停止し、手動で続行できます。"</string>
+    <string name="ui_generated_f141054f90bcd5">"公式ログインページの自動入力を許可"</string>
+    <string name="ui_generated_f09d02b07a9af4">"保存後、QMplus 専用のログイン情報をこの端末の安全なストレージに保管します。初回は自動入力が選択されていますが、保存前にオフにできます。"</string>
+    <string name="ui_generated_b7df5fe6f6018c">"ログインと同期はバックグラウンドで進みます。CAPTCHA または MFA が必要な場合のみ公式ウィンドウを自動表示します。不明なページでは停止し、手動で続行できます。"</string>
+    <string name="ui_generated_8d1807d5c0f998">"確認済みでアカウントが一致する公式ログイン手順のみ自動処理します。CAPTCHA と MFA はご自身で完了してください。"</string>
+    <string name="ui_generated_e6ff81b07ab0b4">"保存済みのパスワードは表示しません。ログイン情報を更新するときだけ再入力してください。"</string>
+    <string name="ui_generated_679afb01032ac3">"初回は保存オプションがオンです。「保存」を選んだ後にのみ、この端末の安全なストレージにログイン情報を保存します。"</string>
     <string name="ui_generated_1a78803a506cc4">"QMplus を有効にする"</string>
     <string name="ui_generated_de0fc50a49bf3c">"国際学院の学生のみ"</string>
     <string name="ui_generated_dba3ae91be2408">"端末の設定を保存できません。"</string>

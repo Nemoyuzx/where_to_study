@@ -228,7 +228,8 @@ class QmplusActivity : Activity() {
                 return { schedulerHandler.removeCallbacks(task) }
             }
         }
-        val savedOptIn = intent.getBooleanExtra(EXTRA_SAVED_LOGIN_ENABLED, false)
+        val explicitManual = intent.getBooleanExtra(EXTRA_MANUAL_CONTINUATION, false)
+        val savedOptIn = intent.getBooleanExtra(EXTRA_SAVED_LOGIN_ENABLED, false) && !explicitManual
         val diagnosticsEnabled = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_AUTH_DIAGNOSTICS, false)
         val authScript = if (savedOptIn) runCatching {
             assets.open("qmplus-auth.js").bufferedReader().use { it.readText() }
@@ -237,19 +238,22 @@ class QmplusActivity : Activity() {
             savedOptIn,
             intent.getLongExtra(EXTRA_SAVED_LOGIN_REVISION, -1), authScript,
             reveal = { weakOwner.get()?.revealOfficialWindow() },
+            verificationRequired = { weakOwner.get()?.revealOfficialWindow(verification = true) },
+            verificationFinished = { weakOwner.get()?.hideForSync() },
             authenticated = { weakOwner.get()?.beginSync() },
             reportPhase = { phase ->
                 if (diagnosticsEnabled)
                     weakOwner.get()?.status?.contentDescription = "qmplus.auth.$phase"
             }, quietConnection = quietConnection, requestedTarget = startURL(),
             featureEnabled = { weakOwner.get()?.isFeatureCurrent() == true }, pageScript = pageScript,
+            manualContinuation = { weakOwner.get()?.deferManualContinuation() },
             pageObserved = { kind -> weakOwner.get()?.let { owner ->
                 owner.authenticatedDocument = kind == QmplusPageKind.AUTHENTICATED && QmplusPolicy.isBusinessPage(owner.browser?.url.orEmpty())
                 owner.syncButton.isEnabled = owner.authenticatedDocument && !owner.syncing && !owner.closing
                 owner.reconnectButton.visibility = if (kind == QmplusPageKind.ERROR) View.VISIBLE else View.GONE
                 if (kind == QmplusPageKind.ERROR) owner.status.setText(R.string.qmplus_web_error)
             } })
-        if (!quietConnection) revealOfficialWindow()
+        if (!quietConnection || explicitManual) revealOfficialWindow()
     }
 
     private fun inspectFinishedDocument(url: String) {
@@ -257,11 +261,19 @@ class QmplusActivity : Activity() {
         authFlow?.pageReady(url)
     }
 
-    private fun revealOfficialWindow() {
+    private fun deferManualContinuation() {
+        if (closing || isFinishing || isDestroyed || loginVisible) return
+        closing = true
+        authFlow?.close(); invalidateSync(); browser?.stopLoading()
+        setResult(RESULT_CANCELED, resultIntent().putExtra(EXTRA_CONNECT_REQUIRED, true))
+        finish()
+    }
+
+    private fun revealOfficialWindow(verification: Boolean = false) {
         if (closing || isFinishing || isDestroyed) return
-        if (silentRefresh) {
-            // Startup refresh may use an existing cookie or explicit saved
-            // authorization, but never has authority to present MFA/error UI.
+        if (silentRefresh && !(verification && foreground)) {
+            // Background refresh defers unknown/error pages. Only a verified
+            // challenge observed while foreground can present the official UI.
             closing = true
             authFlow?.close(); invalidateSync()
             browser?.stopLoading()
@@ -272,7 +284,8 @@ class QmplusActivity : Activity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
         browserRoot?.alpha = 1f
         window.setBackgroundDrawable(ColorDrawable(Palette.background))
-        if (::status.isInitialized && !syncing) status.setText(R.string.qmplus_saved_login_manual)
+        if (::status.isInitialized && !syncing) status.text = if (verification)
+            uiText("请在官方窗口完成验证码或 MFA，完成后将继续同步。") else getString(R.string.qmplus_saved_login_manual)
     }
 
     private fun beginSync() {
@@ -413,7 +426,7 @@ class QmplusActivity : Activity() {
 
     override fun onStop() {
         foreground = false
-        authFlow?.suspend(); revealOfficialWindow(); invalidateSync(resumeInterrupted = true)
+        authFlow?.suspend(); invalidateSync(resumeInterrupted = true)
         super.onStop()
     }
 
@@ -441,6 +454,7 @@ class QmplusActivity : Activity() {
         internal const val EXTRA_RECONNECT_REQUEST = "qmplus_reconnect_request"
         internal const val EXTRA_SILENT_REFRESH = "qmplus_silent_refresh"
         internal const val EXTRA_CONNECT_REQUIRED = "qmplus_connect_required"
+        internal const val EXTRA_MANUAL_CONTINUATION = "qmplus_manual_continuation"
     }
 
     internal fun closeForLogout() { closing = true; authFlow?.close(); invalidateSync(); browser?.stopLoading(); finish() }

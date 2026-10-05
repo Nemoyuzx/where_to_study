@@ -4,6 +4,60 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QmplusLoginAutomationTest {
+    @Test fun confirmedIdentitySurvivesNavigationButPasswordAndContinueBudgetsDoNotReset() {
+        val gate = QmplusLoginAutomationGate()
+        val first = gate.beginDocument()
+        assertTrue(gate.installed(first, "AUTH_INSTALLED"))
+        assertTrue(gate.claimFill(first, "username", true))
+        assertTrue(gate.submitted(first, "username", "USERNAME_SUBMITTED"))
+        val password = gate.beginDocument()
+        assertTrue(gate.installed(password, "AUTH_INSTALLED"))
+        assertFalse(gate.claimFill(password, "username", true))
+        assertFalse(gate.submitted(password, "username", "USERNAME_SUBMITTED"))
+        assertTrue(gate.identityAcknowledged(password))
+        assertTrue(gate.claimFill(password, "password", true, true))
+        val kmsi = gate.beginDocument()
+        assertTrue(gate.installed(kmsi, "AUTH_INSTALLED"))
+        assertFalse(gate.claimFill(kmsi, "password", true, true))
+        assertFalse(gate.claimFill(kmsi, "continue", true, false))
+        assertTrue(gate.claimFill(kmsi, "continue", true, true))
+        assertTrue(gate.submitted(kmsi, "continue", "CONTINUE_SUBMITTED"))
+        assertFalse(gate.claimFill(kmsi, "continue", true, true))
+        gate.close()
+        assertFalse(gate.identityAcknowledged(kmsi))
+    }
+
+    @Test fun verifiedCurrentAccountRequiresTheInstalledCurrentDocumentAndCannotRenewPassword() {
+        val gate = QmplusLoginAutomationGate()
+        val first = gate.beginDocument()
+        assertFalse(gate.acknowledgeCurrentAccount(first, true))
+        assertTrue(gate.installed(first, "AUTH_INSTALLED"))
+        assertFalse(gate.acknowledgeCurrentAccount(first, false))
+        assertTrue(gate.acknowledgeCurrentAccount(first, true))
+        assertTrue(gate.claimFill(first, "password", true, true))
+        val next = gate.beginDocument()
+        assertTrue(gate.installed(next, "AUTH_INSTALLED"))
+        assertFalse(gate.acknowledgeCurrentAccount(first, true))
+        assertFalse(gate.acknowledgeCurrentAccount(next, true))
+        assertFalse(gate.claimFill(next, "password", true, true))
+    }
+
+    @Test fun directContinuePreventsEveryEarlierLoginStepEvenInAnotherDocument() {
+        val gate = QmplusLoginAutomationGate()
+        val first = gate.beginDocument()
+        assertTrue(gate.installed(first, "AUTH_INSTALLED"))
+        assertTrue(gate.acknowledgeCurrentAccount(first, true))
+        assertTrue(gate.claimFill(first, "continue", true, true))
+        val next = gate.beginDocument()
+        assertTrue(gate.installed(next, "AUTH_INSTALLED"))
+        for (stage in listOf("account", "username", "password", "continue")) {
+            assertFalse(gate.claimFill(next, stage, true, true))
+        }
+        assertFalse(gate.claimSSO(next, true))
+        assertFalse(gate.claimLoginEntry(next, true))
+        assertFalse(gate.acknowledgeCurrentAccount(next, true))
+    }
+
     @Test fun plainGuestEntryIsOnceAndCannotBeClaimedAfterSSOOrCredentialSubmission() {
         val gate = QmplusLoginAutomationGate()
         val document = gate.beginDocument()

@@ -884,6 +884,16 @@
     <string name="ui_generated_fee09598ad7872">"Sedang membaca pengumuman terbaru bagian logistik dan jadwal yang kini berlaku."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"Akar JSON jadwal khusus harus berupa objek."</string>
     <string name="ui_generated_ff93bd2c081d35">"Buka daftar tugas Teaching Cloud di peramban"</string>
+    <string name="ui_generated_b63c257717353e">"Selesaikan CAPTCHA atau MFA di jendela resmi. Sinkronisasi akan dilanjutkan setelahnya."</string>
+    <string name="ui_generated_81a90adf66f769">"Login otomatis dijeda. Pilih “Lanjutkan secara manual” untuk melihat halaman resmi."</string>
+    <string name="ui_generated_2042efadd2c35a">"Lanjutkan secara manual"</string>
+    <string name="ui_generated_5d364751ceb578">"Akun dan kata sandi tersimpan menyelesaikan login resmi secara otomatis. Anda hanya perlu bertindak untuk CAPTCHA atau MFA. Halaman yang tidak dikenal dijeda agar Anda dapat melanjutkan secara manual."</string>
+    <string name="ui_generated_f141054f90bcd5">"Izinkan pengisian otomatis pada halaman login resmi"</string>
+    <string name="ui_generated_f09d02b07a9af4">"Setelah disimpan, kredensial QMplus yang terpisah disimpan dalam penyimpanan aman perangkat ini. Pengisian otomatis dipilih pada penggunaan pertama dan dapat dimatikan sebelum menyimpan."</string>
+    <string name="ui_generated_b7df5fe6f6018c">"Login dan sinkronisasi berjalan di latar belakang. Jendela resmi hanya terbuka otomatis untuk CAPTCHA atau MFA. Halaman yang tidak dikenali dijeda agar Anda dapat melanjutkan secara manual."</string>
+    <string name="ui_generated_8d1807d5c0f998">"Hanya langkah login resmi yang terverifikasi untuk akun yang cocok yang berjalan otomatis. Anda menyelesaikan CAPTCHA dan MFA."</string>
+    <string name="ui_generated_e6ff81b07ab0b4">"Kata sandi tersimpan tidak ditampilkan. Masukkan kembali detail hanya saat memperbaruinya."</string>
+    <string name="ui_generated_679afb01032ac3">"Opsi penyimpanan aktif pada penggunaan pertama. Detail login baru masuk ke penyimpanan aman perangkat ini setelah Anda memilih “Simpan”."</string>
     <string name="ui_generated_1a78803a506cc4">"Aktifkan QMplus"</string>
     <string name="ui_generated_de0fc50a49bf3c">"Hanya untuk Fakultas Internasional"</string>
     <string name="ui_generated_dba3ae91be2408">"Tidak dapat menyimpan preferensi lokal."</string>

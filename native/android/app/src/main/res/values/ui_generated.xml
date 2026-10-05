@@ -884,6 +884,16 @@
     <string name="ui_generated_fee09598ad7872">"正在读取后勤部最新通知与当前生效时刻表。"</string>
     <string name="ui_generated_ff89a1a38ca3a7">"自定义日程顶层必须是对象。"</string>
     <string name="ui_generated_ff93bd2c081d35">"在浏览器中打开教学云平台作业列表"</string>
+    <string name="ui_generated_b63c257717353e">"请在官方窗口完成验证码或 MFA，完成后将继续同步。"</string>
+    <string name="ui_generated_81a90adf66f769">"自动登录已暂停，可选择“手动继续”查看官方页面。"</string>
+    <string name="ui_generated_2042efadd2c35a">"手动继续"</string>
+    <string name="ui_generated_5d364751ceb578">"已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。"</string>
+    <string name="ui_generated_f141054f90bcd5">"允许官方登录页自动填写"</string>
+    <string name="ui_generated_f09d02b07a9af4">"保存后会在本机安全存储中保留独立 QMplus 登录资料。首次默认开启自动填写，也可在保存前关闭。"</string>
+    <string name="ui_generated_b7df5fe6f6018c">"登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。"</string>
+    <string name="ui_generated_8d1807d5c0f998">"仅自动处理已核验且账号匹配的官方登录步骤；验证码和 MFA 由您完成。"</string>
+    <string name="ui_generated_e6ff81b07ab0b4">"已保存的密码不会回显。仅更新登录资料时需要重新填写。"</string>
+    <string name="ui_generated_679afb01032ac3">"保存选项首次默认开启；只有点击“保存”后，登录资料才会存入本机安全存储。"</string>
     <string name="ui_generated_1a78803a506cc4">"启用 QMplus"</string>
     <string name="ui_generated_de0fc50a49bf3c">"仅适用国院"</string>
     <string name="ui_generated_dba3ae91be2408">"无法保存本地偏好。"</string>

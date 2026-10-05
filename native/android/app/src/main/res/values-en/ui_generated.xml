@@ -884,6 +884,16 @@
     <string name="ui_generated_fee09598ad7872">"Reading the latest Logistics Department notice and currently active timetable."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"The custom schedule root must be an object."</string>
     <string name="ui_generated_ff93bd2c081d35">"Open the Teaching Cloud Platform assignment list in your browser."</string>
+    <string name="ui_generated_b63c257717353e">"Complete CAPTCHA or MFA in the official window. Sync will continue afterward."</string>
+    <string name="ui_generated_81a90adf66f769">"Automatic sign-in paused. Choose “Continue manually” to view the official page."</string>
+    <string name="ui_generated_2042efadd2c35a">"Continue manually"</string>
+    <string name="ui_generated_5d364751ceb578">"Your saved account and password complete official sign-in automatically. Only CAPTCHA or MFA needs your action. Unknown pages pause so you can continue manually."</string>
+    <string name="ui_generated_f141054f90bcd5">"Allow autofill on official sign-in pages"</string>
+    <string name="ui_generated_f09d02b07a9af4">"Your separate QMplus credentials are kept in secure storage on this device after saving. Autofill is selected initially and can be turned off before saving."</string>
+    <string name="ui_generated_b7df5fe6f6018c">"Sign-in and sync run in the background. The official window opens automatically only for CAPTCHA or MFA. Unrecognized pages pause for you to continue manually."</string>
+    <string name="ui_generated_8d1807d5c0f998">"Only verified official sign-in steps for the matching account run automatically. You complete CAPTCHA and MFA."</string>
+    <string name="ui_generated_e6ff81b07ab0b4">"Saved passwords are not displayed. Enter your details again only when updating them."</string>
+    <string name="ui_generated_679afb01032ac3">"Saving is selected on first use. Your sign-in details enter secure storage on this device only after you choose “Save”."</string>
     <string name="ui_generated_1a78803a506cc4">"Enable QMplus"</string>
     <string name="ui_generated_de0fc50a49bf3c">"International School only"</string>
     <string name="ui_generated_dba3ae91be2408">"Unable to save local preferences."</string>

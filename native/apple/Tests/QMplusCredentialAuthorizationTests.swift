@@ -5,9 +5,11 @@ import XCTest
 @testable import WhereToStudyiOS
 #endif
 
+// Pure specification source only; no real credentials or WebKit are used.
+// These tests are not executed while local automation is prohibited.
 @MainActor
 final class QMplusCredentialAuthorizationTests: XCTestCase {
-    func testDefaultOffAndRestoreOnlyReadsNonsecretMatchingMetadata() throws {
+    func testAuthorizationDefaultsOffAndRestoreOnlyReadsNonsecretMatchingMetadata() throws {
         let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
         let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
         authorization.loadIfNeeded()
@@ -23,6 +25,85 @@ final class QMplusCredentialAuthorizationTests: XCTestCase {
         restored.restoreAuthorization()
         XCTAssertTrue(restored.isEnabled)
         XCTAssertEqual(vault.secretReads, 0, "Settings restoration must not read an account or password")
+    }
+
+    func testInitialSaveChoiceIsOnWithoutCreatingSavedCredentialsOrAuthorization() throws {
+        let suite = "QMplusInitialSaveChoice.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let draft = QMplusCredentialDraft(defaults: defaults)
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
+        authorization.loadIfNeeded()
+        XCTAssertTrue(draft.wantsToSave)
+        XCTAssertTrue(draft.account.isEmpty)
+        XCTAssertTrue(draft.password.isEmpty)
+        XCTAssertNil(defaults.object(forKey: QMplusCredentialDraft.preferenceKey), "The first-use default is not a saved opt-in record")
+        XCTAssertFalse(authorization.isEnabled)
+        XCTAssertNil(vault.record)
+        XCTAssertNil(journal.marker)
+        XCTAssertEqual(vault.secretReads, 0)
+    }
+
+    func testExplicitOffChoiceSurvivesDraftClearingAndReconstructionUntilPreferencesReset() throws {
+        let suite = "QMplusExplicitSaveChoice.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let draft = QMplusCredentialDraft(defaults: defaults)
+        draft.account = "synthetic@example.invalid"
+        draft.password = "synthetic-draft-password"
+        draft.disableSaving()
+        XCTAssertFalse(draft.wantsToSave)
+        XCTAssertTrue(draft.account.isEmpty)
+        XCTAssertTrue(draft.password.isEmpty)
+        XCTAssertEqual(defaults.object(forKey: QMplusCredentialDraft.preferenceKey) as? Bool, false)
+        draft.clear()
+        let reconstructed = QMplusCredentialDraft(defaults: defaults)
+        XCTAssertFalse(reconstructed.wantsToSave)
+        XCTAssertTrue(reconstructed.account.isEmpty)
+        XCTAssertTrue(reconstructed.password.isEmpty)
+        reconstructed.resetSavingPreference()
+        XCTAssertTrue(reconstructed.wantsToSave)
+        XCTAssertNil(defaults.object(forKey: QMplusCredentialDraft.preferenceKey))
+        XCTAssertTrue(QMplusCredentialDraft(defaults: defaults).wantsToSave)
+    }
+
+    func testVerifiedSavedStateSurvivesEmptyEditingFieldsAndAnUnrelatedValidationStatus() {
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
+        let draft = QMplusCredentialDraft(defaults: nil)
+        XCTAssertTrue(authorization.saveAndAuthorize(account: "synthetic@example.invalid", password: "synthetic-password"))
+        let saved = vault.record
+        let reads = vault.secretReads
+        draft.account = "synthetic@example.invalid"
+        draft.password = "synthetic-edit"
+        draft.clear()
+        XCTAssertTrue(draft.wantsToSave)
+        XCTAssertTrue(draft.account.isEmpty)
+        XCTAssertTrue(draft.password.isEmpty, "The editor must not reload the saved password")
+        XCTAssertTrue(authorization.isEnabled, "The persistent saved badge depends on verified authorization, not editable input")
+        XCTAssertFalse(authorization.saveAndAuthorize(account: "", password: ""))
+        XCTAssertEqual(authorization.statusKey, "请填写有效的 QMplus 账号和密码。")
+        XCTAssertTrue(authorization.isEnabled, "A transient validation message does not replace the verified saved state")
+        XCTAssertEqual(vault.record, saved)
+        let restored = QMplusCredentialAuthorization(storage: vault, journal: journal)
+        restored.restoreAuthorization()
+        XCTAssertTrue(restored.isEnabled)
+        XCTAssertEqual(vault.secretReads, reads, "Checking the saved state must read metadata only")
+    }
+
+    func testStorageProhibitedDraftChoiceNeverTouchesTheProvidedDefaults() throws {
+        let suite = "QMplusSampleSaveChoice.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        let store = QMplusStore(defaults: defaults, credentialStore: vault, authorizationJournal: journal, allowsCredentialStorage: false)
+        XCTAssertTrue(store.credentialDraft.wantsToSave)
+        store.credentialDraft.disableSaving()
+        XCTAssertNil(defaults.object(forKey: QMplusCredentialDraft.preferenceKey))
+        XCTAssertFalse(store.credentialAuthorization.isEnabled)
+        XCTAssertEqual(vault.secretReads, 0)
+        XCTAssertNil(store.webView)
     }
 
     func testSaveWithdrawsAuthorityBeforeSecretAndAuthorizesOnlyAfterReadback() throws {
@@ -184,6 +265,8 @@ final class QMplusCredentialAuthorizationTests: XCTestCase {
         XCTAssertNil(journal.marker)
         XCTAssertEqual(store.credentialDraft.account, "")
         XCTAssertEqual(store.credentialDraft.password, "")
+        XCTAssertFalse(store.credentialDraft.wantsToSave)
+        XCTAssertFalse(QMplusCredentialDraft(defaults: defaults).wantsToSave)
         XCTAssertNil(store.webView, "Credential tests must not construct WebKit or request any website")
     }
 

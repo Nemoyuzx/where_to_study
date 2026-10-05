@@ -262,8 +262,29 @@ final class QMplusCredentialAuthorization: ObservableObject {
 
 @MainActor
 final class QMplusCredentialDraft: ObservableObject {
+    static let preferenceKey = "qmplusCredentialSavePreference"
+    private let defaults: UserDefaults?
+    private var persistsPreference = true
     @Published var account = ""
     @Published var password = ""
-    @Published var wantsToSave = false
-    func clear() { account = ""; password = ""; wantsToSave = false }
+    // A selected editing preference is not an authorization or saved record.
+    // Only the explicit save action can establish the secure-store binding.
+    @Published var wantsToSave: Bool {
+        didSet { if persistsPreference { defaults?.set(wantsToSave, forKey: Self.preferenceKey) } }
+    }
+
+    init(defaults: UserDefaults? = .standard) {
+        self.defaults = defaults
+        wantsToSave = defaults?.object(forKey: Self.preferenceKey) as? Bool ?? true
+    }
+
+    func clear() { account = ""; password = "" }
+    func disableSaving() { wantsToSave = false; clear() }
+    func resetSavingPreference() {
+        clear()
+        defaults?.removeObject(forKey: Self.preferenceKey)
+        persistsPreference = false
+        wantsToSave = true
+        persistsPreference = true
+    }
 }

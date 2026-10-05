@@ -77,6 +77,46 @@ async function authorization(current: QMPlusSession): Promise<QMPlusLoginAuthori
 
 export default function qmPlusSavedLoginTest() {
   describe('QMPlusSavedLoginTest', () => {
+    it('a_foreground_warm_owner_reveals_only_verification_then_returns_to_quiet_work', 0, () => {
+      const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
+      current.openLogin(QMPlusURLPolicy.home, true);
+      const owner = current.loginOwner();
+      current.setLoginForeground(false);
+      current.presentVerification();
+      expect(current.loginPresented).assertFalse();
+      current.setLoginForeground(true);
+      current.presentVerification();
+      expect(current.loginPresented).assertTrue();
+      expect(current.isLoginOwnerCurrent(owner)).assertTrue();
+      current.resumeAutomaticLogin();
+      expect(current.loginPresented).assertFalse();
+      expect(current.isLoginOwnerCurrent(owner)).assertTrue();
+      current.closeLogin();
+    });
+
+    it('unknown_page_deferral_preserves_the_document_for_explicit_manual_continuation_and_later_teardown', 0, async () => {
+      const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
+      expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
+      expect(await current.setAutoFillEnabled(true)).assertTrue();
+      current.openLogin();
+      const owner = current.loginOwner();
+      let stops: number = 0;
+      current.bindLoginWeb(owner, (): void => { stops++; });
+      current.deferManualLogin();
+      expect(current.loginPresented).assertFalse();
+      expect(current.manualContinuationRequired).assertTrue();
+      expect(current.isLoginOwnerCurrent(owner)).assertTrue();
+      expect(stops).assertEqual(1);
+      current.openLogin();
+      expect(current.loginPresented).assertTrue();
+      expect(current.isLoginOwnerCurrent(owner)).assertTrue();
+      current.presentVerification();
+      current.resumeAutomaticLogin();
+      expect(current.loginPresented).assertTrue();
+      current.closeLogin();
+      expect(stops).assertEqual(2);
+    });
+
     it('silent_owner_manual_requirement_preserves_last_good_and_retires_without_presenting_a_window', 0, () => {
       const store: FakeLoginStore = new FakeLoginStore();
       const current: QMPlusSession = session(store, new FakeAuthorizationJournal());
@@ -691,11 +731,46 @@ export default function qmPlusSavedLoginTest() {
       expect(ledger.claimUsername('document_1')).assertFalse();
       expect(ledger.recordUsernameSubmission('document_1', 'MANUAL_REQUIRED')).assertFalse();
       expect(ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED')).assertTrue();
-      ledger.beginDocument();
+      ledger.beginDocument('document_2');
       expect(ledger.claimUsername('document_2')).assertFalse();
       expect(ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED')).assertFalse();
       expect(ledger.claimPassword('document_1', true)).assertFalse();
+      expect(ledger.claimPassword('document_2', true)).assertTrue();
       expect(ledger.claimPassword('document_2', true)).assertFalse();
+      ledger.beginDocument('document_3');
+      expect(ledger.claimContinue('document_3', false)).assertFalse();
+      expect(ledger.claimContinue('document_3', true)).assertTrue();
+      expect(ledger.claimContinue('document_3', true)).assertFalse();
+    });
+
+    it('direct_verified_identity_is_current_document_only_and_does_not_renew_password_claims', 0, () => {
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger();
+      ledger.begin();
+      ledger.beginDocument('document_1');
+      expect(ledger.acknowledgeCurrentAccount('document_2', true)).assertFalse();
+      expect(ledger.acknowledgeCurrentAccount('document_1', false)).assertFalse();
+      expect(ledger.acknowledgeCurrentAccount('document_1', true)).assertTrue();
+      expect(ledger.claimPassword('document_1', true)).assertTrue();
+      ledger.beginDocument('document_2');
+      expect(ledger.acknowledgeCurrentAccount('document_2', true)).assertFalse();
+      expect(ledger.claimPassword('document_2', true)).assertFalse();
+      expect(ledger.claimContinue('document_2', true)).assertTrue();
+      ledger.stop();
+      expect(ledger.identityAcknowledged('document_2')).assertFalse();
+    });
+
+    it('direct_continue_prevents_backwards_credential_steps_and_saml_restart', 0, () => {
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger();
+      ledger.begin();
+      ledger.beginDocument('document_1');
+      expect(ledger.acknowledgeCurrentAccount('document_1', true)).assertTrue();
+      expect(ledger.claimContinue('document_1', true)).assertTrue();
+      ledger.beginDocument('document_2');
+      expect(ledger.claimAccount('document_2', true)).assertFalse();
+      expect(ledger.claimUsername('document_2')).assertFalse();
+      expect(ledger.claimPassword('document_2', true)).assertFalse();
+      expect(ledger.claimContinue('document_2', true)).assertFalse();
+      expect(ledger.credentialsAttempted()).assertTrue();
     });
 
     it('password_is_once_only_and_manual_stop_stays_stopped_after_navigation', 0, () => {

@@ -66,13 +66,25 @@ function fixture(overrides={}) {
       return this.querySelectorAll(selector)[0]??null
     },
     querySelectorAll(selector) {
-      const inputs=state.stage==='username'?[user,pass,submit]:[pass,submit]
+      const inputs=state.stage==='username'?[user,pass,submit]:state.stage==='continue'?[submit,...(state.continueInputs??[])]:[pass,submit]
       if(selector==='form#i0281')return [form]
       if(selector==='input#idSIButton9[type="submit"]')return [submit]
       if(selector==='input#i0116[name="loginfmt"][type="email"]')return inputs.filter(n=>n===user)
       if(selector==='input#i0118[name="passwd"][type="password"]')return inputs.filter(n=>n===pass)
       if(selector==='#i0116')return inputs.filter(n=>n===user)
+      if(selector==='#i0116, #i0118')return inputs.filter(n=>n===user||n===pass)
       if(selector==='#displayName')return state.stage==='username'?[]:[displayName]
+      if(selector==='#kmsiTitle')return state.kmsiTitle?[state.kmsiTitle]:[]
+      if(selector==='input#idBtn_Back[type="button"]')return state.back?[state.back]:[]
+      if(selector==='input#KmsiCheckboxField[type="checkbox"]')return state.kmsiCheckbox?[state.kmsiCheckbox]:[]
+      if(selector==='label[for="KmsiCheckboxField"]')return state.kmsiLabel?[state.kmsiLabel]:[]
+      if(selector==='iframe[title], input[aria-label], [role="group"][aria-label], img[alt]')return state.extra.filter(n=>
+        (n.tagName==='IFRAME'&&n.attrs.title)||(n instanceof FakeInput&&n.attrs['aria-label'])||
+        (n.attrs.role==='group'&&n.attrs['aria-label'])||(n.tagName==='IMG'&&n.attrs.alt))
+      if(selector==='input[autocomplete="one-time-code"], input[name="otc"]')return state.extra.filter(n=>
+        n instanceof FakeInput&&(n.attrs.autocomplete==='one-time-code'||n.name==='otc'))
+      if(selector==='h1, h2, [role="heading"]')return state.extra.filter(n=>['H1','H2'].includes(n.tagName)||n.attrs.role==='heading')
+      if(selector==='button, select, [role="button"]')return state.extra.filter(n=>['BUTTON','SELECT'].includes(n.tagName)||n.attrs.role==='button')
       if(selector==='#tilesHolder')return state.chooser?[state.chooser]:[]
       if(selector==='.usermenu .userbutton')return state.menu?[state.menu]:[]
       if(selector==='.moodle-dialogue-exception h5, .modal.show .modal-title, .modal[aria-hidden="false"] .modal-title, [role="dialog"][aria-modal="true"] .modal-title')return state.errorTitles??[]
@@ -82,8 +94,8 @@ function fixture(overrides={}) {
     elementFromPoint(x,y) {
       if(state.occluder)return state.occluder
       if(state.stage==='chooser')return state.chooserRows?.find(n=>n.style.opacity!=='0'&&x>=n.rect.left&&x<=n.rect.left+n.rect.width&&y>=n.rect.top&&y<=n.rect.top+n.rect.height) ?? state.chooser
-      const inputs=state.stage==='username'?[user,pass,submit]:[pass,submit]
-      const nodes=[...inputs,displayName,...state.extra]
+      const inputs=state.stage==='username'?[user,pass,submit]:state.stage==='continue'?[submit,...(state.continueInputs??[])]:[pass,submit]
+      const nodes=[...inputs,displayName,...state.extra,...(state.kmsiTitle?[state.kmsiTitle]:[])]
       return nodes.find(node=>node.style.opacity!=='0'&&x>=node.rect.left&&x<=node.rect.left+node.rect.width&&
         y>=node.rect.top&&y<=node.rect.top+node.rect.height)??form
     }}
@@ -94,7 +106,26 @@ function fixture(overrides={}) {
     setURL(url){const parsed=new URL(url);location.href=parsed.href;location.origin=parsed.origin}}
 }
 
-function inspect(f, hint=account, doc=nonce) { return JSON.parse(JSON.stringify(f.auth.inspect(doc,hint))) }
+function inspect(f, hint=account, doc=nonce, identityAcknowledged=false) {
+  return JSON.parse(JSON.stringify(f.auth.inspect(doc,hint,identityAcknowledged)))
+}
+
+function continuationFixture({checkbox=false,url=msURL}={}) {
+  const f=fixture({stage:'continue',url:new URL(url)})
+  f.form.action='https://login.microsoftonline.com/kmsi'
+  const title=new FakeElement({id:'kmsiTitle',textContent:'Stay signed in?',rect:{left:100,top:85,width:280,height:32}})
+  const back=new FakeInput({id:'idBtn_Back',type:'button',rect:{left:250,top:160,width:108,height:32}})
+  for(const item of [title,back])item.parentElement=f.form
+  f.state.kmsiTitle=title;f.state.back=back;f.state.continueInputs=[back]
+  f.submit.onClick=()=>{}
+  if(checkbox){
+    const field=new FakeInput({id:'KmsiCheckboxField',type:'checkbox',rect:{left:100,top:130,width:20,height:20}})
+    const label=new FakeElement({tagName:'LABEL',textContent:"Don't show this again",rect:{left:130,top:130,width:230,height:20}})
+    field.parentElement=f.form;label.parentElement=f.form;field.checked=false
+    f.state.kmsiCheckbox=field;f.state.kmsiLabel=label;f.state.continueInputs.push(field)
+  }
+  return {...f,title,back}
+}
 
 function chooserFixture(options={}) {
   const f=fixture({stage:'chooser'})
@@ -183,6 +214,7 @@ function desktopBootstrap(f,{invoke=()=>Promise.resolve(false),revision=1}={}) {
   assert.ok(start>=0)
   const template=rust.slice(start,rust.indexOf('"#,',start))
   const script=template.replaceAll('{AUTH_SCRIPT}',source).replaceAll('{revision}',String(revision))
+    .replaceAll('{identity_acknowledged}','false')
     .replaceAll('{nonce}',JSON.stringify(nonce)).replaceAll('{url}',JSON.stringify(msURL))
     .replaceAll('{account}',JSON.stringify(account)).replaceAll('{{','{').replaceAll('}}','}')
   const reports=[],timers=new Map();let nextTimer=0
@@ -207,7 +239,7 @@ test('desktop bootstrap propagates the canonical install return and inspects wit
   assert.doesNotMatch(JSON.stringify(reports),/student@|password|SAMLRequest/)
 })
 
-test('desktop layout waits once while hidden and at most eight more times after asking to show the same window',async()=>{
+test('desktop layout reports bounded hidden settling and stops without treating layout failure as a challenge',async()=>{
   const f=fixture({skipInstall:true});f.submit.rect.width=0
   const bridge=desktopBootstrap(f)
   for(let i=0;i<7;i++)assert.equal(await bridge.next(),250)
@@ -295,6 +327,25 @@ test('desktop pending native approval cannot resume after pagehide or a changed 
     assert.equal(bridge.timers.size,0,event)
     assert.equal(f.user.value,'');assert.equal(f.pass.value,'');assert.equal(f.submit.clicked,0,event)
   }
+})
+
+test('desktop challenge polling stays read-only and can observe the next ordinary SSO step',async()=>{
+  const f=fixture({skipInstall:true})
+  const code=new FakeInput({type:'text',name:'otc',rect:{left:500,top:100,width:170,height:30}})
+  code.parentElement=f.form;f.state.extra.push(code)
+  const bridge=desktopBootstrap(f)
+  await bridge.settle()
+  assert.equal(bridge.reports[0].args.report.stage,'challenge')
+  assert.equal(bridge.reports[0].args.report.reason,'MFA_REQUIRED')
+  for(let i=0;i<72;i++)assert.equal(await bridge.next(),750)
+  assert.equal(bridge.active(nonce),true)
+  assert.equal(bridge.reports.every(item=>item.args.report.stage==='challenge'),true)
+  assert.equal(f.user.value,'');assert.equal(f.pass.value,'');assert.equal(code.value,'');assert.equal(code.clicked,0)
+  f.state.extra=[]
+  assert.equal(await bridge.next(),750)
+  assert.equal(bridge.reports.at(-1).args.report.stage,'username')
+  assert.equal(f.submit.clicked,0)
+  assert.doesNotMatch(JSON.stringify(bridge.reports),/student@|synthetic-password|SAMLRequest/)
 })
 
 test('only the observed official sibling placeholder may be focused before strict hit revalidation',()=>{
@@ -471,11 +522,11 @@ test('prefilled other account or an OS-managed password is never overwritten',()
   assert.equal(existing.pass.value,'system-managed-password')
 })
 
-test('password stage refuses account mismatch and manual username entry',()=>{
+test('direct password page identifies the exact current account but still requires native acknowledgement before filling',()=>{
   const manual=fixture({stage:'password'})
   manual.pass.rect={left:100,top:100,width:348,height:36};manual.pass.style.opacity='1'
   assert.equal(inspect(manual).stage,'password')
-  assert.equal(inspect(manual).reason,'USERNAME_NOT_SUBMITTED')
+  assert.equal(inspect(manual).reason,'CURRENT_ACCOUNT_VERIFIED')
   assert.equal(manual.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'MANUAL_REQUIRED')
   const mismatch=fixture();inspect(mismatch)
   assert.equal(mismatch.auth.fillAndSubmit({document:nonce,stage:'username',account}),'USERNAME_SUBMITTED')
@@ -483,6 +534,154 @@ test('password stage refuses account mismatch and manual username entry',()=>{
   assert.equal(inspect(mismatch).stage,'manual')
   assert.equal(mismatch.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'MANUAL_REQUIRED')
   assert.equal(mismatch.submit.clicked,1)
+})
+
+test('native identity ACK may cross a real document but is not retained by inspect or inferred from truthy values',()=>{
+  const previous=fixture();inspect(previous)
+  assert.equal(previous.auth.fillAndSubmit({document:nonce,stage:'username',account}),'USERNAME_SUBMITTED')
+  const f=fixture({stage:'password'})
+  f.pass.rect={left:100,top:100,width:348,height:36};f.pass.style.opacity='1'
+  assert.equal(inspect(f).reason,'CURRENT_ACCOUNT_VERIFIED')
+  const approved=inspect(f,account,nonce,true)
+  assertFixed(approved);assert.equal(approved.stage,'password');assert.equal(approved.reason,'READY')
+  assert.equal(inspect(f).reason,'CURRENT_ACCOUNT_VERIFIED')
+  for(const value of [false,'true',1,{},null])assert.equal(inspect(f,account,nonce,value).reason,'CURRENT_ACCOUNT_VERIFIED')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'MANUAL_REQUIRED')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret,identityAcknowledged:'true'}),'REJECTED')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret,identityAcknowledged:true}),'PASSWORD_SUBMITTED')
+  assert.equal(f.pass.value,secret);assert.equal(f.submit.clicked,1)
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret,identityAcknowledged:true}),'MANUAL_REQUIRED')
+  assert.equal(f.submit.clicked,1)
+})
+
+test('cross-document identity ACK cannot weaken account, URL, control or nonce verification',()=>{
+  for(const variant of ['account','hidden','leftover-user','prefilled','action','nonce','kmsi-path','challenge']){
+    const f=fixture({stage:'password'})
+    f.pass.rect={left:100,top:100,width:348,height:36};f.pass.style.opacity='1'
+    inspect(f)
+    if(variant==='account')f.displayName.textContent='other@example.org'
+    if(variant==='hidden')f.displayName.hidden=true
+    if(variant==='leftover-user'){
+      const query=f.document.querySelectorAll.bind(f.document)
+      f.document.querySelectorAll=selector=>selector==='#i0116'?[f.user]:query(selector)
+    }
+    if(variant==='prefilled')f.pass.value='existing-password'
+    if(variant==='action')f.form.action='https://login.microsoftonline.com/other/login'
+    if(variant==='kmsi-path')f.setURL('https://login.microsoftonline.com/kmsi')
+    if(variant==='challenge'){
+      const code=new FakeInput({type:'text',name:'otc',rect:{left:500,top:100,width:170,height:30}})
+      code.parentElement=f.form;f.state.extra.push(code)
+    }
+    assert.notEqual(f.auth.fillAndSubmit({document:variant==='nonce'?'nonceB456':nonce,
+      stage:'password',account,password:secret,identityAcknowledged:true}),'PASSWORD_SUBMITTED',variant)
+    assert.equal(f.submit.clicked,0,variant)
+    assert.notEqual(f.pass.value,secret,variant)
+  }
+})
+
+test('only positively identified visible CAPTCHA or MFA controls produce the non-secret challenge stage',()=>{
+  for(const kind of ['captcha','code','otc','approval']){
+    const f=fixture()
+    let control
+    if(kind==='captcha'){
+      control=new FakeElement({tagName:'IFRAME',rect:{left:500,top:100,width:240,height:80}})
+      control.attrs.title='CAPTCHA challenge'
+    }else if(kind==='approval'){
+      control=new FakeElement({tagName:'H1',textContent:'Approve sign in request',rect:{left:500,top:100,width:240,height:32}})
+    }else{
+      control=new FakeInput({name:kind==='otc'?'otc':'verification',type:'text',rect:{left:500,top:100,width:170,height:30}})
+      if(kind==='code')control.attrs.autocomplete='one-time-code'
+    }
+    control.parentElement=f.form;f.state.extra.push(control)
+    f.document.readyState='loading'
+    const state=inspect(f);assertFixed(state)
+    assert.equal(state.stage,'challenge',kind)
+    assert.equal(state.reason,kind==='captcha'?'CAPTCHA_REQUIRED':'MFA_REQUIRED',kind)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED',kind)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'challenge',account}),'REJECTED',kind)
+    assert.equal(f.user.value,'');assert.equal(f.submit.clicked,0);assert.equal(control.clicked,0)
+    control.hidden=true;assert.equal(inspect(f).stage,'loading',kind)
+    f.document.readyState='complete';assert.equal(inspect(f).stage,'username',kind)
+  }
+  const unknown=fixture()
+  const title=new FakeElement({tagName:'H1',textContent:'More information required'})
+  const input=new FakeInput({type:'text',name:'unknown'})
+  title.parentElement=unknown.form;input.parentElement=unknown.form;unknown.state.extra.push(title,input)
+  assert.equal(inspect(unknown).stage,'manual')
+  const untrusted=fixture();untrusted.setURL('https://evil.invalid/login')
+  const otp=new FakeInput({name:'otc',type:'text'});otp.parentElement=untrusted.form;untrusted.state.extra.push(otp)
+  assert.equal(inspect(untrusted).stage,'manual')
+})
+
+test('recognized KMSI continuation requires current identity and submits Yes once without touching checkbox or password',()=>{
+  for(const url of [msURL,'https://login.microsoftonline.com/kmsi']){
+    const f=continuationFixture({checkbox:true,url})
+    assert.equal(inspect(f).stage,'continue');assert.equal(inspect(f).reason,'CURRENT_ACCOUNT_VERIFIED')
+    const state=inspect(f,account,nonce,true);assertFixed(state)
+    assert.equal(state.stage,'continue');assert.equal(state.reason,'READY');assert.equal(state.accountMatch,true)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'continue',account,identityAcknowledged:true,password:secret}),'REJECTED')
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'continue',account}),'MANUAL_REQUIRED')
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'continue',account,identityAcknowledged:true}),'CONTINUE_SUBMITTED')
+    assert.equal(f.submit.clicked,1);assert.equal(f.back.clicked,0)
+    assert.equal(f.state.kmsiCheckbox.clicked,0);assert.equal(f.state.kmsiCheckbox.checked,false)
+    assert.equal(f.pass.value,'');assert.equal(f.user.value,'')
+    assert.equal(inspect(f,account,nonce,true).reason,'ALREADY_ATTEMPTED')
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'continue',account,identityAcknowledged:true}),'MANUAL_REQUIRED')
+    assert.equal(f.submit.clicked,1)
+  }
+})
+
+test('the confirmed MFA method-selection heading requests user interaction without choosing or sending a code',()=>{
+  for(const title of ['Verify your identity', '验证您的身份', '驗證您的身分', '驗證您的身份']){
+    for(const tagName of ['H1','H2','DIV']){
+      const f=fixture({readyState:'loading'})
+      const heading=new FakeElement({tagName,textContent:title,rect:{left:500,top:100,width:280,height:32}})
+      if(tagName==='DIV')heading.attrs.role='heading'
+      const method=new FakeElement({tagName:'BUTTON',textContent:'Synthetic SMS option',rect:{left:500,top:160,width:280,height:32}})
+      heading.parentElement=f.form;method.parentElement=f.form;f.state.extra.push(heading,method)
+      const report=inspect(f);assertFixed(report)
+      assert.equal(report.stage,'challenge');assert.equal(report.reason,'MFA_REQUIRED')
+      assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED')
+      assert.equal(method.clicked,0);assert.equal(f.submit.clicked,0);assert.equal(f.user.value,'')
+      heading.hidden=true
+      assert.equal(inspect(f).stage,'loading')
+    }
+  }
+  const unknown=fixture()
+  const heading=new FakeElement({tagName:'H1',textContent:'Verify your identity and accept new permissions'})
+  const consent=new FakeInput({type:'checkbox'})
+  heading.parentElement=unknown.form;consent.parentElement=unknown.form;unknown.state.extra.push(heading,consent)
+  assert.equal(inspect(unknown).stage,'manual')
+})
+
+test('KMSI never generalizes to unknown consent, permissions, alerts, extra controls or another account',()=>{
+  for(const variant of ['no-title','terms-title','other-account','untrusted-action','tenant-action','checkbox-terms',
+    'unknown-input','unknown-button','alert','missing-back','duplicate-title','credential','occluded']){
+    const f=continuationFixture({checkbox:true})
+    if(variant==='no-title')f.state.kmsiTitle=null
+    if(variant==='terms-title')f.title.textContent='Accept the terms and permissions'
+    if(variant==='other-account')f.displayName.textContent='other@example.org'
+    if(variant==='untrusted-action')f.form.action='https://evil.invalid/kmsi'
+    if(variant==='tenant-action')f.form.action=formURL
+    if(variant==='checkbox-terms')f.state.kmsiLabel.textContent='I accept the terms and permissions'
+    if(variant==='unknown-input')f.state.extra.push(new FakeInput({type:'checkbox'}))
+    if(variant==='unknown-button')f.state.extra.push(new FakeElement({tagName:'BUTTON'}))
+    if(variant==='alert'){f.state.alert=new FakeElement();f.state.alert.attrs.role='alert'}
+    if(variant==='missing-back')f.state.back=null
+    if(variant==='occluded')f.state.occluder=new FakeElement()
+    if(variant==='duplicate-title'||variant==='credential'){
+      const query=f.document.querySelectorAll.bind(f.document)
+      f.document.querySelectorAll=selector=>variant==='duplicate-title'&&selector==='#kmsiTitle'?[f.title,f.title]:
+        variant==='credential'&&selector==='#i0116, #i0118'?[f.pass]:query(selector)
+    }
+    assert.equal(inspect(f,account,nonce,true).stage,'manual',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'continue',account,identityAcknowledged:true}),'MANUAL_REQUIRED',variant)
+    assert.equal(f.submit.clicked,0,variant)
+  }
+  const f=fixture();f.setURL('https://login.microsoftonline.com/kmsi')
+  assert.equal(inspect(f,account,nonce,true).stage,'manual')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED')
+  assert.equal(f.user.value,'')
 })
 
 test('both visible known fields and an unverified password-stage leftover username are manual',()=>{

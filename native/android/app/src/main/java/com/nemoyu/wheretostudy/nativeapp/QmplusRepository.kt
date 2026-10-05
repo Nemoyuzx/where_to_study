@@ -56,6 +56,8 @@ internal class QmplusRepository(context: Context,
         private set
     @Volatile var connection: QmplusConnection? = null
         private set
+    @Volatile var manualContinuationRequired = false
+        private set
     @Volatile var pendingCookieClearAttempt: QmplusCookieClearAttempt? = null
         private set
     @Volatile var savedLoginStatus = QmplusCredentialStatus()
@@ -212,6 +214,7 @@ internal class QmplusRepository(context: Context,
                             clearInternal(preservingPendingLogin = true)
                             val savedStatus = store.save(account, ownedPassword, true, savedLoginStatus.revision)
                             savedLoginStatus = savedStatus
+                            manualContinuationRequired = false
                             savedStatus
                         }
                     }
@@ -252,7 +255,7 @@ internal class QmplusRepository(context: Context,
                                 prefs.getLong(GENERATION, 0) == expectedGeneration)
                             cacheWriteFailed = !prefs.edit().putString(SNAPSHOT, canonical).putLong(GENERATION, generation)
                                 .putBoolean(COOKIE_CLEAR_PENDING, false).commit()
-                            snapshot = parsed; cookiesNeedClearing = false
+                            snapshot = parsed; cookiesNeedClearing = false; manualContinuationRequired = false
                             cancelCookieClearDeadlineLocked()
                         } }
                         if (featureStore != null) featureStore.whileCurrent(checkNotNull(featureRecord), publish)
@@ -294,7 +297,8 @@ internal class QmplusRepository(context: Context,
     fun connectionRequired(expectedGeneration: Long = generation) {
         synchronized(stateLock) {
             if (closed.get() || !featureIsCurrentLocked() || generation != expectedGeneration || connection != null) return
-            error = "请先在官方 QMplus 网页完成登录。"
+            manualContinuationRequired = true
+            error = "自动登录已暂停，可选择“手动继续”查看官方页面。"
         }
         notifyObservers()
     }
@@ -340,6 +344,7 @@ internal class QmplusRepository(context: Context,
         savedLoginStatus = loginClear.getOrNull() ?: QmplusCredentialStatus(savedLoginStatus.revision, false)
         generation = maxOf(generation, prefs.getLong(GENERATION, 0)) + 1
         snapshot = null; isLoading = false; error = null; cookiesNeedClearing = true; isClearingSession = true
+        manualContinuationRequired = false
         armCookieClearDeadlineLocked()
         check(prefs.edit().remove(SNAPSHOT).putLong(GENERATION, generation)
             .putBoolean(COOKIE_CLEAR_PENDING, true).commit()) { "QMplus cache clear failed." }

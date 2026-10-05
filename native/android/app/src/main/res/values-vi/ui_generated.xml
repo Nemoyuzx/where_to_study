@@ -884,6 +884,16 @@
     <string name="ui_generated_fee09598ad7872">"Đang đọc thông báo mới nhất của bộ phận hậu cần và thời gian biểu đang áp dụng."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"Gốc JSON lịch tùy chỉnh phải là đối tượng."</string>
     <string name="ui_generated_ff93bd2c081d35">"Mở danh sách bài tập của nền tảng học tập trong trình duyệt"</string>
+    <string name="ui_generated_b63c257717353e">"Hoàn tất CAPTCHA hoặc MFA trong cửa sổ chính thức. Quá trình đồng bộ sẽ tiếp tục sau đó."</string>
+    <string name="ui_generated_81a90adf66f769">"Đăng nhập tự động đã tạm dừng. Chọn “Tiếp tục thủ công” để xem trang chính thức."</string>
+    <string name="ui_generated_2042efadd2c35a">"Tiếp tục thủ công"</string>
+    <string name="ui_generated_5d364751ceb578">"Tài khoản và mật khẩu đã lưu được dùng để tự động hoàn tất đăng nhập chính thức. Bạn chỉ cần thao tác khi có CAPTCHA hoặc MFA. Trang không xác định sẽ tạm dừng để bạn tiếp tục thủ công."</string>
+    <string name="ui_generated_f141054f90bcd5">"Cho phép tự động điền trên trang đăng nhập chính thức"</string>
+    <string name="ui_generated_f09d02b07a9af4">"Sau khi lưu, thông tin đăng nhập QMplus riêng được giữ trong bộ nhớ bảo mật của thiết bị này. Tự động điền được chọn sẵn ở lần đầu và có thể tắt trước khi lưu."</string>
+    <string name="ui_generated_b7df5fe6f6018c">"Đăng nhập và đồng bộ chạy trong nền. Cửa sổ chính thức chỉ tự động mở khi có CAPTCHA hoặc MFA. Trang không nhận diện được sẽ tạm dừng để bạn tiếp tục thủ công."</string>
+    <string name="ui_generated_8d1807d5c0f998">"Chỉ tự động xử lý các bước đăng nhập chính thức đã xác minh và khớp tài khoản. Bạn tự hoàn tất CAPTCHA và MFA."</string>
+    <string name="ui_generated_e6ff81b07ab0b4">"Mật khẩu đã lưu không được hiển thị. Chỉ nhập lại thông tin khi cần cập nhật."</string>
+    <string name="ui_generated_679afb01032ac3">"Tùy chọn lưu được bật sẵn ở lần đầu. Thông tin đăng nhập chỉ được đưa vào bộ nhớ bảo mật của thiết bị này sau khi bạn chọn “Lưu”."</string>
     <string name="ui_generated_1a78803a506cc4">"Bật QMplus"</string>
     <string name="ui_generated_de0fc50a49bf3c">"Chỉ dành cho Khoa Quốc tế"</string>
     <string name="ui_generated_dba3ae91be2408">"Không thể lưu tùy chọn trên thiết bị."</string>

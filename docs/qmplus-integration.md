@@ -14,9 +14,9 @@ Open Connect QMplus in Settings or Courses and complete SSO/MFA in the app-owned
 
 ### 可选安全保存与自动填写 / Optional secure saving and autofill
 
-默认关闭。在独立 QMplus 设置保存账号和密码，再明确授权本机自动填写。密码使用各平台系统安全存储，与北邮凭据分开，不进入普通设置文件。有效会话优先同步；已核验的 QMplus 访客页可以先通过固定官方登录入口进入 SSO，需要登录时仅在已核验的官方 Microsoft 主文档表单提交普通 Next／Sign in 各一次。精确匹配已保存账号的已核验账户选择页可自动选择一次。验证码、MFA、未匹配的账号选择、保持登录、风险、协议或未知页面显露同一个官方窗口，必须用户处理；不会自动重试密码或绕过验证。网页改版、跨文档步骤或系统限制可能需要完整手动登录，不能保证所有分支静默完成。[辅助契约](../contracts/qmplus/AUTH.md)
+保存选项首次默认开启；输入资料并点击保存后，才会写入独立安全存储并按所选项授权自动填写。已明确关闭的选项保留，已保存状态持续显示。密码使用各平台系统安全存储，与北邮凭据分开，不进入普通设置文件。有效会话优先同步；已核验的 QMplus 访客页可以先通过固定官方登录入口进入 SSO，需要登录时仅在已核验的官方 Microsoft 主文档表单提交普通 Next／Sign in 各一次。精确匹配已保存账号的已核验账户选择页可自动选择一次。同一连接内已确认的身份可以跨文档延续，密码和已核验的保持登录步骤各最多一次。应用在前台时仅验证码／MFA 自动显示官方窗口；其它未知、风险或协议页面暂停，供用户手动继续。不会自动重试密码或绕过验证。[辅助契约](../contracts/qmplus/AUTH.md)
 
-Off by default. Save separate QMplus credentials and explicitly authorize local autofill in QMplus settings. Passwords use OS secure storage separate from BUPT credentials, not ordinary settings files. Valid sessions synchronize first; verified official Microsoft main-document forms may receive one ordinary Next and Sign in submission each. A verified account chooser may select an exact match for the saved account once. CAPTCHA, MFA, unmatched account choices, staying signed in, risk, terms or unknown pages reveal the same official window for user action, with no automatic password retries or verification bypass. Changed pages, cross-document steps or OS restrictions may require fully manual sign-in; silence cannot be guaranteed for every branch. [Helper contract](../contracts/qmplus/AUTH.md)
+Saving is selected initially, but separate QMplus credentials are stored and authorized only after the user enters them and chooses Save. Explicitly disabled choices are retained, and verified saved status remains visible. Passwords use OS secure storage separate from BUPT credentials, not ordinary settings files. Valid sessions synchronize first; verified official Microsoft main-document forms may receive one ordinary Next and Sign in submission each. A verified account chooser may select an exact match for the saved account once. Confirmed identity can continue across documents within the same connection. Password and verified Stay signed in steps are each attempted at most once. Only CAPTCHA/MFA automatically reveals the official window while the app is active; unknown pages, risk or terms pause for explicit manual continuation. Passwords are not retried and verification is never bypassed. [Helper contract](../contracts/qmplus/AUTH.md)
 
 关闭“启用 QMplus”只暂停连接和同步，保留登录资料、官方网页会话与课程缓存；它不执行删除。关闭自动填写会撤销自动填写授权；Apple 的“关闭自动填写并删除 QMplus 登录信息”为组合删除操作。删除登录资料、退出并清除数据或清除本地数据，会按所选操作移除对应记录。
 
@@ -38,9 +38,9 @@ The shared script makes only allowlisted read-only requests to the official enro
 
 ## 会话和本地资料 / Sessions and local data
 
-课程和活动业务快照经大小、字段、时间及官方链接校验后，绑定独立身份作用域保存在本机；不含登录秘密、Cookie、令牌或完整 HTML。重启先恢复缓存并保留原获取时间，启用功能时由应用数据层静默更新。缓存不证明网页登录有效；后台遇到验证要求不会自动弹窗，显式连接后才显示需要本人处理的官方页面。身份变更或清除先撤销旧作用域，旧请求不得恢复已清除的数据；功能关闭保留缓存。
+课程和活动业务快照经大小、字段、时间及官方链接校验后，绑定独立身份作用域保存在本机；不含登录秘密、Cookie、令牌或完整 HTML。重启先恢复缓存并保留原获取时间，启用功能时由应用数据层静默更新。缓存不证明网页登录有效；应用处于前台时，验证码／MFA 自动显示官方窗口；未知要求暂停，用户可手动继续，系统后台不抢占界面。身份变更或清除先撤销旧作用域，旧请求不得恢复已清除的数据；功能关闭保留缓存。
 
-Validated business snapshots are stored locally with an independent identity scope and original fetch times, never credentials, cookies, tokens or full HTML. Restart restores cached data before a data-owner-managed silent update when enabled. A cache does not establish a valid login. Background verification requirements do not automatically open a window; explicit connection reveals official pages needing action. Identity changes or clearing revoke the old scope before stale requests can republish data. Disabling retains the cache.
+Validated business snapshots are stored locally with an independent identity scope and original fetch times, never credentials, cookies, tokens or full HTML. Restart restores cached data before a data-owner-managed silent update when enabled. A cache does not establish a valid login. CAPTCHA/MFA reveals the official window while the app is active; unknown requirements pause for explicit manual continuation, and the OS background does not take focus. Identity changes or clearing revoke the old scope before stale requests can republish data. Disabling retains the cache.
 
 | 平台 / Platform | 应用内官方网页登录会话 / App-owned web session | 业务快照 / Business snapshot |
 | --- | --- | --- |

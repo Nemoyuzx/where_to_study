@@ -12,6 +12,7 @@ const AUTH_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-auth.js");
 const PAGE_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-page.js");
 const MS_ORIGIN: &str = "https://login.microsoftonline.com";
 const MAXIMUM_ACCOUNT_SETTLING_POLLS: u8 = 12;
+const MAXIMUM_SUBMISSION_SETTLING_POLLS: u8 = 24;
 const MS_PATHS: [&str; 2] = [
     "/569df091-b013-40e3-86ee-bd9cb9e25814/saml2",
     "/569df091-b013-40e3-86ee-bd9cb9e25814/login",
@@ -120,6 +121,9 @@ pub struct QmState {
     dashboard_started: AtomicBool,
     profile_id: Mutex<Option<String>>,
     background_owner: AtomicBool,
+    challenge_presented: AtomicBool,
+    manual_presented: AtomicBool,
+    auth_suspended: AtomicBool,
     login_entry_started: Mutex<bool>,
     cache_warning: AtomicBool,
     sync_in_progress: AtomicBool,
@@ -184,6 +188,13 @@ struct AuthLedger {
     username_claimed_document: Option<String>,
     username_submitted_document: Option<String>,
     password_claimed_document: Option<String>,
+    verified_password_document: Option<String>,
+    verified_continue_document: Option<String>,
+    password_submitted: bool,
+    continue_attempted: bool,
+    continue_claimed_document: Option<String>,
+    continue_submitted: bool,
+    submission_settling_polls: u8,
 }
 impl AuthLedger {
     fn begin(&mut self, credential_revision: u64) {
@@ -196,11 +207,34 @@ impl AuthLedger {
     fn accepts(&self, credential_revision: u64) -> bool {
         self.active && self.credential_revision == credential_revision
     }
+    fn identity_acknowledged(&self, credential_revision: u64) -> bool {
+        self.accepts(credential_revision)
+            && (self.username_submitted_document.is_some()
+                || self.account_selected_document.is_some()
+                || (self.password_submitted && self.verified_password_document.is_some()))
+    }
+    fn verify_current_identity(&mut self, stage: &str, nonce: &str, account_match: bool, credential_revision: u64) -> bool {
+        if !self.accepts(credential_revision) || !valid_nonce(nonce) || !account_match || self.continue_attempted {
+            return false;
+        }
+        match stage {
+            "password" if !self.password_attempted => {
+                self.verified_password_document = Some(nonce.to_owned());
+                true
+            }
+            "continue" => {
+                self.verified_continue_document = Some(nonce.to_owned());
+                true
+            }
+            _ => false,
+        }
+    }
     fn can_begin_sso(&self, credential_revision: u64) -> bool {
         self.accepts(credential_revision)
             && !self.account_attempted
             && !self.username_attempted
             && !self.password_attempted
+            && !self.continue_attempted
     }
     fn stop(&mut self) {
         self.active = false;
@@ -209,6 +243,9 @@ impl AuthLedger {
         self.username_claimed_document = None;
         self.username_submitted_document = None;
         self.password_claimed_document = None;
+        self.verified_password_document = None;
+        self.verified_continue_document = None;
+        self.continue_claimed_document = None;
     }
     fn claim_account_settling(
         &mut self,
@@ -229,6 +266,20 @@ impl AuthLedger {
         self.account_settling_polls += 1;
         true
     }
+    fn is_awaiting_navigation(&self, nonce: &str, credential_revision: u64) -> bool {
+        self.accepts(credential_revision)
+            && ((self.password_submitted && self.password_claimed_document.as_deref() == Some(nonce))
+                || (self.continue_submitted && self.continue_claimed_document.as_deref() == Some(nonce)))
+    }
+    fn claim_submission_settling(&mut self, nonce: &str, credential_revision: u64) -> bool {
+        if !self.is_awaiting_navigation(nonce, credential_revision)
+            || self.submission_settling_polls >= MAXIMUM_SUBMISSION_SETTLING_POLLS
+        {
+            return false;
+        }
+        self.submission_settling_polls += 1;
+        true
+    }
     fn claim(
         &mut self,
         stage: &str,
@@ -244,25 +295,37 @@ impl AuthLedger {
                 if !self.account_attempted
                     && !self.username_attempted
                     && !self.password_attempted
+                    && !self.continue_attempted
                     && account_match =>
             {
                 self.account_attempted = true;
                 self.account_claimed_document = Some(nonce.to_owned());
                 true
             }
-            "username" if !self.username_attempted && !self.password_attempted => {
+            "username" if !self.username_attempted && !self.password_attempted && !self.continue_attempted => {
                 self.username_attempted = true;
                 self.username_claimed_document = Some(nonce.to_owned());
                 true
             }
             "password"
                 if !self.password_attempted
+                    && !self.continue_attempted
                     && account_match
-                    && (self.username_submitted_document.as_deref() == Some(nonce)
-                        || self.account_selected_document.as_deref() == Some(nonce)) =>
+                    && (self.identity_acknowledged(credential_revision)
+                        || self.verified_password_document.as_deref() == Some(nonce)) =>
             {
                 self.password_attempted = true;
                 self.password_claimed_document = Some(nonce.to_owned());
+                true
+            }
+            "continue"
+                if !self.continue_attempted
+                    && account_match
+                    && (self.identity_acknowledged(credential_revision)
+                        || self.verified_continue_document.as_deref() == Some(nonce)) =>
+            {
+                self.continue_attempted = true;
+                self.continue_claimed_document = Some(nonce.to_owned());
                 true
             }
             _ => false,
@@ -293,6 +356,14 @@ impl AuthLedger {
                 if self.password_attempted
                     && self.password_claimed_document.as_deref() == Some(nonce) =>
             {
+                self.password_submitted = true;
+                true
+            }
+            "CONTINUE_SUBMITTED"
+                if self.continue_attempted
+                    && self.continue_claimed_document.as_deref() == Some(nonce) =>
+            {
+                self.continue_submitted = true;
                 true
             }
             _ => false,
@@ -312,6 +383,8 @@ struct AuthFill<'a> {
     account: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     password: Option<&'a str>,
+    #[serde(rename = "identityAcknowledged", skip_serializing_if = "Option::is_none")]
+    identity_acknowledged: Option<bool>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -329,7 +402,7 @@ fn trusted_auth_page(url: &tauri::Url) -> bool {
         && url.scheme() == "https"
         && (url.port().is_none() || url.port() == Some(443))
         && url.origin().ascii_serialization() == MS_ORIGIN
-        && MS_PATHS.contains(&url.path())
+        && (MS_PATHS.contains(&url.path()) || url.path() == "/kmsi")
 }
 fn official_qm_page(url: &tauri::Url) -> bool {
     url.origin().ascii_serialization() == ORIGIN
@@ -349,14 +422,6 @@ fn page_allows_sync(url: &tauri::Url, kind: &str) -> bool {
 const APPROVED_SSO: &str = "(()=>{const targets=new Set(Array.from(document.querySelectorAll('a[href]')).flatMap(a=>{try{const u=new URL(a.getAttribute('href'),location.href);return u.href==='https://qmplus.qmul.ac.uk/auth/saml2/login.php'&&!u.username&&!u.password&&!u.search&&!u.hash?[u.href]:[];}catch{return[];}}));return targets.size===1;})()";
 const APPROVED_LOGIN_ENTRY: &str = "(()=>{const targets=new Set(Array.from(document.querySelectorAll('a[href]')).flatMap(a=>{try{const u=new URL(a.getAttribute('href'),location.href);return u.href==='https://qmplus.qmul.ac.uk/login/index.php'&&!u.username&&!u.password&&!u.search&&!u.hash?[u.href]:[];}catch{return[];}}));return targets.size===1;})()";
 fn show_login(window: &tauri::WebviewWindow) {
-    if window
-        .app_handle()
-        .state::<QmState>()
-        .background_owner
-        .load(Ordering::SeqCst)
-    {
-        return;
-    }
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -504,6 +569,9 @@ impl QmState {
     fn retire_connection_preserving_snapshot(&self) {
         self.owner_active.store(false, Ordering::SeqCst);
         self.quiet_owner.store(false, Ordering::SeqCst);
+        self.challenge_presented.store(false, Ordering::SeqCst);
+        self.manual_presented.store(false, Ordering::SeqCst);
+        self.auth_suspended.store(false, Ordering::SeqCst);
         self.revision.fetch_add(1, Ordering::SeqCst);
         self.stop_autofill();
         *self
@@ -578,6 +646,8 @@ impl QmState {
         !self.feature_blocked.load(Ordering::SeqCst)
             && self.owner_active.load(Ordering::SeqCst)
             && self.quiet_owner.load(Ordering::SeqCst)
+            && !self.auth_suspended.load(Ordering::SeqCst)
+            && !self.challenge_presented.load(Ordering::SeqCst)
             && self.revision.load(Ordering::SeqCst) == revision
             && self.auth.lock().ok().is_some_and(|auth| auth.ledger.active)
     }
@@ -632,20 +702,31 @@ fn require_manual(app: &tauri::AppHandle, window: &tauri::WebviewWindow, reason:
         deadline.abort();
     }
     record_connection_status(app, "manual", reason);
-    if app
-        .state::<QmState>()
-        .background_owner
-        .load(Ordering::SeqCst)
-    {
-        app.state::<QmState>()
-            .retire_connection_preserving_snapshot();
+    state.challenge_presented.store(false, Ordering::SeqCst);
+    if !state.manual_presented.load(Ordering::SeqCst) {
         let _ = window.hide();
-        if let Ok(blank) = tauri::Url::parse("about:blank") {
-            let _ = window.navigate(blank);
-        }
-        return;
     }
-    show_login(window);
+}
+
+fn require_challenge(app: &tauri::AppHandle, window: &tauri::WebviewWindow, reason: &'static str) {
+    let state = app.state::<QmState>();
+    if let Some(deadline) = state.quiet_deadline.lock().ok().and_then(|mut value| value.take()) {
+        deadline.abort();
+    }
+    record_connection_status(app, "challenge", reason);
+    state.challenge_presented.store(true, Ordering::SeqCst);
+    if !app_is_backgrounded(app) && !window.is_visible().unwrap_or(false) {
+        show_login(window);
+    }
+}
+
+fn suspend_autofill(app: &tauri::AppHandle) {
+    let state = app.state::<QmState>();
+    state.auth_suspended.store(true, Ordering::SeqCst);
+    if let Some(deadline) = state.quiet_deadline.lock().ok().and_then(|mut value| value.take()) {
+        deadline.abort();
+    }
+    record_connection_status(app, "checking", "APP_BACKGROUNDED");
 }
 
 fn watch_background(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
@@ -670,8 +751,7 @@ fn watch_background(app: &tauri::AppHandle, window: &tauri::WebviewWindow) {
                     && state.revision.load(Ordering::SeqCst) == revision
                     && app_is_backgrounded(&owner)
                 {
-                    cancel_autofill(&owner);
-                    record_connection_status(&owner, "manual", "APP_BACKGROUNDED");
+                    suspend_autofill(&owner);
                 }
             });
         });
@@ -849,14 +929,8 @@ pub fn accept_qmplus_snapshot(
         return Err("QMplus 来源或会话已失效。".into());
     }
     if let Err(error) = state.publish(snapshot, revision) {
-        cancel_autofill(&app);
+        require_manual(&app, &window, "SYNC_FAILED");
         record_connection_status(&app, "failed", "SYNC_FAILED");
-        if state.background_owner.load(Ordering::SeqCst) {
-            require_manual(&app, &window, "SYNC_FAILED");
-        } else {
-            state.sync_in_progress.store(false, Ordering::SeqCst);
-            show_login(&window);
-        }
         return Err(error);
     }
     state.sync_in_progress.store(false, Ordering::SeqCst);
@@ -922,6 +996,7 @@ pub fn accept_qmplus_auth(
     require_current_profile(&app, &state)?;
     if window.label() != "qmplus"
         || revision != state.revision.load(Ordering::SeqCst)
+        || !state.owner_active.load(Ordering::SeqCst)
         || report.v != 1
         || !valid_nonce(&report.document)
         || report.reason.len() > 32
@@ -931,6 +1006,8 @@ pub fn accept_qmplus_auth(
             "account",
             "username",
             "password",
+            "continue",
+            "challenge",
             "manual",
             "unknown",
             "submitted",
@@ -940,6 +1017,35 @@ pub fn accept_qmplus_auth(
         return Err("QMplus 登录状态已失效。".into());
     }
     let url = window.url().map_err(|_| "QMplus 页面不可用。")?;
+    let credential_revision = crate::qmplus_login::revision();
+    if report.stage == "submitted" {
+        // A real navigation can retire its source document before the IPC ACK
+        // arrives. Only a claim made by this live owner and credential revision
+        // can acknowledge a submission; it never creates a new input budget.
+        if !trusted_auth_page(&url) && !official_qm_page(&url) {
+            return Err("QMplus 登录状态已失效。".into());
+        }
+        let accepted = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?
+            .ledger.submitted(&report.document, &report.reason, credential_revision);
+        if !accepted {
+            // Late or forged ACKs cannot stop an already-running business sync.
+            // A failed fill on the still-current document may pause its owner.
+            let current_failure = !["ACCOUNT_SELECTED", "USERNAME_SUBMITTED", "PASSWORD_SUBMITTED", "CONTINUE_SUBMITTED"].contains(&report.reason.as_str())
+                && state.auth.lock().ok().is_some_and(|auth|
+                    auth.document_for_report(&report.document, &url, credential_revision).is_some());
+            if current_failure { require_manual(&app, &window, "MANUAL_REQUIRED"); }
+            return Err("QMplus 登录状态已失效。".into());
+        }
+        let reason = match report.reason.as_str() {
+            "ACCOUNT_SELECTED" => "ACCOUNT_SELECTED",
+            "USERNAME_SUBMITTED" => "USERNAME_SUBMITTED",
+            "PASSWORD_SUBMITTED" => "PASSWORD_SUBMITTED",
+            "CONTINUE_SUBMITTED" => "CONTINUE_SUBMITTED",
+            _ => "MANUAL_REQUIRED",
+        };
+        record_connection_status(&app, "submitted", reason);
+        return Ok(false);
+    }
     if report.stage == "page" {
         let auth = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?;
         if !official_qm_page(&url)
@@ -1028,15 +1134,43 @@ pub fn accept_qmplus_auth(
         }
         return Ok(false);
     }
-    let credential_revision = crate::qmplus_login::revision();
     let mut auth = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?;
     let document = auth
         .document_for_report(&report.document, &url, credential_revision)
         .ok_or("QMplus 登录状态已失效。")?;
-    if !trusted_auth_page(&url) {
+    if !trusted_auth_page(&url)
+        || (url.path() == "/kmsi"
+            && ["account", "username", "password"].contains(&report.stage.as_str()))
+    {
         return Err("QMplus 登录状态已失效。".into());
     }
     let nonce = document.nonce.clone();
+    if report.stage == "challenge" {
+        let reason = match report.reason.as_str() {
+            "CAPTCHA_REQUIRED" => "CAPTCHA_REQUIRED",
+            "MFA_REQUIRED" => "MFA_REQUIRED",
+            _ => return Err("QMplus 登录状态已失效。".into()),
+        };
+        drop(auth);
+        require_challenge(&app, &window, reason);
+        return Ok(false);
+    }
+    if app_is_backgrounded(&app) {
+        drop(auth);
+        suspend_autofill(&app);
+        return Ok(true);
+    }
+    let resumed = state.auth_suspended.swap(false, Ordering::SeqCst);
+    let challenge_finished = state.challenge_presented.swap(false, Ordering::SeqCst);
+    if challenge_finished && !state.manual_presented.load(Ordering::SeqCst) { let _ = window.hide(); }
+    if resumed || challenge_finished {
+        drop(auth);
+        arm_quiet_deadline(&app, &state, revision)?;
+        auth = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?;
+        if auth.document_for_report(&nonce, &url, credential_revision).is_none() {
+            return Err("QMplus 登录状态已失效。".into());
+        }
+    }
     // A successful chooser click can leave an empty SPA chooser briefly.
     // Only a native ACK for this document authorizes bounded read-only polling.
     if auth.ledger.claim_account_settling(
@@ -1048,6 +1182,21 @@ pub fn accept_qmplus_auth(
         drop(auth);
         record_connection_status(&app, "checking", "ACCOUNT_CHOOSER");
         return Ok(true);
+    }
+    if auth.ledger.is_awaiting_navigation(&nonce, credential_revision)
+        && report.stage == "manual"
+        && ["ALREADY_ATTEMPTED", "FORM_UNTRUSTED", "KNOWN_FORM_ABSENT", "INTERFERENCE"].contains(&report.reason.as_str())
+    {
+        // The acknowledged submit can leave its old form visible while the
+        // official page prepares MFA/KMSI. Observe finitely without new claims.
+        let wait = auth.ledger.claim_submission_settling(&nonce, credential_revision);
+        drop(auth);
+        if wait {
+            record_connection_status(&app, "checking", "SUBMISSION_SETTLING");
+            return Ok(true);
+        }
+        require_manual(&app, &window, "POLL_EXHAUSTED");
+        return Ok(false);
     }
     let reason = match report.reason.as_str() {
         "READY" => "READY",
@@ -1063,6 +1212,9 @@ pub fn accept_qmplus_auth(
         "ALREADY_ATTEMPTED" => "ALREADY_ATTEMPTED",
         "USERNAME_SUBMITTED" => "USERNAME_SUBMITTED",
         "PASSWORD_SUBMITTED" => "PASSWORD_SUBMITTED",
+        "CONTINUE_SUBMITTED" => "CONTINUE_SUBMITTED",
+        "USERNAME_NOT_SUBMITTED" => "USERNAME_NOT_SUBMITTED",
+        "CURRENT_ACCOUNT_VERIFIED" => "CURRENT_ACCOUNT_VERIFIED",
         "POLL_EXHAUSTED" => "POLL_EXHAUSTED",
         _ => "MANUAL_REQUIRED",
     };
@@ -1070,34 +1222,29 @@ pub fn accept_qmplus_auth(
         "account" => "username",
         "username" => "username",
         "password" => "password",
+        "continue" => "checking",
         "submitted" => "submitted",
         "loading" => "checking",
+        "manual" if report.reason == "ALREADY_ATTEMPTED" => "checking",
         _ => "manual",
     };
     record_connection_status(&app, phase, reason);
-    if report.stage == "submitted" {
-        let accepted = auth
-            .ledger
-            .submitted(&nonce, &report.reason, credential_revision);
-        drop(auth);
-        if !accepted {
-            require_manual(&app, &window, "MANUAL_REQUIRED");
-        }
-        return Ok(false);
-    }
     if report.stage == "loading" {
-        drop(auth);
-        // A hidden platform window may need one visible layout pass. This is
-        // still a bounded inspection wait, not a credential submission retry.
-        if report.reason == "FORM_UNTRUSTED" || report.reason == "KNOWN_FORM_ABSENT" {
-            show_login(&window);
-        }
         return Ok(false);
     }
     if report.reason == "ALREADY_ATTEMPTED" {
         return Ok(false);
     }
-    if report.reason != "READY" {
+    let identity_acknowledged = auth.ledger.identity_acknowledged(credential_revision);
+    let current_identity_proof = report.reason == "CURRENT_ACCOUNT_VERIFIED"
+        && ["password", "continue"].contains(&report.stage.as_str())
+        && report.account_match;
+    if report.reason != "READY"
+        && !current_identity_proof
+        && !(["password", "continue"].contains(&report.stage.as_str())
+            && report.reason == "USERNAME_NOT_SUBMITTED"
+            && identity_acknowledged)
+    {
         drop(auth);
         require_manual(&app, &window, reason);
         return Ok(false);
@@ -1107,6 +1254,8 @@ pub fn accept_qmplus_auth(
         require_manual(&app, &window, "AUTHORIZATION_REVOKED");
         return Ok(false);
     };
+    let current_identity_verified = current_identity_proof
+        && auth.ledger.verify_current_identity(&report.stage, &nonce, report.account_match, credential_revision);
     if !auth.ledger.claim(
         &report.stage,
         &nonce,
@@ -1122,6 +1271,7 @@ pub fn accept_qmplus_auth(
         stage: &report.stage,
         account: &credentials.account,
         password: (report.stage == "password").then_some(credentials.password.as_str()),
+        identity_acknowledged: ["password", "continue"].contains(&report.stage.as_str()).then_some(identity_acknowledged || current_identity_verified),
     };
     let encoded =
         Zeroizing::new(serde_json::to_string(&options).map_err(|_| "QMplus 页面不可用。")?);
@@ -1217,27 +1367,30 @@ pub async fn connect_qmplus(
     app: tauri::AppHandle,
     payload: Option<ConnectRequest>,
 ) -> Result<(), String> {
-    let background = payload.is_some_and(|value| value.background);
+    let request = payload.unwrap_or_default();
     crate::qmplus_profile::recover_pending(&app).await?;
     let (sent, received) = tokio::sync::oneshot::channel();
     let owner = app.clone();
     app.run_on_main_thread(move || {
         let state = owner.state::<QmState>();
-        let _ = sent.send(connect_qmplus_on_main(owner.clone(), state, background));
+        let _ = sent.send(connect_qmplus_on_main(owner.clone(), state, request.background, request.manual));
     })
     .map_err(|_| "QMplus 页面不可用。")?;
     received.await.map_err(|_| "QMplus 页面不可用。")?
 }
-#[derive(Deserialize)]
+#[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConnectRequest {
     #[serde(default)]
     background: bool,
+    #[serde(default)]
+    manual: bool,
 }
 fn connect_qmplus_on_main(
     app: tauri::AppHandle,
     state: tauri::State<'_, QmState>,
     background: bool,
+    manual: bool,
 ) -> Result<(), String> {
     if !crate::qmplus_feature::enabled(&app).unwrap_or(false) {
         state.set_feature_enabled(false);
@@ -1255,7 +1408,17 @@ fn connect_qmplus_on_main(
     }
     *state.profile_id.lock().map_err(|_| "QMplus 页面不可用。")? = Some(profile.id().to_owned());
     state.set_feature_enabled(true);
-    if let Some(w) = app.get_webview_window("qmplus").filter(|_| {
+    if manual {
+        if let Some(window) = app.get_webview_window("qmplus").filter(|_| state.owner_active.load(Ordering::SeqCst)) {
+            cancel_autofill(&app);
+            state.background_owner.store(false, Ordering::SeqCst);
+            state.manual_presented.store(true, Ordering::SeqCst);
+            record_connection_status(&app, "manual", "USER_CONTINUE");
+            show_login(&window);
+            return Ok(());
+        }
+    }
+    if app.get_webview_window("qmplus").is_some_and(|_| {
         state.owner_active.load(Ordering::SeqCst)
             && state
                 .page_kind
@@ -1274,10 +1437,8 @@ fn connect_qmplus_on_main(
         if active || state.sync_in_progress.load(Ordering::SeqCst) {
             return Ok(());
         }
-        if !background && w.url().ok().is_some_and(|url| trusted_auth_page(&url)) {
-            show_login(&w);
-            return Ok(());
-        }
+        // Connect/sync always retries quietly. Only the explicit manual action
+        // may expose a non-challenge page.
         state.retire_connection_preserving_snapshot();
     }
     let revision = state.revision.fetch_add(1, Ordering::SeqCst) + 1;
@@ -1303,13 +1464,12 @@ fn connect_qmplus_on_main(
         .lock()
         .map_err(|_| "QMplus 页面不可用。")? = false;
     let credential_revision = crate::qmplus_login::revision();
-    let quiet = background
-        || app.get_webview_window("qmplus").is_some()
-        || profile.persistent()
-        || (crate::qmplus_login::authorized(&app).is_some()
-            && credential_revision == crate::qmplus_login::revision());
+    let quiet = !manual;
     state.owner_active.store(true, Ordering::SeqCst);
     state.quiet_owner.store(quiet, Ordering::SeqCst);
+    state.challenge_presented.store(false, Ordering::SeqCst);
+    state.manual_presented.store(manual, Ordering::SeqCst);
+    state.auth_suspended.store(false, Ordering::SeqCst);
     {
         state
             .auth
@@ -1317,6 +1477,9 @@ fn connect_qmplus_on_main(
             .map_err(|_| "QMplus 页面不可用。")?
             .ledger
             .begin(credential_revision);
+    }
+    if manual {
+        state.stop_autofill();
     }
     *state
         .close_after_sync
@@ -1354,11 +1517,15 @@ fn connect_qmplus_on_main(
     .on_page_load(move |w, p| {
         let handle = w.app_handle();
         let state = handle.state::<QmState>();
-        if state.feature_blocked.load(Ordering::SeqCst) || !state.owner_active.load(Ordering::SeqCst) || require_current_profile(handle, &state).is_err() { return; }
+        if state.feature_blocked.load(Ordering::SeqCst) || !state.owner_active.load(Ordering::SeqCst) || state.window_revision.load(Ordering::SeqCst) != window_revision || require_current_profile(handle, &state).is_err() { return; }
         let revision = state.revision.load(Ordering::SeqCst);
         if p.event() == tauri::webview::PageLoadEvent::Started {
             *state.page_kind.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = "unknown";
             state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).document = None;
+            if state.challenge_presented.swap(false, Ordering::SeqCst) && !state.manual_presented.load(Ordering::SeqCst) {
+                if let Some(window) = handle.get_webview_window("qmplus") { let _ = window.hide(); }
+                let _ = arm_quiet_deadline(handle, &state, revision);
+            }
             if valid_business_page(p.url()) && !["/my", "/my/"].contains(&p.url().path()) {
                 *state.close_after_sync.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = false;
             }
@@ -1380,7 +1547,7 @@ fn connect_qmplus_on_main(
             }
             let credentials = crate::qmplus_login::authorized(handle);
             let active = state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).ledger.accepts(crate::qmplus_login::revision());
-            if !trusted_auth_page(&current) || credentials.is_none() || !active { require_manual(handle,&window,"UNSUPPORTED_PAGE"); return; }
+            if !trusted_auth_page(&current) || !active { require_manual(handle,&window,"UNSUPPORTED_PAGE"); return; }
             let nonce = match crate::scoped_cache::new_account_scope() {
                 Ok(v) => v.trim_start_matches("opaque-v1:").to_string(),
                 Err(_) => { require_manual(handle,&window,"DOCUMENT_UNAVAILABLE"); return; }
@@ -1389,6 +1556,7 @@ fn connect_qmplus_on_main(
                 nonce: nonce.clone(), url: current.clone(),
             });
             let account = credentials.as_ref().map(|v| v.account.as_str()).unwrap_or("");
+            let identity_acknowledged = state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).ledger.identity_acknowledged(crate::qmplus_login::revision());
             // No password is sent during helper installation or username inspection.
             let script = Zeroizing::new(format!(r#"(()=>{{const install={AUTH_SCRIPT};if(install!=='AUTH_INSTALLED'){{window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'manual',document:{nonce},accountMatch:false,reason:'AUTH_CONFLICT'}}}}).catch(()=>{{}});return;}}
               let attempts=0,settling=0,cancelled=false,timer,accountHint={account};
@@ -1399,10 +1567,11 @@ fn connect_qmplus_on_main(
               const send=report=>window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{report,revision:{revision}}}).catch(finish);
               const schedule=delay=>{{if(!cancelled)timer=setTimeout(poll,delay);}};
               const poll=async()=>{{if(cancelled)return;if(location.href!=={url}){{finish();return;}}if(++attempts>70){{send({{v:1,stage:'manual',document:{nonce},accountMatch:false,reason:'POLL_EXHAUSTED'}});finish();return;}}
-                const report=WTSQmAuth.inspect({nonce},accountHint);if(report.stage==='manual'&&['FORM_UNTRUSTED','KNOWN_FORM_ABSENT'].includes(report.reason)&&settling++<16){{if(settling===8)send({{...report,stage:'loading'}});schedule(250);return;}}
+                const report=WTSQmAuth.inspect({nonce},accountHint,{identity_acknowledged});if(report.stage==='challenge')attempts=0;if(report.stage==='manual'&&['FORM_UNTRUSTED','KNOWN_FORM_ABSENT'].includes(report.reason)&&settling++<16){{if(settling===8)send({{...report,stage:'loading'}});schedule(250);return;}}
                 const accountWait=await send(report);if(cancelled)return;if(location.href!=={url}){{finish();return;}}
-                if(accountWait===true&&report.stage==='manual'&&report.reason==='ACCOUNT_CHOOSER'){{schedule(250);return;}}
-                if(report.stage==='manual'&&report.reason!=='ALREADY_ATTEMPTED'){{finish();return;}}schedule(350);}};poll();}})()"#,
+                if(accountWait===true&&report.stage==='manual'&&report.reason==='ACCOUNT_CHOOSER'){{attempts=0;schedule(250);return;}}
+                if(accountWait===true){{attempts=0;schedule(750);return;}}
+                if(report.stage==='manual'&&report.reason!=='ALREADY_ATTEMPTED'){{finish();return;}}schedule(report.stage==='challenge'?750:350);}};poll();}})()"#,
                 nonce=serde_json::to_string(&nonce).unwrap_or_default(), url=serde_json::to_string(current.as_str()).unwrap_or_default(),
                 account=serde_json::to_string(account).unwrap_or_default()));
             if w.eval(&*script).is_err() { require_manual(handle,&window,"SCRIPT_UNAVAILABLE"); }
@@ -1432,8 +1601,8 @@ fn connect_qmplus_on_main(
         }
     });
     // A single window losing focus is not the app entering the background.
-    // Give a main/official-window focus transfer time to settle, then retire
-    // only automation; the official browser and last-good cache stay intact.
+    // Give a main/official-window focus transfer time to settle, then pause
+    // injection while retaining this owner's once-only submission budgets.
     watch_background(&app, &window);
     if let Some(main) = app.get_webview_window("main") {
         if !state.main_focus_watched.swap(true, Ordering::SeqCst) {
@@ -1587,7 +1756,7 @@ mod tests {
     }
 
     #[test]
-    fn account_claim_and_ack_reject_other_documents_revisions_and_retired_owners() {
+    fn account_ack_is_source_bound_and_allows_a_matched_password_in_the_next_document() {
         let url = tauri::Url::parse(&format!("{MS_ORIGIN}{}", MS_PATHS[0])).unwrap();
         let mut auth = AuthState::default();
         auth.ledger.begin(7);
@@ -1603,7 +1772,7 @@ mod tests {
         assert!(auth.document_for_report("nonceA123", &url, 7).is_none());
         assert!(auth.document_for_report("nonceB456", &url, 7).is_some());
         assert!(!auth.ledger.claim("account", "nonceB456", true, 7));
-        assert!(!auth.ledger.claim("password", "nonceB456", true, 7));
+        assert!(auth.ledger.claim("password", "nonceB456", true, 7));
         auth.ledger.stop();
         assert!(!auth.ledger.claim("password", "nonceA123", true, 7));
         assert!(!auth.ledger.submitted("nonceA123", "ACCOUNT_SELECTED", 7));
@@ -1662,7 +1831,7 @@ mod tests {
     }
 
     #[test]
-    fn autofill_requires_a_same_document_username_ack_and_claims_each_stage_once() {
+    fn autofill_requires_a_claimed_username_ack_and_claims_password_once_across_documents() {
         let mut ledger = AuthLedger::default();
         ledger.begin(7);
         assert!(!ledger.claim("password", "nonceA123", true, 7));
@@ -1673,13 +1842,12 @@ mod tests {
         assert!(!ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 8));
         assert!(!ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
         assert!(ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 7));
-        assert!(!ledger.claim("password", "nonceB456", true, 7));
         assert!(!ledger.claim("password", "nonceA123", false, 7));
         assert!(!ledger.claim("password", "nonceA123", true, 8));
-        assert!(ledger.claim("password", "nonceA123", true, 7));
+        assert!(ledger.claim("password", "nonceB456", true, 7));
         assert!(!ledger.claim("password", "nonceA123", true, 7));
-        assert!(!ledger.submitted("nonceB456", "PASSWORD_SUBMITTED", 7));
-        assert!(ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
+        assert!(!ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
+        assert!(ledger.submitted("nonceB456", "PASSWORD_SUBMITTED", 7));
     }
 
     #[test]
@@ -1720,6 +1888,117 @@ mod tests {
         assert!(!state.auth.lock().unwrap().ledger.accepts(0));
         assert!(state.snapshot.lock().unwrap().is_some());
         assert_eq!(state.revision.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn continuation_needs_identity_ack_and_account_match_and_never_rearms_credentials() {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        assert!(!ledger.claim("continue", "nonceA123", true, 7));
+        assert!(ledger.claim("username", "nonceA123", false, 7));
+        assert!(!ledger.identity_acknowledged(7));
+        assert!(ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 7));
+        assert!(ledger.identity_acknowledged(7));
+        assert!(!ledger.identity_acknowledged(8));
+        assert!(!ledger.claim("continue", "nonceB456", false, 7));
+        assert!(ledger.claim("continue", "nonceB456", true, 7));
+        assert!(!ledger.claim("continue", "nonceC789", true, 7));
+        assert!(!ledger.claim("password", "nonceC789", true, 7));
+        assert!(!ledger.submitted("nonceA123", "CONTINUE_SUBMITTED", 7));
+        assert!(ledger.submitted("nonceB456", "CONTINUE_SUBMITTED", 7));
+        ledger.stop();
+        assert!(!ledger.identity_acknowledged(7));
+        assert!(!ledger.submitted("nonceB456", "CONTINUE_SUBMITTED", 7));
+        ledger.begin(8);
+        assert!(!ledger.identity_acknowledged(8));
+        assert!(!ledger.claim("continue", "nonceC789", true, 8));
+    }
+
+    #[test]
+    fn a_claimed_identity_ack_can_arrive_after_its_document_is_retired() {
+        let mut auth = AuthState::default();
+        auth.ledger.begin(7);
+        assert!(auth.ledger.claim("account", "nonceA123", true, 7));
+        auth.document = None;
+        assert!(!auth.ledger.submitted("nonceB456", "ACCOUNT_SELECTED", 7));
+        assert!(!auth.ledger.submitted("nonceA123", "ACCOUNT_SELECTED", 8));
+        assert!(auth.ledger.submitted("nonceA123", "ACCOUNT_SELECTED", 7));
+        assert!(auth.ledger.claim("password", "nonceB456", true, 7));
+        assert!(!auth.ledger.claim("password", "nonceC789", true, 7));
+        auth.ledger.stop();
+        assert!(!auth.ledger.submitted("nonceB456", "PASSWORD_SUBMITTED", 7));
+    }
+
+    #[test]
+    fn old_form_wait_requires_its_real_ack_and_is_bounded_without_rearming_password() {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        assert!(ledger.verify_current_identity("password", "nonceA123", true, 7));
+        assert!(ledger.claim("password", "nonceA123", true, 7));
+        assert!(!ledger.claim_submission_settling("nonceA123", 7));
+        assert!(ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
+        assert!(!ledger.claim_submission_settling("nonceB456", 7));
+        assert!(!ledger.claim_submission_settling("nonceA123", 8));
+        for _ in 0..MAXIMUM_SUBMISSION_SETTLING_POLLS {
+            assert!(ledger.claim_submission_settling("nonceA123", 7));
+            assert!(ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
+        }
+        assert!(!ledger.claim_submission_settling("nonceA123", 7));
+        assert!(!ledger.claim("password", "nonceA123", true, 7));
+        ledger.stop();
+        assert!(!ledger.is_awaiting_navigation("nonceA123", 7));
+        ledger.begin(8);
+        assert!(ledger.verify_current_identity("continue", "nonceC789", true, 8));
+        assert!(ledger.claim("continue", "nonceC789", true, 8));
+        assert!(!ledger.claim_submission_settling("nonceC789", 8));
+        assert!(ledger.submitted("nonceC789", "CONTINUE_SUBMITTED", 8));
+        assert!(ledger.claim_submission_settling("nonceC789", 8));
+        assert!(!ledger.can_begin_sso(8));
+        assert!(!ledger.claim("continue", "nonceC789", true, 8));
+    }
+
+    #[test]
+    fn directly_verified_identity_is_stage_and_document_bound_until_a_real_password_ack() {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        assert!(!ledger.verify_current_identity("password", "nonceA123", false, 7));
+        assert!(!ledger.verify_current_identity("password", "nonceA123", true, 8));
+        assert!(!ledger.verify_current_identity("username", "nonceA123", true, 7));
+        assert!(ledger.verify_current_identity("password", "nonceA123", true, 7));
+        assert!(!ledger.identity_acknowledged(7));
+        assert!(!ledger.claim("password", "nonceB456", true, 7));
+        assert!(!ledger.claim("continue", "nonceA123", true, 7));
+        assert!(ledger.claim("password", "nonceA123", true, 7));
+        assert!(!ledger.verify_current_identity("password", "nonceB456", true, 7));
+        assert!(!ledger.submitted("nonceB456", "PASSWORD_SUBMITTED", 7));
+        assert!(ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
+        assert!(ledger.identity_acknowledged(7));
+        assert!(ledger.claim("continue", "nonceB456", true, 7));
+        ledger.begin(8);
+        assert!(ledger.verify_current_identity("continue", "nonceC789", true, 8));
+        assert!(!ledger.claim("password", "nonceC789", true, 8));
+        assert!(!ledger.claim("continue", "nonceB456", true, 8));
+        assert!(ledger.claim("continue", "nonceC789", true, 8));
+        assert!(!ledger.claim("continue", "nonceC789", true, 8));
+    }
+
+    #[test]
+    fn background_suspension_keeps_identity_and_attempt_budgets_but_disarms_quiet_timeout() {
+        let state = QmState::default();
+        state.owner_active.store(true, Ordering::SeqCst);
+        state.quiet_owner.store(true, Ordering::SeqCst);
+        state.auth.lock().unwrap().ledger.begin(7);
+        assert!(state.auth.lock().unwrap().ledger.claim("username", "nonceA123", false, 7));
+        assert!(state.auth.lock().unwrap().ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 7));
+        state.auth_suspended.store(true, Ordering::SeqCst);
+        assert!(!state.quiet_timeout_is_current(0));
+        assert!(state.auth.lock().unwrap().ledger.identity_acknowledged(7));
+        assert!(!state.auth.lock().unwrap().ledger.claim("username", "nonceB456", false, 7));
+        state.auth_suspended.store(false, Ordering::SeqCst);
+        assert!(state.quiet_timeout_is_current(0));
+        assert!(state.auth.lock().unwrap().ledger.claim("password", "nonceB456", true, 7));
+        state.challenge_presented.store(true, Ordering::SeqCst);
+        assert!(!state.quiet_timeout_is_current(0));
     }
 
     fn sample() -> Snapshot {
@@ -2040,6 +2319,7 @@ mod tests {
         assert!(!trusted_auth_page(
             &tauri::Url::parse(&format!("{ORIGIN}/login/index.php")).unwrap()
         ));
+        assert!(trusted_auth_page(&tauri::Url::parse(&format!("{MS_ORIGIN}/kmsi")).unwrap()));
         for url in [
             "https://login.microsoftonline.com/common/login",
             "https://login.microsoftonline.com/other/saml2",
@@ -2048,6 +2328,9 @@ mod tests {
             "https://login.microsoftonline.com:444/569df091-b013-40e3-86ee-bd9cb9e25814/login",
             "https://name@login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/login",
             "https://qmplus.qmul.ac.uk/auth/saml2/login.php",
+            "https://login.microsoftonline.com/kmsi/",
+            "https://login.microsoftonline.com/common/kmsi",
+            "https://login.microsoftonline.com.evil.test/kmsi",
         ] { assert!(!trusted_auth_page(&tauri::Url::parse(url).unwrap())); }
     }
     #[test]
@@ -2097,6 +2380,7 @@ mod tests {
             stage: "username",
             account: "student@example.org",
             password: None,
+            identity_acknowledged: None,
         })
         .unwrap();
         assert!(!payload.contains("password"));

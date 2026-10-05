@@ -1245,6 +1245,9 @@ final class AppModel: ObservableObject {
         invalidatePendingOperations()
         setQMplusEnabled(false)
         qmplus.disconnect()
+        if !qmplus.credentialAuthorization.removalNeedsAttention {
+            qmplus.credentialDraft.resetSavingPreference()
+        }
         courseDataClearRevision &+= 1
         dailyClassroomRefreshTask?.cancel()
         dailyClassroomRefreshTask = nil

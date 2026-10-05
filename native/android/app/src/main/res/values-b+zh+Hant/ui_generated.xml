@@ -884,6 +884,16 @@
     <string name="ui_generated_fee09598ad7872">"正在讀取後勤部最新通知與目前生效時刻表。"</string>
     <string name="ui_generated_ff89a1a38ca3a7">"自定義日程頂層必須是對象。"</string>
     <string name="ui_generated_ff93bd2c081d35">"在瀏覽器中打開教學雲平台作業列表"</string>
+    <string name="ui_generated_b63c257717353e">"請在官方視窗完成驗證碼或 MFA，完成後將繼續同步。"</string>
+    <string name="ui_generated_81a90adf66f769">"自動登入已暫停，可選擇「手動繼續」查看官方頁面。"</string>
+    <string name="ui_generated_2042efadd2c35a">"手動繼續"</string>
+    <string name="ui_generated_5d364751ceb578">"已儲存的帳號和密碼用於自動完成官方登入；只有驗證碼或 MFA 需要您操作。未知頁面會暫停，可手動繼續。"</string>
+    <string name="ui_generated_f141054f90bcd5">"允許官方登入頁自動填寫"</string>
+    <string name="ui_generated_f09d02b07a9af4">"儲存後會在本機安全儲存空間保留獨立的 QMplus 登入資料。首次預設開啟自動填寫，也可在儲存前關閉。"</string>
+    <string name="ui_generated_b7df5fe6f6018c">"登入與同步在背景完成，只有需要驗證碼或 MFA 時才自動顯示官方視窗。無法識別的頁面會暫停，您可手動繼續。"</string>
+    <string name="ui_generated_8d1807d5c0f998">"僅自動處理已核驗且帳號相符的官方登入步驟；驗證碼和 MFA 由您完成。"</string>
+    <string name="ui_generated_e6ff81b07ab0b4">"已儲存的密碼不會顯示。僅更新登入資料時需要重新填寫。"</string>
+    <string name="ui_generated_679afb01032ac3">"儲存選項首次預設開啟；只有點選「儲存」後，登入資料才會存入本機安全儲存空間。"</string>
     <string name="ui_generated_1a78803a506cc4">"啟用 QMplus"</string>
     <string name="ui_generated_de0fc50a49bf3c">"僅適用國院"</string>
     <string name="ui_generated_dba3ae91be2408">"無法儲存本機偏好設定。"</string>

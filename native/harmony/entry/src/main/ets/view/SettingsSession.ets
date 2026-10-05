@@ -1,6 +1,7 @@
 // 仅保存设置页的临时 UI 状态，由 RootView 持有；不写入业务偏好或磁盘。
 // 平板侧栏与手机底栏互切时 SettingsView 会重新创建，草稿仍应保留。
 import { AppLanguage, AppLanguageInfo } from '../common/AppLocalization';
+import { PreferencesStore } from '../store/PreferencesStore';
 
 @ObservedV2
 export class SettingsSession {
@@ -15,12 +16,39 @@ export class SettingsSession {
   @Trace qmplusDetailsExpanded: boolean = false;
   @Trace qmPlusAccountDraft: string = '';
   @Trace qmPlusPasswordDraft: string = '';
+  @Trace qmPlusSaveLoginSelected: boolean = true;
+  private qmPlusSaveSelectionRevision: number = 0;
+  private qmPlusSaveSelectionRestored: boolean = false;
+  private qmPlusSaveSelectionWrite: Promise<boolean> = Promise.resolve(true);
+  private readonly qmPlusUIPreferences: PreferencesStore = new PreferencesStore('qmplus-settings-ui');
   private qmplusDisclosureEnabled: boolean | null = null;
 
   updateQMplusDisclosure(enabled: boolean): void {
     if (this.qmplusDisclosureEnabled === enabled) { return; }
     this.qmplusDisclosureEnabled = enabled;
     this.qmplusDetailsExpanded = enabled;
+  }
+
+  async restoreQMPlusSaveSelection(): Promise<void> {
+    if (this.qmPlusSaveSelectionRestored) { return; }
+    const revision: number = this.qmPlusSaveSelectionRevision;
+    try {
+      const selected: boolean = await this.qmPlusUIPreferences.getBool('save-login-selected', true);
+      if (revision === this.qmPlusSaveSelectionRevision) { this.qmPlusSaveLoginSelected = selected; }
+      this.qmPlusSaveSelectionRestored = true;
+    } catch (e) {}
+  }
+
+  async updateQMPlusSaveSelection(selected: boolean): Promise<boolean> {
+    this.qmPlusSaveSelectionRevision++;
+    this.qmPlusSaveSelectionRestored = true;
+    this.qmPlusSaveLoginSelected = selected;
+    const write: Promise<boolean> = this.qmPlusSaveSelectionWrite.then(async (): Promise<boolean> => {
+      try { await this.qmPlusUIPreferences.setBool('save-login-selected', selected); return true; }
+      catch (e) { return false; }
+    });
+    this.qmPlusSaveSelectionWrite = write;
+    return await write;
   }
 
   clearTransientPasswords(): void { this.qmPlusPasswordDraft = ''; }

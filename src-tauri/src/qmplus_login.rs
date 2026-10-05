@@ -24,6 +24,8 @@ pub struct LoginStatus {
 pub struct LoginRequest {
     account: String,
     password: String,
+    #[serde(default)]
+    autofill: Option<bool>,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -152,6 +154,7 @@ pub async fn save_qmplus_login(
     let noop_app = app.clone();
     let account = zeroize::Zeroizing::new(payload.account.trim().to_owned());
     let password = zeroize::Zeroizing::new(payload.password.clone());
+    let allows_unchanged_authorization = payload.autofill != Some(false);
     let no_change = tauri::async_runtime::spawn_blocking(move || -> Result<bool, String> {
         let gate = GATE.lock().map_err(|_| "QMplus 安全存储正忙。")?;
         if REVISION.load(Ordering::SeqCst) != revision
@@ -168,6 +171,7 @@ pub async fn save_qmplus_login(
                     == Some(record.account_scope.as_str())
         });
         Ok(unchanged
+            && allows_unchanged_authorization
             && REVISION.load(Ordering::SeqCst) == revision
             && crate::qmplus_profile::active_profile_ready(&noop_app))
     })
@@ -186,6 +190,7 @@ pub async fn save_qmplus_login(
             return Err(error.clone());
         }
     }
+    let clearing_complete = clearing.is_ok();
     let saved = tauri::async_runtime::spawn_blocking(move || -> Result<LoginStatus, String> {
         let mut gate = GATE.lock().map_err(|_| "QMplus 安全存储正忙。")?;
         if REVISION.load(Ordering::SeqCst) != revision {
@@ -207,10 +212,26 @@ pub async fn save_qmplus_login(
         if load()?.as_ref() != Some(&record) {
             return Err("QMplus 安全记录验证失败。".into());
         }
-        // Saving is not permission to submit credentials. A separate switch authorizes it.
+        // The UI explicitly includes its selected preference. Old callers that
+        // omit it only save. A pending cleanup never grants an authorization.
+        let enable = payload.autofill == Some(true) && clearing_complete;
+        if enable {
+            if REVISION.load(Ordering::SeqCst) != revision {
+                return Err("QMplus 保存请求已失效。".into());
+            }
+            if !crate::qmplus_profile::authorization_ready(&app) {
+                return Err(crate::qmplus_profile::RESTART_REQUIRED.into());
+            }
+            authorize(&app, &record.account_scope)?;
+            if REVISION.load(Ordering::SeqCst) != revision {
+                revoke_marker(&app)?;
+                return Err("QMplus 保存请求已失效。".into());
+            }
+            gate.blocked = false;
+        }
         Ok(LoginStatus {
             saved: true,
-            enabled: false,
+            enabled: enable,
         })
     })
     .await

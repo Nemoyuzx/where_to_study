@@ -754,7 +754,8 @@ export struct CourseView {
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
-        Button(this.model.text(this.qmPlusSession.snapshot === null ? '连接QMplus' : '重新同步'))
+        Button(this.model.text(this.qmPlusSession.manualContinuationRequired ? '手动继续' :
+          this.qmPlusSession.snapshot === null ? '连接QMplus' : '重新同步'))
           .type(ButtonType.Normal)
           .height(ControlMetrics.height)
           .backgroundColor(AppTheme.surfaceVariant())

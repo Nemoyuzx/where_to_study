@@ -997,7 +997,7 @@ internal class InformationQueryPage(
         val others = snapshot?.courses?.filter { it.currentTermStatus != "current" }.orEmpty()
         addView(courseSectionHeader("QMplus · EBU", current?.size, R.id.course_qmplus_refresh,
             repository != null && !repository.isLoading && !repository.isClearingSession && repository.connection == null,
-            activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() })
+            if (repository?.manualContinuationRequired == true) activity.uiText("手动继续") else activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() })
         repository?.error?.let { addView(statusCard(activity.uiText(it))) }
         if (snapshot == null) addView(statusCard(activity.getString(
             if (repository?.isLoading == true) R.string.qmplus_loading else R.string.qmplus_not_connected)))
@@ -1284,7 +1284,7 @@ internal class InformationQueryPage(
         val repository = qmplusRepository
         if (repository?.isFeatureEnabled != true) { qmplusRows = emptyList(); return@privateQueryContent }
         val snapshot = repository?.snapshot
-        addView(gradeAction(activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() }
+        addView(gradeAction(if (repository?.manualContinuationRequired == true) activity.uiText("手动继续") else activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() }
             .apply { id = R.id.course_qmplus_refresh
                 isEnabled = repository != null && !repository.isLoading && !repository.isClearingSession && repository.connection == null })
         addView(querySourceFooter("QMplus · Queen Mary University of London", QmplusPolicy.START_URL))

@@ -55,6 +55,7 @@
 "仅删除本次课程？" = "Yalnızca bu ders silinsin mi?";
 "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" = "Yalnızca doğrulanmış resmi giriş sayfalarında kayıtlı hesapla tam eşleşen hesap otomatik seçilir, kullanıcı adı ve parola doldurulur; her adım en fazla bir kez denenir. Eşleşmeyen hesap seçimi, MFA, CAPTCHA, oturumu açık tutma, risk ve koşul onayları sizin işleminizi gerektirir.";
 "仅在当天有课时通知；课表更新或账号变更后会自动重排。" = "Bildirimler yalnızca ders olan günlerde gönderilir; program veya hesap değişince yeniden planlanır.";
+"仅自动处理已核验且账号匹配的官方登录步骤；验证码和 MFA 由您完成。" = "Yalnızca eşleşen hesap için doğrulanmış resmî oturum açma adımları otomatik yürütülür. CAPTCHA ve MFA işlemlerini siz tamamlarsınız.";
 "仅适用国院" = "Yalnızca Uluslararası Okul için";
 "今天" = "Bugün";
 "今天可以自由安排" = "Bugününüz serbest";
@@ -78,6 +79,7 @@
 "作业来自教学云，与日历共享缓存；提交状态和截止时间以教学云为准。" = "Ödevler takvimle aynı önbelleği kullanır. Teslim durumunu ve son tarihleri Teaching Cloud üzerinde doğrulayın.";
 "使用个人课表排除已有课程" = "Kişisel derslerle dolu saatleri hariç tut";
 "保存 QMplus 登录信息并在官方页面自动填写（可选）" = "QMplus giriş bilgilerini resmi sayfada otomatik doldurma için kaydet (isteğe bağlı)";
+"保存后会在本机安全存储中保留独立 QMplus 登录资料。首次默认开启自动填写，也可在保存前关闭。" = "Kaydettikten sonra bağımsız QMplus giriş bilgileri bu cihazın güvenli depolamasında tutulur. Otomatik doldurma ilk kullanımda seçilidir ve kaydetmeden önce kapatılabilir.";
 "保存学期设置" = "Dönemi kaydet";
 "保存并授权 QMplus 官方网页自动填写" = "Kaydet ve resmi QMplus sayfasında otomatik doldurmaya izin ver";
 "保存并校验自定义源" = "Kaynağı kaydet ve doğrula";
@@ -85,7 +87,9 @@
 "保存新的登录信息会清除现有 QMplus 会话与快照，避免复用其他身份。" = "Yeni giriş bilgilerini kaydetmek, başka bir kimliğin yeniden kullanılmasını önlemek için mevcut QMplus oturumunu ve anlık görüntüsünü temizler.";
 "保存设置" = "Ayarları kaydet";
 "保存账号前请阅读并同意隐私政策。" = "Hesabı kaydetmeden önce Gizlilik Politikasını okuyup kabul edin.";
+"保存选项首次默认开启；只有点击“保存”后，登录资料才会存入本机安全存储。" = "Kaydetme seçeneği ilk kullanımda açıktır. Giriş bilgileriniz ancak “Kaydet”i seçtikten sonra bu cihazın güvenli depolamasına kaydedilir.";
 "信息查询" = "Bilgi arama";
+"允许官方登录页自动填写" = "Resmî oturum açma sayfalarında otomatik doldurmaya izin ver";
 "全天" = "Tüm gün";
 "全天日程" = "Tüm gün etkinlikleri";
 "全部" = "Tümü";
@@ -185,6 +189,7 @@
 "导航" = "Gezinme";
 "小号" = "Küçük";
 "小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会应用到本机小组件。" = "Widget önce bugünkü dersleri, yer kalırsa yarınkileri gösterir. İki gün ortak ders sınırını kullanır; büyük widget'ta en fazla 6 ders gösterilir. Ayarlar bu cihazın widget'larına uygulanır.";
+"尚未保存 QMplus 登录资料。" = "QMplus giriş bilgileri henüz kaydedilmedi.";
 "尚未授予通知权限，请重新开启提醒以申请权限" = "Bildirim izni verilmedi. İzin istemek için hatırlatmaları kapatıp yeniden açın.";
 "尚未获取个人课表" = "Kişisel program henüz alınmadı";
 "展开日程" = "Programı genişlet";
@@ -192,9 +197,12 @@
 "岁次" = "Yıl döngüsü";
 "已交 %d" = "Teslim edilen %d";
 "已保存 QMplus 登录信息并授权官方网页自动填写" = "QMplus giriş bilgileri kaydedildi ve resmi sayfa otomatik doldurmasına izin verildi";
+"已保存的密码不会回显。仅更新登录资料时需要重新填写。" = "Kaydedilen parolalar gösterilmez. Bilgilerinizi yalnızca güncellerken yeniden girin.";
+"已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。" = "Kaydedilen hesap ve parola, resmî oturum açma işlemini otomatik tamamlar. Yalnızca CAPTCHA veya MFA için işlem yapmanız gerekir. Bilinmeyen sayfalarda işlem duraklar; manuel devam edebilirsiniz.";
 "已关闭 QMplus 自动填写并删除保存的登录信息" = "QMplus otomatik doldurma kapalı ve kayıtlı giriş bilgileri silindi";
 "已关闭自动检测，将使用上方手动填写的学期信息。" = "Otomatik algılama kapalı. Yukarıda elle girilen dönem bilgileri kullanılacak.";
 "已删除课程（本学期）" = "Silinen dersler (bu dönem)";
+"已在本机安全保存 QMplus 登录资料。" = "QMplus giriş bilgileri bu cihazda güvenle kaydedildi.";
 "已安全保存，留空保持不变" = "Güvenle kaydedildi; korumak için boş bırakın";
 "已安排 %d 条课前提醒，重新打开应用时自动补充" = "%d ders öncesi hatırlatma planlandı; uygulama yeniden açılınca yaklaşanlar eklenir";
 "已安排未来 %d 个有课日的课程摘要" = "Gelecekteki %d ders günü için ders özeti planlandı";
@@ -251,6 +259,7 @@
 "成绩获取失败，请检查账户或稍后重试。" = "Notlar alınamadı. Hesabınızı kontrol edin veya daha sonra deneyin.";
 "成绩记录" = "Not kayıtları";
 "截止时间" = "Teslim zamanı";
+"手动继续" = "Manuel devam et";
 "打开 QMplus 官方登录页" = "Resmi QMplus giriş sayfasını aç";
 "打开主窗口" = "Ana pencereyi aç";
 "打开作业列表" = "Ödev listesini aç";
@@ -452,6 +461,7 @@
 "用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。" = "Ödev son tarihleri içindir; genellikle birleşik kimlik parolası kullanılır. Belirtilmezse akademik parola kullanılır. Kayıtlı ayrı parolayı korumak için boş bırakın; değişiklikten sonra ayarları kaydedin.";
 "界面语言" = "Arayüz dili";
 "留空使用教务密码" = "Akademik parolayı kullanmak için boş bırakın";
+"登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。" = "Oturum açma ve eşitleme arka planda gerçekleşir. Resmî pencere yalnızca CAPTCHA veya MFA için otomatik açılır. Tanınmayan sayfalarda işlem duraklar; manuel devam edebilirsiniz.";
 "登录后同步" = "Girişten sonra eşitle";
 "登录完成后会自动同步一次 EBU 课程与活动；失败时可手动重试。" = "Girişten sonra EBU dersleri ve etkinlikleri otomatik olarak bir kez eşitlenir. Başarısız olursa elle yeniden deneyebilirsiniz.";
 "登录状态已过期，请刷新重试。" = "Oturumunuz sona erdi. Yeniden denemek için yenileyin.";
@@ -516,6 +526,7 @@
 "联动查询" = "Bağlantılı arama";
 "联系维护者" = "Proje yöneticisine ulaş";
 "自动检测当前学期" = "Geçerli dönemi otomatik algıla";
+"自动登录已暂停，可选择“手动继续”查看官方页面。" = "Otomatik oturum açma duraklatıldı. Resmî sayfayı görmek için “Manuel devam et”i seçin.";
 "自定义" = "Özel";
 "自定义日程" = "Özel takvim";
 "自定义日程 HTTPS 地址" = "Özel takvim HTTPS URL'si";
@@ -552,6 +563,7 @@
 "请先在个人账户中保存教务账号和密码。" = "Önce akademik hesabınızı ve parolanızı Kişisel Hesapta kaydedin.";
 "请先填写自定义日程 HTTPS 地址。" = "Önce özel takvim HTTPS URL'sini girin.";
 "请先获取/刷新个人课表。" = "Önce kişisel programınızı alın veya yenileyin.";
+"请在官方窗口完成验证码或 MFA，完成后将继续同步。" = "Resmî pencerede CAPTCHA veya MFA doğrulamasını tamamlayın. Ardından eşitleme devam eder.";
 "请在官方网页完成 SSO 与 MFA。本应用不读取或保存微软密码。" = "SSO ve MFA işlemini resmi web sayfasında tamamlayın. Uygulama Microsoft parolanızı okumaz veya kaydetmez.";
 "请在官方网页完成 SSO 与 MFA；也可自愿保存独立的 QMplus 登录信息，用于官方网页自动填写。" = "SSO ve MFA işlemini resmi sitede tamamlayın. İsterseniz resmi sayfa otomatik doldurması için ayrı QMplus giriş bilgilerini kaydedebilirsiniz.";
 "请在官方网页完成 SSO 与 MFA；可选自动填写只用于已确认的官方登录页面。" = "SSO ve MFA işlemini resmi sitede tamamlayın. İsteğe bağlı otomatik doldurma yalnızca tanınan resmi giriş sayfalarında kullanılır.";

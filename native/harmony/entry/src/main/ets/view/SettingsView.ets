@@ -80,7 +80,10 @@ export struct SettingsView {
     if (!this.favoriteManagerOnly) {
       this.session.syncCustomDeadlineURL(this.model.customDeadlinesURL);
       this.applyPendingLanguageRequest();
-      if (!this.model.isSampleMode()) { void this.qmPlusSession.restoreSavedLoginStatus(); }
+      if (!this.model.isSampleMode()) {
+        void this.session.restoreQMPlusSaveSelection();
+        void this.qmPlusSession.restoreSavedLoginStatus();
+      }
     }
   }
 
@@ -537,7 +540,7 @@ export struct SettingsView {
       }
       .width('100%')
       DisclosureClip({ expanded: this.session.qmplusDetailsExpanded }) {
-      Text(this.model.text('QMplus 使用独立的官方网页；仅在您主动保存时，Microsoft 登录资料才进入本机安全存储。MFA 仍须本人完成。'))
+      Text(this.model.text('保存后会在本机安全存储中保留独立 QMplus 登录资料。首次默认开启自动填写，也可在保存前关闭。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
         .width('100%')
@@ -572,6 +575,12 @@ export struct SettingsView {
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
+        if (this.qmPlusSession.savedLoginAvailable) {
+          Text(this.model.text('已保存的密码不会回显。仅更新登录资料时需要重新填写。'))
+            .fontSize(12)
+            .fontColor(AppTheme.secondaryText())
+            .width('100%')
+        }
         this.field('QMplus Microsoft 登录邮箱', this.session.qmPlusAccountDraft, InputType.Normal,
           (value: string): void => { this.session.qmPlusAccountDraft = value; },
           !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.account')
@@ -591,21 +600,32 @@ export struct SettingsView {
           .onClick(() => {
             const account: string = this.session.qmPlusAccountDraft;
             const password: string = this.session.qmPlusPasswordDraft;
+            const autoFillSelected: boolean = this.qmPlusSession.savedLoginAvailable ?
+              this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected;
             this.session.qmPlusPasswordDraft = '';
-            void this.qmPlusSession.saveSavedLogin(account, password);
+            void this.qmPlusSession.saveSavedLogin(account, password).then(async (saved: boolean): Promise<void> => {
+              if (saved && autoFillSelected) { await this.qmPlusSession.setAutoFillEnabled(true); }
+            });
           })
         Row({ space: 8 }) {
-          Text(this.model.text('允许官方登录页自动填写（默认关闭）'))
+          Text(this.model.text('允许官方登录页自动填写'))
             .fontSize(13)
             .fontColor(AppTheme.text())
             .layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: this.qmPlusSession.autoFillEnabled })
+          Toggle({ type: ToggleType.Switch, isOn: this.qmPlusSession.savedLoginAvailable ?
+            this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected })
             .selectedColor(AppTheme.primaryFill())
             .width(48)
-            .enabled(this.qmPlusSession.savedLoginAvailable && !this.qmPlusSession.loginSettingsBusy)
+            .enabled(!this.qmPlusSession.loginSettingsBusy)
             .id('settings.qmplus.autofill')
             .onChange((enabled: boolean): void => {
-              void this.qmPlusSession.setAutoFillEnabled(enabled);
+              const selected: boolean = this.qmPlusSession.savedLoginAvailable ?
+                this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected;
+              if (enabled === selected) { return; }
+              void this.session.updateQMPlusSaveSelection(enabled).then((saved: boolean): void => {
+                if (!saved) { this.qmPlusSession.loginSettingsError = '无法保存本地偏好。'; }
+              });
+              if (this.qmPlusSession.savedLoginAvailable) { void this.qmPlusSession.setAutoFillEnabled(enabled); }
             })
         }
         .width('100%')
@@ -613,7 +633,7 @@ export struct SettingsView {
           .fontSize(11)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
-        Text(this.model.text('仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。'))
+        Text(this.model.text('已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。'))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
@@ -634,7 +654,8 @@ export struct SettingsView {
           .id('settings.qmplus.delete-login')
           .onClick(() => { void this.qmPlusSession.deleteSavedLogin(); })
       }
-      Button(this.model.text(this.qmPlusSession.snapshot === null ? '连接 QMplus' : '重新同步 QMplus'))
+      Button(this.model.text(this.qmPlusSession.manualContinuationRequired ? '手动继续' :
+        this.qmPlusSession.snapshot === null ? '连接 QMplus' : '重新同步 QMplus'))
         .type(ButtonType.Normal)
         .height(ControlMetrics.height)
         .width('100%')

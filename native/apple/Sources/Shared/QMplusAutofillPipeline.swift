@@ -1,7 +1,10 @@
 import Foundation
 import WebKit
 
-enum QMplusAuthStage: String, Hashable, Sendable { case loading, authenticated, account, username, password, manual }
+enum QMplusAuthStage: String, Hashable, Sendable {
+    case loading, authenticated, account, username, password, manual, challenge
+    case continuation = "continue"
+}
 enum QMplusAuthReason: String, Sendable {
     case ready = "READY", authenticated = "AUTHENTICATED", loading = "LOADING"
     case invalidNonce = "INVALID_NONCE", staleDocument = "STALE_DOCUMENT", untrusted = "UNTRUSTED_CONTEXT"
@@ -9,6 +12,8 @@ enum QMplusAuthReason: String, Sendable {
     case interference = "INTERFERENCE", absent = "KNOWN_FORM_ABSENT", mismatch = "ACCOUNT_MISMATCH"
     case priorUsername = "USERNAME_NOT_SUBMITTED", attempted = "ALREADY_ATTEMPTED"
     case accountHintRequired = "ACCOUNT_HINT_REQUIRED"
+    case currentAccountVerified = "CURRENT_ACCOUNT_VERIFIED"
+    case captchaRequired = "CAPTCHA_REQUIRED", mfaRequired = "MFA_REQUIRED"
 }
 
 struct QMplusAuthInspection: Equatable, Sendable {
@@ -32,12 +37,14 @@ enum QMplusAuthInstallResult: Equatable, Sendable { case installed, conflict, un
 enum QMplusAuthSubmissionResult: String, Sendable {
     case accountSelected = "ACCOUNT_SELECTED"
     case usernameSubmitted = "USERNAME_SUBMITTED", passwordSubmitted = "PASSWORD_SUBMITTED"
+    case continuationSubmitted = "CONTINUE_SUBMITTED"
     case manual = "MANUAL_REQUIRED", rejected = "REJECTED", stale = "STALE_DOCUMENT"
 }
 enum QMplusAuthSubmission: Sendable {
     case account(document: String, account: String)
     case username(document: String, account: String)
-    case password(document: String, account: String, password: String)
+    case password(document: String, account: String, password: String, identityAcknowledged: Bool = false)
+    case continuation(document: String, account: String, identityAcknowledged: Bool)
 }
 
 enum QMplusAutofillPolicy {
@@ -46,7 +53,7 @@ enum QMplusAutofillPolicy {
     static func isTrustedMicrosoftDocument(_ url: URL?) -> Bool {
         guard QMplusConnectionPolicy.isHTTPSNavigation(url), url?.host?.lowercased() == "login.microsoftonline.com",
               let url, let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath else { return false }
-        return ["/\(tenant)/saml2", "/\(tenant)/login"].contains(path)
+        return ["/\(tenant)/saml2", "/\(tenant)/login", "/kmsi"].contains(path)
     }
     static func isQMplusLoginDocument(_ url: URL?) -> Bool {
         guard QMplusConnectionPolicy.isHTTPSNavigation(url), url?.host?.lowercased() == "qmplus.qmul.ac.uk", let url,
@@ -85,16 +92,27 @@ final class QMplusAutofillLedger {
     private var claimedAccountDocument: String?
     private var claimedUsernameDocument: String?
     private var ssoAttempted = false
+    private(set) var continuationAttempted = false
+    private var verifiedIdentityDocument: String?
+    private var claimedPasswordDocument: String?
+    private var passwordAcknowledged = false
+    private var claimedContinuationDocument: String?
+    private var continuationAcknowledgedDocument: String?
 
     func begin(presentation: UInt64, credentialRevision: UInt64) {
         self.presentation = presentation; self.credentialRevision = credentialRevision
         isActive = true; accountAttempted = false; usernameAttempted = false; passwordAttempted = false
         accountSelectedDocument = nil; claimedAccountDocument = nil
         usernameSubmittedDocument = nil; claimedUsernameDocument = nil; ssoAttempted = false
+        continuationAttempted = false; verifiedIdentityDocument = nil
+        claimedPasswordDocument = nil; passwordAcknowledged = false
+        claimedContinuationDocument = nil; continuationAcknowledgedDocument = nil
     }
     func stop() {
         isActive = false; usernameSubmittedDocument = nil; claimedUsernameDocument = nil
         accountSelectedDocument = nil; claimedAccountDocument = nil
+        verifiedIdentityDocument = nil; claimedPasswordDocument = nil; passwordAcknowledged = false
+        claimedContinuationDocument = nil; continuationAcknowledgedDocument = nil
     }
     func accepts(presentation: UInt64, credentialRevision: UInt64) -> Bool {
         isActive && self.presentation == presentation && self.credentialRevision == credentialRevision
@@ -110,26 +128,50 @@ final class QMplusAutofillLedger {
     // password. Its own presentation budget survives a previous SSO redirect.
     func canNavigateLoginEntry(presentation: UInt64, credentialRevision: UInt64) -> Bool {
         accepts(presentation: presentation, credentialRevision: credentialRevision) &&
-            !accountAttempted && !usernameAttempted && !passwordAttempted
+            !accountAttempted && !usernameAttempted && !passwordAttempted && !continuationAttempted
     }
     func claim(_ state: QMplusAuthInspection, presentation: UInt64, credentialRevision: UInt64) -> Bool {
         guard accepts(presentation: presentation, credentialRevision: credentialRevision), state.reason == .ready,
               QMplusAutofillPolicy.isValidNonce(state.document) else { return false }
         switch state.stage {
         case .account:
-            guard !accountAttempted, !usernameAttempted, !passwordAttempted, state.accountMatch else { return false }
+            guard !accountAttempted, !usernameAttempted, !passwordAttempted, !continuationAttempted, state.accountMatch else { return false }
             accountAttempted = true; claimedAccountDocument = state.document; return true
         case .username:
-            guard !usernameAttempted, !passwordAttempted else { return false }
+            guard !usernameAttempted, !passwordAttempted, !continuationAttempted else { return false }
             usernameAttempted = true; claimedUsernameDocument = state.document; return true
         case .password:
-            guard !passwordAttempted, state.accountMatch, hasIdentityAcknowledgement(for: state.document) else { return false }
-            passwordAttempted = true; return true
+            guard !passwordAttempted, !continuationAttempted, state.accountMatch, hasIdentityAcknowledgement(for: state.document) else { return false }
+            passwordAttempted = true; claimedPasswordDocument = state.document; return true
+        case .continuation:
+            guard !continuationAttempted, state.accountMatch, hasIdentityAcknowledgement(for: state.document) else { return false }
+            continuationAttempted = true; claimedContinuationDocument = state.document; return true
         default: return false
         }
     }
     func hasIdentityAcknowledgement(for document: String) -> Bool {
-        usernameSubmittedDocument == document || accountSelectedDocument == document
+        usernameSubmittedDocument != nil || accountSelectedDocument != nil || passwordAcknowledged || verifiedIdentityDocument == document
+    }
+    func recordVerifiedIdentity(_ state: QMplusAuthInspection, presentation: UInt64, credentialRevision: UInt64) -> Bool {
+        guard accepts(presentation: presentation, credentialRevision: credentialRevision), state.accountMatch,
+              state.reason == .currentAccountVerified, QMplusAutofillPolicy.isValidNonce(state.document),
+              (state.stage == .password && !passwordAttempted && !continuationAttempted) ||
+                (state.stage == .continuation && !continuationAttempted) else { return false }
+        verifiedIdentityDocument = state.document
+        return true
+    }
+    func recordPasswordSubmission(document: String, presentation: UInt64, credentialRevision: UInt64) {
+        guard accepts(presentation: presentation, credentialRevision: credentialRevision),
+              passwordAttempted, claimedPasswordDocument == document else { return }
+        passwordAcknowledged = true
+    }
+    func recordContinuationSubmission(document: String, presentation: UInt64, credentialRevision: UInt64) {
+        guard accepts(presentation: presentation, credentialRevision: credentialRevision),
+              continuationAttempted, claimedContinuationDocument == document else { return }
+        continuationAcknowledgedDocument = document
+    }
+    func isAwaitingNavigation(from document: String) -> Bool {
+        (passwordAcknowledged && claimedPasswordDocument == document) || continuationAcknowledgedDocument == document
     }
     func recordAccountSelection(document: String, presentation: UInt64, credentialRevision: UInt64) {
         guard accepts(presentation: presentation, credentialRevision: credentialRevision),
@@ -147,7 +189,16 @@ final class QMplusAutofillLedger {
 protocol QMplusAutofillEvaluating: AnyObject {
     func install(_ source: String, completion: @escaping @MainActor @Sendable (QMplusAuthInstallResult) -> Void)
     func inspect(nonce: String, accountHint: String, completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void)
+    func inspect(nonce: String, accountHint: String, identityAcknowledged: Bool,
+                 completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void)
     func submit(_ submission: QMplusAuthSubmission, completion: @escaping @MainActor @Sendable (QMplusAuthSubmissionResult?) -> Void)
+}
+
+extension QMplusAutofillEvaluating {
+    func inspect(nonce: String, accountHint: String, identityAcknowledged: Bool,
+                 completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
+        inspect(nonce: nonce, accountHint: accountHint, completion: completion)
+    }
 }
 
 @MainActor
@@ -164,9 +215,13 @@ final class QMplusWebKitAutofillEvaluator: QMplusAutofillEvaluating {
         }
     }
     func inspect(nonce: String, accountHint: String, completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
+        inspect(nonce: nonce, accountHint: accountHint, identityAcknowledged: false, completion: completion)
+    }
+    func inspect(nonce: String, accountHint: String, identityAcknowledged: Bool,
+                 completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
         guard let browser else { completion(nil); return }
-        browser.callAsyncJavaScript("return WTSQmAuth.inspect(documentNonce, accountHint);",
-            arguments: ["documentNonce": nonce, "accountHint": accountHint], in: nil, in: world) { result in
+        browser.callAsyncJavaScript("return WTSQmAuth.inspect(documentNonce, accountHint, identityAcknowledged);",
+            arguments: ["documentNonce": nonce, "accountHint": accountHint, "identityAcknowledged": identityAcknowledged], in: nil, in: world) { result in
                 guard case let .success(value) = result else { completion(nil); return }
                 completion(QMplusAuthInspection.decode(value))
             }
@@ -191,9 +246,12 @@ final class QMplusWebKitAutofillEvaluator: QMplusAutofillEvaluating {
             // No password key, even as undefined/null, enters the username call.
             arguments = ["documentNonce": nonce, "account": account]
             function = "return WTSQmAuth.fillAndSubmit({document:documentNonce, stage:'username', account});"
-        case let .password(nonce, account, password):
-            arguments = ["documentNonce": nonce, "account": account, "password": password]
-            function = "return WTSQmAuth.fillAndSubmit({document:documentNonce, stage:'password', account, password});"
+        case let .password(nonce, account, password, identityAcknowledged):
+            arguments = ["documentNonce": nonce, "account": account, "password": password, "identityAcknowledged": identityAcknowledged]
+            function = "return WTSQmAuth.fillAndSubmit({document:documentNonce, stage:'password', account, password, identityAcknowledged});"
+        case let .continuation(nonce, account, identityAcknowledged):
+            arguments = ["documentNonce": nonce, "account": account, "identityAcknowledged": identityAcknowledged]
+            function = "return WTSQmAuth.fillAndSubmit({document:documentNonce, stage:'continue', account, identityAcknowledged});"
         }
         return (function, arguments)
     }
@@ -201,7 +259,7 @@ final class QMplusWebKitAutofillEvaluator: QMplusAutofillEvaluating {
 
 @MainActor
 final class QMplusAutofillPipeline {
-    enum Progress: Sendable { case username, password, waiting }
+    enum Progress: Sendable { case username, password, continuation, waiting }
     private let evaluator: any QMplusAutofillEvaluating
     private let ledger: QMplusAutofillLedger
     private let presentation: UInt64
@@ -211,12 +269,15 @@ final class QMplusAutofillPipeline {
     private let viewportReady: @MainActor () -> Bool
     private let credentials: @MainActor () -> QMplusSavedCredentials?
     private let manual: @MainActor () -> Void
+    private let challenge: @MainActor () -> Void
     private let identityMismatch: @MainActor () -> Void
     private let progress: @MainActor (Progress) -> Void
     private var waitTask: Task<Void, Never>?
     private var cancelled = false
     private var started = false
     private var accountHint: String?
+    private var awaitingChallenge = false
+    private var viewportWaitCount = 0
     private var completedSubmissionStages = Set<QMplusAuthStage>()
     private let wait: @MainActor (Duration) async throws -> Void
 
@@ -224,6 +285,7 @@ final class QMplusAutofillPipeline {
          credentialRevision: UInt64, nonce: String, isCurrent: @escaping @MainActor () -> Bool,
          viewportReady: @escaping @MainActor () -> Bool = { true },
          credentials: @escaping @MainActor () -> QMplusSavedCredentials?, manual: @escaping @MainActor () -> Void,
+         challenge: @escaping @MainActor () -> Void = {},
          identityMismatch: @escaping @MainActor () -> Void = {},
          progress: @escaping @MainActor (Progress) -> Void = { _ in },
          wait: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
@@ -231,6 +293,7 @@ final class QMplusAutofillPipeline {
         self.credentialRevision = credentialRevision; self.nonce = nonce; self.isCurrent = isCurrent
         self.viewportReady = viewportReady
         self.credentials = credentials; self.manual = manual; self.identityMismatch = identityMismatch
+        self.challenge = challenge
         self.progress = progress; self.wait = wait
     }
 
@@ -250,20 +313,38 @@ final class QMplusAutofillPipeline {
     }
     private func inspect(attempt: Int) {
         guard accepts else { return }
-        guard viewportReady() else { requireManual(); return }
+        guard viewportReady() else { waitForViewport(attempt: attempt); return }
+        viewportWaitCount = 0
         if accountHint == nil {
-            guard let saved = credentials(), accepts, let key = QMplusAutofillPolicy.accountKey(saved.account) else {
-                requireManual(); return
-            }
-            accountHint = key
+            if let saved = credentials(), accepts { accountHint = QMplusAutofillPolicy.accountKey(saved.account) }
         }
-        guard let accountHint, accepts else { return }
-        evaluator.inspect(nonce: nonce, accountHint: accountHint) { [weak self] state in
+        guard accepts else { return }
+        evaluator.inspect(nonce: nonce, accountHint: accountHint ?? "",
+                          identityAcknowledged: ledger.hasIdentityAcknowledgement(for: nonce)) { [weak self] state in
             guard let self, self.accepts else { return }
-            guard self.viewportReady() else { self.requireManual(); return }
+            guard self.viewportReady() else { self.waitForViewport(attempt: attempt); return }
             guard let state, state.document == self.nonce else { self.requireManual(); return }
+            if state.stage == .challenge && [.captchaRequired, .mfaRequired].contains(state.reason) {
+                if !self.awaitingChallenge { self.awaitingChallenge = true; self.challenge() }
+                self.waitForChallenge(); return
+            }
+            self.awaitingChallenge = false
             if state.stage == .loading && state.reason == .loading {
+                // The verification form may not have mounted yet. A missing
+                // saved identity must not stop read-only challenge detection.
                 self.scheduleInspection(attempt: attempt); return
+            }
+            guard self.accountHint != nil else { self.requireManual(); return }
+            if state.reason == .currentAccountVerified {
+                guard self.ledger.recordVerifiedIdentity(state, presentation: self.presentation,
+                    credentialRevision: self.credentialRevision) else { self.requireManual(); return }
+                self.scheduleInspection(attempt: attempt); return
+            }
+            if self.ledger.isAwaitingNavigation(from: self.nonce), state.stage == .manual,
+               [.attempted, .form, .absent, .interference].contains(state.reason) {
+                // A successful submit can leave its old form visible while
+                // Microsoft prepares MFA/KMSI. Poll only; never submit again.
+                self.scheduleInspection(attempt: attempt, maximumAttempts: 36); return
             }
             if state.stage == .account && state.reason == .accountHintRequired && !self.ledger.accountAttempted {
                 self.accountHint = nil
@@ -296,12 +377,30 @@ final class QMplusAutofillPipeline {
                 submission = .username(document: self.nonce, account: saved.account)
             case .password:
                 self.progress(.password)
-                submission = .password(document: self.nonce, account: saved.account, password: saved.password)
+                submission = .password(document: self.nonce, account: saved.account, password: saved.password,
+                    identityAcknowledged: self.ledger.hasIdentityAcknowledgement(for: self.nonce))
+            case .continuation:
+                self.progress(.continuation)
+                submission = .continuation(document: self.nonce, account: saved.account,
+                    identityAcknowledged: self.ledger.hasIdentityAcknowledgement(for: self.nonce))
             default: self.requireManual(); return
             }
             guard self.accepts else { return }
             guard self.viewportReady() else { self.requireManual(); return }
-            self.evaluator.submit(submission) { [weak self] result in
+            let ledger = self.ledger, presentation = self.presentation, credentialRevision = self.credentialRevision, nonce = self.nonce
+            self.evaluator.submit(submission) { [weak self, ledger] result in
+                // A successful click may navigate before its ACK arrives.
+                // Record only the originally claimed nonce/owner/revision;
+                // UI polling still requires the live document below.
+                if state.stage == .account && result == .accountSelected {
+                    ledger.recordAccountSelection(document: nonce, presentation: presentation, credentialRevision: credentialRevision)
+                } else if state.stage == .username && result == .usernameSubmitted {
+                    ledger.recordUsernameSubmission(document: nonce, presentation: presentation, credentialRevision: credentialRevision)
+                } else if state.stage == .password && result == .passwordSubmitted {
+                    ledger.recordPasswordSubmission(document: nonce, presentation: presentation, credentialRevision: credentialRevision)
+                } else if state.stage == .continuation && result == .continuationSubmitted {
+                    ledger.recordContinuationSubmission(document: nonce, presentation: presentation, credentialRevision: credentialRevision)
+                }
                 guard let self, self.accepts, self.completedSubmissionStages.insert(state.stage).inserted else { return }
                 if state.stage == .account && result == .accountSelected {
                     self.ledger.recordAccountSelection(document: self.nonce, presentation: self.presentation,
@@ -316,13 +415,38 @@ final class QMplusAutofillPipeline {
                 } else if state.stage == .password && result == .passwordSubmitted {
                     self.progress(.waiting)
                     self.scheduleInspection(attempt: 0)
+                } else if state.stage == .continuation && result == .continuationSubmitted {
+                    self.progress(.waiting)
+                    self.scheduleInspection(attempt: 0)
                 } else { self.requireManual() }
             }
         }
     }
-    private func scheduleInspection(attempt: Int) {
+    private func waitForChallenge() {
         guard accepts else { return }
-        guard attempt < 8 else { requireManual(); return }
+        waitTask?.cancel()
+        waitTask = Task { [weak self] in
+            guard let self else { return }
+            do { try await self.wait(.seconds(1)) } catch { return }
+            guard self.accepts else { return }
+            self.inspect(attempt: 0)
+        }
+    }
+    private func waitForViewport(attempt: Int) {
+        guard accepts else { return }
+        guard viewportWaitCount < 12 else { requireManual(); return }
+        viewportWaitCount += 1
+        waitTask?.cancel()
+        waitTask = Task { [weak self] in
+            guard let self else { return }
+            do { try await self.wait(.milliseconds(250)) } catch { return }
+            guard self.accepts else { return }
+            self.inspect(attempt: attempt)
+        }
+    }
+    private func scheduleInspection(attempt: Int, maximumAttempts: Int = 8) {
+        guard accepts else { return }
+        guard attempt < maximumAttempts else { requireManual(); return }
         waitTask?.cancel()
         waitTask = Task { [weak self] in
             guard let self else { return }

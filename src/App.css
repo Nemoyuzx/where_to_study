@@ -6233,6 +6233,10 @@ input:disabled {
 .qmplus-settings-disclosure { margin-inline-start: auto; }
 .qmplus-settings-body { display: grid; gap: 12px; padding-top: 12px; min-width: 0; }
 .qmplus-settings-body p { margin: 0; }
+.qmplus-settings-panel .settings-switch-row { min-width: 0; max-width: 100%; }
+.qmplus-settings-panel .settings-switch-row > div { flex: 1 1 0; overflow-wrap: anywhere; }
+.qmplus-settings-panel .settings-switch { flex: 0 0 44px; max-width: 44px; box-sizing: border-box; }
+.qmplus-settings-panel > small { display: block; margin-top: 8px; }
 .query-grades > .query-section-header { flex-wrap: wrap; }
 .query-section-header > .query-grade-header-actions { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .query-grade-term-picker { display: grid; gap: 4px; min-width: 0; flex: 1 1 180px; }

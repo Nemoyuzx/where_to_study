@@ -46,6 +46,10 @@ struct QMplusLoginSynchronizationGate: Equatable, Sendable {
         hasAttemptedAutomaticSync = false
         return true
     }
+    mutating func allowSyncAfterCancellation(context: Context) {
+        guard accepts(context) else { return }
+        hasAttemptedAutomaticSync = false
+    }
 }
 
 enum QMplusOfficialPageStatus: String, Sendable {

@@ -15,9 +15,14 @@ internal class QmplusLoginAutomationGate {
     private var attemptedUsername = false
     private var attemptedPassword = false
     private var attemptedAccount = false
+    private var attemptedContinue = false
+    private var attemptedCredentials = false
+    private var acknowledgedIdentity = false
     private var requiresManualInteraction = false
     private var installedDocument: Long? = null
     private var submittedUsernameDocument: Long? = null
+    private var claimedUsernameDocument: Long? = null
+    private var claimedContinueDocument: Long? = null
     private var selectedAccountDocument: Long? = null
     private var claimedAccountDocument: Long? = null
     private var attemptedSSO = false
@@ -26,6 +31,7 @@ internal class QmplusLoginAutomationGate {
 
     fun beginDocument(): Long {
         document++; installedDocument = null; submittedUsernameDocument = null; selectedAccountDocument = null; claimedAccountDocument = null
+        claimedUsernameDocument = null; claimedContinueDocument = null
         return document
     }
     fun accepts(expectedDocument: Long): Boolean = active && expectedDocument == document
@@ -56,29 +62,40 @@ internal class QmplusLoginAutomationGate {
     fun claimFill(expectedDocument: Long, stage: String, savedOptIn: Boolean, accountMatch: Boolean = false): Boolean {
         if (!savedOptIn || !accepts(expectedDocument) || requiresManualInteraction || installedDocument != expectedDocument) return false
         return when (stage) {
-            "account" -> if (attemptedAccount || attemptedUsername || attemptedPassword || !accountMatch) false
-                else { attemptedAccount = true; claimedAccountDocument = expectedDocument; true }
-            "username" -> if (attemptedUsername || attemptedPassword) false else { attemptedUsername = true; true }
-            "password" -> if (attemptedPassword || !accountMatch || !identityAcknowledged(expectedDocument)) false
+            "account" -> if (attemptedAccount || attemptedUsername || attemptedPassword || attemptedContinue || !accountMatch) false
+                else { attemptedAccount = true; attemptedCredentials = true; claimedAccountDocument = expectedDocument; true }
+            "username" -> if (attemptedUsername || attemptedPassword || attemptedContinue) false
+                else { attemptedUsername = true; attemptedCredentials = true; claimedUsernameDocument = expectedDocument; true }
+            "password" -> if (attemptedPassword || attemptedContinue || !accountMatch || !identityAcknowledged(expectedDocument)) false
                 else { attemptedPassword = true; true }
+            "continue" -> if (attemptedContinue || !accountMatch || !identityAcknowledged(expectedDocument)) false
+                else { attemptedContinue = true; claimedContinueDocument = expectedDocument; true }
             else -> false
         }
     }
     fun submitted(expectedDocument: Long, stage: String, result: String): Boolean {
         if (!accepts(expectedDocument) || requiresManualInteraction) return false
         if (stage == "account" && attemptedAccount && claimedAccountDocument == expectedDocument && result == "ACCOUNT_SELECTED") {
-            selectedAccountDocument = expectedDocument; return true
+            selectedAccountDocument = expectedDocument; acknowledgedIdentity = true; return true
         }
-        if (stage == "username" && attemptedUsername && result == "USERNAME_SUBMITTED") {
-            submittedUsernameDocument = expectedDocument; return true
+        if (stage == "username" && attemptedUsername && claimedUsernameDocument == expectedDocument && result == "USERNAME_SUBMITTED") {
+            submittedUsernameDocument = expectedDocument; acknowledgedIdentity = true; return true
         }
+        if (stage == "continue" && attemptedContinue && claimedContinueDocument == expectedDocument && result == "CONTINUE_SUBMITTED") return true
         return stage == "password" && attemptedPassword && result == "PASSWORD_SUBMITTED"
     }
     fun usernameSubmitted(expectedDocument: Long): Boolean = accepts(expectedDocument) && submittedUsernameDocument == expectedDocument
     fun accountSelected(expectedDocument: Long): Boolean = accepts(expectedDocument) && selectedAccountDocument == expectedDocument
-    fun identityAcknowledged(expectedDocument: Long): Boolean = usernameSubmitted(expectedDocument) || accountSelected(expectedDocument)
+    // The connection and credential revision stay fixed, while the helper must
+    // still verify the exact visible account again in each real document.
+    fun identityAcknowledged(expectedDocument: Long): Boolean = accepts(expectedDocument) && acknowledgedIdentity
+    fun acknowledgeCurrentAccount(expectedDocument: Long, accountMatch: Boolean): Boolean {
+        if (!accepts(expectedDocument) || requiresManualInteraction || installedDocument != expectedDocument ||
+            attemptedPassword || attemptedContinue || !accountMatch) return false
+        acknowledgedIdentity = true; return true
+    }
     fun passwordAttempted(): Boolean = attemptedPassword
-    fun hasAttemptedCredentialSubmission(): Boolean = attemptedAccount || attemptedUsername || attemptedPassword
+    fun hasAttemptedCredentialSubmission(): Boolean = attemptedCredentials || attemptedPassword || attemptedContinue
     fun manualInteractionRequired() { requiresManualInteraction = true }
     fun close() { active = false; document++ }
 }
@@ -105,13 +122,13 @@ internal object QmplusLoginPagePolicy {
         it.scheme.equals("https", true) && it.rawUserInfo == null && it.port in listOf(-1, 443) && it.rawFragment == null
     }
     fun isMicrosoftPage(value: String): Boolean = trustedURI(value)?.let {
-        it.host.equals("login.microsoftonline.com", true) && it.rawPath in setOf("/$QM_TENANT/saml2", "/$QM_TENANT/login")
+        it.host.equals("login.microsoftonline.com", true) && it.rawPath in setOf("/$QM_TENANT/saml2", "/$QM_TENANT/login", "/kmsi")
     } == true
     fun canInspectAuthenticationPage(value: String): Boolean = runCatching { URI(value) }.getOrNull()?.let {
         it.scheme.equals("https", true) && it.rawUserInfo == null && it.port in listOf(-1, 443) &&
             it.rawFragment == null && when {
                 it.host.equals("qmplus.qmul.ac.uk", true) -> isSSOEntry(value)
-                it.host.equals("login.microsoftonline.com", true) -> it.rawPath in setOf("/$QM_TENANT/saml2", "/$QM_TENANT/login")
+                it.host.equals("login.microsoftonline.com", true) -> it.rawPath in setOf("/$QM_TENANT/saml2", "/$QM_TENANT/login", "/kmsi")
                 else -> false
             }
     } == true
@@ -180,10 +197,10 @@ internal object QmplusAuthResultCodec {
     }?.takeIf { it in setOf("saml", "login", "none") }
     private val reasons = setOf("READY", "AUTHENTICATED", "LOADING", "INVALID_NONCE", "STALE_DOCUMENT", "UNTRUSTED_CONTEXT",
         "UNSUPPORTED_PAGE", "ACCOUNT_CHOOSER", "ACCOUNT_HINT_REQUIRED", "FORM_UNTRUSTED", "INTERFERENCE", "KNOWN_FORM_ABSENT", "ACCOUNT_MISMATCH",
-        "USERNAME_NOT_SUBMITTED", "ALREADY_ATTEMPTED")
+        "USERNAME_NOT_SUBMITTED", "ALREADY_ATTEMPTED", "CAPTCHA_REQUIRED", "MFA_REQUIRED", "CURRENT_ACCOUNT_VERIFIED")
     fun code(encoded: String): String? = encoded.takeIf { it.length <= 96 }?.let {
         runCatching { JSONArray("[$it]").get(0) as? String }.getOrNull()
-    }?.takeIf { it in setOf("AUTH_INSTALLED", "AUTH_CONFLICT", "ACCOUNT_SELECTED", "USERNAME_SUBMITTED", "PASSWORD_SUBMITTED", "MANUAL_REQUIRED", "REJECTED", "STALE_DOCUMENT") }
+    }?.takeIf { it in setOf("AUTH_INSTALLED", "AUTH_CONFLICT", "ACCOUNT_SELECTED", "USERNAME_SUBMITTED", "PASSWORD_SUBMITTED", "CONTINUE_SUBMITTED", "MANUAL_REQUIRED", "REJECTED", "STALE_DOCUMENT") }
     fun observation(encoded: String, nonce: String): QmplusAuthObservation? = encoded.takeIf { it.length <= 1024 }?.let {
         runCatching {
             val json = JSONObject(it)
@@ -193,7 +210,8 @@ internal object QmplusAuthResultCodec {
             val document = json.get("document") as? String ?: error("Invalid document.")
             val match = json.get("accountMatch") as? Boolean ?: error("Invalid match.")
             val reason = json.get("reason") as? String ?: error("Invalid reason.")
-            require(stage in setOf("authenticated", "account", "username", "password", "loading", "manual") && document == nonce && reason in reasons)
+            require(stage in setOf("authenticated", "account", "username", "password", "continue", "loading", "manual", "challenge") && document == nonce && reason in reasons)
+            require((stage == "challenge") == (reason in setOf("CAPTCHA_REQUIRED", "MFA_REQUIRED")))
             QmplusAuthObservation(stage, document, match, reason)
         }.getOrNull()
     }
@@ -216,6 +234,9 @@ internal class QmplusAuthFlow(
     private val featureEnabled: () -> Boolean = { true },
     private val pageScript: String = QmplusLoginPagePolicy.UNKNOWN_PAGE_SCRIPT,
     private val pageObserved: (QmplusPageKind) -> Unit = {},
+    private val manualContinuation: () -> Unit = {},
+    private val verificationRequired: () -> Unit = reveal,
+    private val verificationFinished: () -> Unit = {},
 ) {
     private val gate = QmplusLoginAutomationGate()
     private var url: String? = null
@@ -230,14 +251,16 @@ internal class QmplusAuthFlow(
     private var lastSubmittedStage: String? = null
     private var postSubmitChecks = 0
     private var initialLayoutChecks = 0
+    private var waitingForVerification = false
 
     fun begin() {
-        if (!checkFeature() || manual || cancelDeadline != null) return
+        if (!checkFeature() || manual || waitingForVerification || cancelDeadline != null) return
         val weak = WeakReference(this)
         cancelDeadline = scheduler.schedule(25_000) { weak.get()?.manualRequired() }
     }
     fun pageStarted(value: String) {
         if (!checkFeature()) return
+        if (waitingForVerification) { waitingForVerification = false; verificationFinished() }
         cancelPoll?.invoke(); cancelPoll = null
         gate.beginDocument(); url = value; nonce = UUID.randomUUID().toString()
         accountHint = null; installed = false; busy = false; lastSubmittedStage = null; postSubmitChecks = 0; initialLayoutChecks = 0
@@ -253,12 +276,18 @@ internal class QmplusAuthFlow(
         if (!QmplusLoginPagePolicy.isMicrosoftPage(value)) { manualRequired(); return }
         if (!installed) install(document, value) else inspect(document, value)
     }
-    fun manualRequired() {
+    fun manualRequired(challenge: Boolean = false) {
         if (closed || manual) return
-        manual = true; busy = false; accountHint = null
+        if (challenge) {
+            cancelDeadline?.invoke(); cancelDeadline = null
+            if (!waitingForVerification) { waitingForVerification = true; reportPhase("challenge"); verificationRequired() }
+            return
+        }
+        manual = true; busy = false; accountHint = null; waitingForVerification = false
         gate.manualInteractionRequired(); cancelPoll?.invoke(); cancelPoll = null
         cancelDeadline?.invoke(); cancelDeadline = null
-        reportPhase("manual"); reveal()
+        reportPhase("manual")
+        if (!savedOptIn) reveal() else manualContinuation()
     }
     fun suspend() {
         if (closed) return
@@ -386,17 +415,26 @@ internal class QmplusAuthFlow(
             val account = accountHint ?: run { manualRequired(); return@authorized }
             busy = true; reportPhase("inspecting")
             val weak = WeakReference(this)
-            evaluate(document, value, guarded(value, "WTSQmAuth.inspect(${JSONObject.quote(nonce)}, ${JSONObject.quote(account)})")) { encoded ->
+            evaluate(document, value, guarded(value, "WTSQmAuth.inspect(${JSONObject.quote(nonce)}, ${JSONObject.quote(account)}, ${gate.identityAcknowledged(document)})")) { encoded ->
                 val owner = weak.get() ?: return@evaluate
                 if (!owner.checkedCurrent(document, value) || owner.manual) return@evaluate
                 owner.busy = false
                 val state = QmplusAuthResultCodec.observation(encoded, owner.nonce)
                 if (state == null) { owner.manualRequired(); return@evaluate }
+                if (state.stage != "challenge" && owner.waitingForVerification) {
+                    owner.waitingForVerification = false; owner.verificationFinished(); owner.begin()
+                }
                 when {
+                    state.stage == "challenge" -> {
+                        owner.manualRequired(challenge = true); owner.schedulePoll(document, value, 750)
+                    }
                     state.stage == "loading" && state.reason == "LOADING" -> owner.schedulePoll(document, value)
                     state.stage == "manual" && state.reason in setOf("FORM_UNTRUSTED", "KNOWN_FORM_ABSENT") &&
-                        !owner.gate.hasAttemptedCredentialSubmission() && owner.initialLayoutChecks++ < 8 ->
+                        owner.lastSubmittedStage == null && owner.initialLayoutChecks++ < 8 ->
                         owner.schedulePoll(document, value)
+                    state.stage == "manual" && owner.lastSubmittedStage in setOf("password", "continue") &&
+                        state.reason in setOf("INTERFERENCE", "FORM_UNTRUSTED", "KNOWN_FORM_ABSENT") &&
+                        owner.postSubmitChecks++ < 12 -> owner.schedulePoll(document, value)
                     state.reason == "ALREADY_ATTEMPTED" && owner.lastSubmittedStage != null && owner.postSubmitChecks++ < 12 ->
                         owner.schedulePoll(document, value)
                     state.stage == "manual" && state.reason == "ACCOUNT_CHOOSER" && owner.gate.accountSelected(document) &&
@@ -407,6 +445,11 @@ internal class QmplusAuthFlow(
                     state.stage == "account" && state.reason == "READY" && state.accountMatch -> owner.submit(document, value, state)
                     state.stage == "username" && state.reason == "READY" -> owner.submit(document, value, state)
                     state.stage == "password" && state.reason == "READY" && state.accountMatch -> owner.submit(document, value, state)
+                    state.stage == "password" && state.reason == "CURRENT_ACCOUNT_VERIFIED" && state.accountMatch &&
+                        owner.gate.acknowledgeCurrentAccount(document, true) -> owner.submit(document, value, state)
+                    state.stage == "continue" && state.reason == "READY" && state.accountMatch -> owner.submit(document, value, state)
+                    state.stage == "continue" && state.reason == "CURRENT_ACCOUNT_VERIFIED" && state.accountMatch &&
+                        owner.gate.acknowledgeCurrentAccount(document, true) -> owner.submit(document, value, state)
                     else -> owner.manualRequired()
                 }
             }
@@ -414,6 +457,9 @@ internal class QmplusAuthFlow(
     }
     private fun submit(document: Long, value: String, state: QmplusAuthObservation) {
         authorized(document, value) {
+            if (runCatching { URI(value).rawPath == "/kmsi" }.getOrDefault(false) && state.stage != "continue") {
+                manualRequired(); return@authorized
+            }
             if (!gate.claimFill(document, state.stage, true, state.accountMatch)) { manualRequired(); return@authorized }
             if (state.stage == "account") {
                 busy = true
@@ -427,7 +473,7 @@ internal class QmplusAuthFlow(
                     }
                     owner.executeSubmit(document, value, state.stage, account, null)
                 }
-            } else if (state.stage == "username") executeSubmit(document, value, state.stage, accountHint.orEmpty(), null)
+            } else if (state.stage in setOf("username", "continue")) executeSubmit(document, value, state.stage, accountHint.orEmpty(), null)
             else {
                 busy = true
                 val weak = WeakReference(this)
@@ -449,6 +495,7 @@ internal class QmplusAuthFlow(
         if (!checkedCurrent(document, value) || manual) return
         val options = JSONObject().put("document", nonce).put("stage", stage).put("account", account)
         if (stage == "password") options.put("password", String(checkNotNull(password)))
+        if (stage in setOf("password", "continue")) options.put("identityAcknowledged", gate.identityAcknowledged(document))
         busy = true
         val weak = WeakReference(this)
         val arguments = options.toString().replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
@@ -458,14 +505,15 @@ internal class QmplusAuthFlow(
             owner.busy = false
             if (!owner.gate.submitted(document, stage, QmplusAuthResultCodec.code(encoded).orEmpty())) { owner.manualRequired(); return@evaluate }
             owner.lastSubmittedStage = stage; owner.postSubmitChecks = 0
-            owner.reportPhase(when (stage) { "account" -> "account_selected"; "username" -> "username_submitted"; else -> "password_submitted" })
+            owner.reportPhase(when (stage) { "account" -> "account_selected"; "username" -> "username_submitted";
+                "continue" -> "continue_submitted"; else -> "password_submitted" })
             owner.schedulePoll(document, value)
         }
     }
-    private fun schedulePoll(document: Long, value: String) {
+    private fun schedulePoll(document: Long, value: String, delayMillis: Long = 350) {
         cancelPoll?.invoke()
         val weak = WeakReference(this)
-        cancelPoll = scheduler.schedule(350) {
+        cancelPoll = scheduler.schedule(delayMillis) {
             val owner = weak.get() ?: return@schedule
             owner.cancelPoll = null
             if (owner.checkedCurrent(document, value) && !owner.busy) owner.pageReady(value)

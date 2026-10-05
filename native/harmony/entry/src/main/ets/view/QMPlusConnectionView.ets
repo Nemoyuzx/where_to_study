@@ -24,7 +24,7 @@ export class QMPlusAuthNavigationPolicy {
   }
   static isOfficialQMPage(url: string): boolean { return /^https:\/\/qmplus\.qmul\.ac\.uk\//.test(url); }
   private static readonly microsoftPage: RegExp =
-    /^https:\/\/login\.microsoftonline\.com\/569df091-b013-40e3-86ee-bd9cb9e25814\/(?:saml2|login)(?:[?#][^\s]*)?$/;
+    /^https:\/\/login\.microsoftonline\.com\/(?:569df091-b013-40e3-86ee-bd9cb9e25814\/(?:saml2|login)|kmsi)(?:\?[^\s#]*)?$/;
 
   static isKnownMicrosoftPage(url: string): boolean {
     return QMPlusAuthNavigationPolicy.microsoftPage.test(url);
@@ -38,12 +38,16 @@ export class QMPlusAuthNavigationPolicy {
 }
 
 // One native ledger belongs to one presentation. A navigation retires the
-// same-document ACK, never the once-only username/password claims.
+// document callbacks, while every credential claim remains whole-connection once.
 export class QMPlusAuthAttemptLedger {
   private active: boolean = false;
   private usernameClaimed: boolean = false;
   private passwordClaimed: boolean = false;
   private accountClaimed: boolean = false;
+  private continueClaimed: boolean = false;
+  private attemptedCredentials: boolean = false;
+  private acknowledgedIdentity: boolean = false;
+  private documentNonce: string = '';
   private claimedAccountDocument: string = '';
   private selectedAccountDocument: string = '';
   private claimedUsernameDocument: string = '';
@@ -54,6 +58,10 @@ export class QMPlusAuthAttemptLedger {
     this.usernameClaimed = false;
     this.passwordClaimed = false;
     this.accountClaimed = false;
+    this.continueClaimed = false;
+    this.attemptedCredentials = false;
+    this.acknowledgedIdentity = false;
+    this.documentNonce = '';
     this.claimedUsernameDocument = '';
     this.submittedUsernameDocument = '';
     this.claimedAccountDocument = '';
@@ -62,10 +70,12 @@ export class QMPlusAuthAttemptLedger {
 
   isActive(): boolean { return this.active; }
   passwordAttempted(): boolean { return this.passwordClaimed; }
+  continueAttempted(): boolean { return this.continueClaimed; }
   accountAttempted(): boolean { return this.accountClaimed; }
-  credentialsAttempted(): boolean { return this.accountClaimed || this.usernameClaimed || this.passwordClaimed; }
+  credentialsAttempted(): boolean { return this.attemptedCredentials || this.passwordClaimed || this.continueClaimed; }
 
-  beginDocument(): void {
+  beginDocument(document: string = ''): void {
+    this.documentNonce = document;
     this.claimedUsernameDocument = '';
     this.submittedUsernameDocument = '';
     this.claimedAccountDocument = '';
@@ -75,9 +85,11 @@ export class QMPlusAuthAttemptLedger {
   stop(): void { this.active = false; this.beginDocument(); }
 
   claimAccount(document: string, accountMatch: boolean): boolean {
-    if (!this.active || this.accountClaimed || this.usernameClaimed || this.passwordClaimed ||
+    if (!this.active || this.accountClaimed || this.usernameClaimed || this.passwordClaimed || this.continueClaimed ||
       !accountMatch || !/^[A-Za-z0-9_-]{8,64}$/.test(document)) { return false; }
     this.accountClaimed = true;
+    this.documentNonce = document;
+    this.attemptedCredentials = true;
     this.claimedAccountDocument = document;
     return true;
   }
@@ -85,6 +97,7 @@ export class QMPlusAuthAttemptLedger {
   recordAccountSelection(document: string, code: string): boolean {
     if (!this.active || !this.accountClaimed || this.claimedAccountDocument !== document || code !== 'ACCOUNT_SELECTED') { return false; }
     this.selectedAccountDocument = document;
+    this.acknowledgedIdentity = true;
     return true;
   }
 
@@ -93,12 +106,22 @@ export class QMPlusAuthAttemptLedger {
   }
 
   identityAcknowledged(document: string): boolean {
-    return this.usernameSubmitted(document) || this.accountSelected(document);
+    return this.active && this.documentNonce === document && /^[A-Za-z0-9_-]{8,64}$/.test(document) && this.acknowledgedIdentity;
+  }
+
+  acknowledgeCurrentAccount(document: string, accountMatch: boolean): boolean {
+    if (!this.active || this.documentNonce !== document || this.passwordClaimed || this.continueClaimed || !accountMatch ||
+      !/^[A-Za-z0-9_-]{8,64}$/.test(document)) { return false; }
+    this.acknowledgedIdentity = true;
+    return true;
   }
 
   claimUsername(document: string): boolean {
-    if (!this.active || this.usernameClaimed || this.passwordClaimed || !/^[A-Za-z0-9_-]{8,64}$/.test(document)) { return false; }
+    if (!this.active || this.usernameClaimed || this.passwordClaimed || this.continueClaimed ||
+      !/^[A-Za-z0-9_-]{8,64}$/.test(document)) { return false; }
     this.usernameClaimed = true;
+    this.documentNonce = document;
+    this.attemptedCredentials = true;
     this.claimedUsernameDocument = document;
     return true;
   }
@@ -107,6 +130,7 @@ export class QMPlusAuthAttemptLedger {
     if (!this.active || !this.usernameClaimed || this.claimedUsernameDocument !== document ||
       code !== 'USERNAME_SUBMITTED') { return false; }
     this.submittedUsernameDocument = document;
+    this.acknowledgedIdentity = true;
     return true;
   }
 
@@ -115,8 +139,14 @@ export class QMPlusAuthAttemptLedger {
   }
 
   claimPassword(document: string, accountMatch: boolean): boolean {
-    if (!this.active || this.passwordClaimed || !accountMatch || !this.identityAcknowledged(document)) { return false; }
+    if (!this.active || this.passwordClaimed || this.continueClaimed || !accountMatch || !this.identityAcknowledged(document)) { return false; }
     this.passwordClaimed = true;
+    return true;
+  }
+
+  claimContinue(document: string, accountMatch: boolean): boolean {
+    if (!this.active || this.continueClaimed || !accountMatch || !this.identityAcknowledged(document)) { return false; }
+    this.continueClaimed = true;
     return true;
   }
 }
@@ -141,11 +171,12 @@ class QMPlusAuthInspection {
       if (Object.keys(item).length !== 5 || item['v'] !== 1 || item['document'] !== nonce ||
         typeof item['stage'] !== 'string' || typeof item['reason'] !== 'string' ||
         typeof item['accountMatch'] !== 'boolean' ||
-        !['authenticated', 'account', 'username', 'password', 'manual', 'unknown', 'loading'].includes(item['stage'] as string) ||
+        !['authenticated', 'account', 'username', 'password', 'continue', 'challenge', 'manual', 'unknown', 'loading'].includes(item['stage'] as string) ||
         !['READY', 'AUTHENTICATED', 'LOADING', 'INVALID_NONCE', 'STALE_DOCUMENT',
           'UNTRUSTED_CONTEXT', 'UNSUPPORTED_PAGE', 'ACCOUNT_CHOOSER', 'ACCOUNT_HINT_REQUIRED', 'FORM_UNTRUSTED',
           'INTERFERENCE', 'KNOWN_FORM_ABSENT', 'ACCOUNT_MISMATCH', 'USERNAME_NOT_SUBMITTED',
-          'ALREADY_ATTEMPTED'].includes(item['reason'] as string)) { return null; }
+          'ALREADY_ATTEMPTED', 'MFA_REQUIRED', 'CAPTCHA_REQUIRED', 'CURRENT_ACCOUNT_VERIFIED'].includes(item['reason'] as string)) { return null; }
+      if ((item['stage'] === 'challenge') !== ['MFA_REQUIRED', 'CAPTCHA_REQUIRED'].includes(item['reason'] as string)) { return null; }
       return new QMPlusAuthInspection(item['stage'] as string, item['reason'] as string,
         item['accountMatch'] as boolean);
     } catch (e) { return null; }
@@ -175,28 +206,35 @@ class QMPlusAuthPasswordRequest {
   readonly stage: string = 'password';
   readonly account: string;
   readonly password: string;
+  readonly identityAcknowledged: boolean;
 
-  constructor(nonce: string, account: string, password: string) {
+  constructor(nonce: string, account: string, password: string, identityAcknowledged: boolean) {
     this.document = nonce;
     this.account = account;
     this.password = password;
+    this.identityAcknowledged = identityAcknowledged;
+  }
+}
+
+class QMPlusAuthContinueRequest {
+  readonly document: string;
+  readonly stage: string = 'continue';
+  readonly account: string;
+  readonly identityAcknowledged: boolean;
+  constructor(nonce: string, account: string, identityAcknowledged: boolean) {
+    this.document = nonce; this.account = account; this.identityAcknowledged = identityAcknowledged;
   }
 }
 
 // 仅官方 HTTPS 网页在本应用独立的 incognito ArkWeb 中登录。Microsoft SSO/MFA
 // 页面可以正常导航；本机明确授权、主文档与官方表单双重验证后仅提交普通
-// Next/Sign in 各一次；唯一精确匹配的已保存账号可选一次。MFA/风险/条款
-// 及未知账号选择仍由用户操作；不注册 JS proxy。
+// Next/Sign in/保持登录各一次；唯一精确匹配的已保存账号可选一次。
+// 仅验证码/MFA自动呈现，未知页面暂停并保留手动继续；不注册 JS proxy。
 @ComponentV2
 export struct QMPlusConnectionView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: QMPlusSession = new QMPlusSession();
   @Local authStatus: string = '';
-  @Monitor('authStatus')
-  authStatusChanged(): void {
-    if (this.ownsLoginPresentation() && this.authStatus.length > 0 && !this.authStatus.startsWith('账号已提交') &&
-      !this.authStatus.startsWith('密码已提交')) { this.session.presentLogin(); }
-  }
   private readonly controller: webview.WebviewController = new webview.WebviewController();
   private mounted: boolean = false;
   private authPresentationRevision: number = 0;
@@ -264,6 +302,7 @@ export struct QMPlusConnectionView {
 
   private retireOfficialWeb(): void {
     this.authPresentationRevision++;
+    this.authLedger.stop();
     this.authAuthorization = null;
     this.cancelAuthDelay();
     this.cancelWebFlight();
@@ -432,17 +471,17 @@ export struct QMPlusConnectionView {
     this.authAuthorization = null;
     this.invalidateAuth();
     this.authStatus = this.manualAuthStatus(reason);
-    this.session.presentLogin();
+    this.session.deferManualLogin();
   }
 
-  private async waitForAuthStep(): Promise<void> {
+  private async waitForAuthStep(delayMillis: number = 250): Promise<void> {
     await new Promise<void>((resolve: () => void): void => {
       this.resolveAuthDelay = resolve;
       this.authTimer = setTimeout((): void => {
         this.authTimer = -1;
         this.resolveAuthDelay = null;
         resolve();
-      }, 250);
+      }, delayMillis);
     });
   }
 
@@ -519,7 +558,7 @@ export struct QMPlusConnectionView {
 
   private authContextGuard(): string {
     return 'location.origin==="https://login.microsoftonline.com"&&window.top===window&&' +
-      '/^\\/569df091-b013-40e3-86ee-bd9cb9e25814\\/(?:saml2|login)$/.test(location.pathname)';
+      '/^\\/(?:569df091-b013-40e3-86ee-bd9cb9e25814\\/(?:saml2|login)|kmsi)$/.test(location.pathname)';
   }
 
   private decodeAuthReply(raw: string | null): string {
@@ -543,7 +582,7 @@ export struct QMPlusConnectionView {
     const script: string = '(function(){if(!(' + this.authContextGuard() +
       ')||location.href!==' + JSON.stringify(url) + ')return "{}";if(typeof globalThis.WTSQmAuth!=="object")return "{}";' +
       'return JSON.stringify(globalThis.WTSQmAuth.inspect(' + JSON.stringify(nonce) + ',' +
-      JSON.stringify(accountHint) + '));})()';
+      JSON.stringify(accountHint) + ',' + JSON.stringify(this.authLedger.identityAcknowledged(nonce)) + '));})()';
     const raw: string = this.decodeAuthReply(await this.controller.runJavaScript(script));
     return this.sameAuthPage(owner, page, url, nonce) ? QMPlusAuthInspection.parse(raw, nonce) : null;
   }
@@ -551,26 +590,30 @@ export struct QMPlusConnectionView {
   private async fillAuth(owner: number, page: number, url: string, nonce: string,
     account: string, password: string | null, stage: string = 'username'): Promise<string> {
     if (!this.sameAuthPage(owner, page, url, nonce)) { return 'MANUAL_REQUIRED'; }
-    if (stage === 'account' && password !== null) { return 'MANUAL_REQUIRED'; }
+    if (/^https:\/\/login\.microsoftonline\.com\/kmsi(?:\?|$)/.test(url) && stage !== 'continue') { return 'MANUAL_REQUIRED'; }
+    if ((stage === 'account' || stage === 'continue') && password !== null) { return 'MANUAL_REQUIRED'; }
     // 用户名阶段的 JSON 对象不含 password 字段；密码只在 fresh ASSET 授权与
     // 同document accountMatch后构造一次性脚本，绝不通过 JS proxy 暴露。
-    const request: QMPlusAuthUsernameRequest | QMPlusAuthPasswordRequest | QMPlusAuthAccountRequest =
-      stage === 'account' ? new QMPlusAuthAccountRequest(nonce, account) : password === null ?
-        new QMPlusAuthUsernameRequest(nonce, account) : new QMPlusAuthPasswordRequest(nonce, account, password);
+    const request: QMPlusAuthUsernameRequest | QMPlusAuthPasswordRequest | QMPlusAuthAccountRequest | QMPlusAuthContinueRequest =
+      stage === 'continue' ? new QMPlusAuthContinueRequest(nonce, account, this.authLedger.identityAcknowledged(nonce)) :
+        stage === 'account' ? new QMPlusAuthAccountRequest(nonce, account) : password === null ?
+          new QMPlusAuthUsernameRequest(nonce, account) :
+          new QMPlusAuthPasswordRequest(nonce, account, password, this.authLedger.identityAcknowledged(nonce));
     const script: string = '(function(){if(!(' + this.authContextGuard() +
       ')||location.href!==' + JSON.stringify(url) + ')return "MANUAL_REQUIRED";if(typeof globalThis.WTSQmAuth!=="object")return "MANUAL_REQUIRED";' +
       'return globalThis.WTSQmAuth.fillAndSubmit(' + JSON.stringify(request) + ');})()';
     // ArkWeb 异常可能携带脚本文本；调用方只呈现固定本地文案，不记录异常。
     const code: string = this.decodeAuthReply(await this.controller.runJavaScript(script));
     return this.sameAuthPage(owner, page, url, nonce) &&
-      ['ACCOUNT_SELECTED', 'USERNAME_SUBMITTED', 'PASSWORD_SUBMITTED', 'MANUAL_REQUIRED', 'REJECTED',
+      ['ACCOUNT_SELECTED', 'USERNAME_SUBMITTED', 'PASSWORD_SUBMITTED', 'CONTINUE_SUBMITTED', 'MANUAL_REQUIRED', 'REJECTED',
         'STALE_DOCUMENT'].includes(code) ? code : 'MANUAL_REQUIRED';
   }
 
   private manualAuthStatus(reason: string): string {
+    if (reason === 'MFA_REQUIRED' || reason === 'CAPTCHA_REQUIRED') { return '请在官方窗口完成验证码或 MFA，完成后将继续同步。'; }
     if (reason === 'ACCOUNT_CHOOSER') { return '请在官方网页手动选择登录账户。'; }
     if (reason === 'ACCOUNT_MISMATCH') { return '当前官方账号与保存的账号不一致，请手动登录。'; }
-    return '此官方登录步骤需要您手动完成；应用不会重试或处理 MFA、验证码及确认页面。';
+    return '自动登录已暂停，可选择“手动继续”查看官方页面。';
   }
 
   private async runAuth(owner: number, page: number, url: string, nonce: string,
@@ -598,21 +641,36 @@ export struct QMPlusConnectionView {
       let afterUsername: boolean = this.authLedger.usernameSubmitted(nonce);
       let afterAccount: boolean = this.authLedger.accountSelected(nonce);
       let afterPassword: boolean = this.authLedger.passwordAttempted();
+      let passwordSubmittedHere: boolean = false;
+      let afterContinue: boolean = false;
       let transitionDeadline: number = 0;
-      const deadline: number = Date.now() + 4500;
+      let deadline: number = Date.now() + 4500;
       while (this.sameAuthPage(owner, page, url, nonce) && Date.now() < deadline) {
         const state: QMPlusAuthInspection | null = await this.inspectAuth(owner, page, url, nonce,
           account ?? '');
         if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
         if (state === null) { this.requireManualAuth(''); return; }
+        if (state.stage === 'challenge') {
+          this.authStatus = this.manualAuthStatus(state.reason);
+          this.session.presentVerification();
+          await this.waitForAuthStep(750);
+          deadline = Date.now() + 4500;
+          continue;
+        }
+        this.session.resumeAutomaticLogin();
+        if (this.authLedger.continueAttempted() && ['account', 'username', 'password'].includes(state.stage)) {
+          this.requireManualAuth(''); return;
+        }
+        if (/^https:\/\/login\.microsoftonline\.com\/kmsi(?:\?|$)/.test(url) &&
+          ['account', 'username', 'password'].includes(state.stage)) { this.requireManualAuth(''); return; }
         if (state.stage === 'loading') { await this.waitForAuthStep(); continue; }
-        if (!afterUsername && !afterAccount && !afterPassword && !this.authLedger.accountAttempted() && state.stage === 'manual' &&
+        if (!afterUsername && !afterAccount && !afterContinue && state.stage === 'manual' &&
           ['KNOWN_FORM_ABSENT', 'FORM_UNTRUSTED'].includes(state.reason)) {
           // First layout can trail onPageEnd. Waiting never submits a credential.
           await this.waitForAuthStep();
           continue;
         }
-        if (account === null && (state.stage === 'username' || state.reason === 'ACCOUNT_MISMATCH' ||
+        if (account === null && (['username', 'password', 'continue'].includes(state.stage) || state.reason === 'ACCOUNT_MISMATCH' ||
           (state.stage === 'account' && state.reason === 'ACCOUNT_HINT_REQUIRED' && !state.accountMatch))) {
           account = await this.session.authorizedAccountHint(authorization);
           if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
@@ -640,12 +698,13 @@ export struct QMPlusConnectionView {
           if (!this.authLedger.recordUsernameSubmission(nonce, code)) { this.requireManualAuth(''); return; }
           afterUsername = true;
           transitionDeadline = Date.now() + 2000;
-          this.authStatus = '账号已提交到官方页面；如出现其他验证，请手动完成。';
+          this.authStatus = '';
           await this.waitForAuthStep();
           continue;
         }
-        if (account !== null && (afterUsername || afterAccount) && state.stage === 'password' &&
-          !afterPassword && state.accountMatch && state.reason === 'READY' && this.authLedger.identityAcknowledged(nonce)) {
+        if (account !== null && state.stage === 'password' && !afterPassword && state.accountMatch &&
+          (state.reason === 'READY' || (state.reason === 'CURRENT_ACCOUNT_VERIFIED' &&
+            this.authLedger.acknowledgeCurrentAccount(nonce, state.accountMatch))) && this.authLedger.identityAcknowledged(nonce)) {
           const password: string | null = await this.session.authorizedPasswordFor(account, authorization);
           if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
           if (password === null || !this.authLedger.claimPassword(nonce, state.accountMatch)) {
@@ -654,20 +713,39 @@ export struct QMPlusConnectionView {
           const code: string = await this.fillAuth(owner, page, url, nonce, account, password);
           if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
           if (code === 'PASSWORD_SUBMITTED') {
-            this.authStatus = '密码已提交到官方页面；MFA 与其他确认请由您手动完成。';
+            this.authStatus = '';
             afterPassword = true;
+            passwordSubmittedHere = true;
             transitionDeadline = Date.now() + 2000;
             await this.waitForAuthStep();
             continue;
           } else { this.requireManualAuth(''); }
           return;
         }
+        if (account !== null && state.stage === 'continue' && state.accountMatch &&
+          (state.reason === 'READY' || (state.reason === 'CURRENT_ACCOUNT_VERIFIED' &&
+            this.authLedger.acknowledgeCurrentAccount(nonce, state.accountMatch))) &&
+          this.authLedger.claimContinue(nonce, state.accountMatch)) {
+          const code: string = await this.fillAuth(owner, page, url, nonce, account, null, 'continue');
+          if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
+          if (code !== 'CONTINUE_SUBMITTED') { this.requireManualAuth(''); return; }
+          afterContinue = true;
+          transitionDeadline = Date.now() + 2000;
+          this.authStatus = '';
+          await this.waitForAuthStep();
+          continue;
+        }
         if (afterAccount && this.authLedger.accountSelected(nonce) && !this.authLedger.passwordAttempted() &&
           state.stage === 'manual' && state.reason === 'ACCOUNT_CHOOSER' && Date.now() < transitionDeadline) {
           await this.waitForAuthStep();
           continue;
         }
-        if ((afterUsername || afterAccount) && Date.now() < transitionDeadline &&
+        if ((passwordSubmittedHere || afterContinue) && state.stage === 'manual' && state.reason === 'INTERFERENCE' &&
+          Date.now() < transitionDeadline) {
+          await this.waitForAuthStep();
+          continue;
+        }
+        if ((afterUsername || afterAccount || afterPassword || afterContinue) && Date.now() < transitionDeadline &&
           ['ALREADY_ATTEMPTED', 'KNOWN_FORM_ABSENT', 'FORM_UNTRUSTED'].includes(state.reason)) {
           await this.waitForAuthStep();
           continue;
@@ -703,12 +781,12 @@ export struct QMPlusConnectionView {
       if (authenticated !== 'authenticated') {
         this.session.errorCode = 'QM_LOGIN_REQUIRED';
         this.session.error = '请先在官方 QMplus 网页完成登录。';
-        this.session.presentLogin();
+        this.session.deferManualLogin();
         this.autoSyncPending = true;
         return;
       }
     } catch (e) {
-      if (this.sameOwnedPage(authOwner, page, url)) { this.session.presentLogin(); }
+      if (this.sameOwnedPage(authOwner, page, url)) { this.session.deferManualLogin(); }
       return;
     }
     const generation: number = this.session.beginSync();
@@ -763,6 +841,7 @@ export struct QMPlusConnectionView {
 
   private pageBegan(url: string): void {
     if (!this.ownsLoginPresentation()) { return; }
+    this.session.resumeAutomaticLogin();
     this.documentReadyURL = '';
     this.officialPageAuthenticated = false;
     if (this.loginOwner !== null) { this.session.noteOfficialPageLoading(this.loginOwner, true); }
@@ -784,7 +863,7 @@ export struct QMPlusConnectionView {
 
   private async maybeStartSAML(owner: number, page: number, url: string): Promise<void> {
     if (this.model.isSampleMode() || this.authSAMLStarted || !this.authLedger.isActive() || this.authLedger.credentialsAttempted()) {
-      this.session.presentLogin(); return;
+      this.session.deferManualLogin(); return;
     }
     // 冷启恢复匹配授权可能仍在ASSET/Preferences读取中；等待本机读取，
     // 不因页面先加载完就静默错过这一次用户主动连接。
@@ -832,11 +911,12 @@ export struct QMPlusConnectionView {
     }
     if (!this.model.isSampleMode() && this.session.autoFillEnabled &&
       QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url)) {
-      if (!this.authLedger.isActive()) { this.session.presentLogin(); return; }
+      if (!this.authLedger.isActive()) { this.session.deferManualLogin(); return; }
       if (this.authNonce.length > 0) { return; }
       try {
         const nonce: string = newQMPlusRecordID();
         this.authNonce = nonce;
+        this.authLedger.beginDocument(nonce);
         this.authURL = url;
         const owner: number = this.authPresentationRevision;
         const page: number = this.pageRevision;
@@ -865,7 +945,7 @@ export struct QMPlusConnectionView {
         this.dashboardRestored = true; this.controller.loadUrl(QMPlusURLPolicy.home); return;
       }
       if (kind !== 'authenticated') {
-        if (url !== QMPlusAuthNavigationPolicy.qmSAMLStart) { this.session.presentLogin(); }
+        if (url !== QMPlusAuthNavigationPolicy.qmSAMLStart) { this.session.deferManualLogin(); }
         return;
       }
       if (this.loginOwner !== null) {
@@ -878,7 +958,7 @@ export struct QMPlusConnectionView {
       } else if (this.autoSyncPending && QMPlusURLPolicy.isBusinessPage(url)) {
         this.autoSyncPending = false; await this.runSync();
       }
-    } catch (e) { if (this.sameOwnedPage(owner, page, url)) { this.session.presentLogin(); } }
+    } catch (e) { if (this.sameOwnedPage(owner, page, url)) { this.session.deferManualLogin(); } }
   }
 
   private close(): void {
@@ -901,7 +981,7 @@ export struct QMPlusConnectionView {
       this.controller.loadUrl(this.session.targetURL);
     } catch (e) {
       if (this.ownsLoginPresentation() && page === this.pageRevision && this.safeCurrentURL() === url) {
-        this.session.presentLogin();
+        this.session.deferManualLogin();
       }
     }
   }
@@ -944,7 +1024,7 @@ export struct QMPlusConnectionView {
         .padding({ left: 16, right: 16, bottom: 8 })
       if (this.session.autoFillEnabled) {
         Text(this.model.text(this.authStatus.length > 0 ? this.authStatus :
-          '仅在已核验的官方登录表单尝试自动填写；其它步骤请手动完成。'))
+          '已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。'))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')

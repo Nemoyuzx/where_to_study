@@ -55,6 +55,7 @@
 "仅删除本次课程？" = "Delete this occurrence?";
 "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" = "Only verified official sign-in pages may select the exact saved account and fill the username and password, with each step attempted at most once. Unmatched account choices, MFA, CAPTCHA, staying signed in, risk and terms confirmations still require your action.";
 "仅在当天有课时通知；课表更新或账号变更后会自动重排。" = "Notifications are sent only on days with classes and are rescheduled after schedule or account changes.";
+"仅自动处理已核验且账号匹配的官方登录步骤；验证码和 MFA 由您完成。" = "Only verified official sign-in steps for the matching account run automatically. You complete CAPTCHA and MFA.";
 "仅适用国院" = "International School only";
 "今天" = "Today";
 "今天可以自由安排" = "Your day is free";
@@ -78,6 +79,7 @@
 "作业来自教学云，与日历共享缓存；提交状态和截止时间以教学云为准。" = "Assignments share the calendar cache. Confirm submission status and deadlines in Teaching Cloud.";
 "使用个人课表排除已有课程" = "Exclude periods occupied by personal courses";
 "保存 QMplus 登录信息并在官方页面自动填写（可选）" = "Save QMplus sign-in details for official-page autofill (optional)";
+"保存后会在本机安全存储中保留独立 QMplus 登录资料。首次默认开启自动填写，也可在保存前关闭。" = "Your separate QMplus credentials are kept in secure storage on this device after saving. Autofill is selected initially and can be turned off before saving.";
 "保存学期设置" = "Save Semester";
 "保存并授权 QMplus 官方网页自动填写" = "Save and authorize official-page QMplus autofill";
 "保存并校验自定义源" = "Save and Validate Feed";
@@ -85,7 +87,9 @@
 "保存新的登录信息会清除现有 QMplus 会话与快照，避免复用其他身份。" = "Saving replacement sign-in details clears the existing QMplus session and snapshot to avoid reusing another identity.";
 "保存设置" = "Save Settings";
 "保存账号前请阅读并同意隐私政策。" = "Read and agree to the Privacy Policy before saving an account.";
+"保存选项首次默认开启；只有点击“保存”后，登录资料才会存入本机安全存储。" = "Saving is selected on first use. Your sign-in details enter secure storage on this device only after you choose “Save”.";
 "信息查询" = "Information Search";
+"允许官方登录页自动填写" = "Allow autofill on official sign-in pages";
 "全天" = "All day";
 "全天日程" = "All-day Events";
 "全部" = "All";
@@ -185,6 +189,7 @@
 "导航" = "Navigation";
 "小号" = "Small";
 "小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会应用到本机小组件。" = "Widgets show today's courses first, adding tomorrow's courses when space permits. Both days share the course limit, up to 6 in the large widget. Settings apply to widgets on this device.";
+"尚未保存 QMplus 登录资料。" = "No QMplus login details are saved.";
 "尚未授予通知权限，请重新开启提醒以申请权限" = "Notification permission has not been granted. Turn reminders off and back on to request access.";
 "尚未获取个人课表" = "Personal schedule has not been fetched";
 "展开日程" = "Expand schedule";
@@ -192,9 +197,12 @@
 "岁次" = "Year cycle";
 "已交 %d" = "Submitted %d";
 "已保存 QMplus 登录信息并授权官方网页自动填写" = "QMplus sign-in details are saved and official-page autofill is authorized";
+"已保存的密码不会回显。仅更新登录资料时需要重新填写。" = "Saved passwords are not displayed. Enter your details again only when updating them.";
+"已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。" = "Your saved account and password complete official sign-in automatically. Only CAPTCHA or MFA needs your action. Unknown pages pause so you can continue manually.";
 "已关闭 QMplus 自动填写并删除保存的登录信息" = "QMplus autofill is off and saved sign-in details have been deleted";
 "已关闭自动检测，将使用上方手动填写的学期信息。" = "Automatic detection is off. The semester information entered above will be used.";
 "已删除课程（本学期）" = "Deleted courses (this semester)";
+"已在本机安全保存 QMplus 登录资料。" = "QMplus login details are saved securely on this device.";
 "已安全保存，留空保持不变" = "Saved securely; leave blank to keep it";
 "已安排 %d 条课前提醒，重新打开应用时自动补充" = "%d before-class reminders scheduled; reopening the app adds upcoming reminders";
 "已安排未来 %d 个有课日的课程摘要" = "Course summaries scheduled for %d upcoming class days";
@@ -251,6 +259,7 @@
 "成绩获取失败，请检查账户或稍后重试。" = "Could not load grades. Check your account or try again later.";
 "成绩记录" = "Grade records";
 "截止时间" = "Due time";
+"手动继续" = "Continue manually";
 "打开 QMplus 官方登录页" = "Open the official QMplus login page";
 "打开主窗口" = "Open Main Window";
 "打开作业列表" = "Open assignment list";
@@ -452,6 +461,7 @@
 "用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。" = "Used for assignment deadlines, usually with your unified identity password. If unset, the academic password is used. Leave a saved separate password blank to keep it; save settings after changes.";
 "界面语言" = "Interface Language";
 "留空使用教务密码" = "Leave blank to use the academic password";
+"登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。" = "Sign-in and sync run in the background. The official window opens automatically only for CAPTCHA or MFA. Unrecognized pages pause for you to continue manually.";
 "登录后同步" = "Sync after login";
 "登录完成后会自动同步一次 EBU 课程与活动；失败时可手动重试。" = "After sign-in, EBU courses and activities sync once automatically. If it fails, you can retry manually.";
 "登录状态已过期，请刷新重试。" = "Your session expired. Refresh to try again.";
@@ -516,6 +526,7 @@
 "联动查询" = "Combined Search";
 "联系维护者" = "Contact the Maintainer";
 "自动检测当前学期" = "Detect current semester automatically";
+"自动登录已暂停，可选择“手动继续”查看官方页面。" = "Automatic sign-in paused. Choose “Continue manually” to view the official page.";
 "自定义" = "Custom";
 "自定义日程" = "Custom Schedule";
 "自定义日程 HTTPS 地址" = "Custom Schedule HTTPS URL";
@@ -552,6 +563,7 @@
 "请先在个人账户中保存教务账号和密码。" = "Save your academic account and password in Personal Account first.";
 "请先填写自定义日程 HTTPS 地址。" = "Enter a custom schedule HTTPS URL first.";
 "请先获取/刷新个人课表。" = "Fetch or refresh your personal schedule first.";
+"请在官方窗口完成验证码或 MFA，完成后将继续同步。" = "Complete CAPTCHA or MFA in the official window. Sync will continue afterward.";
 "请在官方网页完成 SSO 与 MFA。本应用不读取或保存微软密码。" = "Complete SSO and MFA on the official webpage. This app does not read or save your Microsoft password.";
 "请在官方网页完成 SSO 与 MFA；也可自愿保存独立的 QMplus 登录信息，用于官方网页自动填写。" = "Complete SSO and MFA on the official website. You can optionally save separate QMplus sign-in details for official-page autofill.";
 "请在官方网页完成 SSO 与 MFA；可选自动填写只用于已确认的官方登录页面。" = "Complete SSO and MFA on the official website. Optional autofill is limited to recognized official sign-in pages.";

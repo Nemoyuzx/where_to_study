@@ -58,8 +58,11 @@ export class QMPlusSession {
   @Trace officialWebProfileReady: boolean = false;
   @Trace isFeatureEnabled: boolean = true;
   // Mount the same ArkWeb with a real viewport during an authorized quiet flow.
-  // Presentation is separate from ownership; unknown/MFA pages reveal this owner.
+  // Presentation is separate from ownership; only verified challenges reveal automatically.
   @Trace loginPresented: boolean = false;
+  @Trace manualContinuationRequired: boolean = false;
+  private verificationPresented: boolean = false;
+  private automaticLoginPaused: boolean = false;
   @Trace loginForeground: boolean = true;
   @Trace explicitDetailRequest: boolean = false;
   @Trace targetURL: string = QMPlusURLPolicy.home;
@@ -478,7 +481,7 @@ export class QMPlusSession {
     this.officialWebProfileReady = prepared;
     if (!prepared) {
       this.setWebClearError();
-      this.presentLogin();
+      this.deferManualLogin();
     }
     return prepared;
   }
@@ -494,6 +497,11 @@ export class QMPlusSession {
       QMPlusSession.ownedWebClearPendingInProcess && !this.clearOwnedWebSession())) { return; }
     if (this.loginVisible) {
       if (!silentRefresh) { this.silentRefreshOwner = false; }
+      if (!silentRefresh && this.manualContinuationRequired) {
+        this.manualContinuationRequired = false;
+        this.presentLogin();
+        return;
+      }
       // Explicit Connect may upgrade a running quiet owner, but must not reveal
       // a loading landing or interrupt its SAML/MFA callback with another GET.
       if ((this.errorCode !== 'QM_ERROR_PAGE' && this.errorCode !== 'QM_WEB_CLEAR_PENDING') || this.officialPageLoading) {
@@ -516,6 +524,9 @@ export class QMPlusSession {
     this.explicitDetailRequest = this.targetURL !== QMPlusURLPolicy.home &&
       this.targetURL !== 'https://qmplus.qmul.ac.uk/my';
     this.loginVisible = true;
+    this.manualContinuationRequired = false;
+    this.verificationPresented = false;
+    this.automaticLoginPaused = false;
     this.silentRefreshOwner = silentRefresh;
     this.loginPresented = !silentRefresh && (this.explicitDetailRequest || !this.autoFillEnabled);
     if (!this.loginPresented) {
@@ -523,7 +534,7 @@ export class QMPlusSession {
       this.quietDeadlineTimer = setTimeout((): void => {
         this.quietDeadlineTimer = -1;
         if (this.loginVisible && revision === this.loginPresentationRevision && !this.syncing) {
-          this.presentLogin();
+          this.deferManualLogin();
         }
       }, 25000);
     }
@@ -540,7 +551,7 @@ export class QMPlusSession {
     this.cancelSync();
     this.errorCode = 'QM_ERROR_PAGE';
     this.error = 'QMplus 同步失败。';
-    this.presentLogin();
+    this.deferManualLogin();
   }
 
   closeLogin(): void {
@@ -551,7 +562,10 @@ export class QMPlusSession {
     this.cancelSync();
     this.loginVisible = false;
     this.loginPresented = false;
+    this.manualContinuationRequired = false;
     this.silentRefreshOwner = false;
+    this.verificationPresented = false;
+    this.automaticLoginPaused = false;
     this.officialWebProfileReady = this.webProfile === null;
     this.targetURL = QMPlusURLPolicy.home;
   }
@@ -611,7 +625,7 @@ export class QMPlusSession {
     }
     this.syncing = false;
     if (this.error.length === 0 && !this.explicitDetailRequest) { this.closeLogin(); }
-    else if (this.error.length > 0) { this.presentLogin(); }
+    else if (this.error.length > 0) { this.deferManualLogin(); }
   }
 
   failSync(generation: number, message: string): void {
@@ -620,7 +634,7 @@ export class QMPlusSession {
     this.errorCode = '';
     // 只呈现本地固定文案，避免未来调用者把 ArkWeb 异常、URL 或令牌原文传到 UI。
     this.error = message === 'QMplus 同步已超时，请稍后重试。' ? message : 'QMplus 同步失败。';
-    this.presentLogin();
+    this.deferManualLogin();
   }
 
   cancelSync(): void {
@@ -720,7 +734,7 @@ export class QMPlusSession {
   presentLogin(): void {
     if (!this.loginVisible) { return; }
     if (this.silentRefreshOwner) {
-      // Silent startup has no authority to open an MFA/error/unknown window.
+      // Ordinary silent fallback cannot open an error/unknown window.
       // Retire this owner; a later explicit connection uses a fresh fixed GET.
       if (this.error.length === 0) { this.error = '请先在官方 QMplus 网页完成登录。'; }
       if (this.errorCode.length === 0) { this.errorCode = 'QM_LOGIN_REQUIRED'; }
@@ -728,7 +742,43 @@ export class QMPlusSession {
       return;
     }
     this.cancelQuietDeadline();
+    this.manualContinuationRequired = false;
     this.loginPresented = true;
+  }
+
+  presentVerification(): void {
+    if (!this.loginVisible || !this.loginForeground || this.automaticLoginPaused) { return; }
+    this.silentRefreshOwner = false;
+    this.verificationPresented = true;
+    this.presentLogin();
+  }
+
+  resumeAutomaticLogin(): void {
+    if (!this.loginVisible || !this.loginForeground || this.automaticLoginPaused || !this.verificationPresented) { return; }
+    this.verificationPresented = false;
+    if (!this.explicitDetailRequest) { this.loginPresented = false; }
+    this.cancelQuietDeadline();
+    const revision: number = this.loginPresentationRevision;
+    this.quietDeadlineTimer = setTimeout((): void => {
+      this.quietDeadlineTimer = -1;
+      if (this.loginVisible && revision === this.loginPresentationRevision && !this.syncing) { this.deferManualLogin(); }
+    }, 25000);
+  }
+
+  deferManualLogin(): void {
+    if (!this.loginVisible || this.automaticLoginPaused) { return; }
+    this.automaticLoginPaused = true;
+    this.silentRefreshOwner = false;
+    this.verificationPresented = false;
+    this.cancelQuietDeadline();
+    this.cancelSync();
+    // Suspend this document without dropping the hook that closes the same
+    // owned WebView on later logout, feature revocation, or view teardown.
+    const retire: (() => void) | null = this.retireOwnedWeb;
+    if (retire !== null) { retire(); }
+    this.manualContinuationRequired = !this.loginPresented;
+    if (this.error.length === 0) { this.error = '自动登录已暂停，可选择“手动继续”查看官方页面。'; }
+    if (this.errorCode.length === 0) { this.errorCode = 'QM_LOGIN_REQUIRED'; }
   }
 
   cancelQuietLoginOnBackground(): void {

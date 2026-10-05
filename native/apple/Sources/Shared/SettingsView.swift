@@ -1205,7 +1205,7 @@ private struct QMplusSettingsSurface: View {
                 featureToggle
                 ExpandableContent(expanded: detailsExpanded) {
                 VStack(alignment: .leading, spacing: 10) {
-                Text(model.localized("请在官方网页完成 SSO 与 MFA；也可自愿保存独立的 QMplus 登录信息，用于官方网页自动填写。"))
+                Text(model.localized("登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。"))
                     .font(.callout).foregroundStyle(theme.secondaryText)
                 Text(model.localized(store.statusKey)).font(.caption).foregroundStyle(theme.secondaryText)
                 ViewThatFits(in: .horizontal) {
@@ -1213,6 +1213,13 @@ private struct QMplusSettingsSurface: View {
                     VStack(alignment: .leading) { connectionActions }
                 }
                 .buttonStyle(.bordered)
+                if store.requiresManualContinuation {
+                    Button { store.continueManually(sampleMode: model.isSampleMode) } label: {
+                        Label(model.localized("手动继续"), systemImage: "arrow.up.forward.app")
+                    }
+                    .buttonStyle(.bordered).disabled(model.isSampleMode || !model.qmplusEnabled)
+                    .accessibilityIdentifier("settings.qmplus.manual-continue")
+                }
                 QMplusCredentialSettingsEditor(authorization: store.credentialAuthorization, draft: store.credentialDraft,
                     language: model.appLanguage, sampleMode: model.isSampleMode,
                     save: store.saveCredentials, disable: store.disableCredentialAutofill)

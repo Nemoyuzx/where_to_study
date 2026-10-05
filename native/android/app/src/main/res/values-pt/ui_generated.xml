@@ -884,6 +884,16 @@
     <string name="ui_generated_fee09598ad7872">"Carregando o aviso mais recente do Departamento de Serviços Gerais e o horário vigente."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"A raiz da agenda personalizada deve ser um objeto."</string>
     <string name="ui_generated_ff93bd2c081d35">"Abrir no navegador a lista de tarefas da plataforma de ensino na nuvem"</string>
+    <string name="ui_generated_b63c257717353e">"Conclua o CAPTCHA ou a MFA na janela oficial. A sincronização continuará depois."</string>
+    <string name="ui_generated_81a90adf66f769">"O início de sessão automático está pausado. Selecione «Continuar manualmente» para ver a página oficial."</string>
+    <string name="ui_generated_2042efadd2c35a">"Continuar manualmente"</string>
+    <string name="ui_generated_5d364751ceb578">"A conta e a palavra-passe guardadas concluem automaticamente o início de sessão oficial. Só precisa de intervir para CAPTCHA ou MFA. As páginas desconhecidas ficam em pausa para continuar manualmente."</string>
+    <string name="ui_generated_f141054f90bcd5">"Permitir preenchimento automático nas páginas oficiais de início de sessão"</string>
+    <string name="ui_generated_f09d02b07a9af4">"Depois de guardar, as credenciais independentes do QMplus ficam no armazenamento seguro deste dispositivo. O preenchimento automático está inicialmente selecionado e pode ser desativado antes de guardar."</string>
+    <string name="ui_generated_b7df5fe6f6018c">"O início de sessão e a sincronização decorrem em segundo plano. A janela oficial só abre automaticamente para CAPTCHA ou MFA. As páginas não reconhecidas ficam em pausa para continuar manualmente."</string>
+    <string name="ui_generated_8d1807d5c0f998">"Só são automatizados os passos oficiais verificados para a conta correspondente. O CAPTCHA e a MFA são concluídos por si."</string>
+    <string name="ui_generated_e6ff81b07ab0b4">"As palavras-passe guardadas não são mostradas. Introduza novamente os dados apenas para os atualizar."</string>
+    <string name="ui_generated_679afb01032ac3">"A opção de guardar está inicialmente selecionada. Os dados de início de sessão só entram no armazenamento seguro deste dispositivo depois de selecionar «Guardar»."</string>
     <string name="ui_generated_1a78803a506cc4">"Ativar QMplus"</string>
     <string name="ui_generated_de0fc50a49bf3c">"Apenas para a Escola Internacional"</string>
     <string name="ui_generated_dba3ae91be2408">"Não foi possível guardar as preferências locais."</string>

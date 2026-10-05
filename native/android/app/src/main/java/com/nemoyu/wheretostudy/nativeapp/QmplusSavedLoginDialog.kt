@@ -21,20 +21,43 @@ internal object QmplusSavedLoginDialog {
         val fields = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL; setPadding(activity.dp(20), activity.dp(8), activity.dp(20), activity.dp(8))
         }
+        val selection = activity.getSharedPreferences("qmplus_settings_ui", android.content.Context.MODE_PRIVATE)
+        val savedLogin = activity.qmplusState().savedLoginStatus.enabled
         fields.addView(TextView(activity).apply {
-            text = activity.uiText("仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。"); textSize = 12f
+            text = activity.uiText(if (savedLogin) "已在本机安全保存 QMplus 登录资料。" else "尚未保存 QMplus 登录资料。")
+            textSize = 13f; setThemeTextColor { Palette.muted }
+        })
+        if (savedLogin) fields.addView(TextView(activity).apply {
+            text = activity.uiText("已保存的密码不会回显。仅更新登录资料时需要重新填写。")
+            textSize = 12f; setThemeTextColor { Palette.muted }
+        })
+        fields.addView(TextView(activity).apply {
+            text = activity.uiText("已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。"); textSize = 12f
             setThemeTextColor { Palette.muted }
+        })
+        fields.addView(TextView(activity).apply {
+            text = activity.uiText("保存选项首次默认开启；只有点击“保存”后，登录资料才会存入本机安全存储。")
+            textSize = 12f; setThemeTextColor { Palette.muted }
         })
         fields.addView(TextView(activity).apply {
             text = activity.uiText("关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。"); textSize = 12f
             setThemeTextColor { Palette.muted }
         })
         val optIn = Switch(activity).apply {
-            id = R.id.qmplus_saved_login_opt_in; text = activity.getString(R.string.qmplus_saved_login_opt_in)
-            textSize = 15f; isChecked = false; setThemeTextColor { Palette.text }
+            id = R.id.qmplus_saved_login_opt_in
+            contentDescription = activity.getString(R.string.qmplus_saved_login_opt_in)
+            isChecked = selection.getBoolean("save_login_selected", true)
             minimumHeight = activity.dp(UiMetrics.controlHeightDp)
         }
-        fields.addView(optIn)
+        fields.addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(TextView(activity).apply {
+                text = activity.getString(R.string.qmplus_saved_login_opt_in)
+                textSize = 15f; setThemeTextColor { Palette.text }
+                setPadding(0, 0, activity.dp(12), 0)
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(optIn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         fun input(resource: Int, viewID: Int, password: Boolean): EditText = EditText(activity).apply {
             id = viewID; hint = activity.getString(resource); textSize = 15f; isSingleLine = true
             isSaveEnabled = false; isSaveFromParentEnabled = false
@@ -73,8 +96,11 @@ internal object QmplusSavedLoginDialog {
         val remove = dialog.getButton(AlertDialog.BUTTON_NEUTRAL)
         remove.isEnabled = activity.qmplusState().savedLoginStatus.enabled
         remove.setOnClickListener { activity.disconnectQmplus(); dialog.dismiss() }
-        save.isEnabled = false
-        optIn.setOnCheckedChangeListener { _, enabled -> save.isEnabled = enabled }
+        save.isEnabled = optIn.isChecked
+        optIn.setOnCheckedChangeListener { _, enabled ->
+            selection.edit().putBoolean("save_login_selected", enabled).apply()
+            save.isEnabled = enabled
+        }
         save.setOnClickListener {
             if (!active.get() || !optIn.isChecked) return@setOnClickListener
             val entered = CharArray(password.text.length) { password.text[it] }

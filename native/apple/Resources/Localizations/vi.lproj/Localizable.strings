@@ -55,6 +55,7 @@
 "仅删除本次课程？" = "Chỉ xóa buổi học này?";
 "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" = "Chỉ trên trang đăng nhập chính thức đã được xác minh, ứng dụng mới tự chọn tài khoản khớp chính xác với tài khoản đã lưu và điền tên đăng nhập cùng mật khẩu, mỗi bước tối đa một lần. Việc chọn tài khoản không khớp, MFA, CAPTCHA, duy trì đăng nhập và xác nhận rủi ro hoặc điều khoản vẫn do bạn thực hiện.";
 "仅在当天有课时通知；课表更新或账号变更后会自动重排。" = "Chỉ thông báo vào ngày có lớp và tự lên lịch lại sau khi lịch học hoặc tài khoản thay đổi.";
+"仅自动处理已核验且账号匹配的官方登录步骤；验证码和 MFA 由您完成。" = "Chỉ tự động xử lý các bước đăng nhập chính thức đã xác minh và khớp tài khoản. Bạn tự hoàn tất CAPTCHA và MFA.";
 "仅适用国院" = "Chỉ dành cho Khoa Quốc tế";
 "今天" = "Hôm nay";
 "今天可以自由安排" = "Hôm nay bạn có thể tự sắp xếp thời gian";
@@ -78,6 +79,7 @@
 "作业来自教学云，与日历共享缓存；提交状态和截止时间以教学云为准。" = "Bài tập dùng chung bộ nhớ đệm với lịch. Hãy xác nhận trạng thái nộp và hạn chót trên nền tảng học tập.";
 "使用个人课表排除已有课程" = "Loại trừ các tiết đã có lớp trong thời khóa biểu cá nhân";
 "保存 QMplus 登录信息并在官方页面自动填写（可选）" = "Lưu thông tin đăng nhập QMplus và tự điền trên trang chính thức (tùy chọn)";
+"保存后会在本机安全存储中保留独立 QMplus 登录资料。首次默认开启自动填写，也可在保存前关闭。" = "Sau khi lưu, thông tin đăng nhập QMplus riêng được giữ trong bộ nhớ bảo mật của thiết bị này. Tự động điền được chọn sẵn ở lần đầu và có thể tắt trước khi lưu.";
 "保存学期设置" = "Lưu cài đặt học kỳ";
 "保存并授权 QMplus 官方网页自动填写" = "Lưu và cho phép tự điền trên trang QMplus chính thức";
 "保存并校验自定义源" = "Lưu và xác minh nguồn tùy chỉnh";
@@ -85,7 +87,9 @@
 "保存新的登录信息会清除现有 QMplus 会话与快照，避免复用其他身份。" = "Lưu thông tin đăng nhập mới sẽ xóa phiên và bản dữ liệu QMplus hiện có để tránh dùng lại danh tính khác.";
 "保存设置" = "Lưu cài đặt";
 "保存账号前请阅读并同意隐私政策。" = "Hãy đọc và đồng ý với Chính sách quyền riêng tư trước khi lưu tài khoản.";
+"保存选项首次默认开启；只有点击“保存”后，登录资料才会存入本机安全存储。" = "Tùy chọn lưu được bật sẵn ở lần đầu. Thông tin đăng nhập chỉ được đưa vào bộ nhớ bảo mật của thiết bị này sau khi bạn chọn “Lưu”.";
 "信息查询" = "Tra cứu thông tin";
+"允许官方登录页自动填写" = "Cho phép tự động điền trên trang đăng nhập chính thức";
 "全天" = "Cả ngày";
 "全天日程" = "Sự kiện cả ngày";
 "全部" = "Tất cả";
@@ -185,6 +189,7 @@
 "导航" = "Điều hướng";
 "小号" = "Cỡ nhỏ";
 "小组件优先显示今日课程，空间充足时显示明日课程；两日合计不超过课程数量设置，大号最多 6 门。设置会应用到本机小组件。" = "Tiện ích hiện lớp hôm nay trước và thêm lớp ngày mai khi đủ chỗ; tổng của hai ngày không vượt giới hạn đã chọn, tối đa 6 môn ở cỡ lớn. Cài đặt áp dụng cho tiện ích trên thiết bị này.";
+"尚未保存 QMplus 登录资料。" = "Chưa lưu thông tin đăng nhập QMplus.";
 "尚未授予通知权限，请重新开启提醒以申请权限" = "Chưa cấp quyền thông báo. Hãy tắt rồi bật lại lời nhắc để yêu cầu quyền.";
 "尚未获取个人课表" = "Chưa tải thời khóa biểu cá nhân";
 "展开日程" = "Mở rộng lịch trình";
@@ -192,9 +197,12 @@
 "岁次" = "Can chi năm";
 "已交 %d" = "Đã nộp %d";
 "已保存 QMplus 登录信息并授权官方网页自动填写" = "Đã lưu thông tin đăng nhập QMplus và cho phép tự điền trên trang chính thức";
+"已保存的密码不会回显。仅更新登录资料时需要重新填写。" = "Mật khẩu đã lưu không được hiển thị. Chỉ nhập lại thông tin khi cần cập nhật.";
+"已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。" = "Tài khoản và mật khẩu đã lưu được dùng để tự động hoàn tất đăng nhập chính thức. Bạn chỉ cần thao tác khi có CAPTCHA hoặc MFA. Trang không xác định sẽ tạm dừng để bạn tiếp tục thủ công.";
 "已关闭 QMplus 自动填写并删除保存的登录信息" = "Đã tắt tự điền QMplus và xóa thông tin đăng nhập đã lưu";
 "已关闭自动检测，将使用上方手动填写的学期信息。" = "Đã tắt tự phát hiện; thông tin học kỳ nhập thủ công ở trên sẽ được dùng.";
 "已删除课程（本学期）" = "Môn đã xóa (học kỳ này)";
+"已在本机安全保存 QMplus 登录资料。" = "Thông tin đăng nhập QMplus đã được lưu an toàn trên thiết bị này.";
 "已安全保存，留空保持不变" = "Đã lưu an toàn; để trống nếu không đổi";
 "已安排 %d 条课前提醒，重新打开应用时自动补充" = "Đã lên lịch %d lời nhắc trước giờ học; các lời nhắc sắp tới sẽ được bổ sung khi mở lại ứng dụng";
 "已安排未来 %d 个有课日的课程摘要" = "Đã lên lịch tóm tắt môn học cho %d ngày có lớp sắp tới";
@@ -251,6 +259,7 @@
 "成绩获取失败，请检查账户或稍后重试。" = "Không tải được điểm. Hãy kiểm tra tài khoản hoặc thử lại sau.";
 "成绩记录" = "Bản ghi điểm";
 "截止时间" = "Thời hạn";
+"手动继续" = "Tiếp tục thủ công";
 "打开 QMplus 官方登录页" = "Mở trang đăng nhập QMplus chính thức";
 "打开主窗口" = "Mở cửa sổ chính";
 "打开作业列表" = "Mở danh sách bài tập";
@@ -452,6 +461,7 @@
 "用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。" = "Dùng để tra hạn nộp bài tập, thường là mật khẩu đăng nhập tập trung; nếu không đặt riêng sẽ dùng mật khẩu học vụ. Để trống mật khẩu riêng đã lưu nếu không đổi; hãy lưu cài đặt sau khi sửa.";
 "界面语言" = "Ngôn ngữ giao diện";
 "留空使用教务密码" = "Để trống để dùng mật khẩu học vụ";
+"登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。" = "Đăng nhập và đồng bộ chạy trong nền. Cửa sổ chính thức chỉ tự động mở khi có CAPTCHA hoặc MFA. Trang không nhận diện được sẽ tạm dừng để bạn tiếp tục thủ công.";
 "登录后同步" = "Đồng bộ sau khi đăng nhập";
 "登录完成后会自动同步一次 EBU 课程与活动；失败时可手动重试。" = "Sau khi đăng nhập, môn học và hoạt động EBU được đồng bộ tự động một lần; nếu lỗi, bạn có thể thử lại thủ công.";
 "登录状态已过期，请刷新重试。" = "Phiên đăng nhập đã hết hạn. Hãy làm mới rồi thử lại.";
@@ -516,6 +526,7 @@
 "联动查询" = "Tra cứu kết hợp";
 "联系维护者" = "Liên hệ người duy trì";
 "自动检测当前学期" = "Tự phát hiện học kỳ hiện tại";
+"自动登录已暂停，可选择“手动继续”查看官方页面。" = "Đăng nhập tự động đã tạm dừng. Chọn “Tiếp tục thủ công” để xem trang chính thức.";
 "自定义" = "Tùy chỉnh";
 "自定义日程" = "Lịch tùy chỉnh";
 "自定义日程 HTTPS 地址" = "URL HTTPS của lịch tùy chỉnh";
@@ -552,6 +563,7 @@
 "请先在个人账户中保存教务账号和密码。" = "Hãy lưu tài khoản và mật khẩu học vụ trong Tài khoản cá nhân trước.";
 "请先填写自定义日程 HTTPS 地址。" = "Hãy nhập URL HTTPS lịch tùy chỉnh trước.";
 "请先获取/刷新个人课表。" = "Hãy tải hoặc làm mới thời khóa biểu cá nhân trước.";
+"请在官方窗口完成验证码或 MFA，完成后将继续同步。" = "Hoàn tất CAPTCHA hoặc MFA trong cửa sổ chính thức. Quá trình đồng bộ sẽ tiếp tục sau đó.";
 "请在官方网页完成 SSO 与 MFA。本应用不读取或保存微软密码。" = "Hãy hoàn tất SSO và MFA trên trang chính thức. Ứng dụng này không đọc hoặc lưu mật khẩu Microsoft.";
 "请在官方网页完成 SSO 与 MFA；也可自愿保存独立的 QMplus 登录信息，用于官方网页自动填写。" = "Hãy hoàn tất SSO và MFA trên trang chính thức. Bạn cũng có thể tự nguyện lưu thông tin đăng nhập QMplus riêng để tự điền trên trang chính thức.";
 "请在官方网页完成 SSO 与 MFA；可选自动填写只用于已确认的官方登录页面。" = "Hãy hoàn tất SSO và MFA trên trang chính thức; tính năng tự điền tùy chọn chỉ dùng trên trang đăng nhập chính thức đã nhận diện.";

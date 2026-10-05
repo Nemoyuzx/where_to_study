@@ -6,14 +6,15 @@
   const tenant = '569df091-b013-40e3-86ee-bd9cb9e25814';
   const msPagePaths = new Set([`/${tenant}/saml2`, `/${tenant}/login`]);
   const msFormPath = `/${tenant}/login`;
+  const kmsiPath = '/kmsi';
   const reasons = Object.freeze({
     ready: 'READY', authenticated: 'AUTHENTICATED', loading: 'LOADING',
     invalidNonce: 'INVALID_NONCE', staleDocument: 'STALE_DOCUMENT',
     untrusted: 'UNTRUSTED_CONTEXT', unsupported: 'UNSUPPORTED_PAGE',
     chooser: 'ACCOUNT_CHOOSER', hint: 'ACCOUNT_HINT_REQUIRED', form: 'FORM_UNTRUSTED',
     interference: 'INTERFERENCE', absent: 'KNOWN_FORM_ABSENT',
-    mismatch: 'ACCOUNT_MISMATCH', priorUsername: 'USERNAME_NOT_SUBMITTED',
-    attempted: 'ALREADY_ATTEMPTED'
+    mismatch: 'ACCOUNT_MISMATCH', priorUsername: 'USERNAME_NOT_SUBMITTED', currentAccount: 'CURRENT_ACCOUNT_VERIFIED',
+    attempted: 'ALREADY_ATTEMPTED', captcha: 'CAPTCHA_REQUIRED', mfa: 'MFA_REQUIRED'
   });
   if (Object.prototype.hasOwnProperty.call(globalThis, 'WTSQmAuth')) return 'AUTH_CONFLICT';
 
@@ -23,6 +24,7 @@
   let usernameAttempted = false;
   let passwordAttempted = false;
   let accountAttempted = false;
+  let continueAttempted = false;
   let accountSelectedFor = '';
   let usernameSubmittedFor = '';
   const validNonce = value => typeof value === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(value);
@@ -41,6 +43,8 @@
         (url.port && url.port !== '443') || url.origin !== location.origin) return 'untrusted';
       if (url.origin === qmOrigin) return 'qm';
       if (url.origin === msOrigin && msPagePaths.has(url.pathname)) return 'ms';
+      // KMSI is a continuation-only surface. Never send credentials here.
+      if (url.origin === msOrigin && url.pathname === kmsiPath) return 'kmsi';
       return 'unsupported';
     } catch { return 'untrusted'; }
   }
@@ -81,7 +85,7 @@
     return false;
   }
 
-  function formAndSubmit() {
+  function formAndSubmit(expectedPath = msFormPath) {
     const form = exactlyOne('form#i0281');
     const submit = exactlyOne('input#idSIButton9[type="submit"]');
     if (!form || !submit || form.id !== 'i0281' || submit.id !== 'idSIButton9' ||
@@ -89,10 +93,76 @@
       !visible(submit, 60, 20, true)) return null;
     try {
       const action = new URL(form.action, location.href);
-      if (action.origin !== msOrigin || action.pathname !== msFormPath ||
+      if (action.origin !== msOrigin || action.pathname !== expectedPath ||
         action.username || action.password || (action.port && action.port !== '443')) return null;
     } catch { return null; }
     return {form, submit};
+  }
+
+  function matchingDisplayName(key) {
+    const displayName = exactlyOne('#displayName');
+    return !!key && !!displayName && visible(displayName, 1, 1, true) &&
+      accountKey(displayName.textContent) === key;
+  }
+
+  function hasIdentityAcknowledgement(key, acknowledgement) {
+    // Only native knows the connection owner and saved-credential revision.
+    // It may carry a successful identity ACK across real documents; inspect
+    // never turns this boolean into retained authority for later calls.
+    return !!key && (usernameSubmittedFor === key || accountSelectedFor === key || acknowledgement === true);
+  }
+
+  function challengeReason() {
+    // Read-only semantic recognition. These controls are never filled or
+    // clicked. Unknown inputs/alerts remain manual, not presumed MFA.
+    const captcha = document.querySelectorAll('iframe[title], input[aria-label], [role="group"][aria-label], img[alt]');
+    for (const node of Array.from(captcha).slice(0, 64)) {
+      const label = node.getAttribute('aria-label') || node.getAttribute('title') || node.getAttribute('alt') || '';
+      if (label.length <= 256 && /(?:\bcaptcha\b|\bsecurity image\b|图形验证码|圖片驗證碼|图像验证码)/i.test(label) && visible(node)) {
+        return reasons.captcha;
+      }
+    }
+    const codeFields = document.querySelectorAll('input[autocomplete="one-time-code"], input[name="otc"]');
+    if (Array.from(codeFields).slice(0, 16).some(node => node instanceof HTMLInputElement &&
+      ['text', 'tel', 'number'].includes(node.type) && visible(node, 40, 16))) return reasons.mfa;
+    const headings = document.querySelectorAll('h1, h2, [role="heading"]');
+    const approvalTitles = new Set(['approve sign in request', 'approve sign-in request',
+      'check your authenticator app', 'open your authenticator app', '批准登录请求', '核准登入要求',
+      'verify your identity', '验证您的身份', '驗證您的身分', '驗證您的身份']);
+    return Array.from(headings).slice(0, 32).some(node => {
+      const title = node.textContent;
+      return typeof title === 'string' && title.length <= 128 && visible(node) &&
+        approvalTitles.has(title.trim().toLowerCase());
+    }) ? reasons.mfa : '';
+  }
+
+  function knownContinuation() {
+    // Microsoft MSAL's public KMSI tests identify #kmsiTitle, Yes
+    // #idSIButton9 and No #idBtn_Back. This does not authorize arbitrary Next,
+    // consent, permissions, risk, device registration or terms buttons.
+    const title = exactlyOne('#kmsiTitle');
+    const verified = formAndSubmit(kmsiPath);
+    const back = exactlyOne('input#idBtn_Back[type="button"]');
+    const titleText = typeof title?.textContent === 'string' ? title.textContent.trim().toLowerCase() : '';
+    if (!title || !visible(title) || !/^(?:stay signed in|keep me signed in|保持登录状态|保持登入狀態|保持登入|保持登录)[?？]?$/.test(titleText) ||
+      !verified || !verified.form.contains(title) ||
+      !back || back.disabled || !verified.form.contains(back) || !visible(back, 60, 20, true) ||
+      document.querySelectorAll('#i0116, #i0118').length !== 0) return null;
+    const allowed = new Set([verified.submit, back]);
+    const checkbox = exactlyOne('input#KmsiCheckboxField[type="checkbox"]');
+    if (checkbox && visible(checkbox)) {
+      const label = exactlyOne('label[for="KmsiCheckboxField"]');
+      const text = typeof label?.textContent === 'string' ? label.textContent.trim().toLowerCase() : '';
+      // The optional display-preference checkbox is deliberately unchanged.
+      // Only its explicit, bounded meaning may be ignored as interference.
+      if (!verified.form.contains(checkbox) || !label || !visible(label) ||
+        !["don't show this again", 'don’t show this again', '不再显示此消息', '不要再显示此消息',
+          '不再显示此内容', '不要再顯示這個訊息', '不要再顯示此訊息'].includes(text)) return null;
+      allowed.add(checkbox);
+    }
+    if (hasInterference(allowed) || Array.from(document.querySelectorAll('button, select, [role="button"]'))
+      .some(node => !allowed.has(node) && visible(node))) return null;
+    return {...verified, title, back, checkbox};
   }
 
   function knownField(selector, expectedID, expectedName, expectedType, form) {
@@ -200,7 +270,7 @@
         (hasSafeOfficialSAMLLink(doc) || hasSafeOfficialLoginLink(doc)) ? 'guest' : 'unknown';
     } catch { return 'unknown'; }
   }
-  function inspectUnsafe(nonce, accountHint, allowBind) {
+  function inspectUnsafe(nonce, accountHint, allowBind, identityAcknowledged) {
     if (!validNonce(nonce)) return result('manual', nonce, false, reasons.invalidNonce);
     if (boundDocument === null && allowBind) {
       boundDocument = document; boundNonce = nonce; boundHref = String(location.href);
@@ -217,8 +287,20 @@
         result('authenticated', nonce, false, reasons.authenticated) :
         result('manual', nonce, false, reasons.unsupported);
     }
+    if (site !== 'ms' && site !== 'kmsi') return result('manual', nonce, false, reasons.unsupported);
+    const challenge = challengeReason();
+    if (challenge) return result('challenge', nonce, false, challenge);
     if (document.readyState === 'loading') return result('loading', nonce, false, reasons.loading);
-    if (site !== 'ms') return result('manual', nonce, false, reasons.unsupported);
+    const continuationTitle = exactlyOne('#kmsiTitle');
+    if (continuationTitle && visible(continuationTitle)) {
+      if (!knownContinuation()) return result('manual', nonce, false, reasons.interference);
+      const hint = accountKey(accountHint);
+      if (!matchingDisplayName(hint)) return result('manual', nonce, false, reasons.mismatch);
+      if (continueAttempted) return result('manual', nonce, true, reasons.attempted);
+      return result('continue', nonce, true, hasIdentityAcknowledgement(hint, identityAcknowledged) ?
+        reasons.ready : reasons.currentAccount);
+    }
+    if (site === 'kmsi') return result('manual', nonce, false, reasons.unsupported);
     const chooser = exactlyOne('#tilesHolder');
     if (chooser && visible(chooser)) {
       if (hasInterference(new Set())) return result('manual', nonce, false, reasons.interference);
@@ -255,22 +337,23 @@
         return result('manual', nonce, false, reasons.interference);
       }
       if (password.value) return result('manual', nonce, false, reasons.interference);
-      const displayName = exactlyOne('#displayName');
       const hint = accountKey(accountHint);
-      const accountMatch = !!displayName && visible(displayName, 1, 1, true) && !!hint &&
-        accountKey(displayName.textContent) === hint;
+      const accountMatch = matchingDisplayName(hint);
       if (!accountMatch) return result('manual', nonce, false, reasons.mismatch);
-      if (usernameSubmittedFor !== hint && accountSelectedFor !== hint) {
-        return result('password', nonce, true, reasons.priorUsername);
+      if (passwordAttempted) return result('manual', nonce, true, reasons.attempted);
+      if (!hasIdentityAcknowledgement(hint, identityAcknowledged)) {
+        // A valid official cookie may enter directly at the password screen.
+        // Native may acknowledge this exact current-page identity only while
+        // its owner, document and saved-credential revision are still current.
+        return result('password', nonce, true, reasons.currentAccount);
       }
-      return passwordAttempted ? result('manual', nonce, true, reasons.attempted) :
-        result('password', nonce, true, reasons.ready);
+      return result('password', nonce, true, reasons.ready);
     }
     return result('manual', nonce, false, reasons.absent);
   }
 
-  function inspectInternal(nonce, accountHint, allowBind) {
-    try { return inspectUnsafe(nonce, accountHint, allowBind); }
+  function inspectInternal(nonce, accountHint, allowBind, identityAcknowledged = false) {
+    try { return inspectUnsafe(nonce, accountHint, allowBind, identityAcknowledged); }
     catch { return result('manual', nonce, false, reasons.untrusted); }
   }
 
@@ -285,18 +368,33 @@
 
   function fillAndSubmitUnsafe(options) {
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
-      Object.keys(options).some(key => !['document', 'stage', 'account', 'password'].includes(key))) return 'REJECTED';
-    const {document: nonce, stage, account, password} = options;
+      Object.keys(options).some(key => !['document', 'stage', 'account', 'password', 'identityAcknowledged'].includes(key))) return 'REJECTED';
+    const {document: nonce, stage, account, password, identityAcknowledged} = options;
     if (!validNonce(nonce) || boundDocument !== document || boundNonce !== nonce) return 'STALE_DOCUMENT';
     const key = accountKey(account);
-    if (!key || !['account', 'username', 'password'].includes(stage)) return 'REJECTED';
+    if (!key || !['account', 'username', 'password', 'continue'].includes(stage)) return 'REJECTED';
+    if (Object.prototype.hasOwnProperty.call(options, 'identityAcknowledged') &&
+      (typeof identityAcknowledged !== 'boolean' || !['password', 'continue'].includes(stage))) return 'REJECTED';
     if (stage !== 'password' && Object.prototype.hasOwnProperty.call(options, 'password')) return 'REJECTED';
     if (stage === 'password' && (typeof password !== 'string' || !password.length || password.length > 2048)) {
       return 'REJECTED';
     }
-    const state = inspectInternal(nonce, account, false);
+    const state = inspectInternal(nonce, account, false, identityAcknowledged);
     if (state.stage !== stage || state.reason !== reasons.ready ||
       (stage !== 'username' && !state.accountMatch)) return 'MANUAL_REQUIRED';
+    if (stage === 'continue') {
+      const verified = knownContinuation();
+      if (!verified || !['ms', 'kmsi'].includes(context())) return 'MANUAL_REQUIRED';
+      continueAttempted = true;
+      const refreshed = knownContinuation();
+      if (!refreshed || refreshed.form !== verified.form || refreshed.submit !== verified.submit ||
+        refreshed.title !== verified.title || refreshed.back !== verified.back || refreshed.checkbox !== verified.checkbox ||
+        !['ms', 'kmsi'].includes(context()) || boundDocument !== document || boundNonce !== nonce ||
+        boundHref !== String(location.href) || challengeReason() || !matchingDisplayName(key) ||
+        !hasIdentityAcknowledgement(key, identityAcknowledged)) return 'MANUAL_REQUIRED';
+      try { verified.submit.click(); return 'CONTINUE_SUBMITTED'; }
+      catch { return 'MANUAL_REQUIRED'; }
+    }
     if (stage === 'account') {
       const holder = exactlyOne('#tilesHolder');
       const choice = accountChoice(holder, key);
@@ -304,7 +402,7 @@
       accountAttempted = true;
       const refreshed = accountChoice(exactlyOne('#tilesHolder'), key);
       if (refreshed !== choice || context() !== 'ms' || boundDocument !== document || boundNonce !== nonce ||
-        boundHref !== String(location.href) || hasInterference(new Set())) return 'MANUAL_REQUIRED';
+        boundHref !== String(location.href) || challengeReason() || hasInterference(new Set())) return 'MANUAL_REQUIRED';
       try { choice.click(); accountSelectedFor = key; return 'ACCOUNT_SELECTED'; }
       catch { return 'MANUAL_REQUIRED'; }
     }
@@ -327,15 +425,12 @@
       if (context() !== 'ms' || boundDocument !== document || boundNonce !== nonce ||
         boundHref !== String(location.href) ||
         !refreshed || refreshed.form !== verified.form || refreshed.submit !== verified.submit ||
-        currentField !== field || hasInterference(new Set([field, verified.submit]))) return 'MANUAL_REQUIRED';
+        currentField !== field || challengeReason() || hasInterference(new Set([field, verified.submit]))) return 'MANUAL_REQUIRED';
       if (stage === 'password') {
-        const displayName = exactlyOne('#displayName');
-        if (!displayName || !visible(displayName, 1, 1, true) || accountKey(displayName.textContent) !== key ||
-          (usernameSubmittedFor !== key && accountSelectedFor !== key)) return 'MANUAL_REQUIRED';
+        if (!matchingDisplayName(key) || !hasIdentityAcknowledgement(key, identityAcknowledged)) return 'MANUAL_REQUIRED';
       }
       verified.submit.click();
       if (stage === 'username') usernameSubmittedFor = key;
-      if (stage === 'password') { usernameSubmittedFor = ''; accountSelectedFor = ''; }
       return stage === 'username' ? 'USERNAME_SUBMITTED' : 'PASSWORD_SUBMITTED';
     } catch { return 'MANUAL_REQUIRED'; }
   }
@@ -347,7 +442,8 @@
 
   try {
     Object.defineProperty(globalThis, 'WTSQmAuth', {
-      value: Object.freeze({inspect: (nonce, accountHint) => inspectInternal(nonce, accountHint, true), fillAndSubmit}),
+      value: Object.freeze({inspect: (nonce, accountHint, identityAcknowledged = false) =>
+        inspectInternal(nonce, accountHint, true, identityAcknowledged), fillAndSubmit}),
       writable: false, configurable: false, enumerable: false
     });
     return 'AUTH_INSTALLED';

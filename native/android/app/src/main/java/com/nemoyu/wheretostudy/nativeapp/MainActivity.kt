@@ -927,6 +927,7 @@ class MainActivity : Activity() {
                 .putExtra(QmplusActivity.EXTRA_FEATURE_REVISION, connection.featureRevision)
                 .putExtra(QmplusActivity.EXTRA_START_URL, startURL)
                 .putExtra(QmplusActivity.EXTRA_SILENT_REFRESH, silentRefresh)
+                .putExtra(QmplusActivity.EXTRA_MANUAL_CONTINUATION, !silentRefresh && repository.manualContinuationRequired)
                 .putExtra(QmplusActivity.EXTRA_SAVED_LOGIN_ENABLED, repository.savedLoginStatus.enabled)
                 .putExtra(QmplusActivity.EXTRA_SAVED_LOGIN_REVISION, repository.savedLoginStatus.revision)
                 .putExtra(QmplusActivity.EXTRA_CLEAR_FIRST, repository.cookiesNeedClearing), QMPLUS_REQUEST_CODE)
