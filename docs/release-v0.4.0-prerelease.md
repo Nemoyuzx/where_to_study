@@ -348,6 +348,12 @@ QMplus 普通 Login、账号选择、用户名／密码和已核验的“保持�
 
 ### 验证与上传边界
 
-按用户要求，继续只做源代码、资源和编译检查，不运行本机自动化测试、真实账号登录或 GUI／模拟器验证。回归规格已更新但未执行，编译通过不能代替真机登录／视觉验证。Apple 114 仅上传 TestFlight 测试，不提交正式审核；实际上传回执完成后另记。0.3.2 预发布草稿和用户素材保持不变。
+按用户要求，继续只做源代码、资源和编译检查，不运行本机自动化测试、真实账号登录或 GUI／模拟器验证。Apple 的严格并发／警告编译与签名归档、Android Debug 构建、HarmonyOS Release 构建、Rust `cargo check --locked` 和 Vite 生产构建均通过；共享脚本镜像、13 语言生成资源和暂存秘密扫描通过。回归规格已更新但未执行，编译通过不能代替真机登录／视觉验证。Apple 114 仅上传 TestFlight 测试，未提交正式审核。0.3.2 预发布草稿和用户素材保持不变。
 
 本轮日志目录：`release-artifacts/v0.4.0-build114-sso-settings/`。
+
+包源码为 `114a2b68`，已推送 `codex/v040-localization`。macOS **0.4.0（114）** 于 **2026-10-05 19:25:04 +0800** 取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`。沿用原 Manual 主程序／Widget 签名、已安装 Installer 身份和测试上传脚本；已核对本地归档版本及共享登录脚本与提交源码一致。成功后未检查 App Store Connect 后续状态，未提交正式审核。
+
+iOS／iPadOS **0.4.0（114）** 于 **2026-10-05 19:30:50 +0800** 取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`。沿用本地 Xcode Automatic 归档及 Apple Distribution 导出验证；本地首次导出成功不代替上传回执。本地归档版本和共享登录脚本均与提交源码一致。成功后停止，未检查 App Store Connect 后续处理状态或提交正式审核。
+
+实际回执：`macos-upload.log`、`ios-upload.log`；编译记录：`macos-compile-final.log`、`ios-compile-final.log`、`android-compile-final.log`、`harmony-compile-final.log`、`rust-compile-final.log`、`tauri-ui-compile.log`，均保留在上述忽略的本机产物目录。未重复上传已成功的 112／113，也未在本轮上传 Android／HarmonyOS 包或更改 GitHub Release。
