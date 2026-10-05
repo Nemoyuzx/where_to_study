@@ -585,6 +585,7 @@
 "课程类型" = "Ders bölümü";
 "课程结束" = "Ders bitiyor";
 "课程节次" = "Ders saatleri";
+"课程获取失败。" = "Dersler yüklenemedi.";
 "课程详情" = "Ders ayrıntıları";
 "课程进行中" = "Ders sürüyor";
 "课表中没有可导入的课程日期" = "Aktarılacak ders tarihi yok";

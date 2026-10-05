@@ -45,6 +45,7 @@ final class TeachingCloudCourseStore: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorMessage = ""
+    @Published private(set) var showsAccountAction = false
     @Published private(set) var fetchedAt: Date?
     @Published private(set) var isRetainingPreviousSnapshot = false
     private let client: any TeachingCloudCourseFetching
@@ -73,6 +74,7 @@ final class TeachingCloudCourseStore: ObservableObject {
             isRetainingPreviousSnapshot = cached.retainingPrevious
             if cached.cachePersistenceFailed {
                 errorMessage = "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。"
+                showsAccountAction = false
             } else if !cached.retainingPrevious { errorMessage = "" }
         }
     }
@@ -108,6 +110,7 @@ final class TeachingCloudCourseStore: ObservableObject {
             isRefreshing = true
             isLoading = courses == nil
             errorMessage = ""
+            showsAccountAction = false
         }
         defer {
             // Every exit releases only the same flight. A late waiter must not
@@ -130,13 +133,20 @@ final class TeachingCloudCourseStore: ObservableObject {
             isRetainingPreviousSnapshot = result.retainingPrevious
             errorMessage = result.cachePersistenceFailed
                 ? "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。" : ""
+            showsAccountAction = false
         } catch is CancellationError {
             // A cleared/switched owner must never publish a late result.
             if revision == generation, owner == nextOwner, flight?.id == selected.id { attempted = false }
         } catch {
             guard revision == generation, owner == nextOwner, !Task.isCancelled,
                   flight?.id == selected.id else { return }
-            errorMessage = error.localizedDescription
+            if let serviceError = error as? CalendarDeadlineError {
+                errorMessage = serviceError.localizedDescription
+                showsAccountAction = true
+            } else {
+                errorMessage = (error as? URLError)?.localizedDescription ?? "课程获取失败。"
+                showsAccountAction = false
+            }
             isRetainingPreviousSnapshot = courses != nil
         }
     }
@@ -157,6 +167,7 @@ final class TeachingCloudCourseStore: ObservableObject {
         fetchedAt = nil
         isRetainingPreviousSnapshot = false
         errorMessage = ""
+        showsAccountAction = false
         isLoading = false
         isRefreshing = false
         attempted = false

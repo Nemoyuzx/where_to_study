@@ -585,6 +585,7 @@
 "课程类型" = "Sección de cursos";
 "课程结束" = "Fin del curso";
 "课程节次" = "Periodos de clase";
+"课程获取失败。" = "No se pudieron obtener las asignaturas.";
 "课程详情" = "Detalles de la clase";
 "课程进行中" = "Clase en curso";
 "课表中没有可导入的课程日期" = "No hay fechas de clases para importar";

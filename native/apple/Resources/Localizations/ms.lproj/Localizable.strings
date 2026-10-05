@@ -585,6 +585,7 @@
 "课程类型" = "Bahagian kursus";
 "课程结束" = "Kelas tamat";
 "课程节次" = "Waktu kelas";
+"课程获取失败。" = "Kursus tidak dapat dimuatkan.";
 "课程详情" = "Butiran kursus";
 "课程进行中" = "Kelas sedang berlangsung";
 "课表中没有可导入的课程日期" = "Tiada tarikh kelas dalam jadual yang boleh diimport";

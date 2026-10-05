@@ -585,6 +585,7 @@
 "课程类型" = "Course section";
 "课程结束" = "Course ends";
 "课程节次" = "Course periods";
+"课程获取失败。" = "Unable to load courses.";
 "课程详情" = "Course Details";
 "课程进行中" = "Class in progress";
 "课表中没有可导入的课程日期" = "No course dates are available to import";

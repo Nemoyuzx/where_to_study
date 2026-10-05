@@ -91,7 +91,7 @@ final class CourseBusinessCacheStorage: @unchecked Sendable {
             try durableWrite(pending, to: url)
             for kind in [CourseBusinessCacheKind.courses, .assignments, .qmplus] where kind.domain == domain {
                 do { try FileManager.default.removeItem(at: root.appendingPathComponent(kind.fileName)) }
-                catch let error as CocoaError where error.code == .fileNoSuchFile { continue }
+                catch where Self.isMissingFile(error) { continue }
             }
             try synchronizeDirectory(root)
             try afterPurge()
@@ -116,7 +116,7 @@ final class CourseBusinessCacheStorage: @unchecked Sendable {
             let root = try prepareDirectoryLocked()
             let url = root.appendingPathComponent(kind.fileName)
             do { return try boundedData(url, maximumBytes: limit) }
-            catch let error as CocoaError where error.code == .fileNoSuchFile { return nil }
+            catch where Self.isMissingFile(error) { return nil }
         }
         guard let data else { return nil }
         try CourseBusinessCacheValidation.validate(data: data, kind: kind)
@@ -150,7 +150,7 @@ final class CourseBusinessCacheStorage: @unchecked Sendable {
         let url = root.appendingPathComponent(domain + "-guard.json")
         let data: Data
         do { data = try boundedData(url, maximumBytes: 256) }
-        catch let error as CocoaError where error.code == .fileNoSuchFile {
+        catch where Self.isMissingFile(error) {
             let epoch = UUID().uuidString
             try durableWrite(try JSONEncoder().encode(Guard(schemaVersion: 1, epoch: epoch, pending: false)), to: url)
             return epoch // A fresh guard never accepts any older payload.
@@ -185,6 +185,17 @@ final class CourseBusinessCacheStorage: @unchecked Sendable {
         let data = try Data(contentsOf: url)
         guard data.count <= maximumBytes else { throw CocoaError(.fileReadCorruptFile) }
         return data
+    }
+
+    // Foundation distinguishes generic file operations (4) from reads (260).
+    // attributesOfItem/Data can report the latter for a normal first launch.
+    // Permission, corruption and I/O failures must still propagate unchanged.
+    static func isMissingFile(_ error: Error) -> Bool {
+        let value = error as NSError
+        return (value.domain == NSCocoaErrorDomain &&
+                (value.code == CocoaError.fileNoSuchFile.rawValue ||
+                 value.code == CocoaError.fileReadNoSuchFile.rawValue)) ||
+               (value.domain == NSPOSIXErrorDomain && value.code == Int(ENOENT))
     }
 
     private func durableWrite(_ data: Data, to url: URL) throws {

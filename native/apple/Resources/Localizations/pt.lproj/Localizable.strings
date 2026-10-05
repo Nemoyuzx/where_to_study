@@ -585,6 +585,7 @@
 "课程类型" = "Tipo de disciplina";
 "课程结束" = "Fim da aula";
 "课程节次" = "Períodos de aula";
+"课程获取失败。" = "Não foi possível obter as disciplinas.";
 "课程详情" = "Detalhes da disciplina";
 "课程进行中" = "Aula em andamento";
 "课表中没有可导入的课程日期" = "A grade não contém datas de aulas para importar";

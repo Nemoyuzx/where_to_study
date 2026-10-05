@@ -585,6 +585,7 @@
 "课程类型" = "Loại môn học";
 "课程结束" = "Lớp học kết thúc";
 "课程节次" = "Tiết học";
+"课程获取失败。" = "Không tải được môn học.";
 "课程详情" = "Chi tiết môn học";
 "课程进行中" = "Đang trong giờ học";
 "课表中没有可导入的课程日期" = "Thời khóa biểu không có ngày học để nhập";

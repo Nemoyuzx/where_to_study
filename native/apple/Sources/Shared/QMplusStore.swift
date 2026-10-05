@@ -77,7 +77,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     private var authenticationProbeTask: Task<Void, Never>?
     private var quietPreflightTimeoutTask: Task<Void, Never>?
     private var urlObservation: NSKeyValueObservation?
+    private var loadingObservation: NSKeyValueObservation?
     private var activeNavigation: WKNavigation?
+    private var committedMainDocumentContext: QMplusLoginSynchronizationGate.Context?
     private var activePopupNavigation: WKNavigation?
     private var mainHTTPFailureCode: String?
     private var popupHTTPFailureCode: String?
@@ -249,16 +251,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         let hasIsolatedSession = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:)) != nil
         let quiet = background || (supportsPersistentIsolation && (hasIsolatedSession || credentialAuthorization.isEnabled))
         guard beginConnectionOwner(quiet: quiet) else { return }
-        if quiet {
-            let context = loginGate.context
-            quietPreflightTimeoutTask = Task { [weak self] in
-                do { try await Task.sleep(for: .seconds(20)) } catch { return }
-                guard let self, self.hasActiveConnection, self.loginGate.presentation == context.presentation,
-                      self.isQuietConnection, !self.isSyncing else { return }
-                self.statusKey = "QMplus 会话核查超时，请在官方网页继续登录。"
-                self.presentExistingConnection()
-            }
-        }
+        if quiet { scheduleQuietPreflightTimeout() }
         navigationFailureCode = nil
         canSynchronize = false
         if webView == nil {
@@ -316,6 +309,19 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         isShowingConnection = true
     }
 
+    private func scheduleQuietPreflightTimeout() {
+        guard isQuietConnection, !isSyncing else { return }
+        quietPreflightTimeoutTask?.cancel()
+        let presentation = loginGate.presentation
+        quietPreflightTimeoutTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(20)) } catch { return }
+            guard let self, self.hasActiveConnection, self.loginGate.presentation == presentation,
+                  self.isQuietConnection, !self.isSyncing else { return }
+            self.statusKey = "QMplus 会话核查超时，请在官方网页继续登录。"
+            self.presentExistingConnection()
+        }
+    }
+
     func cancelQuietConnection() {
         if isQuietConnection { endPresentation() }
     }
@@ -333,7 +339,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         } else {
             // Retire late DOM/sync callbacks without closing or stopping the
             // visible official MFA page, changing focus, or clearing its cache.
+            let hasCommittedDocument = committedMainDocumentContext == loginGate.context
             loginGate.beginDocument()
+            if hasCommittedDocument { committedMainDocumentContext = loginGate.context }
             endPendingSync(stopLoading: false)
             if credentialAuthorization.isEnabled {
                 statusKey = "QMplus 自动填写已停止，请在官方网页手动完成登录或验证。"
@@ -366,7 +374,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     func synchronize() {
         guard featureEnabled, canSynchronize, !isSyncing, hasActiveConnection, let browser = webView,
-              popupWebView == nil, !browser.isLoading, Self.isSyncOrigin(browser.url) else { return }
+              popupWebView == nil, committedMainDocumentContext == loginGate.context,
+              Self.isSyncOrigin(browser.url) else { return }
         guard let resource = Bundle.main.url(forResource: "qmplus-sync", withExtension: "js"),
               let script = try? String(contentsOf: resource, encoding: .utf8) else {
             isRetainingPreviousSnapshot = snapshot != nil
@@ -530,7 +539,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         quietPreflightTimeoutTask?.cancel(); quietPreflightTimeoutTask = nil
         cancelAuthenticationProbe()
         urlObservation = nil
+        loadingObservation = nil
         activeNavigation = nil
+        committedMainDocumentContext = nil
         lastReviewedDocumentURL = nil
         canSynchronize = false
         closeAuthenticationPopup(reloadMain: false)
@@ -597,7 +608,10 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         // SSO/MFA stays in the official webpage; only QM's own origin can run
         // the explicit business synchronization, never a Microsoft login page.
         if webView === self.webView, navigationAction.targetFrame?.isMainFrame == true {
+            let sameDocument = committedMainDocumentContext == loginGate.context
+                && isFragmentNavigation(navigationAction, in: webView)
             loginGate.beginDocument()
+            if sameDocument { committedMainDocumentContext = loginGate.context }
             cancelAuthenticationProbe()
             cancelAutofill()
             canSynchronize = false
@@ -607,6 +621,16 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             cancelAutofill()
         }
         decisionHandler(.allow)
+    }
+
+    private func isFragmentNavigation(_ action: WKNavigationAction, in browser: WKWebView) -> Bool {
+        guard action.navigationType == .linkActivated, action.request.httpMethod == "GET",
+              let currentURL = browser.url, let targetURL = action.request.url,
+              var current = URLComponents(url: currentURL, resolvingAgainstBaseURL: false),
+              var target = URLComponents(url: targetURL, resolvingAgainstBaseURL: false),
+              current.fragment != target.fragment else { return false }
+        current.fragment = nil; target.fragment = nil
+        return current == target
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
@@ -647,7 +671,6 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         }
         guard webView === self.webView, navigation != nil, navigation === activeNavigation else { return }
         currentHost = webView.url?.host ?? ""
-        canSynchronize = false
         navigationFailureCode = mainHTTPFailureCode
         reviewCurrentDocument(in: webView)
     }
@@ -656,8 +679,18 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard hasActiveConnection, navigation != nil,
               (webView === self.webView && navigation === activeNavigation)
                 || (webView === popupWebView && navigation === activePopupNavigation) else { return }
+        if webView === self.webView {
+            committedMainDocumentContext = loginGate.context
+            // Loading completion belongs to this same main document, including
+            // Microsoft pages whose autofill starts before didFinish.
+            lastReviewedDocumentURL = webView.url
+        }
         if QMplusAutofillPolicy.isTrustedMicrosoftDocument(webView.url), credentialAuthorization.isEnabled {
             startAutofill(in: webView)
+        } else if webView === self.webView, Self.isSyncOrigin(webView.url) {
+            // The official DOM may be ready while analytics, images or other
+            // subresources still keep isLoading true and delay didFinish.
+            reviewCurrentDocument(in: webView)
         } else if !Self.isSyncOrigin(webView.url) {
             currentHost = webView.url?.host ?? ""
             presentExistingConnection()
@@ -676,6 +709,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard webView === self.webView else { return }
         mainHTTPFailureCode = nil
         activeNavigation = navigation
+        committedMainDocumentContext = nil
         loginGate.beginDocument()
         cancelAuthenticationProbe()
         cancelAutofill()
@@ -689,17 +723,34 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         urlObservation = browser.observe(\.url, options: [.new]) { [weak self, weak browser] _, _ in
             Task { @MainActor in
                 guard let self, let browser, browser === self.webView, self.hasActiveConnection,
-                      self.loginGate.presentation == presentation, !browser.isLoading,
-                      browser.url != self.lastReviewedDocumentURL else { return }
-                // Also covers same-document dashboard/history navigation. The
-                // new document identity revokes an older DOM result.
-                self.loginGate.beginDocument()
-                self.cancelAuthenticationProbe()
-                self.cancelAutofill()
-                if self.isSyncing { self.endPendingSync(stopLoading: false) }
-                self.reviewCurrentDocument(in: browser)
+                      self.loginGate.presentation == presentation else { return }
+                self.reviewObservedDocument(in: browser)
             }
         }
+        loadingObservation = browser.observe(\.isLoading, options: [.new]) { [weak self, weak browser] _, _ in
+            Task { @MainActor in
+                guard let self, let browser, browser === self.webView, self.hasActiveConnection,
+                      self.loginGate.presentation == presentation else { return }
+                // Recover a loading/finish callback ordering gap without
+                // renewing the credential ledger or its document nonce.
+                self.reviewObservedDocument(in: browser)
+            }
+        }
+    }
+
+    private func reviewObservedDocument(in browser: WKWebView) {
+        guard !browser.isLoading, committedMainDocumentContext == loginGate.context else { return }
+        if browser.url != lastReviewedDocumentURL {
+            // Also covers a same-document/history URL change observed before
+            // loading settled. Its old DOM result must no longer be accepted.
+            loginGate.beginDocument()
+            committedMainDocumentContext = loginGate.context
+            cancelAuthenticationProbe()
+            cancelAutofill()
+            canSynchronize = false
+            if isSyncing { endPendingSync(stopLoading: false) }
+        }
+        reviewCurrentDocument(in: browser)
     }
 
     private func cancelAuthenticationProbe() {
@@ -811,6 +862,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 _ = self.invalidateBusinessCacheForIdentityChange()
             }, progress: { [weak self, weak browser] state in
                 guard let self, let browser, self.acceptsAutofillDocument(document, browser: browser) else { return }
+                // These are once-only, validated login steps. A slow
+                // preflight must not consume the next step's entire deadline.
+                self.scheduleQuietPreflightTimeout()
                 switch state {
                 case .username: self.statusKey = "正在填写 QMplus 官方登录账号…"
                 case .password: self.statusKey = "正在填写 QMplus 官方登录密码…"
@@ -823,20 +877,22 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     private func beginOfficialSSOIfAllowed(in browser: WKWebView,
                                           context: QMplusLoginSynchronizationGate.Context) -> Bool {
-        guard hasActiveConnection, browser === webView, popupWebView == nil, !browser.isLoading,
-              loginGate.accepts(context), hasActiveAutofillLedger,
+        guard hasActiveConnection, browser === webView, popupWebView == nil,
+              loginGate.accepts(context), committedMainDocumentContext == context, hasActiveAutofillLedger,
               QMplusAutofillPolicy.isQMplusLoginDocument(browser.url), credentialAuthorization.isEnabled,
               autofillLedger.claimSSO(presentation: loginGate.presentation,
                   credentialRevision: credentialAuthorization.credentialRevision) else { return false }
         cancelAuthenticationProbe()
         statusKey = "正在打开 QMplus 官方 SSO 登录…"
+        scheduleQuietPreflightTimeout()
         activeNavigation = browser.load(URLRequest(url: QMplusAutofillPolicy.ssoURL))
         return true
     }
 
     private func reviewCurrentDocument(in browser: WKWebView) {
         guard hasActiveAuthenticationRecognition, browser === webView, popupWebView == nil,
-              browser.url != nil, !browser.isLoading else { return }
+              browser.url != nil, committedMainDocumentContext == loginGate.context else { return }
+        lastReviewedDocumentURL = browser.url
         guard Self.isSyncOrigin(browser.url) else {
             if QMplusAutofillPolicy.isTrustedMicrosoftDocument(browser.url), credentialAuthorization.isEnabled {
                 startAutofill(in: browser)
@@ -844,7 +900,6 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             return
         }
         let context = loginGate.context
-        lastReviewedDocumentURL = browser.url
         guard authenticationProbeContext != context else { return }
         authenticationProbeContext = context
         if snapshot == nil, !isSyncing, !loginGate.hasAttemptedAutomaticSync {
@@ -854,11 +909,13 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     private func probeAuthentication(in browser: WKWebView, context: QMplusLoginSynchronizationGate.Context, attempt: Int) {
-        guard hasActiveAuthenticationRecognition else { return }
+        guard hasActiveAuthenticationRecognition, loginGate.accepts(context), committedMainDocumentContext == context,
+              let documentURL = browser.url, Self.isSyncOrigin(documentURL) else { return }
         if isAutofillApplicationInactive(browser) { stopAutomaticLoginForInactiveScene(); return }
         browser.evaluateJavaScript(QMplusConnectionPolicy.pageStatusScript) { [weak self, weak browser] result, error in
             guard let self, let browser, browser === self.webView, self.popupWebView == nil,
-                  self.hasActiveAuthenticationRecognition, self.loginGate.accepts(context), !browser.isLoading,
+                  self.hasActiveAuthenticationRecognition, self.loginGate.accepts(context),
+                  self.committedMainDocumentContext == context, browser.url == documentURL,
                   Self.isSyncOrigin(browser.url) else { return }
             if self.isAutofillApplicationInactive(browser) { self.stopAutomaticLoginForInactiveScene(); return }
             let state = error == nil ? QMplusOfficialPageStatus(rawValue: result as? String ?? "unknown") ?? .unknown : .unknown
@@ -871,15 +928,17 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 }
             } else if state == .error || self.mainHTTPFailureCode != nil {
                 self.presentExistingConnection()
-            } else if state == .guest, self.hasActiveAutofillLedger,
+            } else if state == .guest, self.hasActiveAutofillLedger, self.credentialAuthorization.isEnabled,
                       QMplusAutofillPolicy.isQMplusLoginDocument(browser.url) {
                 browser.evaluateJavaScript(QMplusConnectionPolicy.officialSSOEntryScript) { [weak self, weak browser] eligible, linkError in
                     guard let self, let browser, self.loginGate.accepts(context), self.hasActiveAuthenticationRecognition,
-                          browser === self.webView, !browser.isLoading else { return }
+                          browser === self.webView, self.committedMainDocumentContext == context,
+                          browser.url == documentURL else { return }
                     if linkError == nil, eligible as? Bool == true,
                        self.beginOfficialSSOIfAllowed(in: browser, context: context) { return }
                     browser.evaluateJavaScript(QMplusConnectionPolicy.officialLoginEntryScript) { [weak self, weak browser] entry, entryError in
-                        guard let self, let browser, browser === self.webView, !browser.isLoading,
+                        guard let self, let browser, browser === self.webView, browser.url == documentURL,
+                              self.committedMainDocumentContext == context,
                               self.loginGate.accepts(context), self.hasActiveAuthenticationRecognition,
                               self.hasActiveAutofillLedger, self.credentialAuthorization.isEnabled else { return }
                         if entryError == nil, entry as? Bool == true,
@@ -887,12 +946,14 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                                 credentialRevision: self.credentialAuthorization.credentialRevision),
                            browser.url?.path != "/login/index.php", self.loginGate.claimLoginEntry(context: context) {
                             self.cancelAuthenticationProbe()
+                            self.scheduleQuietPreflightTimeout()
                             self.activeNavigation = browser.load(URLRequest(url: QMplusConnectionPolicy.loginEntryURL))
                         } else { self.continueAuthenticationReview(in: browser, context: context, attempt: attempt) }
                     }
                 }
             } else {
-                self.continueAuthenticationReview(in: browser, context: context, attempt: attempt)
+                self.continueAuthenticationReview(in: browser, context: context, attempt: attempt,
+                    waitingForDocument: state == .loading)
             }
         }
     }
@@ -918,12 +979,13 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     private func continueAuthenticationReview(in browser: WKWebView,
-                                             context: QMplusLoginSynchronizationGate.Context, attempt: Int) {
+                                             context: QMplusLoginSynchronizationGate.Context, attempt: Int,
+                                             waitingForDocument: Bool = false) {
         guard loginGate.accepts(context), hasActiveAuthenticationRecognition else { return }
-        if attempt < 3 {
+        if attempt < (waitingForDocument ? 20 : 3) {
                 self.authenticationProbeTask?.cancel()
                 self.authenticationProbeTask = Task { [weak self, weak browser] in
-                    do { try await Task.sleep(for: .milliseconds(250 * (attempt + 1))) } catch { return }
+                    do { try await Task.sleep(for: .milliseconds(waitingForDocument ? 500 : 250 * (attempt + 1))) } catch { return }
                     guard let self, let browser, self.loginGate.accepts(context), self.hasActiveConnection else { return }
                     self.probeAuthentication(in: browser, context: context, attempt: attempt + 1)
                 }

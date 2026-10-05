@@ -585,6 +585,7 @@
 "课程类型" = "Bagian mata kuliah";
 "课程结束" = "Kelas selesai";
 "课程节次" = "Jam kuliah";
+"课程获取失败。" = "Mata kuliah tidak dapat dimuat.";
 "课程详情" = "Detail mata kuliah";
 "课程进行中" = "Kelas sedang berlangsung";
 "课表中没有可导入的课程日期" = "Tidak ada tanggal kelas dalam jadwal yang dapat diimpor";

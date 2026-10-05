@@ -164,7 +164,9 @@ struct CoursesView: View {
                         Text(model.localized("当前展示上次成功获取的课程，请留意更新时间。"))
                             .font(.caption).foregroundStyle(theme.secondaryText)
                     }
-                    PersonalAccountQueryButton(identifier: "courses.ucloud.account")
+                    if teachingCloud.showsAccountAction {
+                        PersonalAccountQueryButton(identifier: "courses.ucloud.account")
+                    }
                 }
                 if let courses = teachingCloud.courses {
                     let cached = CourseListEvidence.cachedAssignments(query: assignmentStore.assignmentQueryItems,

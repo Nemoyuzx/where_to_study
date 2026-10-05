@@ -277,3 +277,21 @@ Apple 111 包源码为 `b300a2dd`（含 `275ecceb` 的全平台修复），已�
 **2026-10-05 16:40:37 +0800**，iOS／iPadOS **0.4.0（111）**取得 `Upload succeeded`、`EXPORT SUCCEEDED`；沿用同一本地 Xcode Automatic 归档／测试上传脚本。导出过程仍有与 110 相同的旧 Xcode 账户会话警告，随后实际包分析和上传成功；本地第一次 `EXPORT SUCCEEDED` 不作为上传证据。成功后停止，未查询 App Store Connect、提交正式审核或重新上传已经成功的 111。
 
 最终回执日志：`macos-build-111-upload.log`、`ios-build-111-upload.log`；最新纯编译日志：`apple-{macos,ios}-final-compile.log`、`android-compile-final.log`、`harmony-compile-final.log`、`rust-data-compile.log`、`tauri-ui-compile.log`。这些日志留在忽略的本机产物目录，不把商店归档、AAB、鸿蒙包或用户素材加入 Git。
+
+## 首次缓存与 QMplus 登录推进修复：Apple 112（2026-10-05）
+
+### iOS / iPadOS
+
+修复 111 首次读取 `ucloud-guard.json` 失败：Foundation 的“读取文件不存在”（260）与普通文件操作缺失（4）不同，初始化漏接前者。现在对确切的缺失错误创建 guard，缺少业务文件视为缓存未命中；已有损坏／待清理 guard 和权限错误继续按原规则处理。系统存储错误不再把内部文件名直接显示给用户或引导用户修改账号。已有账号和密码可继续使用。
+
+QMplus 在主文档提交后开始有限的 DOM 就绪检查；已渲染的官方登录首页不再等待图片、统计脚本等附属资源全部加载完成。回调仍校验当前文档与 URL；已认证的同步也使用该文档条件，避免先消耗自动同步机会再被 `isLoading` 拦住。加载结束补回遗漏识别，但不重置同一文档的账号／密码填写次数。只有已经验证的登录步骤推进才更新超时预算，验证码、MFA 与未知确认继续交给本人。
+
+### macOS
+
+同步相同的缓存初始化修复、系统错误展示和 WebKit 登录推进逻辑。静默登录、已有会话、一次凭据提交及清理边界沿用原设置。
+
+### 验证与发布
+
+macOS 和通用 iOS Simulator 的严格并发／警告编译通过，未启动模拟器；生成资源与源码检查通过。新增首次目录／业务缓存缺失及已有待清理／损坏 guard 的回归规格，仅编写、未执行。遵守用户禁止本机自动化测试的要求，未做真实账号或设备登录验证；DOM 等待缺口与截图现象相符，不能把静态分析写成已经真机复现。
+
+本轮继续上传 iOS／iPadOS 和 macOS **0.4.0（112）** 测试包，成功回执后记录；不提交正式审核。日志保存在 `release-artifacts/v0.4.0-build112-login-fix/`。
