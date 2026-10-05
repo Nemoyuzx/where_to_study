@@ -316,4 +316,8 @@ macOS 和通用 iOS Simulator 的严格并发／警告编译通过，未启动�
 
 ### 验证与上传
 
-继续遵守不在本机运行自动化测试的要求：只进行源码检查、公开官方入口核对和编译；更新的预算／恢复回归规格未执行，也没有真实账号或设备登录验证。新的 Apple 测试包使用 **0.4.0（113）**，成功回执将在上传后补充。日志目录为 `release-artifacts/v0.4.0-build113-login-entry/`。
+继续遵守不在本机运行自动化测试的要求：只进行源码检查、公开官方入口核对和编译；更新的预算／恢复回归规格未执行，也没有真实账号或设备登录验证。macOS 和通用 iOS Simulator 严格并发／警告编译均通过，未启动模拟器；归档中的分类脚本与源码摘要一致。
+
+包源码为 `38d3fdaf`，已推送 `codex/v040-localization`。macOS **0.4.0（113）** 于 **2026-10-05 18:12:59 +0800**、iOS／iPadOS **0.4.0（113）** 于 **18:17:27 +0800** 分别返回 `Upload succeeded` 和 `EXPORT SUCCEEDED`。沿用本地 Xcode 的 macOS Manual／iOS Automatic 签名与原测试上传脚本；未提交正式审核，成功后未检查 App Store Connect 后续状态。
+
+日志目录为 `release-artifacts/v0.4.0-build113-login-entry/`，`macos-upload.log`、`ios-upload.log` 保存实际上传回执。编译与静态检查不代表已经在用户手机上验证此登录路径。
