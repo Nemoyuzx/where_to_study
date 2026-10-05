@@ -10,6 +10,8 @@
 
 Apple 默认连接先在后台核查 Dashboard；已确认的访客页自动进入普通 Login，再进入已核验 SSO。普通 GET 与密码填写授权分离，Login 和 SSO 各有独立的有限预算；未保存密码也能尝试复用官方会话，但不能据此读取或填写密码。发出自动 GET 前同步撤销旧 document 的回调资格，保留本次凭据步骤预算。已解析出的明确访客标记可提前识别；入口尚未解析时有限等待 DOM，已认证判定仍等待页面就绪。已确认的访客欢迎页在预算耗尽后保留缓存并提示重试，不要求用户手动点击 Login。只读同步明确返回 `QM_LOGIN_REQUIRED` 时，且本次尚未进入 Login、尚未选择账号或提交凭据，可进行一次登录恢复和一次后续自动同步；这不会重建凭据 ledger。
 
+Apple 116 将已核验官方登录链中的有限布局暂停与撤销连接分开：仅原 owner、原凭据版本、仍有效授权，并且新的真实导航已 `didCommit` 后，允许恢复一次尚未消耗的阶段。真实导航身份必须与当前 active navigation 一致且不同于暂停导航；同页 history、前台恢复制造的 epoch、旧回调不能恢复。所有已 claim 的阶段和真实 ACK 保留，既不重选已选账户也不重放密码；再次暂停后需显式开始新连接。手动打开原页不重置 ledger，只有后续真实提交 ACK 才自动收起人工窗口。外域、协议异常、明确 HTTP／网页／WebKit 错误、账号不匹配、授权变化、辅助脚本冲突和未知表单干扰走不可恢复的 stop；验证码／MFA 仍由用户完成。此恢复机制未改变凭据路径和精确身份校验，不宣称修改官方会话有效期。
+
 凭据页面白名单仅包括 `https://qmplus.qmul.ac.uk` 的已登录用户菜单，以及 `https://login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/saml2` 或同租户 `/login`。Microsoft 凭据表单须唯一为 `form#i0281`，提交目标仍是同源同租户 `/login`；账号是可见 `input#i0116[name=loginfmt][type=email]`，普通下一步是可见 `input#idSIButton9[type=submit]`。密码阶段账号框已移除，可见 `input#i0118[name=passwd][type=password]`，`#displayName` 仅在网页内部与本机授权账号比对。预加载的 10×13、透明度 0 密码框**不是**可填写密码页。新增的精确路径 `https://login.microsoftonline.com/kmsi` 仅可识别验证挑战或继续保持登录，不能填写账号或密码。
 
 实际模拟器的非敏感主文档路由与结构元数据已确认，MFA 方式选择页可位于 `https://login.microsoftonline.com/common/DeviceAuthTls/reprocess`，包含官方 MFA 标题节点。该地址单独归类为 **verification-only**：仅此完整路径忽略大小写，不接受尾斜杠、编码替换、相邻路径或其它域名；native 不为它读取保存账号／密码，仅调用 `inspect(nonce, '')`。有效当前文档中只做 `challenge` 识别，标题尚未挂载或没有明确挑战时返回 `loading`／`LOADING` 使用原有有限原生等待预算；不会进入账号选择、用户名、密码或 KMSI 继续分支，任何对应 `fillAndSubmit` 请求均被拒绝。验证路径许可与凭据提交许可必须分别维护。

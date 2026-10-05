@@ -82,6 +82,9 @@ export class QMPlusAuthAttemptLedger {
   continueAttempted(): boolean { return this.continueClaimed; }
   accountAttempted(): boolean { return this.accountClaimed; }
   credentialsAttempted(): boolean { return this.attemptedCredentials || this.passwordClaimed || this.continueClaimed; }
+  canWaitForInitialAccountChoice(attempt: number): boolean {
+    return this.active && !this.credentialsAttempted() && attempt >= 0 && attempt < 8;
+  }
 
   beginDocument(document: string = ''): void {
     this.documentNonce = document;
@@ -657,6 +660,7 @@ export struct QMPlusConnectionView {
       let afterPassword: boolean = this.authLedger.passwordAttempted();
       let passwordSubmittedHere: boolean = false;
       let afterContinue: boolean = false;
+      let initialChooserChecks: number = 0;
       let transitionDeadline: number = 0;
       let deadline: number = Date.now() + 4500;
       while (this.sameAuthPage(owner, page, url, nonce) && Date.now() < deadline) {
@@ -678,6 +682,12 @@ export struct QMPlusConnectionView {
         if (/^https:\/\/login\.microsoftonline\.com\/kmsi(?:\?|$)/.test(url) &&
           ['account', 'username', 'password'].includes(state.stage)) { this.requireManualAuth(''); return; }
         if (state.stage === 'loading') { await this.waitForAuthStep(); continue; }
+        if (state.stage === 'manual' && state.reason === 'ACCOUNT_CHOOSER' &&
+          this.authLedger.canWaitForInitialAccountChoice(initialChooserChecks)) {
+          initialChooserChecks++;
+          await this.waitForAuthStep(initialChooserChecks === 1 ? 250 : 500);
+          continue;
+        }
         if (!afterUsername && !afterAccount && !afterContinue && state.stage === 'manual' &&
           ['KNOWN_FORM_ABSENT', 'FORM_UNTRUSTED'].includes(state.reason)) {
           // First layout can trail onPageEnd. Waiting never submits a credential.

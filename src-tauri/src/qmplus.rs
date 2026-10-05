@@ -12,6 +12,7 @@ const AUTH_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-auth.js");
 const PAGE_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-page.js");
 const MS_ORIGIN: &str = "https://login.microsoftonline.com";
 const MS_VERIFICATION_PATH: &str = "/common/deviceauthtls/reprocess";
+const MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS: u8 = 16;
 const MAXIMUM_ACCOUNT_SETTLING_POLLS: u8 = 12;
 const MAXIMUM_SUBMISSION_SETTLING_POLLS: u8 = 24;
 const MS_PATHS: [&str; 2] = [
@@ -185,6 +186,7 @@ struct AuthLedger {
     account_attempted: bool,
     account_claimed_document: Option<String>,
     account_selected_document: Option<String>,
+    initial_account_settling_polls: u8,
     account_settling_polls: u8,
     username_claimed_document: Option<String>,
     username_submitted_document: Option<String>,
@@ -247,6 +249,25 @@ impl AuthLedger {
         self.verified_password_document = None;
         self.verified_continue_document = None;
         self.continue_claimed_document = None;
+    }
+    fn claim_initial_account_settling(
+        &mut self,
+        stage: &str,
+        reason: &str,
+        nonce: &str,
+        credential_revision: u64,
+    ) -> bool {
+        if !self.accepts(credential_revision) || !valid_nonce(nonce)
+            || stage != "manual" || reason != "ACCOUNT_CHOOSER"
+            || self.account_attempted || self.username_attempted || self.password_attempted || self.continue_attempted
+            || self.initial_account_settling_polls >= MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS
+        {
+            return false;
+        }
+        // The holder can render before its exact matching tile. This only
+        // spends a read-only owner budget; it grants no identity or input claim.
+        self.initial_account_settling_polls += 1;
+        true
     }
     fn claim_account_settling(
         &mut self,
@@ -1199,9 +1220,14 @@ pub fn accept_qmplus_auth(
             return Err("QMplus 登录状态已失效。".into());
         }
     }
-    // A successful chooser click can leave an empty SPA chooser briefly.
-    // Only a native ACK for this document authorizes bounded read-only polling.
-    if auth.ledger.claim_account_settling(
+    // Wait finitely for the first exact tile, or for the old chooser to settle
+    // after its ACK. Neither path extends a deadline or renews an input budget.
+    if auth.ledger.claim_initial_account_settling(
+        &report.stage,
+        &report.reason,
+        &nonce,
+        credential_revision,
+    ) || auth.ledger.claim_account_settling(
         &report.stage,
         &report.reason,
         &nonce,
@@ -1731,6 +1757,45 @@ mod tests {
         assert_eq!(state.profile_id.lock().unwrap().as_deref(), Some("existing-browser-profile"));
         assert_eq!(state.window_revision.load(Ordering::SeqCst), 42);
         assert!(state.publish(sample(), 0).is_err());
+    }
+
+    #[test]
+    fn initial_chooser_wait_is_readonly_and_document_changes_do_not_reset_its_budget() {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        for index in 0..MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS {
+            let nonce = if index % 2 == 0 { "nonceA123" } else { "nonceB456" };
+            assert!(ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", nonce, 7));
+        }
+        assert!(!ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", "nonceC789", 7));
+        assert_eq!(ledger.initial_account_settling_polls, MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS);
+        assert!(!ledger.account_attempted && !ledger.username_attempted && !ledger.password_attempted && !ledger.continue_attempted);
+        assert!(!ledger.identity_acknowledged(7));
+        assert!(!ledger.claim("account", "nonceC789", false, 7));
+        assert!(ledger.claim("account", "nonceC789", true, 7));
+        assert!(!ledger.claim("account", "nonceC789", true, 7));
+        assert!(ledger.submitted("nonceC789", "ACCOUNT_SELECTED", 7));
+        assert_eq!(ledger.initial_account_settling_polls, MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS);
+    }
+
+    #[test]
+    fn initial_chooser_wait_rejects_mismatch_other_stages_stale_revisions_and_prior_claims() {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        for (stage, reason, nonce, revision) in [
+            ("account", "ACCOUNT_CHOOSER", "nonceA123", 7),
+            ("manual", "ACCOUNT_MISMATCH", "nonceA123", 7),
+            ("manual", "INTERFERENCE", "nonceA123", 7),
+            ("manual", "ACCOUNT_CHOOSER", "bad!nonce", 7),
+            ("manual", "ACCOUNT_CHOOSER", "nonceA123", 8),
+        ] {
+            assert!(!ledger.claim_initial_account_settling(stage, reason, nonce, revision));
+        }
+        assert_eq!(ledger.initial_account_settling_polls, 0);
+        assert!(ledger.claim("username", "nonceA123", false, 7));
+        assert!(!ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", "nonceA123", 7));
+        ledger.stop();
+        assert!(!ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", "nonceA123", 7));
     }
 
     #[test]

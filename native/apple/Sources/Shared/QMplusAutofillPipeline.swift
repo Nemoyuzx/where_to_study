@@ -50,6 +50,13 @@ enum QMplusAuthSubmission: Sendable {
 enum QMplusAutofillPolicy {
     static let tenant = "569df091-b013-40e3-86ee-bd9cb9e25814"
     static let ssoURL = URL(string: "https://qmplus.qmul.ac.uk/auth/saml2/login.php")!
+    static func isResumableOfficialDocument(_ url: URL?) -> Bool {
+        QMplusConnectionPolicy.isOfficialAuthenticationPopup(url) || isPassiveMicrosoftTransit(url)
+    }
+    static func isNewCommittedNavigation(_ committed: AnyObject?, active: AnyObject?, paused: AnyObject?) -> Bool {
+        guard let committed, let active, let paused else { return false }
+        return committed === active && committed !== paused
+    }
     static func isTrustedMicrosoftDocument(_ url: URL?) -> Bool {
         guard QMplusConnectionPolicy.isHTTPSNavigation(url), url?.host?.lowercased() == "login.microsoftonline.com",
               let url, let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath else { return false }
@@ -96,6 +103,8 @@ final class QMplusAutofillLedger {
     private var presentation: UInt64 = 0
     private var credentialRevision: UInt64 = 0
     private var isActive = false
+    private var isSuspended = false
+    private var resumptionAvailable = true
     private(set) var accountAttempted = false
     private(set) var usernameAttempted = false
     private(set) var passwordAttempted = false
@@ -113,7 +122,8 @@ final class QMplusAutofillLedger {
 
     func begin(presentation: UInt64, credentialRevision: UInt64) {
         self.presentation = presentation; self.credentialRevision = credentialRevision
-        isActive = true; accountAttempted = false; usernameAttempted = false; passwordAttempted = false
+        isActive = true; isSuspended = false; resumptionAvailable = true
+        accountAttempted = false; usernameAttempted = false; passwordAttempted = false
         accountSelectedDocument = nil; claimedAccountDocument = nil
         usernameSubmittedDocument = nil; claimedUsernameDocument = nil; ssoAttempted = false
         continuationAttempted = false; verifiedIdentityDocument = nil
@@ -121,10 +131,25 @@ final class QMplusAutofillLedger {
         claimedContinuationDocument = nil; continuationAcknowledgedDocument = nil
     }
     func stop() {
-        isActive = false; usernameSubmittedDocument = nil; claimedUsernameDocument = nil
+        isActive = false; isSuspended = false; resumptionAvailable = false
+        usernameSubmittedDocument = nil; claimedUsernameDocument = nil
         accountSelectedDocument = nil; claimedAccountDocument = nil
         verifiedIdentityDocument = nil; claimedPasswordDocument = nil; passwordAcknowledged = false
         claimedContinuationDocument = nil; continuationAcknowledgedDocument = nil
+    }
+    // Pause only the unrecognized document. A later verified real document may
+    // resume once without resetting any submission claim or identity ACK.
+    func suspend() {
+        guard isActive else { return }
+        isActive = false
+        isSuspended = resumptionAvailable
+    }
+    @discardableResult
+    func resume(presentation: UInt64, credentialRevision: UInt64) -> Bool {
+        guard isSuspended, resumptionAvailable, self.presentation == presentation,
+              self.credentialRevision == credentialRevision else { return false }
+        isSuspended = false; resumptionAvailable = false; isActive = true
+        return true
     }
     func accepts(presentation: UInt64, credentialRevision: UInt64) -> Bool {
         isActive && self.presentation == presentation && self.credentialRevision == credentialRevision
@@ -366,7 +391,7 @@ final class QMplusAutofillPipeline {
     func cancel() { cancelled = true; waitTask?.cancel(); waitTask = nil; accountHint = nil }
     func start(source: String) {
         guard !started, accepts, QMplusAutofillPolicy.isValidNonce(nonce) else { return }
-        guard viewportReady() else { requireManual(); return }
+        guard viewportReady() else { requireManual(resumable: true); return }
         started = true
         evaluator.install(source) { [weak self] result in
             guard let self, self.accepts else { return }
@@ -504,7 +529,7 @@ final class QMplusAutofillPipeline {
     }
     private func waitForViewport(attempt: Int) {
         guard accepts else { return }
-        guard viewportWaitCount < 12 else { requireManual(); return }
+        guard viewportWaitCount < 12 else { requireManual(resumable: true); return }
         viewportWaitCount += 1
         waitTask?.cancel()
         waitTask = Task { [weak self] in
@@ -516,7 +541,7 @@ final class QMplusAutofillPipeline {
     }
     private func scheduleInspection(attempt: Int, maximumAttempts: Int = 8) {
         guard accepts else { return }
-        guard attempt < maximumAttempts else { requireManual(); return }
+        guard attempt < maximumAttempts else { requireManual(resumable: true); return }
         waitTask?.cancel()
         waitTask = Task { [weak self] in
             guard let self else { return }
@@ -525,8 +550,10 @@ final class QMplusAutofillPipeline {
             self.inspect(attempt: attempt + 1)
         }
     }
-    private func requireManual() {
+    private func requireManual(resumable: Bool = false) {
         guard !cancelled else { return }
-        cancel(); ledger.stop(); manual()
+        cancel()
+        if resumable { ledger.suspend() } else { ledger.stop() }
+        manual()
     }
 }

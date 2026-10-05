@@ -482,6 +482,9 @@ internal class QmplusAuthFlow(
                         owner.manualRequired(challenge = true); owner.schedulePoll(document, value, 750)
                     }
                     state.stage == "loading" && state.reason == "LOADING" -> owner.schedulePoll(document, value)
+                    state.stage == "manual" && state.reason == "ACCOUNT_CHOOSER" &&
+                        !owner.gate.hasAttemptedCredentialSubmission() && owner.initialLayoutChecks++ < 8 ->
+                        owner.schedulePoll(document, value, if (owner.initialLayoutChecks == 1) 250 else 500)
                     state.stage == "manual" && state.reason in setOf("FORM_UNTRUSTED", "KNOWN_FORM_ABSENT") &&
                         owner.lastSubmittedStage == null && owner.initialLayoutChecks++ < 8 ->
                         owner.schedulePoll(document, value)

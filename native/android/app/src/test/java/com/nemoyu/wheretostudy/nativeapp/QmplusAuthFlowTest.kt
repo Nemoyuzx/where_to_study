@@ -7,6 +7,47 @@ import org.junit.Test
 
 /** Production flow, fake transport/clock/secure-store callbacks. No browser or external requests. */
 class QmplusAuthFlowTest {
+    @Test fun initialAccountChooserCanBecomeReadyWithoutGuessingOrReadingPasswordWhileWaiting() {
+        val fixture = installed()
+        repeat(3) { attempt ->
+            fixture.replyStage(fixture.renderer.take(), "manual", reason = "ACCOUNT_CHOOSER")
+            assertEquals(0, fixture.handoffs)
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertTrue(fixture.renderer.pending.isEmpty())
+            fixture.scheduler.advance(if (attempt == 0) 250 else 500)
+        }
+        fixture.replyStage(fixture.renderer.take(), "account", match = true)
+        val choice = fixture.renderer.take()
+        assertEquals("account", choice.options().getString("stage"))
+        assertFalse(choice.options().has("password"))
+        choice.reply("\"ACCOUNT_SELECTED\"")
+        assertEquals(0, fixture.handoffs)
+        assertEquals(0, fixture.credentials.passwordReads)
+        fixture.flow.close()
+    }
+
+    @Test fun aPersistentlyUnmatchedFirstChooserStopsAfterEightWaitsAndCannotRenewTheConnectionDeadline() {
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "manual", reason = "ACCOUNT_CHOOSER")
+        repeat(8) { attempt ->
+            fixture.scheduler.advance(if (attempt == 0) 250 else 500)
+            fixture.replyStage(fixture.renderer.take(), "manual", reason = "ACCOUNT_CHOOSER")
+        }
+        assertEquals(1, fixture.deferrals)
+        assertEquals(0, fixture.reveals)
+        assertEquals(0, fixture.credentials.passwordReads)
+        assertTrue(fixture.renderer.pending.isEmpty())
+        fixture.flow.close()
+        val deadline = installed()
+        deadline.scheduler.advance(24_000)
+        deadline.replyStage(deadline.renderer.take(), "manual", reason = "ACCOUNT_CHOOSER")
+        deadline.scheduler.advance(1_000)
+        assertEquals(1, deadline.deferrals)
+        assertEquals(0, deadline.credentials.passwordReads)
+        assertTrue(deadline.renderer.pending.isEmpty())
+        deadline.flow.close()
+    }
+
     @Test fun microsoftTransitDoesNotInspectOrReadSecretsAndKeepsTheOriginalDeadlineAcrossHops() {
         val fixture = Fixture(optIn = false)
         fixture.open("https://device.login.microsoftonline.com/common/intermediate")
@@ -365,10 +406,10 @@ class QmplusAuthFlowTest {
         listOf("ACCOUNT_CHOOSER", "INTERFERENCE", "FORM_UNTRUSTED", "ACCOUNT_MISMATCH", "UNSUPPORTED_PAGE").forEach { reason ->
             val fixture = installed()
             fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
-            if (reason == "FORM_UNTRUSTED") {
+            if (reason in listOf("FORM_UNTRUSTED", "ACCOUNT_CHOOSER")) {
                 assertEquals(0, fixture.handoffs)
-                repeat(8) {
-                    fixture.scheduler.advance(350)
+                repeat(8) { attempt ->
+                    fixture.scheduler.advance(if (reason == "ACCOUNT_CHOOSER") { if (attempt == 0) 250 else 500 } else 350)
                     fixture.replyStage(fixture.renderer.take(), "manual", reason = reason)
                 }
             }

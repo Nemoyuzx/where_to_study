@@ -8,6 +8,81 @@ import XCTest
 // Synthetic specification source only. Do not execute while local tests and GUI are prohibited.
 @MainActor
 final class QMplusAutofillPipelineTests: XCTestCase {
+    func testResumptionRequiresANewRealCommitAndAnOfficialPausedSource() {
+        let previous = NSObject(), next = NSObject(), unrelated = NSObject()
+        XCTAssertTrue(QMplusAutofillPolicy.isNewCommittedNavigation(next, active: next, paused: previous))
+        XCTAssertFalse(QMplusAutofillPolicy.isNewCommittedNavigation(previous, active: previous, paused: previous))
+        XCTAssertFalse(QMplusAutofillPolicy.isNewCommittedNavigation(next, active: unrelated, paused: previous))
+        XCTAssertFalse(QMplusAutofillPolicy.isNewCommittedNavigation(nil, active: next, paused: previous))
+        XCTAssertFalse(QMplusAutofillPolicy.isNewCommittedNavigation(next, active: next, paused: nil))
+        for value in ["https://qmplus.qmul.ac.uk/login/index.php", "https://login.microsoftonline.com/\(QMplusAutofillPolicy.tenant)/saml2",
+                      "https://device.login.microsoftonline.com/"] {
+            XCTAssertTrue(QMplusAutofillPolicy.isResumableOfficialDocument(URL(string: value)))
+        }
+        for value in ["http://qmplus.qmul.ac.uk/", "https://qmplus.qmul.ac.uk.evil.invalid/", "https://example.invalid/",
+                      "https://login.microsoftonline.com:444/", "https://user@login.microsoftonline.com/"] {
+            XCTAssertFalse(QMplusAutofillPolicy.isResumableOfficialDocument(URL(string: value)))
+        }
+    }
+
+    func testSuspendedOwnerCanResumeOnceAndStillAutoSelectAnUnclaimedExactAccount() async {
+        let first = Fixture()
+        let paused = expectation(description: "The known picker reaches its finite layout wait")
+        first.onManual = { paused.fulfill() }
+        first.evaluator.fallbackState = state(.manual, reason: .chooser)
+        first.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [paused], timeout: 2)
+        XCTAssertEqual(first.manualCount, 1)
+        XCTAssertFalse(first.ledger.accepts(presentation: 1, credentialRevision: 1))
+        XCTAssertFalse(first.ledger.resume(presentation: 2, credentialRevision: 1))
+        XCTAssertFalse(first.ledger.resume(presentation: 1, credentialRevision: 2))
+        XCTAssertTrue(first.ledger.resume(presentation: 1, credentialRevision: 1))
+        let next = Fixture(ledger: first.ledger, nonce: "nonceB456")
+        let selected = expectation(description: "The next verified document auto-selects the saved account")
+        next.evaluator.states = [state(.account, document: "nonceB456", match: true)]
+        next.evaluator.holdsSubmission = true
+        next.evaluator.onInspection = { selected.fulfill() }
+        next.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [selected], timeout: 2)
+        XCTAssertEqual(next.evaluator.submissions.count, 1)
+        guard case .account = next.evaluator.submissions[0] else { return XCTFail("Only the exact account selection is allowed") }
+        XCTAssertNil(first.ledger.accountSelectedDocument)
+        next.evaluator.finishSubmission(.accountSelected)
+        XCTAssertEqual(first.ledger.accountSelectedDocument, "nonceB456")
+        next.pipeline.cancel()
+        first.ledger.suspend()
+        XCTAssertFalse(first.ledger.resume(presentation: 1, credentialRevision: 1), "Repeated pauses cannot refresh the connection budget")
+    }
+
+    func testSuspensionPreservesRealACKAndCannotReplayAlreadyClaimedSteps() {
+        let ledger = QMplusAutofillLedger()
+        ledger.begin(presentation: 1, credentialRevision: 1)
+        XCTAssertTrue(ledger.claim(state(.account, match: true), presentation: 1, credentialRevision: 1))
+        ledger.recordAccountSelection(document: "nonceA123", presentation: 1, credentialRevision: 1)
+        ledger.suspend()
+        XCTAssertFalse(ledger.claim(state(.password, document: "nonceB456", match: true), presentation: 1, credentialRevision: 1))
+        XCTAssertTrue(ledger.resume(presentation: 1, credentialRevision: 1))
+        XCTAssertTrue(ledger.hasIdentityAcknowledgement(for: "nonceB456"))
+        XCTAssertFalse(ledger.claim(state(.account, document: "nonceB456", match: true), presentation: 1, credentialRevision: 1))
+        XCTAssertTrue(ledger.claim(state(.password, document: "nonceB456", match: true), presentation: 1, credentialRevision: 1))
+        ledger.recordPasswordSubmission(document: "nonceB456", presentation: 1, credentialRevision: 1)
+        ledger.suspend()
+        XCTAssertFalse(ledger.resume(presentation: 1, credentialRevision: 1))
+        XCTAssertFalse(ledger.claim(state(.password, document: "nonceC789", match: true), presentation: 1, credentialRevision: 1))
+    }
+
+    func testHardStopRevokesSuspendedOwnerAndCannotBeResumed() {
+        let ledger = QMplusAutofillLedger()
+        ledger.begin(presentation: 1, credentialRevision: 1)
+        ledger.suspend()
+        ledger.stop()
+        XCTAssertFalse(ledger.resume(presentation: 1, credentialRevision: 1))
+        XCTAssertFalse(ledger.accepts(presentation: 1, credentialRevision: 1))
+        ledger.begin(presentation: 2, credentialRevision: 2)
+        XCTAssertFalse(ledger.resume(presentation: 1, credentialRevision: 1))
+        XCTAssertTrue(ledger.accepts(presentation: 2, credentialRevision: 2))
+    }
+
     func testNamespaceConflictNeverReadsOrSendsCredentials() {
         let fixture = Fixture()
         fixture.evaluator.installResult = .conflict

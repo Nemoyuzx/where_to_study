@@ -230,6 +230,45 @@ test('an explicitly pending picker waits without selecting until its async tiles
   assert.equal(f.row.clicked,1)
 })
 
+test('an initially empty ordinary picker changes from ACCOUNT_CHOOSER to READY when its exact saved-account tile arrives',()=>{
+  for(const loaded of [undefined,'true']){
+    const f=chooserFixture({remainChooser:true})
+    if(loaded!==undefined)f.holder.attrs['data-test-asynctilesloaded']=loaded
+    f.state.chooserRows=[]
+    const initial=inspect(f);assertFixed(initial)
+    assert.equal(initial.stage,'manual');assert.equal(initial.reason,'ACCOUNT_CHOOSER');assert.equal(initial.accountMatch,false)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED')
+    assert.equal(f.row.clicked,0);assert.equal(f.user.value,'');assert.equal(f.pass.value,'')
+    f.state.chooserRows=[f.row]
+    const ready=inspect(f);assertFixed(ready)
+    assert.equal(ready.stage,'account');assert.equal(ready.reason,'READY');assert.equal(ready.accountMatch,true)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'ACCOUNT_SELECTED')
+    assert.equal(f.row.clicked,1)
+    const attempted=inspect(f)
+    assert.equal(attempted.stage,'manual');assert.equal(attempted.reason,'ALREADY_ATTEMPTED')
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED')
+    assert.equal(f.row.clicked,1,'Earlier read-only absence must not consume the first choice or allow a second one')
+  }
+})
+
+test('a previously authorized identity can take the ordinary exact single-account picker without broadening account choice',()=>{
+  const f=chooserFixture()
+  const selected=inspect(f,account,nonce,true);assertFixed(selected)
+  assert.equal(selected.stage,'account');assert.equal(selected.reason,'READY')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'ACCOUNT_SELECTED')
+  assert.equal(f.row.clicked,1);assert.equal(f.pass.value,'')
+  const password=inspect(f,account,nonce,true)
+  assert.equal(password.stage,'password');assert.equal(password.reason,'READY');assert.equal(password.accountMatch,true)
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret,identityAcknowledged:true}),'PASSWORD_SUBMITTED')
+  assert.equal(f.submit.clicked,1)
+  const unknown=chooserFixture()
+  unknown.row.attrs['data-test-id']='other@example.org';unknown.content.textContent='other@example.org'
+  const mismatch=inspect(unknown,account,nonce,true)
+  assert.equal(mismatch.stage,'manual');assert.equal(mismatch.reason,'ACCOUNT_CHOOSER')
+  assert.equal(unknown.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED')
+  assert.equal(unknown.row.clicked,0);assert.equal(unknown.pass.value,'')
+})
+
 test('only a unique exact account may wait for layout or hit readiness and a menu never receives a click',()=>{
   for(const variant of ['small','transparent','content-hidden','menu','occluded']){
     const f=chooserFixture()

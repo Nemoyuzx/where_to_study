@@ -95,6 +95,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     private var backgroundOnly = false
     private var autofillPipeline: QMplusAutofillPipeline?
     private var autofillDocument: OwnedAutofillDocument?
+    private var pausedAutofillDocument: OwnedAutofillDocument?
+    private var autofillCommittedNavigation: WKNavigation?
+    private var pausedAutofillNavigation: WKNavigation?
     private var viewportWaitTask: Task<Void, Never>?
     private var viewportWaitDocument: OwnedAutofillDocument?
     private struct OwnedAutofillDocument: Equatable {
@@ -291,6 +294,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         if quiet { loginGate.beginQuietConnection() } else { loginGate.beginPresentation() }
         automaticLoginSuspended = false
         authenticationRecognitionSuspended = false
+        pausedAutofillDocument = nil
+        pausedAutofillNavigation = nil
+        autofillCommittedNavigation = nil
         autofillLedger.begin(presentation: loginGate.presentation, credentialRevision: credentialAuthorization.credentialRevision)
         statusKey = "正在确认 QMplus 登录状态…"
         isShowingConnection = !quiet
@@ -313,7 +319,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             pauseForManualContinuation()
             return
         }
-        if stopAutofill { cancelAutofill(); autofillLedger.stop() }
+        if stopAutofill { suspendAutofillForCurrentDocument() }
         quietPreflightTimeoutTask?.cancel(); quietPreflightTimeoutTask = nil
         requiresManualContinuation = false
         loginGate.presentExistingConnection()
@@ -325,7 +331,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         #if DEBUG
         traceMicrosoftRouteForQA(popupWebView ?? webView)
         #endif
-        cancelAutofill(); autofillLedger.stop(); cancelAuthenticationProbe()
+        suspendAutofillForCurrentDocument(); cancelAuthenticationProbe()
         quietPreflightTimeoutTask?.cancel(); quietPreflightTimeoutTask = nil
         requiresManualContinuation = true
         if isShowingConnection {
@@ -380,7 +386,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard featureEnabled, !sampleMode else { return }
         if !hasActiveConnection { connect(sampleMode: false) }
         manualContinuationRequested = true
-        presentExistingConnection(explicitlyRequested: true)
+        // Showing the paused page does not reset its once-only ledger. A new
+        // verified Microsoft document can resume the remaining steps below.
+        presentExistingConnection(stopAutofill: false, explicitlyRequested: true)
     }
 
     private func showVerification() {
@@ -641,6 +649,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         loginGate.endPresentation()
         cancelAutofill()
         autofillLedger.stop()
+        pausedAutofillDocument = nil
+        pausedAutofillNavigation = nil
+        autofillCommittedNavigation = nil
         isShowingConnection = false
         quietPreflightTimeoutTask?.cancel(); quietPreflightTimeoutTask = nil
         cancelAuthenticationProbe()
@@ -785,6 +796,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard hasActiveConnection, navigation != nil,
               (webView === self.webView && navigation === activeNavigation)
                 || (webView === popupWebView && navigation === activePopupNavigation) else { return }
+        autofillCommittedNavigation = navigation
         if webView === self.webView {
             committedMainDocumentContext = loginGate.context
             // Loading completion belongs to this same main document, including
@@ -808,6 +820,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         if webView === popupWebView {
             popupHTTPFailureCode = nil
             cancelAutofill()
+            autofillCommittedNavigation = nil
             activePopupNavigation = navigation
             popupDocument &+= 1
             return
@@ -815,6 +828,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard webView === self.webView else { return }
         mainHTTPFailureCode = nil
         activeNavigation = navigation
+        autofillCommittedNavigation = nil
         committedMainDocumentContext = nil
         loginGate.beginDocument()
         cancelAuthenticationProbe()
@@ -878,6 +892,42 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         return document.popupDocument == nil ? popupWebView == nil : popupDocument == document.popupDocument
     }
 
+    private func suspendAutofillForCurrentDocument() {
+        guard let browser = popupWebView ?? webView, let url = browser.url,
+              QMplusAutofillPolicy.isResumableOfficialDocument(url) else {
+            cancelAutofill(); autofillLedger.stop()
+            pausedAutofillDocument = nil; pausedAutofillNavigation = nil
+            return
+        }
+        if pausedAutofillDocument == nil {
+            pausedAutofillDocument = OwnedAutofillDocument(connection: loginGate.context,
+                credentialRevision: credentialAuthorization.credentialRevision,
+                popupDocument: browser === popupWebView ? popupDocument : nil,
+                browser: ObjectIdentifier(browser), url: url)
+            pausedAutofillNavigation = browser === popupWebView ? activePopupNavigation : activeNavigation
+        }
+        cancelAutofill()
+        autofillLedger.suspend()
+    }
+
+    private func resumeAutofillForNewDocument(_ document: OwnedAutofillDocument) {
+        guard !hasActiveAutofillLedger, let paused = pausedAutofillDocument,
+              QMplusAutofillPolicy.isNewCommittedNavigation(autofillCommittedNavigation,
+                  active: popupWebView == nil ? activeNavigation : activePopupNavigation,
+                  paused: pausedAutofillNavigation),
+              document.connection.presentation == paused.connection.presentation,
+              document.credentialRevision == paused.credentialRevision,
+              // URL/history changes alone do not establish a new document.
+              document.connection != paused.connection || document.popupDocument != paused.popupDocument,
+              credentialDraft.wantsToSave, credentialAuthorization.isEnabled,
+              QMplusAutofillPolicy.isInspectableMicrosoftDocument(document.url),
+              autofillLedger.resume(presentation: document.connection.presentation,
+                  credentialRevision: document.credentialRevision) else { return }
+        pausedAutofillDocument = nil
+        pausedAutofillNavigation = nil
+        requiresManualContinuation = false
+    }
+
     private func acceptsAutofillDocument(_ document: OwnedAutofillDocument, browser: WKWebView) -> Bool {
         hasActiveAutofillLedger && ownsAutofillDocument(document, browser: browser) && browser.url == document.url
             && QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url)
@@ -906,13 +956,16 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard !automaticLoginSuspended else { return }
         if isAutofillApplicationInactive(browser) { stopAutomaticLoginForInactiveScene(); return }
         guard hasActiveConnection, (popupWebView ?? webView) === browser,
-              QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url), let url = browser.url,
-              hasActiveAutofillLedger else {
+              QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url), let url = browser.url else {
             presentExistingConnection(); return
         }
         let document = OwnedAutofillDocument(connection: loginGate.context,
             credentialRevision: credentialAuthorization.credentialRevision,
             popupDocument: browser === popupWebView ? popupDocument : nil, browser: ObjectIdentifier(browser), url: url)
+        // The recorded navigation must have really committed after the paused
+        // page. Foreground/history epochs alone cannot authorize resumption.
+        resumeAutofillForNewDocument(document)
+        guard hasActiveAutofillLedger else { presentExistingConnection(); return }
         lastReviewedDocumentURL = browser === webView ? url : lastReviewedDocumentURL
         guard autofillDocument != document else { return }
         if !hasUsableAutofillViewport(browser) {
@@ -972,6 +1025,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             }, identityMismatch: { [weak self, weak browser] in
                 guard let self, let browser, self.ownsAutofillDocument(document, browser: browser) else { return }
                 _ = self.invalidateBusinessCacheForIdentityChange()
+                self.autofillLedger.stop()
+                self.pausedAutofillDocument = nil
             }, progress: { [weak self, weak browser] state in
                 guard let self, let browser, self.acceptsAutofillDocument(document, browser: browser) else { return }
                 // These are once-only, validated login steps. A slow
@@ -981,6 +1036,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 case .password: self.statusKey = "正在填写 QMplus 官方登录密码…"
                 case .continuation: self.statusKey = "正在确认 QMplus 登录状态…"
                 case .waiting:
+                    self.manualContinuationRequested = false
                     self.resumeSilentAuthentication()
                     self.statusKey = "已提交 QMplus 官方登录步骤，正在等待页面确认…"
                 }
@@ -1205,6 +1261,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             if state == .authenticated && self.popupHTTPFailureCode == nil {
                 self.closeAuthenticationPopup(reloadMain: true)
             } else if state == .error || self.popupHTTPFailureCode != nil {
+                self.autofillLedger.stop()
+                self.pausedAutofillDocument = nil
                 self.canSynchronize = false
                 self.navigationFailureCode = self.popupHTTPFailureCode ?? "QM_OFFICIAL_EXCEPTION"
                 self.statusKey = "QMplus 官方网页登录失败，请重试"
@@ -1256,6 +1314,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         canSynchronize = false
         navigationFailureCode = code
         statusKey = "QMplus 官方网页登录失败，请重试"
+        autofillLedger.stop()
+        pausedAutofillDocument = nil
         presentExistingConnection()
     }
 

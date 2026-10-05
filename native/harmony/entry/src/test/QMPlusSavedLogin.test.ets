@@ -98,6 +98,29 @@ async function authorization(current: QMPlusSession): Promise<QMPlusLoginAuthori
 
 export default function qmPlusSavedLoginTest() {
   describe('QMPlusSavedLoginTest', () => {
+    it('the_first_chooser_wait_is_bounded_and_a_later_exact_match_keeps_its_single_claim', 0, () => {
+      const ready: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger();
+      ready.begin(); ready.beginDocument('document_1');
+      for (let attempt: number = 0; attempt < 3; attempt++) {
+        expect(ready.canWaitForInitialAccountChoice(attempt)).assertTrue();
+        expect(ready.claimAccount('document_1', false)).assertFalse();
+        expect(ready.passwordAttempted()).assertFalse();
+      }
+      expect(ready.claimAccount('document_1', true)).assertTrue();
+      expect(ready.canWaitForInitialAccountChoice(3)).assertFalse();
+      expect(ready.recordAccountSelection('document_1', 'ACCOUNT_SELECTED')).assertTrue();
+      expect(ready.claimAccount('document_1', true)).assertFalse();
+      const unmatched: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger();
+      unmatched.begin(); unmatched.beginDocument('document_2');
+      for (let attempt: number = 0; attempt < 8; attempt++) {
+        expect(unmatched.canWaitForInitialAccountChoice(attempt)).assertTrue();
+        expect(unmatched.claimAccount('document_2', false)).assertFalse();
+      }
+      expect(unmatched.canWaitForInitialAccountChoice(8)).assertFalse();
+      expect(unmatched.claimPassword('document_2', true)).assertFalse();
+      unmatched.stop();
+      expect(unmatched.canWaitForInitialAccountChoice(0)).assertFalse();
+    });
     it('page_not_ready_retains_session_profile_and_last_good_snapshot_for_a_normal_retry', 0, async () => {
       const store: FakeLoginStore = new FakeLoginStore();
       const profile: RetainedWebProfile = new RetainedWebProfile();
