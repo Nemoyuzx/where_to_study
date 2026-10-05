@@ -4,7 +4,7 @@
 
 ## 本轮更新（2026-10-05）
 
-GitHub 继续保留 **draft + pre-release**，只更新现有测试包，不公开、不转正式版。下面的 103／61／1002038 为历史记录，不代表本次新包。
+GitHub 继续保留 **draft + pre-release**，只更新现有测试包，不公开、不转正式版。本轮包由 `codex/v032-language-hotfix` 的 `fced615e` 构建，完整回执见[本轮记录](https://github.com/Nemoyuzx/where_to_study/blob/codex/v032-language-hotfix/docs/release-v0.3.2-prerelease.md)。下面的 103／61／1002038 为历史记录，不代表本次新包。
 
 ### iOS / iPadOS — 0.3.2（108）
 
