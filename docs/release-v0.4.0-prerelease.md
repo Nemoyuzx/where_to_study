@@ -394,8 +394,14 @@ iOS／iPadOS **0.4.0（114）** 于 **2026-10-05 19:30:50 +0800** 取得 `Upload
 
 登录成功后自动同步；Android、HarmonyOS、Tauri 官方窗口的重复同步按钮同样删除。Android 与 HarmonyOS 补齐成功、关闭和退后台的引擎 Cookie 落盘；Tauri 普通关闭登录窗口保留同一浏览器实例。所有平台优先复用原隔离 profile，普通关闭不删除会话，同样的已保存资料不会无故重建网页身份。已识别登录但页面配置尚未就绪时有限等待，返回普通同步重试，不再误报会话失效并触发重新登录。官方会话有效期与 MFA 要求不修改，不把原始 Cookie 或令牌导出到业务缓存。
 
-本轮 JS 最终相关检查为 **73/73**；共享协议新增的页面就绪检查在镜像同步后另行复核。Android 相关目标规格 **53/53**、HarmonyOS 登录规格 **45/45**、Release 编译、Tauri 相关 Rust **39** 与 JS **5** 规格通过。HarmonyOS 完整宿主套件仍有通知 **1** 项与默认网页区快照 **3** 项既有失败，未把目标规格成功称为全量零失败。Windows／Linux 宿主安装包仍待构建恢复。
+本轮 JS 最终相关检查为 **99/99**，包括已同步镜像、认证／页面就绪、会话保留、课程分组与发布计数。Android 相关目标规格 **53/53**、HarmonyOS 登录规格 **45/45**、Release 编译、Tauri 相关 Rust **39** 与 JS **5** 规格通过。HarmonyOS 完整宿主套件仍有通知 **1** 项与默认网页区快照 **3** 项既有失败，未把目标规格成功称为全量零失败。Windows／Linux 宿主安装包仍待构建恢复。
 
 0.3.2 独立分支 `codex/v032-language-hotfix` 已与远端 `369c6373` 核对并重新执行推送，结果为最新；继续保留预发布草稿。
 
 日志目录：`release-artifacts/v0.4.0-build115-account-picker/`。
+
+包源码为 `f1d7464e`，已推送 `codex/v040-localization`。macOS **0.4.0（115）** 于 **2026-10-05 22:42:45 +0800** 取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`；沿用原 Manual 主程序／Widget、已安装 Installer 身份及测试上传脚本。成功后未检查 App Store Connect 后续状态或提交正式审核。
+
+iOS／iPadOS **0.4.0（115）** 于 **2026-10-05 22:47:25 +0800** 取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`；沿用本地 Xcode Automatic 签名及 Apple Distribution 导出验证。本地首次导出成功不作为上传证据；取得实际成功回执后停止，未检查 App Store Connect 后续状态或提交正式审核。
+
+最终回执为本轮目录中的 `macos-upload.log`、`ios-upload.log`；`ios-targeted-tests.log` 保存 93 项相关单元与 1 项中英工具栏界面成功结果，`js-session-final-tests.log` 保存 99 项 JS 检查结果。未重复上传已经成功的 112／113／114。
