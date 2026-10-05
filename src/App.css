@@ -11,6 +11,42 @@
     env(safe-area-inset-left, 0px);
 }
 
+/* Current window only. The WebView compositor blurs the live backdrop, without
+   capturing screen pixels, retaining an old page, or changing root identity. */
+.language-blur-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  background: transparent;
+  -webkit-backdrop-filter: blur(0px);
+  backdrop-filter: blur(0px);
+  transition: opacity 120ms ease-out, backdrop-filter 120ms ease-out,
+    -webkit-backdrop-filter 120ms ease-out, background-color 120ms ease-out;
+}
+.language-blur-overlay.covering,
+.language-blur-overlay.waiting {
+  visibility: visible;
+  opacity: 1;
+  background: color-mix(in srgb, var(--app-background) 12%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.language-blur-overlay.revealing {
+  visibility: visible;
+  transition-duration: 220ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .language-blur-overlay { transition: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .language-blur-overlay.covering, .language-blur-overlay.waiting {
+    background: var(--app-background);
+  }
+}
+
 .app-frame {
   display: grid;
   grid-template-columns: clamp(210px, 230px, 250px) minmax(0, 1fr);

@@ -435,6 +435,8 @@ object UiText {
         "小组件会显示日期、教学周、当前或下一节状态、节次、地点与教师；展开样式最多展示 6 门课程。预览使用虚构示例，不会写入课表。" to "The widget shows the date, teaching week, current or next-course status, periods, locations, and instructors. Expanded mode shows up to six courses. Preview data is fictional and is never written to your schedule.",
         "应用设置" to "App Settings",
         "语言" to "Language",
+        "正在切换界面语言" to "Switching interface language",
+        "无法保存语言设置。" to "Unable to save the language setting.",
         "跟随系统" to "System",
         "简体中文" to "Chinese",
         "更改语言后将立即重新加载界面。" to "The interface reloads immediately after changing the language.",

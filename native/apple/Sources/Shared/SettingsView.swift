@@ -651,7 +651,7 @@ struct SettingsView: View {
             transaction.disablesAnimations = true
             withTransaction(transaction) { model.setAppLanguage(language) }
         }
-        #if os(iOS)
+        #if os(iOS) || os(macOS)
         session.languageTransition.request(
             current: model.appLanguage, target: language,
             label: model.localized("正在切换界面语言"), reduceMotion: reduceMotion, change: apply

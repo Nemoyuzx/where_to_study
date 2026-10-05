@@ -9,6 +9,7 @@ final class LanguageChangeTransition {
     static let coverDuration: TimeInterval = 0.12
     static let layoutDelay: TimeInterval = 0.06
     static let revealDuration: TimeInterval = 0.22
+    static let layoutTimeout: TimeInterval = 1
 
     private weak var host: UIView?
     private var cover: UIVisualEffectView?
@@ -95,11 +96,10 @@ final class LanguageChangeTransition {
             guard let self, self.revision == currentRevision, position == .end else { return }
             effectView.accessibilityValue = "covered"
             self.waitingForLayout = self.targetLocaleIdentifier != nil
-            // A finite fallback also handles an unchanged resolved locale or
-            // a host removed before SwiftUI delivers a new layout callback.
-            self.scheduleReveal(revision: currentRevision,
-                                delay: self.waitingForLayout ? 0.25 : Self.layoutDelay)
+            if self.waitingForLayout { self.scheduleLayoutTimeout(revision: currentRevision) }
+            else { self.scheduleReveal(revision: currentRevision, delay: Self.layoutDelay) }
             self.applyPendingChange()
+            self.host?.setNeedsLayout()
         }
         covering.startAnimation()
         effectView.accessibilityValue = "covering"
@@ -124,6 +124,16 @@ final class LanguageChangeTransition {
         // Defer animator creation, not just its start: effect=nil otherwise
         // becomes the model value before the covered locale finishes layout.
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: reveal)
+    }
+
+    private func scheduleLayoutTimeout(revision currentRevision: Int) {
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self, self.revision == currentRevision, self.waitingForLayout else { return }
+            // Cleanup must be bounded, but a timeout is not layout readiness.
+            self.finishImmediately()
+        }
+        pendingReveal = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.layoutTimeout, execute: timeout)
     }
 
     // Backgrounding, navigation away, Reduce Motion and host teardown must

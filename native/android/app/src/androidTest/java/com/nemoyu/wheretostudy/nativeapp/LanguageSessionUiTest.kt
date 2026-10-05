@@ -290,7 +290,8 @@ class LanguageSessionUiTest {
         val deadline = SystemClock.elapsedRealtime() + 5_000
         var ready = false
         while (!ready && SystemClock.elapsedRealtime() < deadline) {
-            scenario.onActivity { ready = AppLocale.isEnglish(it) == (language == AppLanguage.ENGLISH) }
+            scenario.onActivity { ready = AppLocale.isEnglish(it) == (language == AppLanguage.ENGLISH) &&
+                it.languageTransitionPhase() == "idle" }
             if (!ready) SystemClock.sleep(10)
         }
         assertTrue("The recreated Activity must use the requested localized Context", ready)

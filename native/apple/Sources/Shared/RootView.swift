@@ -297,7 +297,7 @@ struct RootView: View {
             )
         }
         .onChange(of: scenePhase) { phase in
-            #if os(iOS)
+            #if os(iOS) || os(macOS)
             if phase != .active { settingsSession.languageTransition.finishImmediately() }
             #endif
             if phase == .active {

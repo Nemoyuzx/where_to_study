@@ -57,6 +57,7 @@ export struct SettingsView {
   @Param favoriteManagerOnly: boolean = false;
   @Event onFavoriteManagerVisibilityChanged: (visible: boolean) => void = () => {
   };
+  @Event onLanguageChangeRequested: (target: AppLanguage) => void = () => {};
   @Local contentWidth: number = 350;
   @Local requestedFavoriteCount: number = 20;
   private statusDismissRevision: number = 0;
@@ -72,7 +73,23 @@ export struct SettingsView {
   aboutToAppear(): void {
     if (!this.favoriteManagerOnly) {
       this.session.syncCustomDeadlineURL(this.model.customDeadlinesURL);
+      this.applyRequestedLanguageChange();
     }
+  }
+
+  @Monitor('session.languageChangeRevision')
+  onLanguageChangeRequest(): void {
+    this.applyRequestedLanguageChange();
+  }
+
+  private applyRequestedLanguageChange(): void {
+    const target: AppLanguage | null = this.session.languageChangeTarget;
+    const revision: number = this.session.languageChangeRevision;
+    if (this.favoriteManagerOnly || target === null ||
+      revision <= this.session.languageChangeAppliedRevision) { return; }
+    // 在变更模型前先登记 owner，避免 V2 同步重渲染重入两次点击。
+    this.session.languageChangeAppliedRevision = revision;
+    this.selectLanguageAtCurrentPosition(target);
   }
 
   aboutToDisappear(): void {
@@ -385,6 +402,8 @@ export struct SettingsView {
             .borderRadius(6)
             .backgroundColor(this.model.languageSetting() === language ?
               AppTheme.segmentedSelection() : Color.Transparent)
+            .id('settings.language.thumb.' + index.toString() +
+              (this.model.languageSetting() === language ? '.active' : '.inactive'))
             .animation({ duration: 160, curve: Curve.EaseOut })
           Text(AppLanguageInfo.label(language, this.model.resolvedLanguage()))
             .id('settings.language.' + index.toString())
@@ -395,7 +414,7 @@ export struct SettingsView {
             .maxLines(1)
             .width('100%')
             .height(32)
-            .onClick(() => this.selectLanguageAtCurrentPosition(language))
+            .onClick(() => this.onLanguageChangeRequested(language))
         }
         .layoutWeight(1)
         .height(32)

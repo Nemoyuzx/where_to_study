@@ -1,6 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { SettingsSession } from '../main/ets/view/SettingsSession';
 import { SettingsPresentationSeedPolicy } from '../main/ets/model/LaunchSupport';
+import { AppLanguage } from '../main/ets/common/AppLocalization';
 
 export default function settingsSessionTest() {
   describe('SettingsSessionTest', () => {
@@ -42,6 +43,20 @@ export default function settingsSessionTest() {
       expect(session.editingPreClassReminders).assertFalse();
       expect(session.preClassLeadDrafts.join(',')).assertEqual('10');
       expect(session.previewDimension).assertEqual(3);
+    });
+
+    it('language_cover_request_keeps_only_latest_target_without_touching_other_drafts', 0, () => {
+      const session: SettingsSession = new SettingsSession();
+      session.editCustomDeadlineURL('https://example.org/unsaved.json');
+      session.requestLanguageChange(AppLanguage.english, 7);
+      session.requestLanguageChange(AppLanguage.simplifiedChinese, 8);
+      expect(session.languageChangeTarget).assertEqual(AppLanguage.simplifiedChinese);
+      expect(session.languageChangeRevision).assertEqual(8);
+      session.languageChangeAppliedRevision = 8;
+      session.clearLanguageChange();
+      expect(session.languageChangeTarget).assertNull();
+      expect(session.languageChangeRevision).assertEqual(8);
+      expect(session.customDeadlineURLDraft).assertEqual('https://example.org/unsaved.json');
     });
 
     it('presentation_seed_requires_debug_review_flag_and_is_one_shot_in_memory', 0, () => {

@@ -121,6 +121,7 @@ import {
 import QueryHub from './QueryHub.jsx'
 import ColorThemeSettings, { useColorTheme } from './ColorThemeSettings.jsx'
 import { colorThemeHeatmap, resolvedColorTheme } from './color-themes.js'
+import { useLanguageTransition } from './use-language-transition.js'
 import './App.css'
 
 const NAV_ITEMS = [
@@ -1566,7 +1567,11 @@ function App() {
     supports_calendar_import: false,
   })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
+  const appShellRef = useRef(null)
   const uiLanguage = resolvedUiLanguage(settings.uiLanguage, navigator.languages?.[0] || navigator.language)
+  const languageTransition = useLanguageTransition({rootRef:appShellRef,
+    apply:value => updateSettingImmediately('uiLanguage',value), currentLanguage:uiLanguage, activePage,
+    resolve:value => resolvedUiLanguage(value,navigator.languages?.[0] || navigator.language)})
   const t = useMemo(() => translator(uiLanguage), [uiLanguage])
   const uiWeekdayLabels = uiLanguage === 'en'
     ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -2536,6 +2541,11 @@ function App() {
   }, [classroomsCache, classroomsCacheLoaded, settings.account, settings.hasSavedPassword, settingsLoaded, settingsSaving, todayDate])
 
   function updateSetting(field, value) {
+    if (field === 'uiLanguage') { languageTransition.request(value); return }
+    updateSettingImmediately(field, value)
+  }
+
+  function updateSettingImmediately(field, value) {
     setSettingsSaved(false)
     if (['dailyCourseNotificationsEnabled', 'dailyCourseNotificationMinutes', 'courseRemindersEnabled', 'courseReminderMinutes'].includes(field)) {
       setReminderSettingsStatus('')
@@ -3741,6 +3751,7 @@ function App() {
   }
 
   async function clearAllLocalData() {
+    languageTransition.cancel()
     await runTask('clear-local-data', async () => {
       const previousSavedCredential = { ...savedCredentialState.current }
       credentialStateRevision.current += 1
@@ -3888,7 +3899,7 @@ function App() {
   }
 
   return (
-    <main className="app-shell" lang={uiLanguage === 'en' ? 'en' : 'zh-Hans'}>
+    <main ref={appShellRef} className="app-shell" lang={uiLanguage === 'en' ? 'en' : 'zh-Hans'}>
       <div className="app-frame">
         <aside className="side-nav">
           <div className="side-brand">
@@ -5295,6 +5306,9 @@ function App() {
           </div>
         </CourseManagementDialog>
       ) : null}
+      <div className={`language-blur-overlay ${languageTransition.overlay.phase}`}
+        data-phase={languageTransition.overlay.phase} data-target-locale={languageTransition.overlay.target || ''}
+        aria-hidden="true" />
     </main>
   )
 }

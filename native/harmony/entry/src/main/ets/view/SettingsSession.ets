@@ -1,5 +1,7 @@
 // 仅保存设置页的临时 UI 状态，由 RootView 持有；不写入业务偏好或磁盘。
 // 平板侧栏与手机底栏互切时 SettingsView 会重新创建，草稿仍应保留。
+import { AppLanguage } from '../common/AppLocalization';
+
 @ObservedV2
 export class SettingsSession {
   @Trace showingPrivacyPolicy: boolean = false;
@@ -10,9 +12,23 @@ export class SettingsSession {
   @Trace previewDimension: number = 3;
   // 仅 DEBUG review-demo 的显式 UI 生命周期测试使用；普通/真实输入场景始终为 false。
   @Trace seedOnlyScene: boolean = false;
+  // RootView 的全窗口语言遮罩盖稳后才发出请求。revision 可跨 SettingsView 重建，
+  // 已应用序号防止同一目标在侧栏/底栏布局切换时被重复提交。
+  @Trace languageChangeTarget: AppLanguage | null = null;
+  @Trace languageChangeRevision: number = 0;
+  @Trace languageChangeAppliedRevision: number = 0;
 
   private customDeadlineURLDirty: boolean = false;
   private presentationSeeded: boolean = false;
+
+  requestLanguageChange(target: AppLanguage, revision: number): void {
+    this.languageChangeTarget = target;
+    this.languageChangeRevision = revision;
+  }
+
+  clearLanguageChange(): void {
+    this.languageChangeTarget = null;
+  }
 
   seedReviewPresentationDraftsOnce(): boolean {
     if (this.presentationSeeded) { return false; }

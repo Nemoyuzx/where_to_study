@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.res.ColorStateList
+import android.content.res.Resources
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.Uri
@@ -45,6 +46,10 @@ data class LocalDataClearResult(val failedItems: List<String>) {
 }
 
 class MainActivity : Activity() {
+    private var languageResources: Resources? = null
+    private val languageTransition = LanguageChangeTransition()
+
+    override fun getResources(): Resources = languageResources ?: super.getResources()
     private enum class Destination(
         val label: String,
         val navigationViewID: Int,
@@ -295,6 +300,7 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
+        languageTransition.finishImmediately()
         if (windowLayoutListenerRegistered) {
             windowInfoTracker.removeWindowLayoutInfoListener(windowLayoutInfoListener)
             windowLayoutListenerRegistered = false
@@ -700,10 +706,11 @@ class MainActivity : Activity() {
         (start + (end - start) * fraction).toInt()
 
     private fun navigate(destination: Destination) {
+        if (destination != selectedDestination) languageTransition.finishImmediately()
         captureUiSession()
         val previousDestination = selectedDestination
         selectedDestination = destination
-        if (destination == Destination.SETTINGS) prewarmPublicDeadlinesIfEnabled()
+        if (destination == Destination.SETTINGS && !restoringUiState) prewarmPublicDeadlinesIfEnabled()
         if (destination == Destination.SETTINGS) {
             window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         } else {
@@ -903,6 +910,7 @@ class MainActivity : Activity() {
     }
 
     private fun handleAppBack(): Boolean {
+        if (languageTransition.phase != "idle") { languageTransition.finishImmediately(); return true }
         if (selectedDestination != Destination.SETTINGS ||
             settingsRoute != SettingsRoute.FAVORITES
         ) return false
@@ -912,11 +920,38 @@ class MainActivity : Activity() {
 
     fun updateAppLanguage(language: AppLanguage) {
         if (!isCurrentUiOwner()) return
-        if (preferences.languageCode == language.code) return
-        captureUiSession()
-        preferences.languageCode = language.code
-        recreate()
+        if (preferences.languageCode == language.code) { languageTransition.cancel(); return }
+        if (!::adaptiveRoot.isInitialized) return
+        val weakOwner = java.lang.ref.WeakReference(this)
+        val targetEnglish = language == AppLanguage.ENGLISH || (language == AppLanguage.SYSTEM &&
+            Resources.getSystem().configuration.locales[0].language != java.util.Locale.CHINESE.language)
+        val decor = window.decorView as? ViewGroup ?: return
+        languageTransition.request(decor, adaptiveRoot, uiText("正在切换界面语言"), change = {
+            weakOwner.get()?.takeIf(MainActivity::isCurrentUiOwner)?.applyLanguageInPlace(language)
+        }, ready = {
+            weakOwner.get()?.let { owner -> owner.isCurrentUiOwner() && !owner.restoringUiState &&
+                AppLocale.isEnglish(owner) == targetEnglish && owner.content.childCount > 0 &&
+                owner.content.getChildAt(0).isLaidOut && !owner.content.getChildAt(0).isLayoutRequested } == true
+        })
     }
+
+    private fun applyLanguageInPlace(language: AppLanguage) {
+        if (!isCurrentUiOwner()) return
+        captureUiSession()
+        try { preferences.languageCode = language.code } catch (_: Exception) {
+            Toast.makeText(this, uiText("无法保存语言设置。"), Toast.LENGTH_LONG).show()
+            return
+        }
+        // Only this Activity's resources/views change. The application-context
+        // repositories and current UI owner remain the very same instances.
+        languageResources = AppLocale.wrap(applicationContext, language.code).resources
+        activitySession.detachObservers()
+        restoringUiState = true
+        updateAdaptiveLayout(force = true)
+    }
+
+    internal fun languageTransitionPhase(): String = languageTransition.phase
+    internal fun languageTransitionReadyFrames(): Int = languageTransition.readyFrameCount
 
     internal fun isCurrentUiOwner(): Boolean = !isFinishing && !isDestroyed && activitySession.uiOwner.current() === this
     internal fun allowsAutomaticPageLoads(): Boolean = !restoringUiState
@@ -1372,6 +1407,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        languageTransition.close()
         if (!isChangingConfigurations) automaticScheduleLaunchRefreshKey?.let { key ->
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
             automaticScheduleLaunchRefreshKey = null

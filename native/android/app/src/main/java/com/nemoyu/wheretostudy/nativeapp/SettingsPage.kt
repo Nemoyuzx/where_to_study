@@ -221,6 +221,10 @@ class SettingsPage internal constructor(
                 pendingLanguageCommit = action
                 pendingLanguageSource = weakSource
                 source.postDelayed(action, SEGMENT_SELECTION_COMMIT_DELAY_MILLIS)
+            } else if (activity.languageTransitionPhase() != "idle") {
+                // Selecting the still-current locale also reverses a choice
+                // waiting under the blur; do not let the older choice commit.
+                activity.updateAppLanguage(selectedLanguage)
             }
         }
         val weakPage = WeakReference(this@SettingsPage)
