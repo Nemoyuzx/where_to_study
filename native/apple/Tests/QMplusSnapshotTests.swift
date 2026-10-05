@@ -7,6 +7,34 @@ import XCTest
 
 @MainActor
 final class QMplusSnapshotTests: XCTestCase {
+    func testWarmStartupRechecksSceneEligibilityAfterAwaitAndDoesNotStartAHiddenLogin() async throws {
+        let suite = "QMplusWarmSceneRace.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        var checks = 0
+        await store.launchWarmOnce(sampleMode: false, canStart: { checks += 1; return false })
+        XCTAssertEqual(checks, 1)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertFalse(store.requiresManualContinuation)
+        XCTAssertNil(store.webView, "A scene which became inactive during cache restoration must not open a login page")
+    }
+
+    func testCancelledWarmStartupDoesNotConsumeTheLoginOwner() async throws {
+        let suite = "QMplusCancelledWarm.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let task = Task { @MainActor in await store.launchWarmOnce(sampleMode: false) }
+        task.cancel()
+        await task.value
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView)
+        XCTAssertTrue(store.beginConnectionOwner(quiet: true), "The cancelled startup must leave the sole owner available")
+        store.endPresentation()
+    }
+
     func testReconnectionRequestsFreshDashboardWithoutReplayingCallbackOrAttachingSecrets() {
         let request = QMplusStore.dashboardRequest()
         XCTAssertEqual(request.url?.absoluteString, "https://qmplus.qmul.ac.uk/my/")

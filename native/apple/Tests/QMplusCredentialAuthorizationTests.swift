@@ -1,4 +1,5 @@
 import XCTest
+import Security
 #if os(macOS)
 @testable import WhereToStudyMac
 #else
@@ -9,6 +10,171 @@ import XCTest
 // These tests are not executed while local automation is prohibited.
 @MainActor
 final class QMplusCredentialAuthorizationTests: XCTestCase {
+    func testInactiveSceneCancelsPreparationBeforeItCanCreateALoginOwner() async throws {
+        let suite = "QMplusInactivePreparation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        journal.marker = .init(recordID: UUID(), authorizationNonce: UUID())
+        vault.markerError = .keychain(errSecInteractionNotAllowed)
+        let store = QMplusStore(defaults: defaults, credentialStore: vault,
+            authorizationJournal: journal, allowsCredentialStorage: true)
+        store.connect(sampleMode: false, background: true)
+        XCTAssertTrue(store.isPreparingConnection)
+        XCTAssertFalse(store.hasActiveConnection)
+        store.stopAutomaticLoginForInactiveScene()
+        XCTAssertFalse(store.isPreparingConnection)
+        await Task.yield()
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.requiresManualContinuation)
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertNil(store.webView)
+        XCTAssertEqual(vault.secretReads, 0, "Waiting for startup availability must inspect metadata only")
+        store.endPresentation()
+    }
+
+    func testFeatureOffCancelsPendingPreparationAndCannotLaterOpenAWebView() async throws {
+        let suite = "QMplusDisabledPreparation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        journal.marker = .init(recordID: UUID(), authorizationNonce: UUID())
+        vault.markerError = .keychain(errSecNotAvailable)
+        let store = QMplusStore(defaults: defaults, credentialStore: vault,
+            authorizationJournal: journal, allowsCredentialStorage: true)
+        store.connect(sampleMode: false, background: true)
+        XCTAssertTrue(store.isPreparingConnection)
+        store.setFeatureEnabled(false)
+        XCTAssertFalse(store.isPreparingConnection)
+        await Task.yield()
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView)
+        XCTAssertEqual(vault.secretReads, 0)
+    }
+
+    func testTemporaryMetadataUnavailabilityRetriesWithoutReadingSecretsOrChangingSavedAuthority() {
+        for status in [errSecInteractionNotAllowed, errSecNotAvailable] {
+            let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+            let saved = fixture()
+            vault.record = saved; journal.marker = saved.marker
+            vault.markerError = .keychain(status)
+            let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
+            authorization.loadIfNeeded()
+            XCTAssertTrue(authorization.isTemporarilyUnavailable)
+            XCTAssertFalse(authorization.isEnabled)
+            XCTAssertNil(authorization.loadAuthorizedCredentials(expectedRevision: authorization.credentialRevision))
+            XCTAssertEqual(vault.secretReads, 0)
+            XCTAssertEqual(vault.record, saved)
+            XCTAssertEqual(journal.marker, saved.marker)
+            let reads = vault.markerReads
+            authorization.loadIfNeeded()
+            XCTAssertEqual(vault.markerReads, reads + 1, "A temporary failure must not latch hasLoaded")
+            vault.markerError = nil
+            authorization.loadIfNeeded()
+            XCTAssertTrue(authorization.isEnabled)
+            XCTAssertFalse(authorization.isTemporarilyUnavailable)
+            XCTAssertEqual(vault.secretReads, 0, "Availability recovery still restores metadata only")
+        }
+    }
+
+    func testTemporaryRestoreWithdrawsOldAuthorityAndRechecksChangedMarkers() {
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        let saved = fixture()
+        vault.record = saved; journal.marker = saved.marker
+        let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
+        authorization.restoreAuthorization()
+        let revision = authorization.credentialRevision
+        vault.markerError = .keychain(errSecNotAvailable)
+        authorization.restoreAuthorization()
+        XCTAssertTrue(authorization.isTemporarilyUnavailable)
+        XCTAssertFalse(authorization.isEnabled)
+        XCTAssertGreaterThan(authorization.credentialRevision, revision)
+        XCTAssertNil(authorization.loadAuthorizedCredentials(expectedRevision: revision))
+        vault.markerError = nil
+        journal.marker = fixture().marker
+        authorization.loadIfNeeded()
+        XCTAssertFalse(authorization.isEnabled, "A prior marker cannot authorize the changed record")
+        XCTAssertFalse(authorization.isTemporarilyUnavailable)
+        let reads = vault.markerReads
+        journal.marker = saved.marker
+        authorization.loadIfNeeded()
+        XCTAssertEqual(vault.markerReads, reads, "A real mismatch is not an availability retry")
+        XCTAssertFalse(authorization.isEnabled)
+        XCTAssertEqual(vault.secretReads, 0)
+    }
+
+    func testOnlyTheTwoExplicitKeychainAvailabilityErrorsAutomaticallyRetry() {
+        for error in [QMplusCredentialStorageError.keychain(errSecAuthFailed), .keychain(errSecUserCanceled),
+                      .invalidRecord, .verificationFailed] {
+            let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+            let saved = fixture()
+            vault.record = saved; journal.marker = saved.marker; vault.markerError = error
+            let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
+            authorization.loadIfNeeded()
+            XCTAssertFalse(authorization.isTemporarilyUnavailable)
+            XCTAssertFalse(authorization.isEnabled)
+            let reads = vault.markerReads
+            vault.markerError = nil
+            authorization.loadIfNeeded()
+            XCTAssertEqual(vault.markerReads, reads)
+            XCTAssertFalse(authorization.isEnabled)
+            XCTAssertEqual(vault.secretReads, 0)
+        }
+    }
+
+    func testTemporarySecretReadReturnsNothingAndInvalidatesThePreviousRevision() {
+        for status in [errSecInteractionNotAllowed, errSecNotAvailable] {
+            let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+            let saved = fixture()
+            vault.record = saved; journal.marker = saved.marker
+            let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
+            authorization.restoreAuthorization()
+            let revision = authorization.credentialRevision
+            vault.readError = .keychain(status)
+            XCTAssertNil(authorization.loadAuthorizedCredentials(expectedRevision: revision))
+            XCTAssertTrue(authorization.isTemporarilyUnavailable)
+            XCTAssertFalse(authorization.isEnabled)
+            XCTAssertGreaterThan(authorization.credentialRevision, revision)
+            vault.readError = nil
+            authorization.loadIfNeeded()
+            XCTAssertTrue(authorization.isEnabled)
+            XCTAssertFalse(authorization.isTemporarilyUnavailable)
+            XCTAssertEqual(vault.secretReads, 1, "Metadata retry must not repeat the failed secret read")
+            XCTAssertNil(authorization.loadAuthorizedCredentials(expectedRevision: revision))
+            XCTAssertEqual(authorization.loadAuthorizedCredentials(expectedRevision: authorization.credentialRevision), saved)
+        }
+    }
+
+    func testExplicitDisableCancelsAvailabilityRetryEvenWhenDurableDeletionFails() {
+        for failDeletion in [false, true] {
+            let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+            let saved = fixture()
+            vault.record = saved; journal.marker = saved.marker
+            vault.markerError = .keychain(errSecInteractionNotAllowed)
+            let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
+            authorization.loadIfNeeded()
+            XCTAssertTrue(authorization.isTemporarilyUnavailable)
+            vault.failClear = failDeletion; journal.failRevoke = failDeletion
+            XCTAssertEqual(authorization.disableAndDelete(), !failDeletion)
+            XCTAssertFalse(authorization.isTemporarilyUnavailable)
+            vault.markerError = nil
+            let reads = vault.markerReads
+            authorization.loadIfNeeded()
+            authorization.restoreAuthorization()
+            authorization.suspendInMemory()
+            authorization.loadIfNeeded()
+            XCTAssertFalse(authorization.isEnabled)
+            XCTAssertFalse(authorization.isTemporarilyUnavailable)
+            XCTAssertEqual(vault.markerReads, reads, "Foreground recovery cannot undo the user's disable")
+            XCTAssertEqual(vault.secretReads, 0)
+            vault.failClear = false; journal.failRevoke = false
+            XCTAssertTrue(authorization.saveAndAuthorize(account: "synthetic@example.invalid", password: "synthetic-new-password"))
+            authorization.suspendInMemory()
+            authorization.loadIfNeeded()
+            XCTAssertTrue(authorization.isEnabled, "Only a successful explicit save may grant authority again")
+        }
+    }
+
     func testAuthorizationDefaultsOffAndRestoreOnlyReadsNonsecretMatchingMetadata() throws {
         let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
         let authorization = QMplusCredentialAuthorization(storage: vault, journal: journal)
@@ -281,11 +447,19 @@ private final class FakeQMCredentialVault: QMplusCredentialStoring, @unchecked S
     var record: QMplusSavedCredentials?
     var calls: FakeQMCalls?
     var secretReads = 0
+    var markerReads = 0
+    var markerError: QMplusCredentialStorageError?
+    var readError: QMplusCredentialStorageError?
     var failRead = false, failClear = false
     var onClear: (@MainActor () -> Void)?
-    func authorizationMarker() throws -> QMplusCredentialAuthorizationMarker? { calls?.values.append("vault.marker"); return record?.marker }
+    func authorizationMarker() throws -> QMplusCredentialAuthorizationMarker? {
+        calls?.values.append("vault.marker"); markerReads += 1
+        if let markerError { throw markerError }
+        return record?.marker
+    }
     func load() throws -> QMplusSavedCredentials? {
         calls?.values.append("vault.load"); secretReads += 1
+        if let readError { throw readError }
         if failRead { throw FakeQMFailure.injected }
         return record
     }

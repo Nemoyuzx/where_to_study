@@ -8,6 +8,47 @@ import XCTest
 // Synthetic specification source only. Do not execute while local tests and GUI are prohibited.
 @MainActor
 final class QMplusAutofillPipelineTests: XCTestCase {
+    func testSlowFirstPickerCompletesInBackgroundWithoutManualContinuation() async {
+        let fixture = Fixture()
+        fixture.evaluator.holdsSubmission = true
+        fixture.evaluator.states = Array(repeating: state(.loading, reason: .loading), count: 16)
+            + [state(.account, match: true), state(.manual, match: true, reason: .attempted), state(.password, match: true)]
+        let selected = expectation(description: "The slow picker becomes ready after the old four-second limit")
+        let password = expectation(description: "The remaining password step also runs without manual continuation")
+        fixture.evaluator.onInspection = {
+            if fixture.evaluator.inspections == 17 { selected.fulfill() }
+            if fixture.evaluator.inspections == 19 { password.fulfill() }
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [selected], timeout: 2)
+        XCTAssertEqual(fixture.manualCount, 0)
+        XCTAssertEqual(fixture.challengeCount, 0)
+        XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+        XCTAssertNil(fixture.ledger.accountSelectedDocument)
+        fixture.evaluator.finishSubmission(.accountSelected)
+        await fulfillment(of: [password], timeout: 2)
+        XCTAssertEqual(fixture.manualCount, 0)
+        XCTAssertEqual(fixture.challengeCount, 0)
+        XCTAssertEqual(fixture.evaluator.submissions.count, 2)
+        guard case .account = fixture.evaluator.submissions[0], case .password = fixture.evaluator.submissions[1] else {
+            return XCTFail("Only the matched account and one subsequent password submission are permitted")
+        }
+        XCTAssertEqual(fixture.ledger.accountSelectedDocument, "nonceA123")
+        fixture.pipeline.cancel()
+        fixture.ledger.stop()
+    }
+
+    func testCredentialRevalidationFailureBeforeSubmitDoesNotConsumeAnAccountClaim() {
+        let fixture = Fixture()
+        fixture.evaluator.states = [state(.account, match: true)]
+        fixture.evaluator.onInspection = { fixture.credentialsAvailable = false }
+        fixture.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(fixture.manualCount, 1)
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+        XCTAssertFalse(fixture.ledger.accountAttempted)
+        XCTAssertNil(fixture.ledger.accountSelectedDocument)
+    }
+
     func testResumptionRequiresANewRealCommitAndAnOfficialPausedSource() {
         let previous = NSObject(), next = NSObject(), unrelated = NSObject()
         XCTAssertTrue(QMplusAutofillPolicy.isNewCommittedNavigation(next, active: next, paused: previous))
@@ -190,7 +231,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         await fulfillment(of: [completed], timeout: 2)
         XCTAssertEqual(fixture.evaluator.submissions.count, 1)
         XCTAssertFalse(fixture.ledger.passwordAttempted)
-        XCTAssertLessThanOrEqual(fixture.evaluator.inspections, 10)
+        XCTAssertLessThanOrEqual(fixture.evaluator.inspections, QMplusAutofillPolicy.maximumPageWaits + 2)
         XCTAssertEqual(fixture.identityMismatchCount, 0)
         let unmatched = Fixture()
         let expired = expectation(description: "An initially unknown picker reaches its bounded read-only retry limit")
@@ -201,8 +242,8 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertFalse(unmatched.ledger.hasIdentityAcknowledgement(for: "nonceA123"))
         await fulfillment(of: [expired], timeout: 2)
         XCTAssertTrue(unmatched.evaluator.submissions.isEmpty)
-        XCTAssertEqual(unmatched.waits.count, 8)
-        XCTAssertEqual(unmatched.evaluator.inspections, 9)
+        XCTAssertEqual(unmatched.waits.count, QMplusAutofillPolicy.maximumPageWaits)
+        XCTAssertEqual(unmatched.evaluator.inspections, QMplusAutofillPolicy.maximumPageWaits + 1)
         XCTAssertTrue(unmatched.evaluator.identityAcknowledgements.allSatisfy { !$0 })
         XCTAssertFalse(unmatched.ledger.accountAttempted)
         XCTAssertFalse(unmatched.ledger.usernameAttempted)
@@ -389,7 +430,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         fixture.evaluator.fallbackState = state(.account, reason: .accountHintRequired)
         fixture.pipeline.start(source: "synthetic source")
         await fulfillment(of: [completed], timeout: 2)
-        XCTAssertEqual(fixture.waits.count, 8)
+        XCTAssertEqual(fixture.waits.count, QMplusAutofillPolicy.maximumPageWaits)
         XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
         XCTAssertFalse(fixture.ledger.accountAttempted)
     }
@@ -650,10 +691,10 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         fixture.evaluator.fallbackState = state(.loading, reason: .loading)
         fixture.pipeline.start(source: "synthetic source")
         await fulfillment(of: [completed], timeout: 2)
-        XCTAssertEqual(fixture.waits.count, 8)
+        XCTAssertEqual(fixture.waits.count, QMplusAutofillPolicy.maximumPageWaits)
         XCTAssertEqual(fixture.waits.first, .milliseconds(250))
         XCTAssertTrue(fixture.waits.dropFirst().allSatisfy { $0 == .milliseconds(500) })
-        XCTAssertEqual(fixture.evaluator.inspections, 9)
+        XCTAssertEqual(fixture.evaluator.inspections, QMplusAutofillPolicy.maximumPageWaits + 1)
         XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
     }
 
@@ -734,7 +775,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         await fulfillment(of: [completed], timeout: 2)
         XCTAssertTrue(moved.evaluator.submissions.isEmpty)
         XCTAssertEqual(moved.manualCount, 1)
-        XCTAssertEqual(moved.waits.count, 12)
+        XCTAssertEqual(moved.waits.count, QMplusAutofillPolicy.maximumViewportWaits)
         XCTAssertTrue(moved.waits.allSatisfy { $0 == .milliseconds(250) })
     }
 
@@ -750,7 +791,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
             XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
             XCTAssertEqual(fixture.manualCount, 1)
             XCTAssertEqual(fixture.identityMismatchCount, reason == .mismatch ? 1 : 0)
-            if [.chooser, .form, .absent].contains(reason) { XCTAssertEqual(fixture.waits.count, 8) }
+            if [.chooser, .form, .absent].contains(reason) { XCTAssertEqual(fixture.waits.count, QMplusAutofillPolicy.maximumPageWaits) }
         }
         let stale = Fixture()
         stale.evaluator.states = [state(.username, document: "nonceB456")]

@@ -3,6 +3,8 @@ import Combine
 import WebKit
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 struct QMplusBrowserMountLease: Equatable, Sendable {
@@ -78,6 +80,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     private var loginGate = QMplusLoginSynchronizationGate()
     private var authenticationProbeTask: Task<Void, Never>?
     private var quietPreflightTimeoutTask: Task<Void, Never>?
+    private var connectionPreparationTask: Task<Void, Never>?
     private var urlObservation: NSKeyValueObservation?
     private var loadingObservation: NSKeyValueObservation?
     private var activeNavigation: WKNavigation?
@@ -108,6 +111,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         let url: URL
     }
     var hasActiveConnection: Bool { loginGate.isActive }
+    var isPreparingConnection: Bool { connectionPreparationTask != nil }
     var hasActiveAuthenticationRecognition: Bool { hasActiveConnection && !authenticationRecognitionSuspended }
     var hasActiveAutofillLedger: Bool {
         !automaticLoginSuspended && hasActiveConnection && autofillLedger.accepts(
@@ -160,11 +164,11 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         else { await restoreCachedBusinessSnapshot() }
     }
 
-    func launchWarmOnce(sampleMode: Bool) async {
+    func launchWarmOnce(sampleMode: Bool, canStart: @MainActor () -> Bool = { true }) async {
         guard featureEnabled, !sampleMode else { return }
         await prepareCachedSnapshot()
-        guard featureEnabled, !businessCacheBlocked, let scope = try? currentBusinessScope(),
-              Self.warmedBusinessScopes.insert(scope).inserted else { return }
+        guard !Task.isCancelled, canStart(), featureEnabled, !businessCacheBlocked,
+              let scope = try? currentBusinessScope(), !Self.warmedBusinessScopes.contains(scope) else { return }
         connect(sampleMode: sampleMode, background: true)
     }
 
@@ -255,7 +259,50 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         backgroundOnly = background
         requiresManualContinuation = false
         manualContinuationRequested = false
+        if connectionPreparationTask != nil { return }
+        guard isApplicationReadyForConnection else {
+            prepareConnectionWhenReady(); return
+        }
         credentialAuthorization.restoreAuthorization()
+        guard !credentialAuthorization.isTemporarilyUnavailable else {
+            prepareConnectionWhenReady(); return
+        }
+        startPreparedConnection()
+    }
+
+    private var isApplicationReadyForConnection: Bool {
+        #if os(iOS)
+        UIApplication.shared.applicationState == .active && UIApplication.shared.isProtectedDataAvailable
+        #else
+        NSApp?.isActive == true
+        #endif
+    }
+
+    private func prepareConnectionWhenReady() {
+        guard connectionPreparationTask == nil, featureEnabled else { return }
+        statusKey = "正在确认 QMplus 登录状态…"
+        connectionPreparationTask = Task { [weak self] in
+            for _ in 0..<40 {
+                guard !Task.isCancelled, let self, self.featureEnabled else { return }
+                if self.isApplicationReadyForConnection {
+                    self.credentialAuthorization.restoreAuthorization()
+                    if !self.credentialAuthorization.isTemporarilyUnavailable {
+                        self.connectionPreparationTask = nil
+                        self.startPreparedConnection()
+                        return
+                    }
+                }
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.connectionPreparationTask = nil
+            self.statusKey = "QMplus 官方网页登录失败，请重试"
+            self.isRetainingPreviousSnapshot = self.snapshot != nil
+        }
+    }
+
+    private func startPreparedConnection() {
+        guard featureEnabled, !hasActiveConnection, isApplicationReadyForConnection else { return }
         // The dashboard and ordinary official Login entry never require a
         // user gesture. Reveal the same web view only at a manual step.
         guard beginConnectionOwner(quiet: true) else { return }
@@ -279,6 +326,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             webView = browser
         }
         if let browser = webView {
+            // Use the final persistent profile ID, not the pre-creation legacy
+            // scope. A cancelled scene must never consume this warm-once mark.
+            if backgroundOnly, let scope = try? currentBusinessScope() { Self.warmedBusinessScopes.insert(scope) }
             observeCurrentBrowser(browser)
             // Reconnection is a fresh dashboard GET, not a reload of a stale
             // welcome/error document or a replay of the SAML ACS POST.
@@ -422,6 +472,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     func stopAutomaticLoginForInactiveScene() {
+        // Preparation has no login owner yet, but still belongs to this scene.
+        // Cancel it even when another window keeps the application active.
+        connectionPreparationTask?.cancel(); connectionPreparationTask = nil
         guard hasActiveConnection else { return }
         let wasSyncing = isSyncing
         automaticLoginSuspended = true
@@ -612,6 +665,11 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard request == generation, isSyncing else { return }
         timeoutTask?.cancel(); timeoutTask = nil
         isSyncing = false
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE"] == "1" {
+            FileHandle.standardError.write(Data("WTS_QM_SYNC completed=\(statusKey == "QMplus 同步完成") retained=\(isRetainingPreviousSnapshot) courses=\(snapshot?.courses.count ?? 0)\n".utf8))
+        }
+        #endif
         if isQuietConnection {
             if statusKey == "QMplus 同步完成" { endPresentation() }
             else { presentExistingConnection() }
@@ -642,6 +700,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     func endPresentation() {
+        connectionPreparationTask?.cancel(); connectionPreparationTask = nil
         backgroundOnly = false
         requiresManualContinuation = false
         manualContinuationRequested = false
@@ -973,7 +1032,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             cancelAutofill()
             viewportWaitDocument = document
             viewportWaitTask = Task { [weak self, weak browser] in
-                for attempt in 0..<8 {
+                for attempt in 0..<QMplusAutofillPolicy.maximumPageWaits {
                     do { try await Task.sleep(for: .milliseconds(attempt == 0 ? 250 : 500)) } catch { return }
                     guard let self, let browser, self.acceptsAutofillDocument(document, browser: browser) else { return }
                     if self.isAutofillApplicationInactive(browser) { self.stopAutomaticLoginForInactiveScene(); return }

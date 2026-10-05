@@ -98,7 +98,7 @@ final class PrimaryNavigationState: ObservableObject {
     @Published var selectedSection: AppSection = .planner
     init() {
         #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE"] == "1" { selectedSection = .settings }
+        if ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE_START_IN_SETTINGS"] == "1" { selectedSection = .settings }
         #endif
     }
 }
@@ -276,7 +276,9 @@ struct RootView: View {
             await model.awaitInitialLocalData()
             guard !Task.isCancelled, scenePhase == .active, !model.isSampleMode,
                   model.qmplusEnabled else { return }
-            await model.qmplus.launchWarmOnce(sampleMode: false)
+            await model.qmplus.launchWarmOnce(sampleMode: false, canStart: {
+                scenePhase == .active && model.qmplusEnabled && !model.isSampleMode
+            })
         }
         .task(id: AssignmentDeadlinePrewarmID(
             account: model.account,

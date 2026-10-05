@@ -115,6 +115,7 @@ struct QMplusDefaultsAuthorizationJournal: QMplusCredentialAuthorizationJournali
 @MainActor
 final class QMplusCredentialAuthorization: ObservableObject {
     @Published private(set) var isEnabled = false
+    @Published private(set) var isTemporarilyUnavailable = false
     @Published private(set) var statusKey = ""
     private(set) var credentialRevision: UInt64 = 0
     private(set) var removalNeedsAttention = false
@@ -122,6 +123,7 @@ final class QMplusCredentialAuthorization: ObservableObject {
     private let journal: any QMplusCredentialAuthorizationJournaling
     private let allowsStorage: Bool
     private var hasLoaded = false
+    private var restorationBlocked = false
     private var authorizedMarker: QMplusCredentialAuthorizationMarker?
     var allowsCredentialStorage: Bool { allowsStorage }
 
@@ -132,11 +134,12 @@ final class QMplusCredentialAuthorization: ObservableObject {
     func loadIfNeeded() { if !hasLoaded { restoreAuthorization() } }
 
     func restoreAuthorization() {
-        guard allowsStorage else { return }
+        guard allowsStorage, !restorationBlocked else { return }
         hasLoaded = true
         let previouslyEnabled = isEnabled
         let previousMarker = authorizedMarker
         isEnabled = false
+        isTemporarilyUnavailable = false
         authorizedMarker = nil
         statusKey = ""
         do {
@@ -149,7 +152,7 @@ final class QMplusCredentialAuthorization: ObservableObject {
                     statusKey = "已保存 QMplus 登录信息并授权官方网页自动填写"
                 } else { statusKey = "无法确认 QMplus 登录信息的保存状态，请重新保存或删除。" }
             }
-        } catch { statusKey = "无法确认 QMplus 登录信息的保存状态，请重新保存或删除。" }
+        } catch { recordReadFailure(error) }
         if previouslyEnabled != isEnabled || previousMarker != authorizedMarker { credentialRevision &+= 1 }
     }
 
@@ -165,7 +168,7 @@ final class QMplusCredentialAuthorization: ObservableObject {
             return saved
         } catch {
             stopInMemory()
-            statusKey = "无法确认 QMplus 登录信息的保存状态，请重新保存或删除。"
+            recordReadFailure(error)
             return nil
         }
     }
@@ -212,6 +215,7 @@ final class QMplusCredentialAuthorization: ObservableObject {
             guard try journal.load() == record.marker else { throw QMplusCredentialStorageError.verificationFailed }
             isEnabled = true
             authorizedMarker = record.marker
+            restorationBlocked = false
             removalNeedsAttention = false
             statusKey = "已保存 QMplus 登录信息并授权官方网页自动填写"
             return .replaced
@@ -224,6 +228,7 @@ final class QMplusCredentialAuthorization: ObservableObject {
 
     @discardableResult
     func disableAndDelete() -> Bool {
+        restorationBlocked = true
         stopInMemory()
         guard allowsStorage else { removalNeedsAttention = false; return true }
         return withdrawAndDelete()
@@ -238,11 +243,30 @@ final class QMplusCredentialAuthorization: ObservableObject {
     private func stopInMemory() {
         credentialRevision &+= 1
         isEnabled = false
+        isTemporarilyUnavailable = false
         authorizedMarker = nil
         hasLoaded = true
     }
 
+    private func recordReadFailure(_ error: Error) {
+        if case let QMplusCredentialStorageError.keychain(status) = error,
+           status == errSecInteractionNotAllowed || status == errSecNotAvailable {
+            // Readability is not authority. The next foreground preflight must
+            // revalidate both markers before credentials can be returned again.
+            isTemporarilyUnavailable = true
+            hasLoaded = false
+            statusKey = "正在确认 QMplus 登录状态…"
+        } else {
+            isTemporarilyUnavailable = false
+            hasLoaded = true
+            statusKey = "无法确认 QMplus 登录信息的保存状态，请重新保存或删除。"
+        }
+    }
+
     private func withdrawAndDelete() -> Bool {
+        // A pending availability retry must never undo an explicit removal,
+        // even if both durable stores currently reject their delete requests.
+        restorationBlocked = true
         var journalRemoved = false, secretRemoved = false
         do { try journal.revoke(); journalRemoved = true } catch { }
         do { try storage.clear(); secretRemoved = true } catch { }

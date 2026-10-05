@@ -48,6 +48,10 @@ enum QMplusAuthSubmission: Sendable {
 }
 
 enum QMplusAutofillPolicy {
+    // Stay inside the Store's existing 20-second owner watchdog. Slow real
+    // devices must not lose an otherwise valid picker after only four seconds.
+    static let maximumPageWaits = 36
+    static let maximumViewportWaits = 72
     static let tenant = "569df091-b013-40e3-86ee-bd9cb9e25814"
     static let ssoURL = URL(string: "https://qmplus.qmul.ac.uk/auth/saml2/login.php")!
     static func isResumableOfficialDocument(_ url: URL?) -> Bool {
@@ -167,24 +171,31 @@ final class QMplusAutofillLedger {
         accepts(presentation: presentation, credentialRevision: credentialRevision) &&
             !accountAttempted && !usernameAttempted && !passwordAttempted && !continuationAttempted
     }
-    func claim(_ state: QMplusAuthInspection, presentation: UInt64, credentialRevision: UInt64) -> Bool {
+    func canClaim(_ state: QMplusAuthInspection, presentation: UInt64, credentialRevision: UInt64) -> Bool {
         guard accepts(presentation: presentation, credentialRevision: credentialRevision), state.reason == .ready,
               QMplusAutofillPolicy.isValidNonce(state.document) else { return false }
         switch state.stage {
         case .account:
-            guard !accountAttempted, !usernameAttempted, !passwordAttempted, !continuationAttempted, state.accountMatch else { return false }
-            accountAttempted = true; claimedAccountDocument = state.document; return true
+            return !accountAttempted && !usernameAttempted && !passwordAttempted && !continuationAttempted && state.accountMatch
         case .username:
-            guard !usernameAttempted, !passwordAttempted, !continuationAttempted else { return false }
-            usernameAttempted = true; claimedUsernameDocument = state.document; return true
+            return !usernameAttempted && !passwordAttempted && !continuationAttempted
         case .password:
-            guard !passwordAttempted, !continuationAttempted, state.accountMatch, hasIdentityAcknowledgement(for: state.document) else { return false }
-            passwordAttempted = true; claimedPasswordDocument = state.document; return true
+            return !passwordAttempted && !continuationAttempted && state.accountMatch && hasIdentityAcknowledgement(for: state.document)
         case .continuation:
-            guard !continuationAttempted, state.accountMatch, hasIdentityAcknowledgement(for: state.document) else { return false }
-            continuationAttempted = true; claimedContinuationDocument = state.document; return true
+            return !continuationAttempted && state.accountMatch && hasIdentityAcknowledgement(for: state.document)
         default: return false
         }
+    }
+    func claim(_ state: QMplusAuthInspection, presentation: UInt64, credentialRevision: UInt64) -> Bool {
+        guard canClaim(state, presentation: presentation, credentialRevision: credentialRevision) else { return false }
+        switch state.stage {
+        case .account: accountAttempted = true; claimedAccountDocument = state.document
+        case .username: usernameAttempted = true; claimedUsernameDocument = state.document
+        case .password: passwordAttempted = true; claimedPasswordDocument = state.document
+        case .continuation: continuationAttempted = true; claimedContinuationDocument = state.document
+        default: return false
+        }
+        return true
     }
     func hasIdentityAcknowledgement(for document: String) -> Bool {
         usernameSubmittedDocument != nil || accountSelectedDocument != nil || passwordAcknowledged || verifiedIdentityDocument == document
@@ -420,7 +431,7 @@ final class QMplusAutofillPipeline {
             if state.stage == .loading && state.reason == .loading {
                 // The verification form may not have mounted yet. A missing
                 // saved identity must not stop read-only challenge detection.
-                self.scheduleInspection(attempt: attempt, maximumAttempts: self.verificationOnly ? 36 : 8); return
+                self.scheduleInspection(attempt: attempt); return
             }
             guard !self.verificationOnly else { self.requireManual(); return }
             guard self.accountHint != nil else { self.requireManual(); return }
@@ -456,11 +467,17 @@ final class QMplusAutofillPipeline {
                 // after selection. Wait finitely without selecting or filling.
                 self.scheduleInspection(attempt: attempt); return
             }
-            guard self.ledger.claim(state, presentation: self.presentation, credentialRevision: self.credentialRevision),
+            guard self.ledger.canClaim(state, presentation: self.presentation, credentialRevision: self.credentialRevision),
                   self.accepts, let saved = self.credentials(), self.accepts,
                   QMplusAutofillPolicy.accountKey(saved.account) == self.accountHint,
                   saved.password.utf16.count <= 2048 else {
                 if state.reason == .mismatch { self.identityMismatch() }
+                self.requireManual(); return
+            }
+            // Do not consume a stage merely because a later secure-store read
+            // or viewport check is not ready. Claims precede the actual submit.
+            guard self.viewportReady(),
+                  self.ledger.claim(state, presentation: self.presentation, credentialRevision: self.credentialRevision) else {
                 self.requireManual(); return
             }
             let submission: QMplusAuthSubmission
@@ -529,7 +546,7 @@ final class QMplusAutofillPipeline {
     }
     private func waitForViewport(attempt: Int) {
         guard accepts else { return }
-        guard viewportWaitCount < 12 else { requireManual(resumable: true); return }
+        guard viewportWaitCount < QMplusAutofillPolicy.maximumViewportWaits else { requireManual(resumable: true); return }
         viewportWaitCount += 1
         waitTask?.cancel()
         waitTask = Task { [weak self] in
@@ -539,7 +556,7 @@ final class QMplusAutofillPipeline {
             self.inspect(attempt: attempt)
         }
     }
-    private func scheduleInspection(attempt: Int, maximumAttempts: Int = 8) {
+    private func scheduleInspection(attempt: Int, maximumAttempts: Int = QMplusAutofillPolicy.maximumPageWaits) {
         guard accepts else { return }
         guard attempt < maximumAttempts else { requireManual(resumable: true); return }
         waitTask?.cancel()
