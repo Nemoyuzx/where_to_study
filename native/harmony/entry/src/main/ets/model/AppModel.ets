@@ -13,6 +13,7 @@ import { CourseRemovalStoring, FileCourseRemovalStore } from '../store/CourseRem
 import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { StrictDates, DateParts } from '../common/StrictDates';
 import { Credentials, AssetCredentialStore, CredentialStoring } from '../store/CredentialStore';
+import { CourseDTOCache, CourseDTOCacheStore } from '../store/CourseDTOCacheStore';
 import {
   FileScheduleStore, SchedulePersistenceCoordinator, ScheduleStoring
 } from '../store/ScheduleStore';
@@ -304,6 +305,12 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private readonly weatherClient: WeatherFetching;
   private readonly calendarDailyInfoClient: CalendarDailyInfoFetching = new CalendarDailyInfoClient();
   private readonly assignmentClient: AssignmentDeadlineFetching;
+  private readonly courseDTOStore: CourseDTOCacheStore = new CourseDTOCacheStore();
+  private courseDTOHydration: Promise<void> | null = null;
+  private courseDTOScope: string = '';
+  private courseDTOGeneration: number = 0;
+  private assignmentCatalogFetchedAtMillis: number = 0;
+  private warmCourseRefreshStarted: boolean = false;
   private readonly calendarImporter: CalendarImporting;
   private readonly dailyCourseNotificationScheduler: DailyCourseNotificationScheduling;
   private readonly dailyCourseNotificationAuthorizationTimeoutMs: number;
@@ -491,11 +498,19 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.queryCampusID = this.campusID;
     this.dailyCourseNotificationsEnabled = notificationsEnabled;
     await this.loadCredentials();
+    if (!this.isSampleMode() && this.hasSavedPassword) {
+      try { await this.assignmentCredentialsForRequest(); } catch (e) { /* Cache restore is optional. */ }
+    }
     await this.loadSchedule();
     this.refreshScheduleAutomaticallyAtLaunch();
     await this.loadClassrooms();
     this.synchronizeSelectedSlots();
     this.prefetchCurrentYearCalendarMarkers();
+    if (!this.isSampleMode() && this.hasSavedPassword && !this.warmCourseRefreshStarted) {
+      this.warmCourseRefreshStarted = true;
+      this.loadCloudCourseDirectory(true).catch(() => {});
+      this.loadAssignmentCatalog(true).catch(() => {});
+    }
     this.ensureHolidays(StrictDates.todayParts().year, false);
     // 冷启动总是对账一次，即使开关已关闭也能移除旧批次。
     this.reconcileDailyCourseNotifications(false);
@@ -991,6 +1006,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
         CredentialSettingsLogic.normalizedAccount(storedCredentials?.account ?? '') !==
         CredentialSettingsLogic.normalizedAccount(nextCredentialAccount ?? '');
       const academicPasswordChanged: boolean = storedCredentials?.password !== nextCredentials?.password;
+      if (accountChanged || academicPasswordChanged || cloudIdentityChanged) {
+        this.invalidateCourseDTOCache();
+        await this.courseDTOStore.clear();
+      }
       if (!accountChanged && academicPasswordChanged) { this.invalidatePendingAccountRequests(); }
       if (accountChanged) {
         if (this.isImportingCalendar) {
@@ -1887,6 +1906,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     await this.preferences.remove(PreClassNotificationSettings.enabledKey);
     const failures: string[] = [];
 
+    try { await this.courseDTOStore.clear(); } catch (e) { failures.push('课程作业缓存'); }
+
     try {
       await this.credentialStore.clear();
     } catch (e) {
@@ -2075,7 +2096,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
       const items: AssignmentDeadlineItem[] = await this.assignmentClient.fetchCatalog(credentials, refresh);
       if (!current()) { return; }
       this.assignmentCatalog = items;
-      this.assignmentCatalogFetchedAt = StrictDates.formatFetchedAt(Date.now());
+      this.assignmentCatalogFetchedAtMillis = Date.now();
+      this.assignmentCatalogFetchedAt = StrictDates.formatFetchedAt(this.assignmentCatalogFetchedAtMillis);
       const byDate: Map<string, AssignmentDeadlineItem[]> = new Map<string, AssignmentDeadlineItem[]>();
       for (const item of items) {
         const date: string = item.deadline.substring(0, 10);
@@ -2085,6 +2107,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       }
       this.assignmentDeadlinesByDate = byDate;
       this.assignmentUnavailableByDate = new Map<string, string>();
+      this.persistCourseDTO(credentials);
     } catch (e) {
       if (current()) { this.assignmentCatalogError = '课程作业获取失败。'; }
     } finally {
@@ -2120,6 +2143,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.cloudCourses = courses;
       this.cloudCoursesFetchedAtMillis = Date.now();
       this.cloudCoursesFetchedAt = StrictDates.formatFetchedAt(this.cloudCoursesFetchedAtMillis);
+      this.persistCourseDTO(credentials);
     } catch (e) {
       if (current()) {
         this.cloudCoursesError = e instanceof Error ? e.message : '教学云课程目录暂时不可用。';
@@ -2562,6 +2586,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.cloudCoursesRevision++;
     this.assignmentCatalog = [];
     this.assignmentCatalogFetchedAt = '';
+    this.assignmentCatalogFetchedAtMillis = 0;
     this.assignmentCatalogLoading = false;
     this.assignmentCatalogError = '';
     this.cloudCourses = [];
@@ -2581,6 +2606,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.assignmentMarkerLoadingDates.clear();
     this.deadlineMarkerLoadingDates.clear();
     this.assignmentClient.reset();
+    this.courseDTOHydration = null;
+    this.courseDTOScope = '';
+    this.courseDTOGeneration++;
   }
 
   // 月格/年格标记的批量预取与视图动画分离。作业和公开 DDL 是两个完全
@@ -3057,10 +3085,78 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private async assignmentCredentialsForRequest(): Promise<Credentials> {
     const stored: Credentials | null = await this.credentialStore.load();
-    if (stored === null || stored.account.trim() !== this.account.trim()) {
+    if (stored === null || stored.account.trim() !== this.account.trim() || stored.effectiveCloudPassword().length === 0) {
       throw CredentialSettingsError.accountRequired();
     }
+    await this.hydrateCourseDTO(stored);
     return stored;
+  }
+
+  private invalidateCourseDTOCache(): void {
+    this.resetCalendarDailyInfoState();
+  }
+
+  private courseDTOScopeCurrent(scope: string, generation: number): boolean {
+    return !this.isSampleMode() && this.localDataClearWork === null && scope === this.courseDTOScope &&
+      generation === this.courseDTOGeneration && (!(this.credentialStore instanceof AssetCredentialStore) ||
+        (this.credentialStore as AssetCredentialStore).currentCacheScope() === scope);
+  }
+
+  private async hydrateCourseDTO(credentials: Credentials): Promise<void> {
+    const scope: string = credentials.cacheScope;
+    if (!/^[0-9a-f]{32}$/.test(scope) || this.isSampleMode()) { return; }
+    if (this.courseDTOScope === scope && this.courseDTOHydration !== null) { return await this.courseDTOHydration; }
+    this.courseDTOScope = scope;
+    const generation: number = this.courseDTOGeneration;
+    const work: Promise<void> = (async (): Promise<void> => {
+      const cached: CourseDTOCache | null = await this.courseDTOStore.load(scope);
+      if (cached === null || !this.courseDTOScopeCurrent(scope, generation)) { return; }
+      this.assignmentClient.installValidatedCache?.(credentials, cached.courses, cached.assignments,
+        cached.coursesFetchedAt, cached.assignmentsFetchedAt);
+      if (cached.courses !== null && this.cloudCoursesFetchedAtMillis === 0) {
+        this.cloudCourses = cached.courses;
+        this.cloudCoursesFetchedAtMillis = cached.coursesFetchedAt;
+        this.cloudCoursesFetchedAt = StrictDates.formatFetchedAt(cached.coursesFetchedAt);
+      }
+      if (cached.assignments !== null && this.assignmentCatalogFetchedAtMillis === 0) {
+        this.assignmentCatalog = cached.assignments;
+        this.assignmentCatalogFetchedAtMillis = cached.assignmentsFetchedAt;
+        this.assignmentCatalogFetchedAt = StrictDates.formatFetchedAt(cached.assignmentsFetchedAt);
+        const byDate: Map<string, AssignmentDeadlineItem[]> = new Map<string, AssignmentDeadlineItem[]>();
+        for (const item of cached.assignments) {
+          const date: string = item.deadline.substring(0, 10);
+          const items: AssignmentDeadlineItem[] = byDate.get(date) ?? [];
+          items.push(item); byDate.set(date, items);
+        }
+        this.assignmentDeadlinesByDate = byDate;
+      }
+    })();
+    this.courseDTOHydration = work;
+    await work;
+  }
+
+  private persistCourseDTO(credentials: Credentials): void {
+    const scope: string = credentials.cacheScope;
+    const generation: number = this.courseDTOGeneration;
+    if (!/^[0-9a-f]{32}$/.test(scope)) {
+      const warning: string = '本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。';
+      if (this.cloudCoursesFetchedAtMillis > 0) { this.cloudCoursesError = warning; }
+      if (this.assignmentCatalogFetchedAtMillis > 0) { this.assignmentCatalogError = warning; }
+      return;
+    }
+    if (!this.courseDTOScopeCurrent(scope, generation)) { return; }
+    const cache: CourseDTOCache = new CourseDTOCache(scope,
+      this.cloudCoursesFetchedAtMillis > 0 ? this.cloudCourses : null,
+      this.assignmentCatalogFetchedAtMillis > 0 ? this.assignmentCatalog : null,
+      this.cloudCoursesFetchedAtMillis, this.assignmentCatalogFetchedAtMillis);
+    const warn: () => void = (): void => {
+      if (!this.courseDTOScopeCurrent(scope, generation)) { return; }
+      const message: string = '本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。';
+      if (cache.courses !== null) { this.cloudCoursesError = message; }
+      if (cache.assignments !== null) { this.assignmentCatalogError = message; }
+    };
+    this.courseDTOStore.save(cache, (): boolean => this.courseDTOScopeCurrent(scope, generation))
+      .then((saved: boolean): void => { if (!saved) { warn(); } }).catch(warn);
   }
 
   private updateSavedCredentialState(credentials: Credentials | null): void {
@@ -3073,6 +3169,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   private async clearAccountScopedData(): Promise<void> {
     this.invalidatePendingAccountRequests();
+    await this.courseDTOStore.clear();
     const cancelWork: Promise<void> = this.cancelDailyCourseNotifications();
     cancelWork.catch(() => {
       // 取消失败由下次对账兜底。

@@ -84,6 +84,8 @@ internal class InformationQuerySessionState(
     var courseDetailScrollY = 0
     var courseDetailVisibleCount = 20
     var fullTimetableExpanded = false
+    val expandedTimetablePeriods = mutableSetOf<String>()
+    val expandedTimetableDirections = mutableSetOf<String>()
     val expandedCourseKeys = mutableSetOf<String>()
     val inlineCourseCounts = mutableMapOf<String, Int>()
 
@@ -1073,8 +1075,11 @@ internal class InformationQueryPage(
         counts: CourseSubmissionCounts, term: String? = null): LinearLayout {
         val body = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL; tag = "$key.assignments"
-            visibility = if (key in sessionState.expandedCourseKeys) View.VISIBLE else View.GONE
             setPadding(activity.dp(52), 0, 0, activity.dp(12))
+        }
+        val viewport = NaturalDisclosureViewport(activity).apply {
+            visibility = if (key in sessionState.expandedCourseKeys) View.VISIBLE else View.GONE
+            addView(body, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         lateinit var row: LinearLayout
         lateinit var motion: DisclosureMotionController
@@ -1086,17 +1091,17 @@ internal class InformationQueryPage(
             if (expanded && body.childCount == 0) populateInlineAssignments(key, body)
             ViewCompat.setStateDescription(row.findViewWithTag("$key.disclosure.header"),
                 activity.uiText(if (expanded) "已展开" else "已折叠"))
-            motion.animateTo(expanded)
+            motion.animateTo(expanded, body.childCount > 0)
         } as LinearLayout
         val indicator = row.findViewWithTag<View>("$key.disclosure.indicator")
         indicator.rotation = if (key in sessionState.expandedCourseKeys) 180f else 0f
         ViewCompat.setStateDescription(row.findViewWithTag("$key.disclosure.header"),
             activity.uiText(if (key in sessionState.expandedCourseKeys) "已展开" else "已折叠"))
-        row.addView(body, 1)
+        row.addView(viewport, 1)
         if (key in sessionState.expandedCourseKeys) populateInlineAssignments(key, body)
-        motion = DisclosureMotionController(row, body, indicator, onDetached = {
-            body.visibility = if (key in sessionState.expandedCourseKeys) View.VISIBLE else View.GONE
-            body.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT; body.alpha = 1f
+        motion = DisclosureMotionController(row, viewport, indicator, onDetached = {
+            viewport.visibility = if (key in sessionState.expandedCourseKeys) View.VISIBLE else View.GONE
+            viewport.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT; viewport.alpha = 1f
             indicator.rotation = if (key in sessionState.expandedCourseKeys) 180f else 0f
         })
         return row
@@ -1554,88 +1559,30 @@ internal class InformationQueryPage(
             val schedules = notice.schedules.filter { it.parseStatus == "parsed" && it.rows.isNotEmpty() }
             addView(shuttleSurface().apply {
                 tag = "information.query.shuttle.full-timetable"
-                val viewport = LinearLayout(activity).apply {
-                    tag = "information.query.shuttle.full-timetable.content"
-                    orientation = LinearLayout.VERTICAL
-                    visibility = if (sessionState.fullTimetableExpanded) View.VISIBLE else View.GONE
-                }
-                val indicator = shuttleIcon(R.drawable.ic_chevron_down).apply {
-                    tag = "information.query.shuttle.full-timetable.indicator"
-                    rotation = if (sessionState.fullTimetableExpanded) 180f else 0f
-                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }
-                val header = LinearLayout(activity).apply {
-                    tag = "information.query.shuttle.full-timetable.toggle"
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    minimumHeight = activity.dp(filterHeightDp)
-                    isClickable = true; isFocusable = true
-                    contentDescription = activity.uiText("完整班车时刻表")
-                    addView(LinearLayout(activity).apply {
-                        orientation = LinearLayout.VERTICAL
-                        addView(TextView(activity).apply {
-                            text = "完整班车时刻表"
-                            textSize = 17f
-                            setTypeface(typeface, Typeface.BOLD)
-                            setThemeTextColor { Palette.text }
-                        })
-                        addView(TextView(activity).apply {
-                            text = notice.title
-                            UiText.preserveRawText(this)
-                            textSize = 12f
-                            setThemeTextColor { Palette.muted }
-                            setPadding(0, activity.dp(4), 0, activity.dp(10))
-                        })
-                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(indicator, LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
-                        marginStart = activity.dp(8)
-                    })
-                }
-                val motion = DisclosureMotionController(this, viewport, indicator, onDetached = {
-                    // A detached/reused card must not retain a half-height fade.
-                    viewport.visibility = if (sessionState.fullTimetableExpanded) View.VISIBLE else View.GONE
-                    viewport.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-                    viewport.alpha = 1f
-                    indicator.rotation = if (sessionState.fullTimetableExpanded) 180f else 0f
-                    viewport.requestLayout()
+                addView(TextView(activity).apply {
+                    text = activity.uiText("完整班车时刻表"); textSize = 17f
+                    setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
                 })
-                fun updateAccessibility() {
-                    ViewCompat.setStateDescription(header, activity.uiText(
-                        if (sessionState.fullTimetableExpanded) "已展开" else "已折叠"))
-                }
-                updateAccessibility()
-                ViewCompat.setAccessibilityDelegate(header, object : AccessibilityDelegateCompat() {
-                    override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
-                        super.onInitializeAccessibilityNodeInfo(host, info)
-                        info.className = "android.widget.Button"
-                        info.addAction(if (sessionState.fullTimetableExpanded)
-                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE else
-                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND)
-                    }
-                    override fun performAccessibilityAction(host: View, action: Int, args: android.os.Bundle?): Boolean {
-                        val expand = action == AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND.id
-                        val collapse = action == AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE.id
-                        if ((expand && !sessionState.fullTimetableExpanded) || (collapse && sessionState.fullTimetableExpanded)) {
-                            return host.performClick()
+                addView(TextView(activity).apply {
+                    text = notice.title; UiText.preserveRawText(this); textSize = 12f
+                    setThemeTextColor { Palette.muted }; setPadding(0, activity.dp(4), 0, activity.dp(10))
+                })
+                schedules.groupBy { it.period }.forEach { (period, directions) ->
+                    val periodKey = listOf(period.label, period.startDate.orEmpty(), period.endDate.orEmpty()).joinToString("|")
+                    addView(shuttleTimetableDisclosure("period.$periodKey", period.label,
+                        fullTimetablePeriodMetadata(period, today), sessionState.expandedTimetablePeriods) {
+                        LinearLayout(activity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            directions.forEach { route ->
+                                val directionKey = periodKey + "|" + route.from.orEmpty() + "|" + route.to.orEmpty()
+                                addView(shuttleTimetableDisclosure("direction.$directionKey",
+                                    route.from.orEmpty() + " → " + route.to.orEmpty(), null,
+                                    sessionState.expandedTimetableDirections) { fullTimetableCell(route) })
+                                addView(spacer(activity, 8))
+                            }
                         }
-                        return super.performAccessibilityAction(host, action, args)
-                    }
-                })
-                header.setOnClickListener {
-                    activity.performControlHaptic(it)
-                    sessionState.toggleFullTimetable()
-                    updateAccessibility()
-                    if (sessionState.fullTimetableExpanded && viewport.childCount == 0) {
-                        viewport.addView(adaptiveShuttleGrid(schedules, activity.dp(600), activity.dp(12),
-                            maximumColumns = 2, makeCell = { fullTimetableCell(it, today) }))
-                    }
-                    motion.animateTo(sessionState.fullTimetableExpanded)
-                }
-                addView(header)
-                addView(viewport)
-                if (sessionState.fullTimetableExpanded) {
-                    viewport.addView(adaptiveShuttleGrid(schedules, activity.dp(600), activity.dp(12),
-                        maximumColumns = 2, makeCell = { fullTimetableCell(it, today) }))
+                    })
+                    addView(spacer(activity, 8))
                 }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(16) })
@@ -1643,27 +1590,75 @@ internal class InformationQueryPage(
         addView(shuttleSourceFooter(snapshot.sourcePage))
     }
 
-    private fun fullTimetableCell(schedule: ShuttleBusSchedule, today: String): LinearLayout =
+    private fun shuttleTimetableDisclosure(key: String, title: String, description: String?,
+        expandedKeys: MutableSet<String>, makeBody: () -> View): LinearLayout = shuttleSurface().apply {
+        tag = "information.query.shuttle.$key"
+        val body = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        val viewport = NaturalDisclosureViewport(activity).apply {
+            visibility = if (key in expandedKeys) View.VISIBLE else View.GONE
+            addView(body, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        val indicator = ImageView(activity).apply {
+            setImageResource(R.drawable.ic_chevron_down)
+            imageTintList = android.content.res.ColorStateList.valueOf(Palette.muted)
+            rotation = if (key in expandedKeys) 180f else 0f
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val header = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            isClickable = true; isFocusable = true
+            minimumHeight = activity.dp(filterHeightDp)
+            addView(LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(TextView(activity).apply {
+                    text = title; UiText.preserveRawText(this); textSize = 14f
+                    setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
+                })
+                description?.let { addView(TextView(activity).apply {
+                    text = it; UiText.preserveRawText(this); textSize = 12f
+                    setThemeTextColor { Palette.muted }
+                }) }
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(indicator, LinearLayout.LayoutParams(activity.dp(18), activity.dp(18)))
+        }
+        fun updateAccessibility() {
+            ViewCompat.setStateDescription(header, activity.uiText(if (key in expandedKeys) "已展开" else "已折叠"))
+        }
+        ViewCompat.setAccessibilityDelegate(header, object : AccessibilityDelegateCompat() {
+            override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
+                super.onInitializeAccessibilityNodeInfo(host, info)
+                info.className = android.widget.Button::class.java.name
+                info.addAction(if (key in expandedKeys) AccessibilityNodeInfoCompat.ACTION_COLLAPSE
+                    else AccessibilityNodeInfoCompat.ACTION_EXPAND)
+            }
+            override fun performAccessibilityAction(host: View, action: Int, args: android.os.Bundle?): Boolean {
+                if ((action == AccessibilityNodeInfoCompat.ACTION_EXPAND && key !in expandedKeys) ||
+                    (action == AccessibilityNodeInfoCompat.ACTION_COLLAPSE && key in expandedKeys)) return host.performClick()
+                return super.performAccessibilityAction(host, action, args)
+            }
+        })
+        if (key in expandedKeys) body.addView(makeBody())
+        val motion = DisclosureMotionController(this, viewport, indicator, onDetached = {
+            viewport.visibility = if (key in expandedKeys) View.VISIBLE else View.GONE
+            viewport.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT; viewport.alpha = 1f
+            indicator.rotation = if (key in expandedKeys) 180f else 0f
+        })
+        header.setOnClickListener {
+            activity.performControlHaptic(it)
+            val expanded = if (key in expandedKeys) { expandedKeys.remove(key); false }
+                else { expandedKeys.add(key); true }
+            if (expanded && body.childCount == 0) body.addView(makeBody())
+            updateAccessibility(); motion.animateTo(expanded)
+        }
+        updateAccessibility()
+        addView(header); addView(viewport)
+    }
+
+    private fun fullTimetableCell(schedule: ShuttleBusSchedule): LinearLayout =
         LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         setPadding(activity.dp(12), activity.dp(12), activity.dp(12), activity.dp(12))
         background = themedRoundedBackground(activity, { Palette.surfaceVariant }, radius = 8)
-        addView(TextView(activity).apply {
-            text = "${schedule.period.label} · ${schedule.from.orEmpty()} → ${schedule.to.orEmpty()}"
-            UiText.preserveRawText(this)
-            textSize = 14f
-            setTypeface(typeface, Typeface.BOLD)
-            setThemeTextColor { Palette.primaryText }
-            setPadding(0, 0, 0, activity.dp(5))
-        })
-        addView(TextView(activity).apply {
-            tag = "information.query.shuttle.full-period.meta"
-            text = fullTimetablePeriodMetadata(schedule.period, today)
-            UiText.preserveRawText(this)
-            textSize = 12f
-            setThemeTextColor { Palette.muted }
-            setPadding(0, 0, 0, activity.dp(8))
-        })
         if (availableWidthDp >= 760) {
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL

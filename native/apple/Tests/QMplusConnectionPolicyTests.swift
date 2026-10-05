@@ -7,6 +7,19 @@ import JavaScriptCore
 #endif
 
 final class QMplusConnectionPolicyTests: XCTestCase {
+    // Specification only: local automated execution is disabled by the user.
+    func testFixedLoginEntryHasOnePresentationBudgetAndRejectsStaleDocuments() {
+        var gate = QMplusLoginSynchronizationGate()
+        gate.beginQuietConnection()
+        let first = gate.context
+        XCTAssertTrue(gate.claimLoginEntry(context: first))
+        gate.beginDocument()
+        XCTAssertFalse(gate.claimLoginEntry(context: first))
+        XCTAssertFalse(gate.claimLoginEntry(context: gate.context))
+        gate.endPresentation()
+        gate.beginQuietConnection()
+        XCTAssertTrue(gate.claimLoginEntry(context: gate.context))
+    }
     func testAutomaticSynchronizationNeedsAuthenticationAndOnlyRunsOncePerPresentation() {
         var gate = QMplusLoginSynchronizationGate()
         gate.beginPresentation()

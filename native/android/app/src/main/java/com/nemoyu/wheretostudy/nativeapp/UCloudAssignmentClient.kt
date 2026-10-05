@@ -26,13 +26,17 @@ internal class UCloudAssignmentClient internal constructor(
     private val authenticateOverride: ((Credentials) -> AuthenticatedSession)? = null,
     private val fetchAuthenticatedOverride: ((AuthenticatedSession) -> List<AssignmentDeadlineItem>)? = null,
     private val apiRequestOverride: ((String, AuthenticatedSession) -> JSONObject)? = null,
+    private val scopeProvider: (() -> String?)? = null,
+    private val dtoCache: CourseDTOCacheStore? = null,
 ) {
     private data class CachedAssignments(
         val credentialKey: String,
         val fetchedAtElapsed: Long,
         val items: List<AssignmentDeadlineItem>,
+        val fetchedAtMillis: Long = System.currentTimeMillis(),
     )
-    private data class CachedCourses(val credentialKey: String, val fetchedAtElapsed: Long, val courses: List<TeachingCloudCourse>)
+    private data class CachedCourses(val credentialKey: String, val fetchedAtElapsed: Long, val courses: List<TeachingCloudCourse>,
+        val fetchedAtMillis: Long = System.currentTimeMillis())
     private data class CourseFlight(val credentialKey: String, val revision: Long, val result: CompletableFuture<List<TeachingCloudCourse>>)
 
     internal data class AuthenticatedSession(
@@ -51,13 +55,21 @@ internal class UCloudAssignmentClient internal constructor(
         val credentialKey: String,
         val revision: Long,
         val result: CompletableFuture<List<AssignmentDeadlineItem>>,
+        val startedAtElapsed: Long,
     )
 
     constructor(credentialStore: SecureCredentialStore) : this(
         loadCredentials = credentialStore::load,
+        scopeProvider = credentialStore::cachedScope,
+        dtoCache = credentialStore.courseDTOCache,
     )
 
     private val stateLock = Any()
+    private val hydrationLock = Any()
+    @Volatile private var hydratedScope: String? = null
+    @Volatile private var hydratedCredentialKey: String? = null
+    @Volatile var cachePersistenceWarning: String? = null
+        private set
     private var cachedAssignments: CachedAssignments? = null
     private var cachedCourseRecords: CachedCourses? = null
     private var courseFlight: CourseFlight? = null
@@ -75,16 +87,17 @@ internal class UCloudAssignmentClient internal constructor(
     }
 
     fun cached(): List<AssignmentDeadlineItem>? = synchronized(stateLock) {
-        val key = loadCredentials()?.let(::credentialKey)
+        val key = cachedCredentialKey()
         cachedAssignments?.takeIf { it.credentialKey == key }?.items
     }
 
     fun cachedCourses(): List<TeachingCloudCourse>? = synchronized(stateLock) {
-        val key = loadCredentials()?.let(::credentialKey)
+        val key = cachedCredentialKey()
         cachedCourseRecords?.takeIf { it.credentialKey == key }?.courses
     }
 
     fun fetchCurrentCourses(force: Boolean = false): List<TeachingCloudCourse> {
+        val startedAtElapsed = elapsedRealtime()
         val requestRevision = revision.get()
         val credentials = normalizedCredentials()
         synchronized(stateLock) {
@@ -93,14 +106,58 @@ internal class UCloudAssignmentClient internal constructor(
         }
         return sessions.perform(credentialKey(credentials),
             login = { authenticateOverride?.invoke(credentials) ?: authenticate(credentials) },
-            expiresSession = ::isSessionExpiry) { authenticated -> fetchCoursesSingleFlight(credentials, authenticated, force, requestRevision) }
+            expiresSession = ::isSessionExpiry) { authenticated -> fetchCoursesSingleFlight(credentials, authenticated, force, requestRevision, startedAtElapsed) }
     }
 
     private fun normalizedCredentials(): Credentials {
         val saved = loadCredentials()?.takeIf {
             it.account.trim().isNotEmpty() && it.effectiveTeachingCloudPassword.isNotEmpty()
         } ?: throw DailyInfoClientException("请先在设置中保存教务账号和密码。")
-        return Credentials(saved.account.trim(), saved.effectiveTeachingCloudPassword)
+        val normalized = Credentials(saved.account.trim(), saved.effectiveTeachingCloudPassword, cacheScope = saved.cacheScope)
+        hydrate(normalized)
+        return normalized
+    }
+
+    private fun cachedCredentialKey(): String? = if (scopeProvider == null) loadCredentials()?.let(::credentialKey)
+        else hydratedCredentialKey.takeIf { hydratedScope != null && hydratedScope == scopeProvider.invoke() }
+
+    fun restoreBusinessCache(): Boolean = runCatching { normalizedCredentials(); true }.getOrDefault(false)
+
+    private fun hydrate(credentials: Credentials) = synchronized(hydrationLock) hydration@{
+        val scope = credentials.cacheScope ?: return@hydration
+        if (dtoCache == null || hydratedScope == scope) return@hydration
+        val requestRevision = revision.get()
+        val cached = dtoCache.load(scope)
+        if (scopeProvider?.invoke() != scope || requestRevision != revision.get()) return@hydration
+        val key = credentialKey(credentials)
+        synchronized(stateLock) publication@{
+            if (requestRevision != revision.get() || scopeProvider?.invoke() != scope) return@publication
+            hydratedScope = scope; hydratedCredentialKey = key
+            cached?.courses?.let { courses -> if (cachedCourseRecords == null && courseFlight == null) {
+                cachedCourseRecords = CachedCourses(key, elapsedRealtime() - (System.currentTimeMillis() - cached.coursesFetchedAt).coerceAtLeast(0),
+                    courses, cached.coursesFetchedAt)
+            } }
+            cached?.assignments?.let { items -> if (cachedAssignments == null && inFlightFetches.isEmpty()) {
+                cachedAssignments = CachedAssignments(key, elapsedRealtime() - (System.currentTimeMillis() - cached.assignmentsFetchedAt).coerceAtLeast(0),
+                    items, cached.assignmentsFetchedAt)
+            } }
+        }
+    }
+
+    private fun persistBusinessCache(credentials: Credentials, requestRevision: Long) {
+        val store = dtoCache ?: return
+        val scope = credentials.cacheScope ?: run {
+            if (revision.get() == requestRevision) cachePersistenceWarning =
+                "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。"
+            return
+        }
+        fun current() = revision.get() == requestRevision && scopeProvider?.invoke() == scope
+        if (!current()) return
+        val snapshot = synchronized(stateLock) { CourseDTOCache(scope, cachedCourseRecords?.courses, cachedAssignments?.items,
+            cachedCourseRecords?.fetchedAtMillis ?: 0, cachedAssignments?.fetchedAtMillis ?: 0) }
+        val saved = runCatching { store.save(snapshot, ::current) }.getOrDefault(false)
+        if (current()) cachePersistenceWarning = if (saved) null else
+            "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。"
     }
 
     fun fetchAll(force: Boolean = false): List<AssignmentDeadlineItem> {
@@ -122,6 +179,7 @@ internal class UCloudAssignmentClient internal constructor(
             revision.incrementAndGet()
             cachedAssignments = null
             cachedCourseRecords = null
+            hydratedScope = null; hydratedCredentialKey = null; cachePersistenceWarning = null
             courseFlight?.result?.completeExceptionally(DailyInfoClientException("课程请求已失效。"))
             courseFlight = null
             inFlightFetches.values.toList().also { inFlightFetches.clear() }
@@ -149,6 +207,7 @@ internal class UCloudAssignmentClient internal constructor(
                     credentialKey = credentialKey,
                     revision = currentRevision,
                     result = CompletableFuture(),
+                    startedAtElapsed = elapsedRealtime(),
                 ).also { inFlightFetches[credentialKey] = it } to true
             }
         }
@@ -156,7 +215,7 @@ internal class UCloudAssignmentClient internal constructor(
         flightSelectionObserver?.invoke(selection.second)
         if (selection.second) {
             try {
-                val items = fetchAllOverride?.invoke(credentials) ?: fetchAll(credentials, force, flight.revision)
+                val items = fetchAllOverride?.invoke(credentials) ?: fetchAll(credentials, force, flight.revision, flight.startedAtElapsed)
                 val isCurrent = synchronized(stateLock) {
                     val current = revision.get() == flight.revision &&
                         inFlightFetches[credentialKey]?.result === flight.result &&
@@ -174,6 +233,7 @@ internal class UCloudAssignmentClient internal constructor(
                     current
                 }
                 if (isCurrent) {
+                    persistBusinessCache(credentials, flight.revision)
                     flight.result.complete(items)
                 } else {
                     flight.result.completeExceptionally(
@@ -214,17 +274,17 @@ internal class UCloudAssignmentClient internal constructor(
         }
     }
 
-    private fun fetchAll(credentials: Credentials, force: Boolean, requestRevision: Long): List<AssignmentDeadlineItem> = sessions.perform(
+    private fun fetchAll(credentials: Credentials, force: Boolean, requestRevision: Long, startedAtElapsed: Long): List<AssignmentDeadlineItem> = sessions.perform(
         credentialKey(credentials),
         login = { authenticateOverride?.invoke(credentials) ?: authenticate(credentials) },
         expiresSession = ::isSessionExpiry,
     ) { authenticated ->
-        fetchAuthenticatedOverride?.invoke(authenticated) ?: fetchAllOnce(authenticated, credentials, force, requestRevision)
+        fetchAuthenticatedOverride?.invoke(authenticated) ?: fetchAllOnce(authenticated, credentials, force, requestRevision, startedAtElapsed)
     }
 
     private fun fetchAllOnce(authenticated: AuthenticatedSession, credentials: Credentials, force: Boolean,
-        requestRevision: Long): List<AssignmentDeadlineItem> {
-        val courses = fetchCoursesSingleFlight(credentials, authenticated, force, requestRevision)
+        requestRevision: Long, startedAtElapsed: Long): List<AssignmentDeadlineItem> {
+        val courses = fetchCoursesSingleFlight(credentials, authenticated, force, requestRevision, startedAtElapsed)
         val allItems = mutableListOf<AssignmentDeadlineItem>()
         var successfulCourseRequests = 0
         var firstCourseError: Exception? = null
@@ -275,11 +335,11 @@ internal class UCloudAssignmentClient internal constructor(
     }
 
     private fun fetchCoursesSingleFlight(credentials: Credentials, authenticated: AuthenticatedSession,
-        force: Boolean, requestRevision: Long): List<TeachingCloudCourse> {
+        force: Boolean, requestRevision: Long, startedAtElapsed: Long): List<TeachingCloudCourse> {
         val key = credentialKey(credentials)
         val selection = synchronized(stateLock) {
             check(revision.get() == requestRevision) { "课程请求已失效。" }
-            cachedCourseRecords?.takeIf { !force && it.credentialKey == key &&
+            cachedCourseRecords?.takeIf { (!force || it.fetchedAtElapsed >= startedAtElapsed) && it.credentialKey == key &&
                 elapsedRealtime() - it.fetchedAtElapsed in 0 until CACHE_LIFETIME_MS }?.let { return it.courses }
             val existing = courseFlight?.takeIf { it.credentialKey == key && it.revision == revision.get() }
             if (existing != null) existing to false else CourseFlight(key, revision.get(), CompletableFuture())
@@ -296,6 +356,7 @@ internal class UCloudAssignmentClient internal constructor(
                         loadCredentials()?.let(::credentialKey) == key) { "课程请求已失效。" }
                     cachedCourseRecords = CachedCourses(key, elapsedRealtime(), courses)
                 }
+                persistBusinessCache(credentials, flight.revision)
                 flight.result.complete(courses)
             } catch (error: Exception) { flight.result.completeExceptionally(error) }
             finally { synchronized(stateLock) { if (courseFlight === flight) courseFlight = null } }

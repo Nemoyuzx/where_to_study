@@ -902,4 +902,5 @@
     <string name="ui_generated_fd4480c6c08ea3">"Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos."</string>
     <string name="ui_generated_b5e960a8c37808">"Es necesario borrar la sesión web de QMplus. Reinicia la aplicación."</string>
     <string name="ui_generated_127d5412a91688">"No se pudo borrar o guardar la sesión web de QMplus. Vuelve a intentarlo."</string>
+    <string name="ui_generated_0eae03943703e2">"Se obtuvieron los datos de los cursos, pero no se actualizó la caché local. Al reiniciar podrían aparecer datos anteriores."</string>
 </resources>

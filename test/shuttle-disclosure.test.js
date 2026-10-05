@@ -28,7 +28,7 @@ for(const {name,work} of dedicated)test('production Harmony QuerySession: '+name
 
 function disclosure({reduced=false,animator='1',transition='1',width=390}={}){
   const source=view.slice(view.indexOf('  private reduceFullTimetableMotion()'),view.indexOf('  private selectedTab()'))
-  assert.ok(source.includes('private toggleFullTimetable()'),'drive the actual production handler')
+  assert.ok(source.includes('private toggleTimetablePeriod('),'drive the actual production handler')
   const animations=[]
   const context={Curve:{EaseOut:'ease-out'},accessibility:{isAnimationReduceEnabledSync:()=>reduced},
     settings:{display:{ANIMATOR_DURATION_SCALE:'animator',TRANSITION_ANIMATION_SCALE:'transition'},
@@ -38,7 +38,8 @@ function disclosure({reduced=false,animator='1',transition='1',width=390}={}){
   const owner=new context.DisclosureHarness(),session=new QuerySession()
   Object.assign(owner,{session,contentWidth:width,fullTimetableMotionDuration:160,
     getUIContext:()=>({getHostContext:()=>({}),animateTo:(options,work)=>{animations.push(options);work()}})})
-  return {owner,session,animations}
+  const schedule={period:{key:()=> 'synthetic-period'},from:'A',to:'B'}
+  return {owner,session,animations,schedule}
 }
 test('production Harmony disclosure is initially collapsed at every width and fast toggles only change presentation',()=>{
   for(const width of [320,390,700,840,1180]){
@@ -48,40 +49,48 @@ test('production Harmony disclosure is initially collapsed at every width and fa
     f.session.shuttleError='retained-last-good'
     f.session.regularScrollOffsets.set('shuttle',120)
     f.session.loadShuttle=()=>{throw Error('disclosure must not fetch')}
-    assert.equal(f.session.fullTimetableExpanded,false)
-    for(let index=0;index<51;index++)f.owner.toggleFullTimetable()
-    assert.equal(f.session.fullTimetableExpanded,true)
+    assert.equal(f.session.isShuttlePeriodExpanded('synthetic-period'),false)
+    for(let index=0;index<51;index++)f.owner.toggleTimetablePeriod(f.schedule)
+    assert.equal(f.session.isShuttlePeriodExpanded('synthetic-period'),true)
     assert.equal(f.animations.length,51)
     assert.ok(f.animations.every(options=>options.duration===160&&!options.onFinish))
     f.session.detachView();f.session.attachView()
-    assert.equal(f.session.fullTimetableExpanded,true)
+    assert.equal(f.session.isShuttlePeriodExpanded('synthetic-period'),true)
+    f.owner.toggleTimetableSection(f.schedule)
+    assert.equal(f.session.isShuttlePeriodExpanded('synthetic-period'),true)
+    assert.equal(f.session.isShuttleSectionExpanded(JSON.stringify(['synthetic-period','A','B'])),true)
     assert.equal(f.session.shuttleSnapshot,cached)
     assert.equal(f.session.shuttleFetchedAtMillis,12345)
     assert.equal(f.session.shuttleError,'retained-last-good')
     assert.equal(f.session.regularScrollOffsets.get('shuttle'),120)
-    assert.equal(new QuerySession().fullTimetableExpanded,false)
+    assert.equal(new QuerySession().expandedShuttlePeriods.length,0)
+    assert.equal(new QuerySession().expandedShuttleSections.length,0)
     f.session.dispose()
   }
 })
 test('production Harmony disclosure reads Reduce Motion and both zero system animation scales on every action',()=>{
   for(const options of [{reduced:true},{animator:'0'},{transition:'0'}]){
     const f=disclosure(options)
-    f.owner.toggleFullTimetable()
-    f.owner.toggleFullTimetable()
-    assert.equal(f.session.fullTimetableExpanded,false)
+    f.owner.toggleTimetablePeriod(f.schedule)
+    f.owner.toggleTimetablePeriod(f.schedule)
+    assert.equal(f.session.isShuttlePeriodExpanded('synthetic-period'),false)
     assert.ok(f.animations.every(animation=>animation.duration===0))
   }
 })
 test('native disclosure boundaries keep current service and source footer outside the gated timetable body',()=>{
   const h=view.slice(view.indexOf('  shuttleFullTimetable('),view.indexOf('  shuttleRouteCard('))
   const a=android.slice(android.indexOf('tag = "information.query.shuttle.full-timetable"'),android.indexOf('private fun fullTimetableCell'))
-  assert.match(h,/Text\(daily\.scheduleNotice\.title\)[\s\S]*?if \(this\.session\.fullTimetableExpanded\)[\s\S]*?ForEach\(daily\.scheduleNotice\.schedules/)
+  assert.match(h,/Text\(daily\.scheduleNotice\.title\)[\s\S]*ForEach\(this\.timetablePeriods\(daily\)/)
+  assert.match(h,/DisclosureClip\(\{ expanded: this\.session\.isShuttlePeriodExpanded/)
+  assert.match(h,/DisclosureClip\(\{ expanded: this\.session\.isShuttleSectionExpanded/)
   assert.match(h,/sys\.symbol\.chevron_down/)
-  assert.match(h,/accessibilityStateDescription\(this\.model\.text\(this\.session\.fullTimetableExpanded \? '已展开' : '已折叠'\)\)/)
+  assert.match(h,/accessibilityStateDescription\(this\.model\.text\(this\.session\.isShuttleSectionExpanded/)
   assert.match(h,/minHeight: ControlMetrics\.height/)
   assert.match(view,/this\.shuttleStatusCard\(daily\)[\s\S]*this\.shuttleScheduleGrid\(daily\)[\s\S]*this\.shuttleFullTimetable\(daily\)[\s\S]*this\.shuttleSourceCard\(\)/)
   assert.match(a,/ic_chevron_down/)
-  assert.match(a,/visibility = if \(sessionState\.fullTimetableExpanded\) View\.VISIBLE else View\.GONE/)
+  assert.match(a,/visibility = if \(key in expandedKeys\) View\.VISIBLE else View\.GONE/)
+  assert.match(a,/shuttleTimetableDisclosure\("period\.\$periodKey"/)
+  assert.match(a,/shuttleTimetableDisclosure\("direction\.\$directionKey"/)
   assert.match(a,/DisclosureMotionController\(this, viewport, indicator, onDetached/)
   assert.match(a,/ViewCompat\.setStateDescription/)
   assert.match(a,/ACTION_EXPAND[\s\S]*ACTION_COLLAPSE/)

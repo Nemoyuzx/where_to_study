@@ -18,6 +18,8 @@ export interface AssignmentDeadlineFetching {
   fetch(credentials: Credentials, date: string): Promise<AssignmentDeadlineItem[]>;
   fetchCatalog(credentials: Credentials, refresh?: boolean): Promise<AssignmentDeadlineItem[]>;
   fetchCourseDirectory?(credentials: Credentials, refresh?: boolean): Promise<UCloudCourse[]>;
+  installValidatedCache?(credentials: Credentials, courses: UCloudCourse[] | null,
+    assignments: AssignmentDeadlineItem[] | null, coursesFetchedAt: number, assignmentsFetchedAt: number): void;
   reset(): void;
 }
 
@@ -118,6 +120,23 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     this.fetchDirectoryProvider = fetchDirectoryProvider;
   }
 
+  // IO hydration feeds this same network owner, never a second request client.
+  installValidatedCache(credentials: Credentials, courses: UCloudCourse[] | null,
+    assignments: AssignmentDeadlineItem[] | null, coursesFetchedAt: number, assignmentsFetchedAt: number): void {
+    const account: string = credentials.account.trim();
+    const password: string = credentials.effectiveCloudPassword();
+    if (!/^[0-9a-f]{32}$/.test(credentials.cacheScope) || account.length === 0 || password.length === 0) { return; }
+    if (this.activeAccount !== account || this.activePassword !== password) {
+      this.reset(); this.activeAccount = account; this.activePassword = password;
+    }
+    if (courses !== null && this.courseCache === null && this.courseInFlight === null) {
+      this.courseCache = new UCloudCourseCache(account, coursesFetchedAt, courses);
+    }
+    if (assignments !== null && this.cache === null && this.inFlight === null) {
+      this.cache = new UCloudAssignmentCache(account, assignmentsFetchedAt, assignments);
+    }
+  }
+
   async fetch(credentials: Credentials, date: string): Promise<AssignmentDeadlineItem[]> {
     if (StrictDates.parseDateString(date) === null) {
       throw new Error('作业日期格式不正确。');
@@ -150,7 +169,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       const normalized: Credentials = new Credentials(account, password);
       const work: Promise<AssignmentDeadlineItem[]> = this.fetchAllProvider === null ?
         this.sessions.run(account, password, (): Promise<SessionLease<UCloudSession>> => this.authenticate(normalized),
-          (session: UCloudSession): Promise<AssignmentDeadlineItem[]> => this.fetchAll(session)) :
+          (session: UCloudSession): Promise<AssignmentDeadlineItem[]> => this.fetchAll(session, refresh ? now : 0)) :
         this.fetchAllProvider(normalized);
       this.inFlight = work;
       this.inFlightAccount = account;
@@ -193,7 +212,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     const work: Promise<UCloudCourse[]> = this.fetchDirectoryProvider !== null ?
       this.fetchDirectoryProvider(normalized) : this.sessions.run(account, password,
         (): Promise<SessionLease<UCloudSession>> => this.authenticate(normalized),
-        (session: UCloudSession): Promise<UCloudCourse[]> => this.fetchCourseRecords(session));
+        (session: UCloudSession): Promise<UCloudCourse[]> => this.fetchCourseRecords(session, refresh ? now : 0));
     this.courseInFlight = work;
     this.courseInFlightAccount = account;
     try {
@@ -225,8 +244,8 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     this.activePassword = '';
   }
 
-  private async fetchAll(session: UCloudSession): Promise<AssignmentDeadlineItem[]> {
-    const courses: UCloudCourse[] = await this.fetchCourseRecords(session);
+  private async fetchAll(session: UCloudSession, freshAfter: number = 0): Promise<AssignmentDeadlineItem[]> {
+    const courses: UCloudCourse[] = await this.fetchCourseRecords(session, freshAfter);
     const allItems: AssignmentDeadlineItem[] = [];
     let successfulCourseRequests: number = 0;
     let firstCourseError: Error | null = null;
@@ -285,10 +304,16 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     return UCloudAssignmentClient.merge(allItems);
   }
 
-  private async fetchCourseRecords(session: UCloudSession): Promise<UCloudCourse[]> {
+  private async fetchCourseRecords(session: UCloudSession, freshAfter: number = 0): Promise<UCloudCourse[]> {
     if (this.courseRecordsInFlight !== null && this.courseRecordsUserID === session.userID) {
       return await this.courseRecordsInFlight;
     }
+    if (this.courseCache !== null && this.courseCache.account === this.activeAccount &&
+      this.courseCache.fetchedAt >= freshAfter && Date.now() - this.courseCache.fetchedAt < UCloudAssignmentClient.cacheLifetimeMs) {
+      return this.courseCache.items;
+    }
+    const revision: number = this.revision;
+    const account: string = this.activeAccount;
     const courseQuery: Map<string, string> = new Map<string, string>();
     courseQuery.set('size', '9999');
     courseQuery.set('current', '1');
@@ -301,7 +326,11 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     this.courseRecordsInFlight = work;
     this.courseRecordsUserID = session.userID;
     try {
-      return await work;
+      const courses: UCloudCourse[] = await work;
+      if (revision === this.revision && account === this.activeAccount) {
+        this.courseCache = new UCloudCourseCache(account, Date.now(), courses);
+      }
+      return courses;
     } finally {
       if (this.courseRecordsInFlight === work) {
         this.courseRecordsInFlight = null;

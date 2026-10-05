@@ -7,6 +7,7 @@ enum SettingsSurfaceID: String, Hashable {
     case semester
     case notification
     case information
+    case network
     case widget
     case colorTheme
     case language
@@ -126,6 +127,7 @@ enum SettingsLayoutPolicy {
     static let trailingColumn: [SettingsSurfaceID] = [
         .notification,
         .information,
+        .network,
         .widget,
         .colorTheme,
         .language,
@@ -139,6 +141,7 @@ enum SettingsLayoutPolicy {
         .semester,
         .notification,
         .information,
+        .network,
         .widget,
         .colorTheme,
         .language,
@@ -229,17 +232,17 @@ struct SettingsView: View {
                     if columnCount == 2 {
                         let widths = DesktopColumnLayoutPolicy.widths(containerWidth: proxy.size.width)
                         HStack(alignment: .top, spacing: 16) {
-                            VStack(spacing: 16) {
+                            LazyVStack(spacing: 16) {
                                 settingsSurfaces(SettingsLayoutPolicy.leadingColumn)
                             }
                             .frame(width: widths.leading, alignment: .top)
-                            VStack(spacing: 16) {
+                            LazyVStack(spacing: 16) {
                                 settingsSurfaces(SettingsLayoutPolicy.trailingColumn)
                             }
                             .frame(width: widths.trailing, alignment: .top)
                         }
                     } else {
-                        VStack(spacing: 16) {
+                        LazyVStack(spacing: 16) {
                             settingsSurfaces(SettingsLayoutPolicy.singleColumn)
                         }
                     }
@@ -259,17 +262,17 @@ struct SettingsView: View {
                     referenceNotice
                     if columnCount == 2 {
                         HStack(alignment: .top, spacing: 16) {
-                            VStack(spacing: 16) {
+                            LazyVStack(spacing: 16) {
                                 settingsSurfaces(SettingsLayoutPolicy.leadingColumn)
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
-                            VStack(spacing: 16) {
+                            LazyVStack(spacing: 16) {
                                 settingsSurfaces(SettingsLayoutPolicy.trailingColumn)
                             }
                             .frame(maxWidth: .infinity, alignment: .top)
                         }
                     } else {
-                        VStack(spacing: 16) {
+                        LazyVStack(spacing: 16) {
                             settingsSurfaces(SettingsLayoutPolicy.singleColumn)
                         }
                     }
@@ -343,6 +346,9 @@ struct SettingsView: View {
             notificationSurface
         case .information:
             informationSurface
+        case .network:
+            Surface { systemNetworkAssistanceDescription.frame(maxWidth: .infinity, alignment: .leading) }
+                .frame(maxWidth: .infinity, alignment: .leading)
         case .widget:
             widgetSurface
         case .colorTheme:
@@ -617,23 +623,33 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label("界面语言", systemImage: "globe")
                     .font(.headline)
-                Picker(
-                    "界面语言",
-                    selection: Binding(
-                        get: { model.appLanguage },
-                        set: { language in
+                Menu {
+                    ForEach(AppLanguage.allCases) { language in
+                        Button {
                             AppHaptics.selection()
                             changeInterfaceLanguage(to: language)
+                        } label: {
+                            HStack {
+                                Text(verbatim: language == .system ? model.localized(language.titleKey) : language.nativeName)
+                                if model.appLanguage == language { Image(systemName: "checkmark") }
+                            }
                         }
-                    )
-                ) {
-                    ForEach(AppLanguage.allCases) { language in
-                        Text(verbatim: language == .system ? model.localized(language.titleKey) : language.nativeName)
                             .accessibilityIdentifier("settings.language.option.\(language.rawValue)")
-                            .tag(language)
                     }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(verbatim: model.appLanguage == .system ? model.localized(model.appLanguage.titleKey) : model.appLanguage.nativeName)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.up.chevron.down").accessibilityHidden(true)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .pickerStyle(.menu)
+                .buttonStyle(.plain)
+                .foregroundStyle(theme.primaryOnSoftSurface)
+                .accessibilityLabel(model.localized("界面语言"))
+                .accessibilityValue(model.appLanguage == .system ? model.localized(model.appLanguage.titleKey) : model.appLanguage.nativeName)
                 .accessibilityIdentifier("settings.language")
                 Text("API 、课程与竞赛返回的原始内容不会自动翻译。")
                     .font(.caption)
@@ -914,8 +930,6 @@ struct SettingsView: View {
                 Text("天气、黄历和 DDL 来自第三方公开服务；校内竞赛通知由脚本从学校内部网站公开通知页提取整理，各卡片底部会标明具体来源。")
                     .font(.caption)
                     .foregroundStyle(theme.secondaryText)
-                Divider()
-                systemNetworkAssistanceDescription
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1189,7 +1203,7 @@ private struct QMplusSettingsSurface: View {
             VStack(alignment: .leading, spacing: 10) {
                 sectionHeader
                 featureToggle
-                if detailsExpanded {
+                ExpandableContent(expanded: detailsExpanded) {
                 VStack(alignment: .leading, spacing: 10) {
                 Text(model.localized("请在官方网页完成 SSO 与 MFA；也可自愿保存独立的 QMplus 登录信息，用于官方网页自动填写。"))
                     .font(.callout).foregroundStyle(theme.secondaryText)
@@ -1205,7 +1219,6 @@ private struct QMplusSettingsSurface: View {
                 Text(model.localized("QMplus 会话与教务账号隔离；断开连接或清除本地数据会删除该会话和课程快照。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

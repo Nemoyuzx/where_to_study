@@ -354,6 +354,7 @@
 "本学期暂无教学云课程" = "Belum ada kursus Teaching Cloud untuk semester ini";
 "本学期课程" = "Kursus semester ini";
 "本应用不会自动开启或更改系统网络辅助，也不能保证 Wi-Fi 与蜂窝网络同时使用。蜂窝数据或个人热点可能产生额外费用，请自行确认套餐。" = "Aplikasi ini tidak menghidupkan atau mengubah bantuan rangkaian sistem secara automatik dan tidak dapat menjamin Wi-Fi serta rangkaian selular digunakan serentak. Data selular atau Hotspot Peribadi mungkin dikenakan caj tambahan. Semak pelan anda.";
+"本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。" = "Data kursus telah diperoleh, tetapi cache setempat tidak dikemas kini. Data terdahulu mungkin dipaparkan selepas aplikasi dimulakan semula.";
 "本课已同步作业" = "Tugasan disegerakkan bagi kursus ini";
 "本课已同步活动" = "Aktiviti disegerakkan bagi kursus ini";
 "本课缓存已清除或不再可用。" = "Cache kursus ini telah dipadam atau tidak lagi tersedia.";

@@ -14,7 +14,7 @@ Open Connect QMplus in Settings or Courses and complete SSO/MFA in the app-owned
 
 ### 可选安全保存与自动填写 / Optional secure saving and autofill
 
-默认关闭。在独立 QMplus 设置保存账号和密码，再明确授权本机自动填写。密码使用各平台系统安全存储，与北邮凭据分开，不进入普通设置文件。有效会话优先同步；需要登录时仅在已核验的官方 Microsoft 主文档表单提交普通 Next／Sign in 各一次。精确匹配已保存账号的已核验账户选择页可自动选择一次。验证码、MFA、未匹配的账号选择、保持登录、风险、协议或未知页面显露同一个官方窗口，必须用户处理；不会自动重试密码或绕过验证。网页改版、跨文档步骤或系统限制可能需要完整手动登录，不能保证所有分支静默完成。[辅助契约](../contracts/qmplus/AUTH.md)
+默认关闭。在独立 QMplus 设置保存账号和密码，再明确授权本机自动填写。密码使用各平台系统安全存储，与北邮凭据分开，不进入普通设置文件。有效会话优先同步；已核验的 QMplus 访客页可以先通过固定官方登录入口进入 SSO，需要登录时仅在已核验的官方 Microsoft 主文档表单提交普通 Next／Sign in 各一次。精确匹配已保存账号的已核验账户选择页可自动选择一次。验证码、MFA、未匹配的账号选择、保持登录、风险、协议或未知页面显露同一个官方窗口，必须用户处理；不会自动重试密码或绕过验证。网页改版、跨文档步骤或系统限制可能需要完整手动登录，不能保证所有分支静默完成。[辅助契约](../contracts/qmplus/AUTH.md)
 
 Off by default. Save separate QMplus credentials and explicitly authorize local autofill in QMplus settings. Passwords use OS secure storage separate from BUPT credentials, not ordinary settings files. Valid sessions synchronize first; verified official Microsoft main-document forms may receive one ordinary Next and Sign in submission each. A verified account chooser may select an exact match for the saved account once. CAPTCHA, MFA, unmatched account choices, staying signed in, risk, terms or unknown pages reveal the same official window for user action, with no automatic password retries or verification bypass. Changed pages, cross-document steps or OS restrictions may require fully manual sign-in; silence cannot be guaranteed for every branch. [Helper contract](../contracts/qmplus/AUTH.md)
 
@@ -38,13 +38,17 @@ The shared script makes only allowlisted read-only requests to the official enro
 
 ## 会话和本地资料 / Sessions and local data
 
+课程和活动业务快照经大小、字段、时间及官方链接校验后，绑定独立身份作用域保存在本机；不含登录秘密、Cookie、令牌或完整 HTML。重启先恢复缓存并保留原获取时间，启用功能时由应用数据层静默更新。缓存不证明网页登录有效；后台遇到验证要求不会自动弹窗，显式连接后才显示需要本人处理的官方页面。身份变更或清除先撤销旧作用域，旧请求不得恢复已清除的数据；功能关闭保留缓存。
+
+Validated business snapshots are stored locally with an independent identity scope and original fetch times, never credentials, cookies, tokens or full HTML. Restart restores cached data before a data-owner-managed silent update when enabled. A cache does not establish a valid login. Background verification requirements do not automatically open a window; explicit connection reveals official pages needing action. Identity changes or clearing revoke the old scope before stale requests can republish data. Disabling retains the cache.
+
 | 平台 / Platform | 应用内官方网页登录会话 / App-owned web session | 业务快照 / Business snapshot |
 | --- | --- | --- |
-| Windows/Linux Tauri | 应用私有的专用持久 WebEngine 目录，不复用系统浏览器 Cookie / Dedicated app-private persistent WebEngine directory, no system-browser cookie reuse | 当前进程内存 / Process memory |
-| macOS Tauri | macOS 14 及以上使用独立命名的持久 WebKit store；更旧系统使用 incognito / Separate named persistent WebKit store on macOS 14+; incognito on older systems | 当前进程内存 / Process memory |
-| 原生 iOS/macOS / Native iOS/macOS | iOS 17／macOS 14 及以上使用应用专属、可持久的隔离 WebKit data store；更旧系统使用非持久会话 / App-specific isolated persistent WebKit store on iOS 17+/macOS 14+; nonpersistent on older supported systems | 当前进程内存 / Process memory |
+| Windows/Linux Tauri | 应用私有的专用持久 WebEngine 目录，不复用系统浏览器 Cookie / Dedicated app-private persistent WebEngine directory, no system-browser cookie reuse | 应用私有有界缓存 / Bounded app-private cache |
+| macOS Tauri | macOS 14 及以上使用独立命名的持久 WebKit store；更旧系统使用 incognito / Separate named persistent WebKit store on macOS 14+; incognito on older systems | 应用私有有界缓存 / Bounded app-private cache |
+| 原生 iOS/macOS / Native iOS/macOS | iOS 17／macOS 14 及以上使用应用专属、可持久的隔离 WebKit data store；更旧系统使用非持久会话 / App-specific isolated persistent WebKit store on iOS 17+/macOS 14+; nonpersistent on older supported systems | 应用私有有界缓存 / Bounded app-private cache |
 | Android | 应用内独立 `:qmplus` 进程及 WebView profile，成功同步时刷新引擎 Cookie 保存；不读取外部浏览器 Cookie / Separate app-owned `:qmplus` process/profile with engine cookie flush after successful sync, no external-browser cookie access | 应用私有的有界缓存 / Bounded app-private cache |
-| HarmonyOS | 应用普通 ArkWeb 持久区仅供 QMplus 使用，不是独立命名 profile / Application normal persistent ArkWeb area exclusively for QMplus, not a named profile | 当前进程内存 / Process memory |
+| HarmonyOS | 应用普通 ArkWeb 持久区仅供 QMplus 使用，不是独立命名 profile / Application normal persistent ArkWeb area exclusively for QMplus, not a named profile | 应用私有有界缓存 / Bounded app-private cache |
 
 Cookie 与网页存储由系统 WebEngine 在应用私有区管理，不导出到普通设置、业务 DTO、日志或 Where To Study 服务器。Tauri 的会话 journal 只记录随机 profile ID、后端模式及清理状态，保存在单独的 `qmplus-web-session` 目录；Windows／Linux 的引擎区位于应用本地数据目录下的 `qmplus-web-profiles/<随机 ID>`。HarmonyOS API24 没有命名 profile API，应用当前唯一的 `Web` 为 QMplus；以后其它 `Web` 必须使用 incognito，不能共享普通区。旧 Tauri／HarmonyOS incognito 会话不导出、不迁移，首次使用新持久区需重新完成官方登录。
 

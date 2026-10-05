@@ -16,6 +16,7 @@ data class Credentials(
     val account: String,
     val password: String,
     val teachingCloudPassword: String? = null,
+    val cacheScope: String? = null,
 ) {
     val effectiveTeachingCloudPassword: String
         get() = teachingCloudPassword?.takeIf(String::isNotEmpty) ?: password
@@ -62,14 +63,29 @@ internal object CredentialUpdateLogic {
 
 class SecureCredentialStore(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+    internal val courseDTOCache = CourseDTOCacheStore(context)
 
-    fun save(credentials: Credentials) {
+    fun save(credentials: Credentials) = synchronized(recordLock) {
+        val previous = loadRaw()
+        val same = previous != null && previous.account == credentials.account && previous.password == credentials.password &&
+            previous.teachingCloudPassword == credentials.teachingCloudPassword
+        if (same && previous?.cacheScope != null) { currentScope = previous.cacheScope; return@synchronized }
+        currentScope = null
+        courseDTOCache.clear()
+        val scope = java.util.UUID.randomUUID().toString().replace("-", "")
+        saveRaw(credentials.copy(cacheScope = scope))
+        check(loadRaw(true)?.cacheScope == scope) { "无法安全保存本地凭据。" }
+        currentScope = scope
+    }
+
+    private fun saveRaw(credentials: Credentials) {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val payload = JSONObject()
             .put("account", credentials.account)
             .put("password", credentials.password)
             .put("teaching_cloud_password", credentials.teachingCloudPassword?.takeIf(String::isNotEmpty))
+            .put("cache_scope", credentials.cacheScope)
             .toString()
             .toByteArray(StandardCharsets.UTF_8)
         val ciphertext = try {
@@ -85,7 +101,18 @@ class SecureCredentialStore(context: Context) {
         if (!saved) throw IllegalStateException("无法安全保存本地凭据。")
     }
 
-    fun load(throwOnFailure: Boolean = false): Credentials? {
+    fun load(throwOnFailure: Boolean = false): Credentials? = synchronized(recordLock) {
+        val saved = loadRaw(throwOnFailure) ?: run { currentScope = null; return@synchronized null }
+        if (saved.cacheScope != null) { currentScope = saved.cacheScope; return@synchronized saved }
+        val migrated = saved.copy(cacheScope = java.util.UUID.randomUUID().toString().replace("-", ""))
+        val verified = runCatching { saveRaw(migrated); check(loadRaw(true)?.cacheScope == migrated.cacheScope); migrated }.getOrNull()
+        currentScope = verified?.cacheScope
+        verified ?: saved
+    }
+
+    internal fun cachedScope(): String? = currentScope
+
+    private fun loadRaw(throwOnFailure: Boolean = false): Credentials? {
         val encodedIv = preferences.getString(IV_KEY, null) ?: return null
         val encodedPayload = preferences.getString(PAYLOAD_KEY, null) ?: return null
         val result = runCatching {
@@ -100,6 +127,7 @@ class SecureCredentialStore(context: Context) {
                     password = objectValue.optString("password"),
                     teachingCloudPassword = objectValue.optString("teaching_cloud_password")
                         .takeIf(String::isNotEmpty),
+                    cacheScope = objectValue.optString("cache_scope").takeIf { it.matches(Regex("^[0-9a-f]{32}$")) },
                 )
             } finally {
                 plaintext.fill(0)
@@ -108,7 +136,9 @@ class SecureCredentialStore(context: Context) {
         return if (throwOnFailure) result.getOrThrow() else result.getOrNull()
     }
 
-    fun clear() {
+    fun clear() = synchronized(recordLock) {
+        currentScope = null
+        courseDTOCache.clear()
         if (!preferences.edit().clear().commit()) {
             throw IllegalStateException("无法清除本地凭据记录。")
         }
@@ -139,6 +169,8 @@ class SecureCredentialStore(context: Context) {
     }
 
     private companion object {
+        val recordLock = Any()
+        @Volatile var currentScope: String? = null
         const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         const val KEY_ALIAS = "where_to_study.credentials.v1"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

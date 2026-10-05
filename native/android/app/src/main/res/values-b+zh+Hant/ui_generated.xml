@@ -902,4 +902,5 @@
     <string name="ui_generated_fd4480c6c08ea3">"關閉「啟用 QMplus」只暫停連線與同步，保留登入資料、連線工作階段及課程快取。關閉自動填寫、刪除登入資料或登出並清除資料，請使用對應操作。"</string>
     <string name="ui_generated_b5e960a8c37808">"QMplus 網頁工作階段需要清理，請重新啟動應用程式。"</string>
     <string name="ui_generated_127d5412a91688">"QMplus 網頁工作階段尚未清除或儲存失敗，請重試。"</string>
+    <string name="ui_generated_0eae03943703e2">"本次課程資料已讀取，但本機快取未更新。重新啟動後可能顯示先前的快取。"</string>
 </resources>

@@ -4,6 +4,24 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QmplusLoginAutomationTest {
+    @Test fun plainGuestEntryIsOnceAndCannotBeClaimedAfterSSOOrCredentialSubmission() {
+        val gate = QmplusLoginAutomationGate()
+        val document = gate.beginDocument()
+        assertFalse(gate.claimLoginEntry(document, false))
+        assertTrue(gate.claimLoginEntry(document, true))
+        val next = gate.beginDocument()
+        assertFalse(gate.claimLoginEntry(next, true))
+        assertTrue(gate.claimSSO(next, true))
+        assertFalse(gate.claimLoginEntry(next, true))
+        assertTrue(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/my"))
+        assertTrue(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/my/"))
+        assertFalse(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/my/?next=other"))
+        assertFalse(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/my/#fragment"))
+        assertEquals("login", QmplusAuthResultCodec.guestEntry("\"login\""))
+        assertNull(QmplusAuthResultCodec.guestEntry("true"))
+        assertNull(QmplusAuthResultCodec.guestEntry("\"https://qmplus.qmul.ac.uk/login/index.php?wants=other\""))
+    }
+
     @Test fun ordinaryFormsRequireSavedOptInAndEachCanBeClaimedOnlyOnce() {
         val gate = QmplusLoginAutomationGate()
         val first = gate.beginDocument()

@@ -23,8 +23,8 @@ struct CourseCatalogRow<ExpandedContent: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 8) {
+        VStack(alignment: .leading, spacing: isExpanded ? 12 : 0) {
+            HStack(alignment: .center, spacing: 8) {
                 Button {
                     withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.22)) { toggle() }
                 } label: {
@@ -65,16 +65,16 @@ struct CourseCatalogRow<ExpandedContent: View>: View {
                 .accessibilityHint(model.localized("打开本课详情与已同步活动"))
                 .accessibilityIdentifier(identifier + ".info")
             }
-            if isExpanded {
+            ExpandableContent(expanded: isExpanded) {
                 expandedContent
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
                     .accessibilityIdentifier(identifier + ".activities")
             }
         }
         .padding(12)
         .background(theme.surface, in: RoundedRectangle(cornerRadius: 14))
         .overlay { RoundedRectangle(cornerRadius: 14).stroke(theme.border, lineWidth: 1) }
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.22), value: isExpanded)
     }
 
     private var summary: String {

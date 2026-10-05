@@ -52,6 +52,11 @@ test('pure page, sync protocol and auth inspection agree on explicit Moodle erro
   const cases=[
     [{},'authenticated'],[{menuCount:0},'unknown'],[{menuCount:2},'authenticated'],
     [{bodyID:'page-site-index',menuCount:0,linkHrefs:['/auth/saml2/login.php']},'guest'],
+    // Regression specifications only; not executed during this change.
+    [{bodyID:'page-site-index',menuCount:0,linkHrefs:['/login/index.php']},'guest'],
+    [{bodyID:'page-site-index',menuCount:0,linkHrefs:['https://foreign.invalid/login/index.php']},'unknown'],
+    [{bodyID:'page-site-index',menuCount:0,linkHrefs:['/login/index.php?target=foreign']},'unknown'],
+    [{bodyID:'page-site-index',menuCount:1,linkHrefs:['/login/index.php']},'authenticated'],
     [{bodyID:'page-site-index',menuCount:0,linkHrefs:['https://qmplus.qmul.ac.uk/auth/saml2/login.php']},'guest'],
     [{bodyID:'page-site-index',menuCount:0,linkHrefs:[]},'unknown'],
     [{bodyID:'page-course-view-topics',menuCount:0,linkHrefs:['/auth/saml2/login.php']},'unknown'],

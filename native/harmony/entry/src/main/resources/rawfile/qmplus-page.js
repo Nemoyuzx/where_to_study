@@ -29,6 +29,18 @@
     }
     return false;
   }
+  function hasSafeOfficialLoginLink(doc = document) {
+    const links = doc?.querySelectorAll?.('a[href]') || [];
+    return Array.from(links).slice(0, 512).some(link => {
+      const href = link.getAttribute?.('href');
+      if (typeof href !== 'string' || href.length > 2048) return false;
+      try {
+        const target = new URL(href, 'https://qmplus.qmul.ac.uk');
+        return target.origin === 'https://qmplus.qmul.ac.uk' && !target.username && !target.password &&
+          target.pathname === '/login/index.php' && !target.search && !target.hash;
+      } catch { return false; }
+    });
+  }
   function classifyQMplusPage(doc = document) {
     try {
       if (hasMoodleErrorPage(doc)) return 'error';
@@ -36,7 +48,8 @@
       if (isMoodleGuestPage(doc)) return 'guest';
       const menu = doc?.querySelectorAll?.('.usermenu .userbutton') || [];
       if (doc?.body && menu.length > 0) return 'authenticated';
-      return doc?.body?.id === 'page-site-index' && hasSafeOfficialSAMLLink(doc) ? 'guest' : 'unknown';
+      return doc?.body?.id === 'page-site-index' &&
+        (hasSafeOfficialSAMLLink(doc) || hasSafeOfficialLoginLink(doc)) ? 'guest' : 'unknown';
     } catch { return 'unknown'; }
   }
   try {

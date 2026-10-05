@@ -830,7 +830,9 @@ final class AppModel: ObservableObject {
             case .preserve:
                 updateSavedCredentialState(storedCredentials)
             case let .replace(credentials):
-                try credentialStore.save(credentials)
+                try CourseBusinessCacheStorage.shared.mutateUCloudCredentials {
+                    try credentialStore.save(credentials)
+                }
                 SJDAPIClient.sessions.reset()
                 UCloudAssignmentClient.resetSessions()
                 if !accountChanged, storedCredentials?.password != credentials.password { invalidatePendingAccountRequests() }
@@ -838,7 +840,9 @@ final class AppModel: ObservableObject {
                 updateSavedCredentialState(credentials)
                 assignmentCredentialRevision &+= 1
             case .clear:
-                try credentialStore.clear()
+                try CourseBusinessCacheStorage.shared.mutateUCloudCredentials {
+                    try credentialStore.clear()
+                }
                 SJDAPIClient.sessions.reset()
                 UCloudAssignmentClient.resetSessions()
                 gradeStore.reset()
@@ -1259,7 +1263,9 @@ final class AppModel: ObservableObject {
         if qmplus.credentialAuthorization.removalNeedsAttention { failures.append(localized("QMplus 登录信息")) }
 
         do {
-            try credentialStore.clear()
+            try CourseBusinessCacheStorage.shared.mutateUCloudCredentials {
+                try credentialStore.clear()
+            }
         } catch {
             failures.append("账户密码")
         }
@@ -1785,6 +1791,7 @@ final class AppModel: ObservableObject {
     }
 
     private func clearAccountScopedData() throws {
+        try CourseBusinessCacheStorage.shared.rotateUCloudEpoch()
         invalidatePendingAccountRequests()
         courseDataClearRevision &+= 1
         cancelDailyCourseNotifications(includingDelivered: true)

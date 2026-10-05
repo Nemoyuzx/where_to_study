@@ -1,6 +1,7 @@
 import { preferences } from '@kit.ArkData';
 import { webview } from '@kit.ArkWeb';
 import { AppContext } from './AppContext';
+import { newQMPlusRecordID } from './QMPlusSavedLoginStore';
 
 export interface QMPlusWebProfileStoring {
   reserveWebMount(): boolean;
@@ -12,6 +13,8 @@ export interface QMPlusWebProfileStoring {
   prepare(): Promise<boolean>;
   clear(): Promise<boolean>;
   flush(): Promise<boolean>;
+  businessScope?(): string;
+  hasBeenMounted?(): boolean;
 }
 
 // API24 has no named ArkWeb profile. The application's normal ArkWeb data area
@@ -28,6 +31,7 @@ export class QMPlusWebProfileStore implements QMPlusWebProfileStoring {
   private static clearRevision: number = 0;
   private static clearWork: Promise<boolean> | null = null;
   private static readonly key: string = 'profileState';
+  private static readonly scopeKey: string = 'businessScope';
   private static readonly unused: string = 'v1:unused';
   private static readonly ready: string = 'v1:ready';
   private static readonly clearUnused: string = 'v1:clear-unused';
@@ -61,6 +65,31 @@ export class QMPlusWebProfileStore implements QMPlusWebProfileStoring {
 
   private pending(value: string): boolean {
     return value === QMPlusWebProfileStore.clearUsed || value === QMPlusWebProfileStore.clearUnused;
+  }
+
+  businessScope(): string {
+    try {
+      this.read(); // A corrupt profile fence never becomes a cache binding.
+      const store: preferences.Preferences = this.open();
+      if (!store.hasSync(QMPlusWebProfileStore.scopeKey)) {
+        const scope: string = newQMPlusRecordID();
+        store.putSync(QMPlusWebProfileStore.scopeKey, scope); store.flushSync();
+        if (store.getSync(QMPlusWebProfileStore.scopeKey, '') !== scope) { return ''; }
+      }
+      const value: preferences.ValueType = store.getSync(QMPlusWebProfileStore.scopeKey, '');
+      return typeof value === 'string' && /^[0-9a-f]{32}$/.test(value as string) ? value as string : '';
+    } catch (e) { return ''; }
+  }
+
+  private rotateBusinessScope(): void {
+    const store: preferences.Preferences = this.open();
+    const scope: string = newQMPlusRecordID();
+    store.putSync(QMPlusWebProfileStore.scopeKey, scope); store.flushSync();
+    if (store.getSync(QMPlusWebProfileStore.scopeKey, '') !== scope) { throw new Error('QM_CACHE_SCOPE_WRITE_FAILED'); }
+  }
+
+  hasBeenMounted(): boolean {
+    try { return this.read() !== QMPlusWebProfileStore.unused; } catch (e) { return false; }
   }
 
   reserveWebMount(): boolean {
@@ -100,6 +129,9 @@ export class QMPlusWebProfileStore implements QMPlusWebProfileStoring {
       }
       this.write(state === QMPlusWebProfileStore.unused || state === QMPlusWebProfileStore.clearUnused ?
         QMPlusWebProfileStore.clearUnused : QMPlusWebProfileStore.clearUsed);
+      // Rotate the business binding behind the same durable fence. Old DTOs
+      // cannot return after a Root recreation even when engine deletion fails.
+      this.rotateBusinessScope();
       return true;
     } catch (e) { return false; }
   }
@@ -157,6 +189,10 @@ export class QMPlusWebProfileStore implements QMPlusWebProfileStoring {
         if (webview.WebCookieManager.existCookie(false)) { return false; }
       }
       if (revision !== QMPlusWebProfileStore.clearRevision) { return false; }
+      // A previous scope write can have failed after the durable pending fence
+      // reached disk. Rotate again before readiness so even a failed DTO delete
+      // can never restore the pre-disconnect identity on a later cold launch.
+      this.rotateBusinessScope();
       this.write(state === QMPlusWebProfileStore.clearUnused ? QMPlusWebProfileStore.unused : QMPlusWebProfileStore.ready);
       QMPlusWebProfileStore.blockedInProcess = false;
       return true;

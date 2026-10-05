@@ -354,6 +354,7 @@
 "本学期暂无教学云课程" = "No hay cursos actuales en la nube docente";
 "本学期课程" = "Cursos actuales";
 "本应用不会自动开启或更改系统网络辅助，也不能保证 Wi-Fi 与蜂窝网络同时使用。蜂窝数据或个人热点可能产生额外费用，请自行确认套餐。" = "Esta aplicación no activa ni modifica automáticamente la asistencia de red del sistema y no garantiza el uso simultáneo de Wi-Fi y datos móviles. Los datos móviles o el punto de acceso personal pueden generar cargos adicionales; comprueba tu plan.";
+"本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。" = "Se obtuvieron los datos de los cursos, pero no se actualizó la caché local. Al reiniciar podrían aparecer datos anteriores.";
 "本课已同步作业" = "Tareas sincronizadas de este curso";
 "本课已同步活动" = "Actividades sincronizadas de este curso";
 "本课缓存已清除或不再可用。" = "La caché del curso se ha borrado o ya no está disponible.";

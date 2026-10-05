@@ -37,6 +37,19 @@ private struct AssignmentDeadlinePrewarmID: Equatable {
     let calendarYear: Int
 }
 
+private struct CourseStartupPrewarmID: Equatable {
+    let account: String
+    let credentialRevision: Int
+    let sampleMode: Bool
+    let isSceneActive: Bool
+}
+
+private struct QMplusStartupPrewarmID: Equatable {
+    let enabled: Bool
+    let sampleMode: Bool
+    let isSceneActive: Bool
+}
+
 private struct AlmanacPrewarmID: Equatable {
     let date: String
     let enabled: Bool
@@ -94,7 +107,7 @@ final class CalendarModeDataServices {
     let importantEvents = ImportantEventQueryStore()
 
     init() {
-        let teachingCloud = UCloudAssignmentClient()
+        let teachingCloud = UCloudAssignmentClient.shared
         deadlines = CalendarDeadlineStore(assignmentClient: teachingCloud)
         teachingCloudCourses = TeachingCloudCourseStore(client: teachingCloud)
     }
@@ -226,6 +239,39 @@ struct RootView: View {
                 dates: dates,
                 sampleMode: model.isSampleMode
             )
+        }
+        .task(id: CourseStartupPrewarmID(
+            account: model.account,
+            credentialRevision: model.assignmentCredentialRevision,
+            sampleMode: model.isSampleMode,
+            isSceneActive: scenePhase == .active
+        )) {
+            await model.awaitInitialLocalData()
+            guard !Task.isCancelled, scenePhase == .active, !model.isSampleMode,
+                  model.hasSavedPassword else { return }
+            let account = model.account
+            let revision = model.assignmentCredentialRevision
+            let owner = "\(account)|\(revision)|false"
+            let services = calendarServices.services(sampleMode: false)
+            await services.teachingCloudCourses.restoreCachedCourses(owner: owner, sampleMode: false)
+            await services.deadlines.restoreCachedAssignments(sampleMode: false)
+            guard !Task.isCancelled, scenePhase == .active, !model.isSampleMode,
+                  account == model.account, revision == model.assignmentCredentialRevision else { return }
+            await UCloudAssignmentClient.shared.launchWarmOnce()
+            guard !Task.isCancelled, scenePhase == .active, !model.isSampleMode,
+                  account == model.account, revision == model.assignmentCredentialRevision else { return }
+            await services.teachingCloudCourses.restoreCachedCourses(owner: owner, sampleMode: false)
+            await services.deadlines.restoreCachedAssignments(sampleMode: false)
+        }
+        .task(id: QMplusStartupPrewarmID(
+            enabled: model.qmplusEnabled,
+            sampleMode: model.isSampleMode,
+            isSceneActive: scenePhase == .active
+        )) {
+            await model.awaitInitialLocalData()
+            guard !Task.isCancelled, scenePhase == .active, !model.isSampleMode,
+                  model.qmplusEnabled else { return }
+            await model.qmplus.launchWarmOnce(sampleMode: false)
         }
         .task(id: AssignmentDeadlinePrewarmID(
             account: model.account,

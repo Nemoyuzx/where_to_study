@@ -59,6 +59,7 @@ class QmplusActivity : Activity() {
         .getOrDefault(QmplusLoginPagePolicy.UNKNOWN_PAGE_SCRIPT) }
     private var loginVisible = false
     private var quietConnection = true
+    private var silentRefresh = false
     private lateinit var featureStore: QmplusFeatureStore
     private var featureRecord: QmplusFeatureRecord? = null
 
@@ -74,6 +75,7 @@ class QmplusActivity : Activity() {
         generation = intent.getLongExtra(EXTRA_GENERATION, -1)
         connectionToken = intent.getStringExtra(EXTRA_CONNECTION_TOKEN)
         quietConnection = startURL() == QmplusPolicy.START_URL
+        silentRefresh = intent.getBooleanExtra(EXTRA_SILENT_REFRESH, false) && quietConnection
         if (generation < 0) { finish(); return }
         setResult(RESULT_CANCELED, resultIntent())
         if (savedInstanceState != null) {
@@ -99,6 +101,7 @@ class QmplusActivity : Activity() {
         }.onFailure {
             setResult(RESULT_CANCELED, resultIntent().putExtra(EXTRA_SYNC_FAILED, true))
             revealOfficialWindow()
+            if (closing) return@onFailure
             setContentView(TextView(this).apply {
                 text = getString(R.string.qmplus_web_unavailable); textSize = 15f
                 setThemeTextColor { Palette.muted }; setPadding(dp(20), dp(20), dp(20), dp(20))
@@ -210,6 +213,9 @@ class QmplusActivity : Activity() {
             override fun navigateToOfficialSSO() {
                 if (active) weakBrowser.get()?.loadUrl(QmplusLoginPagePolicy.SSO_START_URL)
             }
+            override fun navigateToOfficialLogin() {
+                if (active) weakBrowser.get()?.loadUrl(QmplusLoginPagePolicy.LOGIN_ENTRY_URL)
+            }
             override fun openBusinessPage(value: String) {
                 if (active && QmplusPolicy.isBusinessPage(value)) weakBrowser.get()?.loadUrl(value)
             }
@@ -253,6 +259,15 @@ class QmplusActivity : Activity() {
 
     private fun revealOfficialWindow() {
         if (closing || isFinishing || isDestroyed) return
+        if (silentRefresh) {
+            // Startup refresh may use an existing cookie or explicit saved
+            // authorization, but never has authority to present MFA/error UI.
+            closing = true
+            authFlow?.close(); invalidateSync()
+            browser?.stopLoading()
+            setResult(RESULT_CANCELED, resultIntent().putExtra(EXTRA_CONNECT_REQUIRED, true))
+            finish(); return
+        }
         loginVisible = true
         window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
         browserRoot?.alpha = 1f
@@ -346,6 +361,7 @@ class QmplusActivity : Activity() {
     }
 
     private fun failSync() {
+        if (silentRefresh) { revealOfficialWindow(); return; }
         invalidateSync()
         authFlow?.manualRequired()
         revealOfficialWindow()
@@ -423,6 +439,8 @@ class QmplusActivity : Activity() {
         internal const val EXTRA_FEATURE_REVISION = "qmplus_feature_revision"
         internal const val EXTRA_OWNER_EXPIRED = "qmplus_owner_expired"
         internal const val EXTRA_RECONNECT_REQUEST = "qmplus_reconnect_request"
+        internal const val EXTRA_SILENT_REFRESH = "qmplus_silent_refresh"
+        internal const val EXTRA_CONNECT_REQUIRED = "qmplus_connect_required"
     }
 
     internal fun closeForLogout() { closing = true; authFlow?.close(); invalidateSync(); browser?.stopLoading(); finish() }

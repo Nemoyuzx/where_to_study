@@ -52,7 +52,7 @@ enum QMplusAutofillPolicy {
         guard QMplusConnectionPolicy.isHTTPSNavigation(url), url?.host?.lowercased() == "qmplus.qmul.ac.uk", let url,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.fragment == nil else { return false }
         if components.percentEncodedPath == "/login/index.php" { return components.percentEncodedQuery == nil }
-        return components.percentEncodedPath == "/"
+        return ["/", "/my", "/my/"].contains(components.percentEncodedPath)
             && (components.percentEncodedQuery == nil || components.percentEncodedQuery == "redirect=0")
     }
     static func isValidNonce(_ nonce: String) -> Bool {
@@ -100,8 +100,12 @@ final class QMplusAutofillLedger {
         isActive && self.presentation == presentation && self.credentialRevision == credentialRevision
     }
     func claimSSO(presentation: UInt64, credentialRevision: UInt64) -> Bool {
-        guard accepts(presentation: presentation, credentialRevision: credentialRevision), !ssoAttempted else { return false }
+        guard canStartOfficialLogin(presentation: presentation, credentialRevision: credentialRevision) else { return false }
         ssoAttempted = true; return true
+    }
+    func canStartOfficialLogin(presentation: UInt64, credentialRevision: UInt64) -> Bool {
+        accepts(presentation: presentation, credentialRevision: credentialRevision) && !ssoAttempted &&
+            !accountAttempted && !usernameAttempted && !passwordAttempted
     }
     func claim(_ state: QMplusAuthInspection, presentation: UInt64, credentialRevision: UInt64) -> Bool {
         guard accepts(presentation: presentation, credentialRevision: credentialRevision), state.reason == .ready,
@@ -202,6 +206,7 @@ final class QMplusAutofillPipeline {
     private let viewportReady: @MainActor () -> Bool
     private let credentials: @MainActor () -> QMplusSavedCredentials?
     private let manual: @MainActor () -> Void
+    private let identityMismatch: @MainActor () -> Void
     private let progress: @MainActor (Progress) -> Void
     private var waitTask: Task<Void, Never>?
     private var cancelled = false
@@ -214,12 +219,14 @@ final class QMplusAutofillPipeline {
          credentialRevision: UInt64, nonce: String, isCurrent: @escaping @MainActor () -> Bool,
          viewportReady: @escaping @MainActor () -> Bool = { true },
          credentials: @escaping @MainActor () -> QMplusSavedCredentials?, manual: @escaping @MainActor () -> Void,
+         identityMismatch: @escaping @MainActor () -> Void = {},
          progress: @escaping @MainActor (Progress) -> Void = { _ in },
          wait: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.evaluator = evaluator; self.ledger = ledger; self.presentation = presentation
         self.credentialRevision = credentialRevision; self.nonce = nonce; self.isCurrent = isCurrent
         self.viewportReady = viewportReady
-        self.credentials = credentials; self.manual = manual; self.progress = progress; self.wait = wait
+        self.credentials = credentials; self.manual = manual; self.identityMismatch = identityMismatch
+        self.progress = progress; self.wait = wait
     }
 
     private var accepts: Bool {
@@ -271,7 +278,10 @@ final class QMplusAutofillPipeline {
             guard self.ledger.claim(state, presentation: self.presentation, credentialRevision: self.credentialRevision),
                   self.accepts, let saved = self.credentials(), self.accepts,
                   QMplusAutofillPolicy.accountKey(saved.account) == self.accountHint,
-                  saved.password.utf16.count <= 2048 else { self.requireManual(); return }
+                  saved.password.utf16.count <= 2048 else {
+                if [.chooser, .mismatch].contains(state.reason) { self.identityMismatch() }
+                self.requireManual(); return
+            }
             let submission: QMplusAuthSubmission
             switch state.stage {
             case .account:

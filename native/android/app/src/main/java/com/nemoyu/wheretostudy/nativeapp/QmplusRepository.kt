@@ -64,6 +64,7 @@ internal class QmplusRepository(context: Context,
         private set
     private var cookieClearDeadline: Runnable? = null
     private var pendingLoginPassword: CharArray? = null
+    private var warmRefreshStarted = false
     private val observers = ConcurrentHashMap<Any, () -> Unit>()
 
     init {
@@ -149,6 +150,12 @@ internal class QmplusRepository(context: Context,
     private fun featureIsCurrentLocked(): Boolean = isFeatureEnabled &&
         (featureStore == null || featureRecord?.let(featureStore::isCurrent) == true)
 
+    fun claimWarmRefresh(): Boolean = synchronized(stateLock) {
+        if (warmRefreshStarted || closed.get() || !featureIsCurrentLocked() || isLoading || isSavingLogin ||
+            isClearingSession || cookiesNeedClearing || connection != null || (snapshot == null && !savedLoginStatus.enabled)) return false
+        warmRefreshStarted = true; true
+    }
+
     fun beginConnection(): QmplusConnection? = synchronized(stateLock) {
         if (closed.get() || !featureIsCurrentLocked() || isLoading || isSavingLogin || isClearingSession || connection != null) return null
         // A second app Activity may have explicitly disconnected the shared QM profile.
@@ -233,6 +240,7 @@ internal class QmplusRepository(context: Context,
         notifyObservers()
         try {
             worker.execute {
+                var cacheWriteFailed = false
                 val result = runCatching {
                     val incoming = QmplusSnapshotCodec.decode(bytes)
                     beforeSavePublication?.invoke()
@@ -242,8 +250,8 @@ internal class QmplusRepository(context: Context,
                         val publish = { synchronized(prefs) {
                             check(!closed.get() && isFeatureEnabled && token == revision && expectedGeneration == generation &&
                                 prefs.getLong(GENERATION, 0) == expectedGeneration)
-                            check(prefs.edit().putString(SNAPSHOT, canonical).putLong(GENERATION, generation)
-                                .putBoolean(COOKIE_CLEAR_PENDING, false).commit()) { "QMplus cache save failed." }
+                            cacheWriteFailed = !prefs.edit().putString(SNAPSHOT, canonical).putLong(GENERATION, generation)
+                                .putBoolean(COOKIE_CLEAR_PENDING, false).commit()
                             snapshot = parsed; cookiesNeedClearing = false
                             cancelCookieClearDeadlineLocked()
                         } }
@@ -254,6 +262,7 @@ internal class QmplusRepository(context: Context,
                 val published = synchronized(stateLock) {
                     if (closed.get() || !featureIsCurrentLocked() || token != revision || expectedGeneration != generation) false else {
                         error = result.exceptionOrNull()?.let { "QMplus 同步或保存失败；保留上次课程缓存。" }
+                            ?: if (cacheWriteFailed) "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。" else null
                         isLoading = false
                         true
                     }
@@ -278,6 +287,14 @@ internal class QmplusRepository(context: Context,
         synchronized(stateLock) {
             if (closed.get() || !featureIsCurrentLocked() || generation != expectedGeneration || connection != null) return
             error = "QMplus 会话已过期，请重新登录。"
+        }
+        notifyObservers()
+    }
+
+    fun connectionRequired(expectedGeneration: Long = generation) {
+        synchronized(stateLock) {
+            if (closed.get() || !featureIsCurrentLocked() || generation != expectedGeneration || connection != null) return
+            error = "请先在官方 QMplus 网页完成登录。"
         }
         notifyObservers()
     }

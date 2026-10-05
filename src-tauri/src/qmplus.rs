@@ -119,6 +119,11 @@ pub struct QmState {
     page_kind: Mutex<&'static str>,
     dashboard_started: AtomicBool,
     profile_id: Mutex<Option<String>>,
+    background_owner: AtomicBool,
+    login_entry_started: Mutex<bool>,
+    cache_warning: AtomicBool,
+    sync_in_progress: AtomicBool,
+    sync_deadline: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 #[derive(Default, Clone, Serialize)]
 pub struct ConnectionStatus {
@@ -334,14 +339,24 @@ fn official_qm_page(url: &tauri::Url) -> bool {
 fn guest_entry(url: &tauri::Url) -> bool {
     official_qm_page(url)
         && url.fragment().is_none()
-        && ((url.path() == "/" && matches!(url.query(), None | Some("redirect=0")))
+        && ((["/", "/my", "/my/"].contains(&url.path())
+            && matches!(url.query(), None | Some("redirect=0")))
             || (url.path() == "/login/index.php" && url.query().is_none()))
 }
 fn page_allows_sync(url: &tauri::Url, kind: &str) -> bool {
     kind == "authenticated" && valid_business_page(url)
 }
 const APPROVED_SSO: &str = "(()=>{const targets=new Set(Array.from(document.querySelectorAll('a[href]')).flatMap(a=>{try{const u=new URL(a.getAttribute('href'),location.href);return u.href==='https://qmplus.qmul.ac.uk/auth/saml2/login.php'&&!u.username&&!u.password&&!u.search&&!u.hash?[u.href]:[];}catch{return[];}}));return targets.size===1;})()";
+const APPROVED_LOGIN_ENTRY: &str = "(()=>{const targets=new Set(Array.from(document.querySelectorAll('a[href]')).flatMap(a=>{try{const u=new URL(a.getAttribute('href'),location.href);return u.href==='https://qmplus.qmul.ac.uk/login/index.php'&&!u.username&&!u.password&&!u.search&&!u.hash?[u.href]:[];}catch{return[];}}));return targets.size===1;})()";
 fn show_login(window: &tauri::WebviewWindow) {
+    if window
+        .app_handle()
+        .state::<QmState>()
+        .background_owner
+        .load(Ordering::SeqCst)
+    {
+        return;
+    }
     let _ = window.show();
     let _ = window.set_focus();
 }
@@ -496,6 +511,15 @@ impl QmState {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = "unknown";
         self.dashboard_started.store(false, Ordering::SeqCst);
+        self.sync_in_progress.store(false, Ordering::SeqCst);
+        if let Some(deadline) = self
+            .sync_deadline
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        {
+            deadline.abort();
+        }
     }
     fn assessment_snapshot(&self) -> Option<Snapshot> {
         // Old in-memory snapshots were validated when published by their reader.
@@ -524,12 +548,22 @@ impl QmState {
     }
     fn revoke(&self) {
         self.owner_active.store(false, Ordering::SeqCst);
+        self.cache_warning.store(false, Ordering::SeqCst);
         self.revision.fetch_add(1, Ordering::SeqCst);
         *self
             .snapshot
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         self.stop_autofill();
+        self.sync_in_progress.store(false, Ordering::SeqCst);
+        if let Some(deadline) = self
+            .sync_deadline
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        {
+            deadline.abort();
+        }
         *self
             .profile_id
             .lock()
@@ -587,7 +621,30 @@ fn cancel_autofill(app: &tauri::AppHandle) {
 
 fn require_manual(app: &tauri::AppHandle, window: &tauri::WebviewWindow, reason: &'static str) {
     cancel_autofill(app);
+    let state = app.state::<QmState>();
+    state.sync_in_progress.store(false, Ordering::SeqCst);
+    if let Some(deadline) = state
+        .sync_deadline
+        .lock()
+        .ok()
+        .and_then(|mut value| value.take())
+    {
+        deadline.abort();
+    }
     record_connection_status(app, "manual", reason);
+    if app
+        .state::<QmState>()
+        .background_owner
+        .load(Ordering::SeqCst)
+    {
+        app.state::<QmState>()
+            .retire_connection_preserving_snapshot();
+        let _ = window.hide();
+        if let Ok(blank) = tauri::Url::parse("about:blank") {
+            let _ = window.navigate(blank);
+        }
+        return;
+    }
     show_login(window);
 }
 
@@ -639,11 +696,47 @@ fn app_is_backgrounded(app: &tauri::AppHandle) -> bool {
 }
 
 #[tauri::command]
-pub fn load_qmplus(state: tauri::State<'_, QmState>) -> Option<Snapshot> {
-    if state.feature_blocked.load(Ordering::SeqCst) {
-        return None;
-    }
-    state.assessment_snapshot()
+pub async fn load_qmplus(app: tauri::AppHandle) -> Option<serde_json::Value> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<QmState>();
+        if state.feature_blocked.load(Ordering::SeqCst)
+            || !crate::qmplus_feature::enabled(&app).unwrap_or(false)
+        {
+            return None;
+        }
+        let revision = state.revision.load(Ordering::SeqCst);
+        let profile = crate::qmplus_profile::active_id(&app).ok().flatten()?;
+        if state.assessment_snapshot().is_none() {
+            let restored = crate::course_cache_store::load_qm(&app, &profile)
+                .ok()
+                .flatten()?;
+            let mut snapshot = state.snapshot.lock().ok()?;
+            if revision != state.revision.load(Ordering::SeqCst)
+                || state.feature_blocked.load(Ordering::SeqCst)
+                || !crate::qmplus_profile::current(&app, Some(&profile))
+            {
+                return None;
+            }
+            if snapshot.is_none() {
+                *snapshot = Some(restored);
+            }
+            *state.profile_id.lock().ok()? = Some(profile.clone());
+        }
+        if state.feature_blocked.load(Ordering::SeqCst)
+            || !crate::qmplus_profile::current(&app, Some(&profile))
+        {
+            return None;
+        }
+        let mut value = serde_json::to_value(state.assessment_snapshot()?).ok()?;
+        value.as_object_mut()?.insert(
+            "cache_warning".into(),
+            serde_json::Value::Bool(state.cache_warning.load(Ordering::SeqCst)),
+        );
+        Some(value)
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 #[derive(Deserialize)]
@@ -683,7 +776,7 @@ pub async fn disconnect_qmplus(app: tauri::AppHandle) -> Result<(), String> {
     let owner = app.clone();
     app.run_on_main_thread(move || {
         owner.state::<QmState>().revoke();
-        let marked = crate::qmplus_profile::mark_for_removal(&owner);
+        let marked = crate::qmplus_profile::mark_for_removal(&owner).and_then(|_| crate::course_cache_store::clear_qm(&owner));
         if let Some(window) = owner.get_webview_window("qmplus") {
             let destroyed = Mutex::new(Some(destroyed));
             window.on_window_event(move |event| {
@@ -758,8 +851,22 @@ pub fn accept_qmplus_snapshot(
     if let Err(error) = state.publish(snapshot, revision) {
         cancel_autofill(&app);
         record_connection_status(&app, "failed", "SYNC_FAILED");
-        show_login(&window);
+        if state.background_owner.load(Ordering::SeqCst) {
+            require_manual(&app, &window, "SYNC_FAILED");
+        } else {
+            state.sync_in_progress.store(false, Ordering::SeqCst);
+            show_login(&window);
+        }
         return Err(error);
+    }
+    state.sync_in_progress.store(false, Ordering::SeqCst);
+    if let Some(deadline) = state
+        .sync_deadline
+        .lock()
+        .ok()
+        .and_then(|mut value| value.take())
+    {
+        deadline.abort();
     }
     cancel_autofill(&app);
     let partial = state
@@ -768,6 +875,17 @@ pub fn accept_qmplus_snapshot(
         .ok()
         .and_then(|data| data.as_ref().map(|s| s.partial))
         .unwrap_or(false);
+    if let (Some(profile), Some(snapshot)) = (
+        state.profile_id.lock().ok().and_then(|value| value.clone()),
+        state.assessment_snapshot(),
+    ) {
+        let stored = crate::course_cache_store::save_qm(&app, &profile, &snapshot, || {
+            revision == state.revision.load(Ordering::SeqCst)
+                && !state.feature_blocked.load(Ordering::SeqCst)
+        })
+        .unwrap_or(false);
+        state.cache_warning.store(!stored, Ordering::SeqCst);
+    }
     record_connection_status(
         &app,
         if partial { "partial" } else { "synced" },
@@ -836,7 +954,7 @@ pub fn accept_qmplus_auth(
         drop(auth);
         let kind = match report.reason.as_str() {
             "authenticated" => "authenticated",
-            "guest" | "guest_sso" => "guest",
+            "guest" | "guest_sso" | "guest_login" => "guest",
             "error" => "error",
             "loading" => "loading",
             _ => "unknown",
@@ -851,27 +969,45 @@ pub fn accept_qmplus_auth(
         }
         if kind == "guest"
             && guest_entry(&url)
-            && report.reason == "guest_sso"
-            && crate::qmplus_login::authorized(&app).is_some()
+            && ["guest_sso", "guest_login"].contains(&report.reason.as_str())
+            && (crate::qmplus_login::authorized(&app).is_some()
+                || !state.background_owner.load(Ordering::SeqCst))
             && state
                 .auth
                 .lock()
                 .ok()
                 .is_some_and(|a| a.ledger.can_begin_sso(crate::qmplus_login::revision()))
         {
-            let mut started = state
-                .sso_started
-                .lock()
-                .map_err(|_| "QMplus 页面不可用。")?;
+            let saml = report.reason == "guest_sso";
+            let mut started = if saml {
+                &state.sso_started
+            } else {
+                &state.login_entry_started
+            }
+            .lock()
+            .map_err(|_| "QMplus 页面不可用。")?;
             if !*started {
                 *started = true;
                 let current =
                     serde_json::to_string(url.as_str()).map_err(|_| "QMplus 页面不可用。")?;
-                let _ = window.eval(format!("(()=>{{if(location.href!=={current})return;const kind={PAGE_SCRIPT};if(kind==='guest'&&{APPROVED_SSO})location.assign('https://qmplus.qmul.ac.uk/auth/saml2/login.php');}})()"));
+                let proof = if saml {
+                    APPROVED_SSO
+                } else {
+                    APPROVED_LOGIN_ENTRY
+                };
+                let target = if saml {
+                    "https://qmplus.qmul.ac.uk/auth/saml2/login.php"
+                } else {
+                    "https://qmplus.qmul.ac.uk/login/index.php"
+                };
+                let _ = window.eval(format!("(()=>{{if(location.href!=={current})return;const kind={PAGE_SCRIPT};if(kind==='guest'&&{proof})location.assign('{target}');}})()"));
                 return Ok(false);
             }
         }
-        if kind == "authenticated" && guest_entry(&url) {
+        if kind == "authenticated"
+            && ["/", "/login/index.php"].contains(&url.path())
+            && guest_entry(&url)
+        {
             if !state.dashboard_started.swap(true, Ordering::SeqCst) {
                 window
                     .navigate(
@@ -1041,6 +1177,32 @@ pub fn begin_qmplus_sync(
         return Err("QMplus 会话已失效。".into());
     }
     state.stop_autofill();
+    state.sync_in_progress.store(true, Ordering::SeqCst);
+    let handle = app.clone();
+    let mut timer = state
+        .sync_deadline
+        .lock()
+        .map_err(|_| "QMplus 页面不可用。")?;
+    if let Some(previous) = timer.take() {
+        previous.abort();
+    }
+    *timer = Some(tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(130)).await;
+        let owner = handle.clone();
+        let _ = handle.run_on_main_thread(move || {
+            let state = owner.state::<QmState>();
+            if state.revision.load(Ordering::SeqCst) == revision
+                && state.owner_active.load(Ordering::SeqCst)
+                && state.sync_in_progress.load(Ordering::SeqCst)
+                && !state.feature_blocked.load(Ordering::SeqCst)
+            {
+                if let Some(window) = owner.get_webview_window("qmplus") {
+                    require_manual(&owner, &window, "SYNC_TIMEOUT");
+                }
+            }
+        });
+    }));
+    drop(timer);
     if *state
         .close_after_sync
         .lock()
@@ -1051,20 +1213,31 @@ pub fn begin_qmplus_sync(
     Ok(())
 }
 #[tauri::command]
-pub async fn connect_qmplus(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn connect_qmplus(
+    app: tauri::AppHandle,
+    payload: Option<ConnectRequest>,
+) -> Result<(), String> {
+    let background = payload.is_some_and(|value| value.background);
     crate::qmplus_profile::recover_pending(&app).await?;
     let (sent, received) = tokio::sync::oneshot::channel();
     let owner = app.clone();
     app.run_on_main_thread(move || {
         let state = owner.state::<QmState>();
-        let _ = sent.send(connect_qmplus_on_main(owner.clone(), state));
+        let _ = sent.send(connect_qmplus_on_main(owner.clone(), state, background));
     })
     .map_err(|_| "QMplus 页面不可用。")?;
     received.await.map_err(|_| "QMplus 页面不可用。")?
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectRequest {
+    #[serde(default)]
+    background: bool,
+}
 fn connect_qmplus_on_main(
     app: tauri::AppHandle,
     state: tauri::State<'_, QmState>,
+    background: bool,
 ) -> Result<(), String> {
     if !crate::qmplus_feature::enabled(&app).unwrap_or(false) {
         state.set_feature_enabled(false);
@@ -1090,26 +1263,54 @@ fn connect_qmplus_on_main(
                 .ok()
                 .is_none_or(|kind| *kind != "error")
     }) {
-        let _ = w.show();
-        w.set_focus().map_err(|_| "无法打开 QMplus。")?;
-        return Ok(());
+        if !background {
+            state.background_owner.store(false, Ordering::SeqCst);
+        }
+        let active = state
+            .auth
+            .lock()
+            .ok()
+            .is_some_and(|auth| auth.ledger.active);
+        if active || state.sync_in_progress.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        if !background && w.url().ok().is_some_and(|url| trusted_auth_page(&url)) {
+            show_login(&w);
+            return Ok(());
+        }
+        state.retire_connection_preserving_snapshot();
     }
     let revision = state.revision.fetch_add(1, Ordering::SeqCst) + 1;
     state.stop_autofill();
+    state.sync_in_progress.store(false, Ordering::SeqCst);
+    if let Some(deadline) = state
+        .sync_deadline
+        .lock()
+        .ok()
+        .and_then(|mut value| value.take())
+    {
+        deadline.abort();
+    }
     state.dashboard_started.store(false, Ordering::SeqCst);
+    state.background_owner.store(background, Ordering::SeqCst);
+    *state
+        .login_entry_started
+        .lock()
+        .map_err(|_| "QMplus 页面不可用。")? = false;
     *state.page_kind.lock().map_err(|_| "QMplus 页面不可用。")? = "unknown";
     *state
         .sso_started
         .lock()
         .map_err(|_| "QMplus 页面不可用。")? = false;
     let credential_revision = crate::qmplus_login::revision();
-    let quiet = app.get_webview_window("qmplus").is_some()
+    let quiet = background
+        || app.get_webview_window("qmplus").is_some()
         || profile.persistent()
         || (crate::qmplus_login::authorized(&app).is_some()
             && credential_revision == crate::qmplus_login::revision());
     state.owner_active.store(true, Ordering::SeqCst);
     state.quiet_owner.store(quiet, Ordering::SeqCst);
-    if quiet {
+    {
         state
             .auth
             .lock()
@@ -1174,7 +1375,7 @@ fn connect_qmplus_on_main(
                 state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).document = Some(AuthDocument { nonce: nonce.clone(), url: current.clone() });
                 let encoded_nonce = serde_json::to_string(&nonce).unwrap_or_default();
                 let encoded_url = serde_json::to_string(current.as_str()).unwrap_or_default();
-                let _ = window.eval(format!("(()=>{{if(location.href!=={encoded_url})return;const kind={PAGE_SCRIPT};const reason=kind==='guest'&&{APPROVED_SSO}?'guest_sso':kind;window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'page',document:{encoded_nonce},accountMatch:false,reason}}}}).catch(()=>{{}});}})()"));
+                let _ = window.eval(format!("(()=>{{if(location.href!=={encoded_url})return;const kind={PAGE_SCRIPT};const reason=kind==='guest'&&{APPROVED_SSO}?'guest_sso':kind==='guest'&&{APPROVED_LOGIN_ENTRY}?'guest_login':kind;window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'page',document:{encoded_nonce},accountMatch:false,reason}}}}).catch(()=>{{}});}})()"));
                 return;
             }
             let credentials = crate::qmplus_login::authorized(handle);

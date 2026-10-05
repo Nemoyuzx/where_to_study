@@ -10,7 +10,7 @@ final class LanguageChangeTransition {
     static let layoutDelay: TimeInterval = 0.06
     static let revealDuration: TimeInterval = 0.22
     static let layoutTimeout: TimeInterval = 12
-    static let completionDuration: TimeInterval = 0.18
+    static let completionDuration: TimeInterval = 0.60
 
     private weak var host: UIView?
     private weak var navigationHost: CompactTabLanguageLayoutView?
@@ -27,7 +27,8 @@ final class LanguageChangeTransition {
     private var layoutGate = LanguageTransitionLayoutGate()
     private var readinessDeadline: TimeInterval = 0
     private weak var progressLabel: UILabel?
-    private weak var completionImage: UIImageView?
+    private weak var completionImage: LanguageCompletionMark?
+    private var secondHaptic: DispatchWorkItem?
     private var revision = 0
     private(set) var isTransitioning = false
 
@@ -112,6 +113,8 @@ final class LanguageChangeTransition {
         progressLabel?.text = "Switching…"
         progressLabel?.isHidden = false
         completionImage?.isHidden = true
+        completionImage?.reset()
+        secondHaptic?.cancel(); secondHaptic = nil
         effectView.accessibilityLabel = label
         effectView.alpha = 1
         effectView.isUserInteractionEnabled = true
@@ -173,6 +176,8 @@ final class LanguageChangeTransition {
                 self.waitingForLayout = false
                 self.progressLabel?.isHidden = true
                 self.completionImage?.isHidden = false
+                self.completionImage?.play()
+                self.playSuccessHaptics(revision: currentRevision)
                 cover.accessibilityValue = "completed"
                 self.scheduleReveal(revision: currentRevision, delay: Self.completionDuration)
             } else { self.scheduleReadinessProbe(revision: currentRevision) }
@@ -188,8 +193,7 @@ final class LanguageChangeTransition {
         label.adjustsFontForContentSizeCategory = true
         label.textColor = .label
         label.translatesAutoresizingMaskIntoConstraints = false
-        let image = UIImageView(image: UIImage(systemName: "checkmark.circle.fill"))
-        image.tintColor = .label
+        let image = LanguageCompletionMark(frame: .zero)
         image.isHidden = true
         image.translatesAutoresizingMaskIntoConstraints = false
         effect.contentView.addSubview(label)
@@ -200,9 +204,23 @@ final class LanguageChangeTransition {
             label.leadingAnchor.constraint(greaterThanOrEqualTo: effect.contentView.leadingAnchor, constant: 20),
             image.centerXAnchor.constraint(equalTo: effect.contentView.centerXAnchor),
             image.centerYAnchor.constraint(equalTo: effect.contentView.centerYAnchor),
-            image.widthAnchor.constraint(equalToConstant: 36), image.heightAnchor.constraint(equalToConstant: 36)
+            image.widthAnchor.constraint(equalToConstant: 52), image.heightAnchor.constraint(equalToConstant: 52)
         ])
         progressLabel = label; completionImage = image
+    }
+
+    private func playSuccessHaptics(revision currentRevision: Int) {
+        guard !UIAccessibility.isReduceMotionEnabled,
+              host?.window?.windowScene?.activationState == .foregroundActive else { return }
+        AppHaptics.impact()
+        let pulse = DispatchWorkItem { [weak self] in
+            guard let self, self.revision == currentRevision, self.isTransitioning,
+                  self.host?.window?.windowScene?.activationState == .foregroundActive else { return }
+            self.secondHaptic = nil
+            AppHaptics.impact()
+        }
+        secondHaptic = pulse
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: pulse)
     }
 
     private func scheduleReveal(revision currentRevision: Int, delay: TimeInterval) {
@@ -256,6 +274,8 @@ final class LanguageChangeTransition {
     }
 
     private func removeCover() {
+        secondHaptic?.cancel(); secondHaptic = nil
+        completionImage?.reset()
         cover?.removeFromSuperview()
         cover = nil
         targetLocaleIdentifier = nil

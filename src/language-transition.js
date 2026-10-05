@@ -12,7 +12,10 @@ export class LanguageTransition {
     this.frames = new Set()
     this.pending = null
     this.target = null
+    this.phase = 'idle'
   }
+
+  emit(value) { this.phase=value.phase; this.publish(value) }
 
   after(ms, revision, action) {
     const id = this.schedule(() => {
@@ -46,16 +49,16 @@ export class LanguageTransition {
     // A reverse choice before commit cancels the pending opposite language.
     if (target === current || this.reducedMotion()) {
       this.apply(preference)
-      this.publish({phase:'idle', revision})
+      this.emit({phase:'idle', revision})
       return
     }
     this.pending = preference
     this.target = target
-    this.publish({phase:'covering', target, revision})
+    this.emit({phase:'covering', target, revision})
     this.after(120, revision, () => {
       const value = this.pending
       this.pending = null
-      this.publish({phase:'waiting', target, revision})
+      this.emit({phase:'waiting', target, revision})
       this.apply(value)
       const check = () => {
         if (!this.layoutReady(target)) { this.nextFrame(revision, check); return }
@@ -77,21 +80,23 @@ export class LanguageTransition {
     const target = this.target
     this.target = null
     this.clearWork()
-    this.publish({phase:'completed',target,revision,completed:true})
-    this.after(300, revision, () => {
-      this.publish({phase:'revealing', target, revision,completed:true})
-      this.after(220, revision, () => this.publish({phase:'idle', revision}))
+    this.emit({phase:'completed',target,revision,completed:true})
+    // Ring/check drawing completes before the completion dwell and fade.
+    this.after(800, revision, () => {
+      this.emit({phase:'revealing', target, revision,completed:true})
+      this.after(220, revision, () => this.emit({phase:'idle', revision}))
     })
   }
 
   finish(commitPending = true, expectedRevision = this.revision) {
     if (expectedRevision !== this.revision) return
+    if (this.phase==='idle' && this.pending===null && this.target===null && !this.timers.size && !this.frames.size) return
     this.revision += 1
     this.clearWork()
     const value = this.pending
     this.pending = null
     this.target = null
     if (commitPending && value !== null) this.apply(value)
-    this.publish({phase:'idle', revision:this.revision})
+    this.emit({phase:'idle', revision:this.revision})
   }
 }

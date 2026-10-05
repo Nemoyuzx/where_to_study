@@ -58,7 +58,8 @@ struct TokenPayload {
     expires_in: Value,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CourseRef {
     pub id: String,
     pub name: Option<String>,
@@ -242,6 +243,20 @@ impl CourseCache {
 }
 
 static COURSE_CACHE: CourseCache = CourseCache::new();
+struct CachedCatalogue {
+    scope: String,
+    revision: u64,
+    at: Instant,
+    value: crate::course_cache_store::CloudCatalogue,
+}
+static CATALOGUE: Mutex<Option<CachedCatalogue>> = Mutex::new(None);
+static CATALOGUE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+struct CatalogueAttempt {
+    scope: String,
+    revision: u64,
+    result: ServiceResult<crate::course_cache_store::CloudCatalogue>,
+}
+static CATALOGUE_ATTEMPT: Mutex<Option<CatalogueAttempt>> = Mutex::new(None);
 
 fn clear_course_and_assignment_caches(assignments: &AssignmentCache, courses: &CourseCache) {
     // Revoke first, before waiting for either result cache. A late course
@@ -252,7 +267,143 @@ fn clear_course_and_assignment_caches(assignments: &AssignmentCache, courses: &C
 
 pub fn clear_cache() {
     clear_course_and_assignment_caches(&ASSIGNMENT_CACHE, &COURSE_CACHE);
+    *CATALOGUE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    *CATALOGUE_ATTEMPT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    CATALOGUE_SEQUENCE.fetch_add(1, Ordering::SeqCst);
     ASSIGNMENT_SESSION.clear();
+}
+
+pub fn restore_catalogue(
+    scope: &str,
+    revision: u64,
+    value: crate::course_cache_store::CloudCatalogue,
+) -> ServiceResult<()> {
+    let mut cached = CATALOGUE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    ASSIGNMENT_CACHE.ensure_revision(revision)?;
+    if cached
+        .as_ref()
+        .is_some_and(|current| current.scope == scope && current.revision == revision)
+    {
+        return Ok(());
+    }
+    COURSE_CACHE.save(&ASSIGNMENT_CACHE, scope, &value.courses, revision)?;
+    ASSIGNMENT_CACHE.save(scope, &value.assignments, revision)?;
+    *cached = Some(CachedCatalogue {
+        scope: scope.into(),
+        revision,
+        at: Instant::now(),
+        value,
+    });
+    CATALOGUE_SEQUENCE.fetch_add(1, Ordering::SeqCst);
+    Ok(())
+}
+
+pub fn cached_catalogue(
+    scope: &str,
+    revision: u64,
+) -> Option<crate::course_cache_store::CloudCatalogue> {
+    let cached = CATALOGUE.lock().ok()?;
+    if ASSIGNMENT_CACHE.ensure_revision(revision).is_err() {
+        return None;
+    }
+    cached
+        .as_ref()
+        .filter(|current| current.scope == scope && current.revision == revision)
+        .map(|current| current.value.clone())
+}
+
+pub async fn fetch_catalogue(
+    account: &str,
+    password: &str,
+    scope: &str,
+    revision: u64,
+    force: bool,
+) -> ServiceResult<crate::course_cache_store::CloudCatalogue> {
+    // Capture before waiting: simultaneous forced callers join the successful
+    // publication they waited for, rather than making serial duplicate GETs.
+    let sequence = CATALOGUE_SEQUENCE.load(Ordering::SeqCst);
+    let _guard = ASSIGNMENT_FETCH.lock().await;
+    ASSIGNMENT_CACHE.ensure_revision(revision)?;
+    if CATALOGUE_SEQUENCE.load(Ordering::SeqCst) != sequence {
+        let attempt = CATALOGUE_ATTEMPT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(attempt) = attempt
+            .as_ref()
+            .filter(|attempt| attempt.scope == scope && attempt.revision == revision)
+        {
+            return attempt.result.clone();
+        }
+    }
+    {
+        let cached = CATALOGUE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(current) = cached.as_ref().filter(|current| {
+            current.scope == scope
+                && current.revision == revision
+                && current.at.elapsed() < CACHE_TTL
+                && (!force || CATALOGUE_SEQUENCE.load(Ordering::SeqCst) != sequence)
+        }) {
+            return Ok(current.value.clone());
+        }
+    }
+    let result = tokio::time::timeout(
+        Duration::from_secs(120),
+        fetch_all_catalogue_at(account, password, revision),
+    )
+    .await
+    .map_err(|_| ServiceError::new("课程获取失败。"))
+    .and_then(|value| value);
+    let (courses, items) = match result {
+        Ok(value) => value,
+        Err(error) => {
+            ASSIGNMENT_CACHE.ensure_revision(revision)?;
+            *CATALOGUE_ATTEMPT
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(CatalogueAttempt {
+                scope: scope.into(),
+                revision,
+                result: Err(error.clone()),
+            });
+            CATALOGUE_SEQUENCE.fetch_add(1, Ordering::SeqCst);
+            return Err(error);
+        }
+    };
+    ASSIGNMENT_CACHE.ensure_revision(revision)?;
+    let value = crate::course_cache_store::CloudCatalogue {
+        fetched_at: chrono::Utc::now().to_rfc3339(),
+        courses,
+        assignments: items,
+        cache_warning: false,
+    };
+    COURSE_CACHE.save(&ASSIGNMENT_CACHE, scope, &value.courses, revision)?;
+    ASSIGNMENT_CACHE.save(scope, &value.assignments, revision)?;
+    let mut cached = CATALOGUE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    ASSIGNMENT_CACHE.ensure_revision(revision)?;
+    *cached = Some(CachedCatalogue {
+        scope: scope.into(),
+        revision,
+        at: Instant::now(),
+        value: value.clone(),
+    });
+    *CATALOGUE_ATTEMPT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(CatalogueAttempt {
+        scope: scope.into(),
+        revision,
+        result: Ok(value.clone()),
+    });
+    CATALOGUE_SEQUENCE.fetch_add(1, Ordering::SeqCst);
+    Ok(value)
 }
 
 pub fn credential_revision() -> u64 {
@@ -304,7 +455,7 @@ fn text(value: Option<&Value>) -> String {
         .unwrap_or_default()
 }
 
-fn normalized_deadline(value: &str) -> Option<(NaiveDate, String)> {
+pub(crate) fn normalized_deadline(value: &str) -> Option<(NaiveDate, String)> {
     let trimmed = value.trim();
     if let Ok(timestamp) = DateTime::parse_from_rfc3339(trimmed) {
         return Some((timestamp.date_naive(), timestamp.to_rfc3339()));
@@ -926,6 +1077,14 @@ async fn fetch_all_assignments_at(
     password: &str,
     revision: u64,
 ) -> ServiceResult<Vec<AssignmentDeadlineItem>> {
+    Ok(fetch_all_catalogue_at(account, password, revision).await?.1)
+}
+
+async fn fetch_all_catalogue_at(
+    account: &str,
+    password: &str,
+    revision: u64,
+) -> ServiceResult<(Vec<CourseRef>, Vec<AssignmentDeadlineItem>)> {
     ASSIGNMENT_CACHE.ensure_revision(revision)?;
     ASSIGNMENT_SESSION
         .run(
@@ -950,7 +1109,7 @@ async fn fetch_all_assignments_at(
 
 async fn fetch_all_with_session(
     authenticated: AuthenticatedClient,
-) -> ServiceResult<Vec<AssignmentDeadlineItem>> {
+) -> ServiceResult<(Vec<CourseRef>, Vec<AssignmentDeadlineItem>)> {
     let courses_payload = authenticated
         .get(
             "/ykt-site/site/list/student/current",
@@ -1020,7 +1179,7 @@ async fn fetch_all_with_session(
         Err(error) if error.authentication_expired => return Err(error),
         Err(_) => (),
     }
-    Ok(merge_items(all_items))
+    Ok((courses, merge_items(all_items)))
 }
 
 /// Current-course directory uses the same protected session as assignments.
@@ -1031,45 +1190,9 @@ pub async fn fetch_course_list(
     revision: u64,
     force: bool,
 ) -> ServiceResult<Vec<CourseRef>> {
-    let _guard = ASSIGNMENT_FETCH.lock().await;
-    ASSIGNMENT_CACHE.ensure_revision(revision)?;
-    if !force {
-        if let Some(courses) = COURSE_CACHE.courses(&ASSIGNMENT_CACHE, scope, revision)? {
-            return Ok(courses);
-        }
-    }
-    let items = ASSIGNMENT_SESSION
-        .run(
-            account,
-            password,
-            || async {
-                ASSIGNMENT_CACHE.ensure_revision(revision)?;
-                let client = authenticate(account, password).await?;
-                ASSIGNMENT_CACHE.ensure_revision(revision)?;
-                let ttl = client.ttl;
-                Ok((client, ttl))
-            },
-            |session| async move {
-                ASSIGNMENT_CACHE.ensure_revision(revision)?;
-                let payload = session
-                    .get(
-                        "/ykt-site/site/list/student/current",
-                        &[
-                            ("size", COURSE_PAGE_SIZE.to_string()),
-                            ("current", "1".to_string()),
-                            ("userId", session.user_id.clone()),
-                            ("siteRoleCode", "2".to_string()),
-                        ],
-                    )
-                    .await?;
-                ASSIGNMENT_CACHE.ensure_revision(revision)?;
-                validate_course_collection(&payload)?;
-                Ok(parse_courses(&payload))
-            },
-        )
-        .await?;
-    COURSE_CACHE.save(&ASSIGNMENT_CACHE, scope, &items, revision)?;
-    Ok(items)
+    Ok(fetch_catalogue(account, password, scope, revision, force)
+        .await?
+        .courses)
 }
 
 /// Full course-assignment catalogue for Query. Shares the calendar data cache;
@@ -1081,16 +1204,11 @@ pub async fn fetch_assignment_list(
     request_revision: u64,
     force: bool,
 ) -> ServiceResult<Vec<AssignmentDeadlineItem>> {
-    let _guard = ASSIGNMENT_FETCH.lock().await;
-    ASSIGNMENT_CACHE.ensure_revision(request_revision)?;
-    if !force {
-        if let Some(items) = ASSIGNMENT_CACHE.items(account_scope, request_revision)? {
-            return Ok(items);
-        }
-    }
-    let items = fetch_all_assignments_at(account, password, request_revision).await?;
-    ASSIGNMENT_CACHE.save(account_scope, &items, request_revision)?;
-    Ok(items)
+    Ok(
+        fetch_catalogue(account, password, account_scope, request_revision, force)
+            .await?
+            .assignments,
+    )
 }
 
 /// Capture `request_revision` alongside the credentials, under the caller's

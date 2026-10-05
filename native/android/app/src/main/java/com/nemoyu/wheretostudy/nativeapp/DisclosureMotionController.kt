@@ -49,7 +49,9 @@ internal class DisclosureMotionController(
         val startRotation = indicator.rotation
         val showContent = expanded && hasContent
         val targetRotation = if (expanded) 180f else 0f
-        val width = section.width - section.paddingLeft - section.paddingRight
+        val margins = content.layoutParams as? ViewGroup.MarginLayoutParams
+        val width = section.width - section.paddingLeft - section.paddingRight -
+            (margins?.leftMargin ?: 0) - (margins?.rightMargin ?: 0)
         if (hasContent && width > 0) {
             content.measure(
                 View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),

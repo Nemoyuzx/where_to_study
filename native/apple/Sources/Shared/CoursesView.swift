@@ -117,6 +117,9 @@ struct CoursesView: View {
         .task(id: loadKey) {
             switch session.selectedMode {
             case .currentCourses:
+                await teachingCloud.restoreCachedCourses(owner: loadKey.owner, sampleMode: model.isSampleMode)
+                await assignmentStore.restoreCachedAssignments(sampleMode: model.isSampleMode)
+                await assignmentStore.loadAssignmentQuery(sampleMode: model.isSampleMode)
                 await teachingCloud.load(owner: loadKey.owner, sampleMode: model.isSampleMode)
             case .assignments:
                 await assignmentStore.loadAssignmentQuery(sampleMode: model.isSampleMode)
@@ -143,8 +146,13 @@ struct CoursesView: View {
                     }
                     Spacer()
                     Button(model.localized("刷新")) {
-                        Task { await teachingCloud.load(owner: loadKey.owner, sampleMode: model.isSampleMode, force: true) }
-                    }.disabled(teachingCloud.isLoading).accessibilityIdentifier("courses.ucloud.refresh")
+                        Task {
+                            await assignmentStore.loadAssignmentQuery(sampleMode: model.isSampleMode, force: true)
+                            await teachingCloud.restoreCachedCourses(owner: loadKey.owner, sampleMode: model.isSampleMode)
+                            await teachingCloud.load(owner: loadKey.owner, sampleMode: model.isSampleMode)
+                        }
+                    }.disabled(teachingCloud.isRefreshing || assignmentStore.isRefreshingAssignmentQuery)
+                        .accessibilityIdentifier("courses.ucloud.refresh")
                 }
                 if model.isSampleMode {
                     Text(model.localized("示例课程，未连接教学云")).font(.caption).foregroundStyle(theme.secondaryText)

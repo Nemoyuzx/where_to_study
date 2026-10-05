@@ -10,6 +10,7 @@ import { SemesterLogic, SemesterSuggestion } from '../common/SemesterLogic';
 import { SettingsSession } from './SettingsSession';
 import { QMPlusSession } from './QMPlusSession';
 import { ColorThemeSettingsCard } from './ColorThemeSettingsCard';
+import { DisclosureClip } from './SharedComponents';
 import {
   TodayCourseWidgetData, WidgetCoursePreferences, WidgetArchive, CoursePhase
 } from '../widget/TodayCourseWidgetData';
@@ -535,7 +536,7 @@ export struct SettingsView {
           })
       }
       .width('100%')
-      if (this.session.qmplusDetailsExpanded) {
+      DisclosureClip({ expanded: this.session.qmplusDetailsExpanded }) {
       Text(this.model.text('QMplus 使用独立的官方网页；仅在您主动保存时，Microsoft 登录资料才进入本机安全存储。MFA 仍须本人完成。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())

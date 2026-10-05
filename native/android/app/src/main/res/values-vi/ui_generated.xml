@@ -902,4 +902,5 @@
     <string name="ui_generated_fd4480c6c08ea3">"Tắt “Bật QMplus” chỉ tạm dừng kết nối và đồng bộ; thông tin đăng nhập đã lưu, phiên và bộ nhớ đệm khóa học vẫn được giữ lại. Hãy dùng các thao tác riêng để tắt tự điền, xóa thông tin đăng nhập hoặc ngắt kết nối và xóa dữ liệu."</string>
     <string name="ui_generated_b5e960a8c37808">"Cần xóa phiên web QMplus. Vui lòng khởi động lại ứng dụng."</string>
     <string name="ui_generated_127d5412a91688">"Không thể xóa hoặc lưu phiên web QMplus. Vui lòng thử lại."</string>
+    <string name="ui_generated_0eae03943703e2">"Đã tải dữ liệu môn học nhưng chưa cập nhật bộ nhớ đệm cục bộ. Dữ liệu cũ có thể xuất hiện sau khi khởi động lại."</string>
 </resources>

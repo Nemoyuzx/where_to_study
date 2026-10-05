@@ -76,6 +76,7 @@ class MainActivity : Activity() {
     private val navigationViews = mutableMapOf<Destination, TextView>()
     private var phoneNavigationBar: PhoneNavigationBar? = null
     private val credentialStore get() = activitySession.credentials
+    private var qmWarmRefreshForeground = false
     private val preferences get() = activitySession.preferences
     private val privacyConsentStore by lazy { PrivacyConsentStore(this) }
     private val plannerQueryState get() = activitySession.planner
@@ -280,6 +281,9 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (!applicationContentStarted) return
+        qmWarmRefreshForeground = true
+        activitySession.qmplus.addObserver(this) { maybeStartWarmQMplusRefresh() }
+        window.decorView.post { maybeStartWarmQMplusRefresh() }
         if (skipFirstResumeResourceLoads) skipFirstResumeResourceLoads = false else {
             prewarmPublicDeadlinesIfEnabled()
             calendarDailyInfoRepository.loadImportantEvents()
@@ -312,6 +316,7 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
+        qmWarmRefreshForeground = false
         languageResourceRevision.incrementAndGet()
         languageTransition.finishImmediately()
         if (windowLayoutListenerRegistered) {
@@ -903,7 +908,12 @@ class MainActivity : Activity() {
         }
     }
 
-    internal fun connectQmplus(startURL: String = QmplusPolicy.START_URL) {
+    private fun maybeStartWarmQMplusRefresh() {
+        if (!qmWarmRefreshForeground || isFinishing || isDestroyed || activitySession.uiOwner.current() !== this) return
+        if (activitySession.qmplus.claimWarmRefresh()) connectQmplus(silentRefresh = true)
+    }
+
+    internal fun connectQmplus(startURL: String = QmplusPolicy.START_URL, silentRefresh: Boolean = false) {
         if (isFinishing || isDestroyed || activitySession.uiOwner.current() !== this) return
         if (!QmplusPolicy.isBusinessPage(startURL)) return
         val repository = activitySession.qmplus
@@ -916,6 +926,7 @@ class MainActivity : Activity() {
                 .putExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN, connection.token)
                 .putExtra(QmplusActivity.EXTRA_FEATURE_REVISION, connection.featureRevision)
                 .putExtra(QmplusActivity.EXTRA_START_URL, startURL)
+                .putExtra(QmplusActivity.EXTRA_SILENT_REFRESH, silentRefresh)
                 .putExtra(QmplusActivity.EXTRA_SAVED_LOGIN_ENABLED, repository.savedLoginStatus.enabled)
                 .putExtra(QmplusActivity.EXTRA_SAVED_LOGIN_REVISION, repository.savedLoginStatus.revision)
                 .putExtra(QmplusActivity.EXTRA_CLEAR_FIRST, repository.cookiesNeedClearing), QMPLUS_REQUEST_CODE)
@@ -976,6 +987,10 @@ class MainActivity : Activity() {
         val token = data?.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN) ?: repository.connection?.token
         if (!repository.finishConnection(token) || data == null) return
         val generation = data.getLongExtra(QmplusActivity.EXTRA_GENERATION, -1)
+        if (data.getBooleanExtra(QmplusActivity.EXTRA_CONNECT_REQUIRED, false)) {
+            repository.connectionRequired(generation)
+            return
+        }
         if (data.getBooleanExtra(QmplusActivity.EXTRA_COOKIES_CLEARED, false))
             activitySession.qmplus.cookiesCleared(generation)
         data.getByteArrayExtra(QmplusActivity.EXTRA_SNAPSHOT)?.takeIf { resultCode == RESULT_OK }
@@ -1585,6 +1600,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        qmWarmRefreshForeground = false
+        if (applicationContentStarted) activitySession.qmplus.removeObserver(this)
         languageTransition.close()
         if (!isChangingConfigurations) automaticScheduleLaunchRefreshKey?.let { key ->
             ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)

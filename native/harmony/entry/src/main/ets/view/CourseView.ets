@@ -7,7 +7,7 @@ import { CoursePageContract, CoursePageTab, CourseQMPlusScope,
 import { AppLanguage } from '../common/AppLocalization';
 import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppModel } from '../model/AppModel';
-import { PageTitle } from './SharedComponents';
+import { DisclosureClip, PageTitle } from './SharedComponents';
 import { AssignmentQueryView, ExamQueryView } from './AcademicQueryViews';
 import { GradeQueryView } from './GradeQueryView';
 import { CourseSession } from './CourseSession';
@@ -696,11 +696,6 @@ export struct CourseView {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      SymbolGlyph($r('sys.symbol.chevron_down'))
-        .fontSize(15)
-        .fontColor([AppTheme.secondaryText()])
-        .rotate({ angle: this.session.isExpanded('ucloud', course.id) ? 180 : 0 })
-        .accessibilityLevel('no')
       }
       .layoutWeight(1)
       .alignItems(VerticalAlign.Center)
@@ -708,6 +703,7 @@ export struct CourseView {
       .accessibilityText(course.name ?? course.id)
       .accessibilityStateDescription(this.model.text(this.session.isExpanded('ucloud', course.id) ? '已展开' : '已折叠'))
       .onClick(() => this.toggleCourseInline('ucloud', course.id))
+      this.courseDisclosureButton('ucloud', course.id)
       Button() { SymbolGlyph($r('sys.symbol.info_circle')).fontSize(18).fontColor([AppTheme.secondaryText()]) }
         .type(ButtonType.Normal).width(ControlMetrics.height).height(ControlMetrics.height).padding(4)
         .backgroundColor(Color.Transparent).accessibilityText(this.model.text('课程详情'))
@@ -719,10 +715,9 @@ export struct CourseView {
     .padding({ top: 8, bottom: 8 })
     .alignItems(VerticalAlign.Center)
     .id('courses.cloud.row.' + course.id)
-      if (this.session.isExpanded('ucloud', course.id)) {
+      DisclosureClip({ expanded: this.session.isExpanded('ucloud', course.id) }) {
         Column({ space: 8 }) { this.inlineCloudAssignments(course) }
           .width('100%').padding({ left: 52, bottom: 8 }).alignItems(HorizontalAlign.Start)
-          .transition(TransitionEffect.OPACITY)
       }
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
@@ -857,11 +852,6 @@ export struct CourseView {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      SymbolGlyph($r('sys.symbol.chevron_down'))
-        .fontSize(15)
-        .fontColor([AppTheme.secondaryText()])
-        .rotate({ angle: this.session.isExpanded('qmplus', course.id) ? 180 : 0 })
-        .accessibilityLevel('no')
       }
       .layoutWeight(1)
       .alignItems(VerticalAlign.Center)
@@ -869,6 +859,7 @@ export struct CourseView {
       .accessibilityText(course.name.length > 0 ? course.name : course.id)
       .accessibilityStateDescription(this.model.text(this.session.isExpanded('qmplus', course.id) ? '已展开' : '已折叠'))
       .onClick(() => this.toggleCourseInline('qmplus', course.id))
+      this.courseDisclosureButton('qmplus', course.id)
       Button() { SymbolGlyph($r('sys.symbol.info_circle')).fontSize(18).fontColor([AppTheme.secondaryText()]) }
         .type(ButtonType.Normal).width(ControlMetrics.height).height(ControlMetrics.height).padding(4)
         .backgroundColor(Color.Transparent).accessibilityText(this.model.text('课程详情'))
@@ -880,12 +871,23 @@ export struct CourseView {
     .padding({ top: 8, bottom: 8 })
     .alignItems(VerticalAlign.Center)
     .id('courses.qmplus.row.' + course.id)
-      if (this.session.isExpanded('qmplus', course.id)) {
+      DisclosureClip({ expanded: this.session.isExpanded('qmplus', course.id) }) {
         Column({ space: 8 }) { this.inlineQMActivities(course) }
           .width('100%').padding({ left: 52, bottom: 8 }).alignItems(HorizontalAlign.Start)
-          .transition(TransitionEffect.OPACITY)
       }
     }.width('100%').alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  courseDisclosureButton(source: string, id: string) {
+    Button() {
+      SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(18).fontColor([AppTheme.secondaryText()])
+        .rotate({ angle: this.session.isExpanded(source, id) ? 180 : 0 })
+    }
+      .type(ButtonType.Normal).width(ControlMetrics.height).height(ControlMetrics.height).padding(4)
+      .backgroundColor(Color.Transparent)
+      .accessibilityText(this.model.text(this.session.isExpanded(source, id) ? '已展开' : '已折叠'))
+      .onClick(() => this.toggleCourseInline(source, id))
   }
 
   @Builder

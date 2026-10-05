@@ -3,6 +3,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import { QMPlusSavedLogin, QMPlusSavedLoginStoring } from '../main/ets/store/QMPlusSavedLoginStore';
 import { QMPlusAuthAttemptLedger, QMPlusAuthNavigationPolicy } from '../main/ets/view/QMPlusConnectionView';
 import { QMPlusAuthorizationJournal, QMPlusLoginAuthorization, QMPlusSession } from '../main/ets/view/QMPlusSession';
+import { QMPlusSnapshot, QMPlusURLPolicy } from '../main/ets/net/QMPlusSnapshot';
 
 class Gate {
   private finish: () => void = () => {};
@@ -76,6 +77,48 @@ async function authorization(current: QMPlusSession): Promise<QMPlusLoginAuthori
 
 export default function qmPlusSavedLoginTest() {
   describe('QMPlusSavedLoginTest', () => {
+    it('silent_owner_manual_requirement_preserves_last_good_and_retires_without_presenting_a_window', 0, () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const current: QMPlusSession = session(store, new FakeAuthorizationJournal());
+      const cached: QMPlusSnapshot = new QMPlusSnapshot('2026-10-05T00:00:00Z', false, [], [], []);
+      current.snapshot = cached;
+      current.openLogin(QMPlusURLPolicy.home, true);
+      const owner = current.loginOwner();
+      let stops: number = 0;
+      current.bindLoginWeb(owner, (): void => { stops++; });
+      const generation: number = current.beginSync();
+      current.presentLogin();
+      expect(current.loginVisible).assertFalse();
+      expect(current.loginPresented).assertFalse();
+      expect(current.snapshot === cached).assertTrue();
+      expect(current.errorCode).assertEqual('QM_LOGIN_REQUIRED');
+      expect(current.isCurrent(generation)).assertFalse();
+      expect(stops).assertEqual(1);
+      expect(store.clearCount).assertEqual(0);
+      current.openLogin();
+      expect(current.targetURL).assertEqual(QMPlusURLPolicy.home);
+      expect(current.isLoginOwnerCurrent(owner)).assertFalse();
+      current.closeLogin();
+    });
+
+    it('explicit_connect_upgrades_an_ongoing_quiet_owner_without_revealing_or_replacing_its_document', 0, () => {
+      const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
+      current.openLogin(QMPlusURLPolicy.home, true);
+      const owner = current.loginOwner();
+      let stops: number = 0;
+      current.bindLoginWeb(owner, (): void => { stops++; });
+      current.openLogin();
+      expect(current.isLoginOwnerCurrent(owner)).assertTrue();
+      expect(current.loginPresented).assertFalse();
+      expect(stops).assertEqual(0);
+      current.presentLogin();
+      expect(current.loginVisible).assertTrue();
+      expect(current.loginPresented).assertTrue();
+      current.closeLogin();
+      expect(QMPlusAuthNavigationPolicy.shouldStartSAML(QMPlusURLPolicy.home, QMPlusURLPolicy.home, true, true, false)).assertTrue();
+      expect(QMPlusAuthNavigationPolicy.isQMGuestEntry('https://qmplus.qmul.ac.uk/my/?wants=other')).assertFalse();
+    });
+
     it('official_error_reconnect_retires_old_owner_and_uses_dashboard_without_deleting_saved_state', 0, async () => {
       const store: FakeLoginStore = new FakeLoginStore();
       const current: QMPlusSession = session(store, new FakeAuthorizationJournal());

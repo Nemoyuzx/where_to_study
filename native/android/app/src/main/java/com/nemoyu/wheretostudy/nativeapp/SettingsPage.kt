@@ -202,7 +202,8 @@ class SettingsPage internal constructor(
 
     private fun appSettingsSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
-        addView(sectionTitle(activity, "应用设置", R.drawable.ic_settings_language))
+        tag = "settings.network-assistance"
+        addView(sectionTitle(activity, "系统网络辅助", R.drawable.ic_settings_language))
         val toggle = featureSwitch(activity.getString(R.string.cellular_assist_title), preferences.cellularAssistEnabled) {}
             .apply { id = R.id.settings_cellular_assist }
         var restoring = false
@@ -356,6 +357,17 @@ class SettingsPage internal constructor(
             addView(spacer(activity, 8)); addView(disconnect)
             addView(spacer(activity, 8)); addView(savedLogin)
         }
+        val detailViewport = NaturalDisclosureViewport(activity).apply {
+            visibility = if (qmplusDetailsExpanded == true) View.VISIBLE else View.GONE
+            addView(details, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        var disclosureTarget = qmplusDetailsExpanded == true
+        val motion = DisclosureMotionController(this, detailViewport, indicator, onDetached = {
+            detailViewport.visibility = if (qmplusDetailsExpanded == true) View.VISIBLE else View.GONE
+            detailViewport.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            detailViewport.alpha = 1f
+            indicator.rotation = if (qmplusDetailsExpanded == true) 180f else 0f
+        })
         fun update() {
             restoringFeatureSwitch = true
             enabledSwitch.isChecked = repository.isFeatureEnabled
@@ -366,8 +378,14 @@ class SettingsPage internal constructor(
                 previousEnabled = repository.isFeatureEnabled
                 qmplusDetailsExpanded = repository.isFeatureEnabled
             }
-            details.visibility = if (qmplusDetailsExpanded == true) View.VISIBLE else View.GONE
-            indicator.rotation = if (qmplusDetailsExpanded == true) 180f else 0f
+            val desired = qmplusDetailsExpanded == true
+            if (desired != disclosureTarget) {
+                disclosureTarget = desired
+                motion.animateTo(desired)
+            } else if (!motion.isRunning) {
+                detailViewport.visibility = if (desired) View.VISIBLE else View.GONE
+                indicator.rotation = if (desired) 180f else 0f
+            }
             indicator.contentDescription = activity.uiText(if (qmplusDetailsExpanded == true) "已展开" else "已折叠")
             stateText.text = activity.getString(when {
                 repository.isClearingSession -> R.string.qmplus_clearing_session
@@ -384,7 +402,7 @@ class SettingsPage internal constructor(
             update()
         }
         update()
-        addView(enabledSwitch); addView(details)
+        addView(enabledSwitch); addView(detailViewport)
         addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
                 repository.addObserver(view) { if (view.isAttachedToWindow) update() }
@@ -708,7 +726,7 @@ class SettingsPage internal constructor(
                     credentials.also {
                         credentialStore.save(credentials)
                         if (savedCredentials != credentials) activity.clearAcademicGrades()
-                        if (CredentialUpdateLogic.changesAssignmentCredentials(savedCredentials, credentials)) {
+                        if (savedCredentials != credentials) {
                             activity.clearCalendarAssignmentData()
                         }
                         preferences.campusID = AppMetadata.campuses[selectedCampusIndex].id
@@ -2050,11 +2068,11 @@ class SettingsPage internal constructor(
             ("UAPI 按校区行政区提供天气与基础黄历，不读取 GPS；Timeless 可补充宜忌。公开活动优先读取 GitHub 上的 Contest DDL，where-to-study.cn 镜像仅在数据更新时间较新时使用，两者不可用时改用原有备用 API；校内竞赛通知另有来源。这些公开请求均不附带个人凭据。自定义日程只向用户填写的 HTTPS 地址发送无凭据 GET，拒绝重定向、本机和私有/保留 IP 字面量，响应上限 2 MiB。所有显示数据仅供参考。\n\n" +
                 "UAPI provides district-level weather and base almanac data without GPS. Timeless may add advice. Public events use Contest DDL on GitHub first; the where-to-study.cn mirror is selected only when its generated data is newer, and the existing API is a fallback if both fail. Campus contest notices have a separate source. These public requests carry no personal credentials. Custom schedules use credential-free GET requests only to the user-provided HTTPS URL, reject redirects, localhost, and literal private/reserved IPs, and limit responses to 2 MiB. Displayed data is for reference only."),
         "云课堂作业 / UCloud assignments" to
-            ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\n" +
-                "The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."),
+            ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie 或令牌写入磁盘。经过校验的课程、作业与原始获取时间保存在应用私有 noBackup 有界 AtomicFile 缓存，随机非秘密作用域由受保护凭据记录管理；普通业务缓存不保存账号、密码、凭据哈希或网页 HTML。重启先显示缓存再由唯一数据入口静默更新，页面共用进行中的请求。凭据真实改变或清除数据先撤销旧作用域并串行清除缓存；失败及部分更新保留并标注此前资料。\n\n" +
+                "The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. Tickets, cookies and tokens are never persisted. Validated courses, assignments and original fetch times use a bounded app-private noBackup AtomicFile cache with a non-secret random scope managed in the protected credential record. Business caches contain no accounts, passwords, credential hashes or HTML. Restart restores cached data before a silent update through one shared data owner; pages join in-flight requests. Genuine credential changes or clearing revoke the old scope and serially remove the cache. Failed or partial updates retain labelled prior information."),
         "QMplus 独立连接 / Independent QMplus connection" to
-            ("QMplus 与北邮教务账号独立。只有你主动连接时，应用才在独立的 :qmplus 进程及应用管理的 WebView profile 打开官方网页；旧系统的应用默认网页区只供 QMplus 使用，不读取系统浏览器 Cookie，也不复用北邮密码。默认不保存登录资料；明确选择保存及授权后，独立 Android Keystore 域在本机加密保存 QMplus 账号和密码，仅在已核验的官方 Microsoft 页面自动选择精确匹配的已保存账号，并在已确认的账号／密码表单各尝试一次普通 Next／Sign in。未匹配的账号选择、验证码、MFA、保持登录、风险、协议及其它确认仍须本人完成。有效会话可直接只读同步；过期或需要验证时显示官方窗口。系统 WebView 引擎管理本机持久 Cookie 和网页存储，成功同步时请求引擎刷新 Cookie 保存；不导出到普通设置、业务快照、日志或本项目服务器，不改变官方有效期或验证策略，不保证永久登录或免 MFA。重新核验同一已授权安全记录和相同密码后，重复保存可保留会话，但不解除已有待清理标记。更换资料、退出或清除会撤销旧连接，并以待清理状态阻止旧会话用于新身份；Cookie 清理等待私有进程的删除完成回调及当前请求匹配的回执，网页存储删除请求交由引擎处理。清理或状态保存失败会提示重试，不能把发出请求、暂停同步或保存新资料当作成功删除旧 Cookie。关闭“启用 QMplus”只暂停连接和同步，保留 Cookie、已保存资料及课程缓存；关闭自动填写撤销授权，删除资料、退出并清除或清除本地数据会移除相应独立安全记录，失败不声称已删除。只读脚本仅获取 EBU 课程及已发布 Assignment／Quiz 业务资料，不请求 QMplus 日历或 Timeline、不提交作业、开始测验或访问答案，不返回密码、Cookie、sesskey、令牌或完整 HTML，不使用第三方 Worker。业务快照保存在应用私有的有界缓存中；真实部分失败保留并标注已核实或此前资料。本项目服务器不接收身份或课程数据；更换北邮账号不会自动更换 QMplus 身份。官方服务按其政策处理你提交的登录信息和网络元数据。\n\n" +
-                "QMplus is independent of BUPT credentials. Only your explicit connection opens the official site in the separate :qmplus process and app-managed WebView profile. On older systems, the application default web area is reserved for QMplus. System-browser cookies and BUPT passwords are never reused. Sign-in saving is off by default; explicit saving and authorization encrypt separate QMplus credentials locally in an Android Keystore domain. Verified official Microsoft pages may select the exact saved account and fill verified username/password forms with one ordinary Next/Sign in submission per step. Unmatched account choices, CAPTCHA, MFA, staying signed in, risk, terms and other confirmations require you. A valid session can sync read-only; expiry or verification shows the official window. The WebView engine manages persistent cookies and web storage locally, with a cookie flush requested after successful sync. They are never exported into ordinary settings, business snapshots, logs or the project server. Official expiry and verification rules are unchanged; permanent sign-in or exemption from MFA is not guaranteed. Revalidating the same authorized secure record and password may preserve the session on resave without removing a pending cleanup marker. Credential replacement, logout or clearing retires the old connection and uses pending cleanup state to block the old session for a new identity. Cookie cleanup waits for the private-process removal callback and a matching acknowledgment for the current request; web-storage deletion requests are handled by the engine. Cleanup or metadata-write failures require retry. Sending a request, pausing sync or saving new credentials is not proof that old cookies were deleted. Turning off “Enable QMplus” pauses connection and sync while retaining cookies, saved credentials and course cache. Turning autofill off revokes authorization; deleting credentials, disconnecting and clearing, or clearing local data removes the separate secure record, with failures not claimed as successful deletion. The read-only script retrieves EBU courses and published Assignment/Quiz business data, never QMplus calendar/Timeline, submissions, quiz attempts or answers, and never returns passwords, cookies, session keys, tokens or full HTML or uses a third-party Worker. Business snapshots use a bounded app-private cache; genuine partial failures retain clearly labelled verified or prior information. The project server receives no identity or course data; changing BUPT credentials does not switch QMplus identity. Official services process submitted sign-in information and network metadata under their policies."),
+            ("QMplus 与北邮教务账号独立。启用功能后，应用可在独立的 :qmplus 进程及应用管理的 WebView profile 后台核查已有官方会话；主动连接时才显露需要本人处理的官方页面。旧系统的应用默认网页区只供 QMplus 使用，不读取系统浏览器 Cookie，也不复用北邮密码。默认不保存登录资料；明确选择保存及授权后，独立 Android Keystore 域在本机加密保存 QMplus 账号和密码，仅在已核验的官方 Microsoft 页面自动选择精确匹配的已保存账号，并在已确认的账号／密码表单各尝试一次普通 Next／Sign in。未匹配的账号选择、验证码、MFA、保持登录、风险、协议及其它确认仍须本人完成。有效会话可后台只读同步；后台遇到过期、验证或未知页面仅提示需重新连接，不自动弹窗，显式连接时显示需要本人处理的官方页面。系统 WebView 引擎管理本机持久 Cookie 和网页存储，成功同步时请求引擎刷新 Cookie 保存；不导出到普通设置、业务快照、日志或本项目服务器，不改变官方有效期或验证策略，不保证永久登录或免 MFA。重新核验同一已授权安全记录和相同密码后，重复保存可保留会话，但不解除已有待清理标记。更换资料、退出或清除会撤销旧连接，并以待清理状态阻止旧会话用于新身份；Cookie 清理等待私有进程的删除完成回调及当前请求匹配的回执，网页存储删除请求交由引擎处理。清理或状态保存失败会提示重试，不能把发出请求、暂停同步或保存新资料当作成功删除旧 Cookie。关闭“启用 QMplus”只暂停连接和同步，保留 Cookie、已保存资料及课程缓存；关闭自动填写撤销授权，删除资料、退出并清除或清除本地数据会移除相应独立安全记录，失败不声称已删除。只读脚本仅获取 EBU 课程及已发布 Assignment／Quiz 业务资料，不请求 QMplus 日历或 Timeline、不提交作业、开始测验或访问答案，不返回密码、Cookie、sesskey、令牌或完整 HTML，不使用第三方 Worker。业务快照保存在应用私有的有界缓存中；真实部分失败保留并标注已核实或此前资料。本项目服务器不接收身份或课程数据；更换北邮账号不会自动更换 QMplus 身份。官方服务按其政策处理你提交的登录信息和网络元数据。\n\n" +
+                "QMplus is independent of BUPT credentials. When enabled, the app may silently check an existing official session in the separate :qmplus process and app-managed WebView profile. Explicit connection reveals official pages requiring your action. On older systems, the application default web area is reserved for QMplus. System-browser cookies and BUPT passwords are never reused. Sign-in saving is off by default; explicit saving and authorization encrypt separate QMplus credentials locally in an Android Keystore domain. Verified official Microsoft pages may select the exact saved account and fill verified username/password forms with one ordinary Next/Sign in submission per step. Unmatched account choices, CAPTCHA, MFA, staying signed in, risk, terms and other confirmations require you. A valid session can synchronize read-only in the background. Background expiry, verification or unknown pages indicate reconnection without opening a window; explicit connection reveals official pages requiring action. The WebView engine manages persistent cookies and web storage locally, with a cookie flush requested after successful sync. They are never exported into ordinary settings, business snapshots, logs or the project server. Official expiry and verification rules are unchanged; permanent sign-in or exemption from MFA is not guaranteed. Revalidating the same authorized secure record and password may preserve the session on resave without removing a pending cleanup marker. Credential replacement, logout or clearing retires the old connection and uses pending cleanup state to block the old session for a new identity. Cookie cleanup waits for the private-process removal callback and a matching acknowledgment for the current request; web-storage deletion requests are handled by the engine. Cleanup or metadata-write failures require retry. Sending a request, pausing sync or saving new credentials is not proof that old cookies were deleted. Turning off “Enable QMplus” pauses connection and sync while retaining cookies, saved credentials and course cache. Turning autofill off revokes authorization; deleting credentials, disconnecting and clearing, or clearing local data removes the separate secure record, with failures not claimed as successful deletion. The read-only script retrieves EBU courses and published Assignment/Quiz business data, never QMplus calendar/Timeline, submissions, quiz attempts or answers, and never returns passwords, cookies, session keys, tokens or full HTML or uses a third-party Worker. Business snapshots use a bounded app-private cache; genuine partial failures retain clearly labelled verified or prior information. The project server receives no identity or course data; changing BUPT credentials does not switch QMplus identity. Official services process submitted sign-in information and network metadata under their policies."),
         "系统日历、通知与小组件 / Calendar, notifications, and widgets" to
             ("日历写入和本地课程通知需要你的操作与权限；应用只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供，相关数据不上传。\n\n" +
                 "Calendar writes and local course notifications require your action and permission, and only marked events are managed. Widgets exist only on supported platforms. This data is not uploaded."),

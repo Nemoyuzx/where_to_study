@@ -15,6 +15,8 @@ function load(source,extra={}) {
   const module={exports:{}}
   const dependencies={'react':React,'react/jsx-runtime':jsxRuntime,'lucide-react':icons,
     './course-domain.js':courseDomain,'./ui-languages.js':locales,'./ui-text.js':labels,
+    './use-course-data.js':{useCourseData:()=>({courses:null,assignments:null,qm:null})},
+    './AnimatedDisclosure.jsx':({children})=>children,
     '@tauri-apps/api/event':{listen:()=>{throw new Error('unexpected event subscription')}},
     './GradesPanel.jsx':()=>null,'./PrivateQueriesPanel.jsx':()=>null,...extra}
   const code=transformSync(source,{loader:'jsx',jsx:'automatic',format:'cjs',target:'es2022'}).code
@@ -50,7 +52,9 @@ test('course disclosure and info are sibling controls; folding keeps data and ne
     const reveal=nodes.find(node=>node.props.id===main.props['aria-controls'])
     assert.equal(descendants(main).filter(node=>node.type==='button').length,1)
     assert.equal(nodes.find(node=>node.props.items===items)?.props.items,items)
-    assert.equal(reveal.props.inert,!expanded)
+    assert.equal(reveal.props.expanded,expanded)
+    const trailing=nodes.find(node=>node.props.className==='course-row-trailing')
+    assert.equal(descendants(trailing).filter(node=>node.type==='button').length,2)
     return {main,info}
   }
   const initial=render();assert.equal(initial.main.props['aria-expanded'],false)
@@ -83,7 +87,8 @@ test('language completion waits for native ACK, fonts and whole-UI three-frame s
   const app=read('src/App.jsx'),hook=read('src/use-language-transition.js')
   assert.match(app,/Promise\.all\(\[command\('set_interface_language',uiLanguage\),document\.fonts\?\.ready/)
   assert.match(app,/languageReadinessRef\.current\.target===target && languageReadinessRef\.current\.ready/)
-  assert.match(hook,/root\.querySelectorAll\('h1,h2,h3,label,button,select,input,p,small,a,span,\[role="dialog"\]'/)
+  assert.match(hook,/document\.createTreeWalker\(root,NodeFilter\.SHOW_ELEMENT/)
+  assert.match(hook,/\['H1','H2','H3','LABEL','BUTTON','SELECT','INPUT','P','SMALL','A','SPAN'\]/)
   assert.match(hook,/return stable>=3/)
   assert.doesNotMatch(hook,/element\.value|innerHTML|outerHTML|console\./)
   assert.match(app,/languageTransition\.overlay\.completed \? t\('完成'\) : 'Switching…'/)

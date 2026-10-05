@@ -1416,6 +1416,7 @@ internal object NativeUiTextCatalog {
         "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。" to R.string.ui_generated_fd4480c6c08ea3,
         "QMplus 网页会话需要清理，请重新启动应用。" to R.string.ui_generated_b5e960a8c37808,
         "QMplus 网页会话尚未清除或保存失败，请重试。" to R.string.ui_generated_127d5412a91688,
+        "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。" to R.string.ui_generated_0eae03943703e2,
     )
     fun resolve(context: Context, source: String): String? = resources[source]?.let(context::getString)
 }

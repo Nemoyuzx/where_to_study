@@ -902,4 +902,5 @@
     <string name="ui_generated_fd4480c6c08ea3">"Desativar “Ativar QMplus” apenas pausa a conexão e a sincronização; os dados de login salvos, a sessão e o cache de cursos são mantidos. Use os controles correspondentes para desativar o preenchimento automático, excluir dados de login ou desconectar e limpar dados."</string>
     <string name="ui_generated_b5e960a8c37808">"É necessário limpar a sessão web do QMplus. Reinicie o aplicativo."</string>
     <string name="ui_generated_127d5412a91688">"Não foi possível limpar ou salvar a sessão web do QMplus. Tente novamente."</string>
+    <string name="ui_generated_0eae03943703e2">"Os dados dos cursos foram obtidos, mas o cache local não foi atualizado. Dados anteriores podem aparecer após reiniciar."</string>
 </resources>

@@ -255,6 +255,18 @@ pub fn current(app: &tauri::AppHandle, id: Option<&str>) -> bool {
                 })
         })
 }
+
+pub fn active_id(app: &tauri::AppHandle) -> Result<Option<String>, String> {
+    let _guard = WRITES.lock().map_err(|_| ERROR)?;
+    let journal = load(&journal_path(app)?)?;
+    if UNSAVED_REVOCATION.load(Ordering::SeqCst) || !journal.pending.is_empty() {
+        return Ok(None);
+    }
+    Ok(journal
+        .active
+        .filter(|profile| profile.backend == backend())
+        .map(|profile| profile.id))
+}
 pub fn authorization_ready(app: &tauri::AppHandle) -> bool {
     let Ok(_guard) = WRITES.lock() else {
         return false;

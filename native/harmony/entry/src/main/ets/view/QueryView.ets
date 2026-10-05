@@ -9,7 +9,7 @@ import { DeadlineVisual } from '../common/DeadlineVisual';
 import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppContext } from '../store/AppContext';
 import { QuerySession } from './QuerySession';
-import { PageTitle } from './SharedComponents';
+import { DisclosureClip, PageTitle } from './SharedComponents';
 import { ShuttleQueryLayout } from './ShuttleQueryLayout';
 import {
   ImportantEventFilter, ImportantEventQueryLogic, QueryPageContract, QueryPageTab
@@ -201,11 +201,34 @@ export struct QueryView {
     } catch (e) { return false; }
   }
 
-  private toggleFullTimetable(): void {
+  private timetableSectionKey(schedule: ShuttleBusSchedule): string {
+    return JSON.stringify([schedule.period.key(), schedule.from, schedule.to]);
+  }
+
+  private timetablePeriods(daily: ShuttleBusDailyView): ShuttleBusSchedule[] {
+    const seen: Set<string> = new Set<string>();
+    return (daily.scheduleNotice?.schedules ?? []).filter((schedule: ShuttleBusSchedule): boolean => {
+      if (seen.has(schedule.period.key())) { return false; }
+      seen.add(schedule.period.key()); return true;
+    });
+  }
+
+  private timetableDirections(daily: ShuttleBusDailyView, period: ShuttleBusSchedule): ShuttleBusSchedule[] {
+    return (daily.scheduleNotice?.schedules ?? []).filter((schedule: ShuttleBusSchedule): boolean => schedule.period.key() === period.period.key());
+  }
+
+  private toggleTimetablePeriod(schedule: ShuttleBusSchedule): void {
+    this.fullTimetableMotionDuration = this.reduceFullTimetableMotion() ? 0 : 160;
+    this.getUIContext().animateTo({ duration: this.fullTimetableMotionDuration, curve: Curve.EaseOut }, (): void => {
+      this.session.toggleShuttlePeriod(schedule.period.key());
+    });
+  }
+
+  private toggleTimetableSection(schedule: ShuttleBusSchedule): void {
     this.fullTimetableMotionDuration = this.reduceFullTimetableMotion() ? 0 : 160;
     // Only presentation changes; never reload or replace the cached snapshot.
     this.getUIContext().animateTo({ duration: this.fullTimetableMotionDuration, curve: Curve.EaseOut }, (): void => {
-      this.session.toggleFullTimetable();
+      this.session.toggleShuttleSection(this.timetableSectionKey(schedule));
     });
   }
 
@@ -699,48 +722,51 @@ export struct QueryView {
   shuttleFullTimetable(daily: ShuttleBusDailyView) {
     if (daily.scheduleNotice !== null && daily.scheduleNotice.schedules.length > 0) {
       Column({ space: 12 }) {
-        Button() {
-          Row({ space: 8 }) {
-            Text(this.model.text('完整班车时刻表'))
-              .fontSize(17)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(AppTheme.text())
-              .layoutWeight(1)
-              .textAlign(TextAlign.Start)
-            SymbolGlyph($r('sys.symbol.chevron_down'))
-              .fontSize(22)
-              .fontColor([AppTheme.secondaryText()])
-              .rotate({ angle: this.session.fullTimetableExpanded ? 180 : 0 })
-              .accessibilityLevel('no')
-          }
-          .width('100%')
-        }
-          .type(ButtonType.Normal)
-          .constraintSize({ minHeight: ControlMetrics.height })
-          .padding(0)
-          .backgroundColor(Color.Transparent)
-          .width('100%')
-          .accessibilityText(this.model.text('完整班车时刻表'))
-          .accessibilityStateDescription(this.model.text(this.session.fullTimetableExpanded ? '已展开' : '已折叠'))
-          .id('query.shuttle.full-timetable.toggle')
-          .onClick(() => this.toggleFullTimetable())
+        Text(this.model.text('完整班车时刻表'))
+          .fontSize(17).fontWeight(FontWeight.Bold).fontColor(AppTheme.text()).width('100%')
         Text(daily.scheduleNotice.title)
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
-        if (this.session.fullTimetableExpanded) {
           Column({ space: 12 }) {
-            ForEach(daily.scheduleNotice.schedules, (schedule: ShuttleBusSchedule) => {
+            ForEach(this.timetablePeriods(daily), (period: ShuttleBusSchedule) => {
               Column({ space: 5 }) {
-                Text(schedule.period.label + ' · ' + schedule.from + ' → ' + schedule.to)
-                  .fontSize(14)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(AppTheme.primary())
-                  .width('100%')
-                Text(this.fullTimetablePeriodMetadata(schedule))
-                  .fontSize(12)
-                  .fontColor(AppTheme.secondaryText())
-                  .width('100%')
+                Button() {
+                  Row({ space: 8 }) {
+                    Column({ space: 5 }) {
+                      Text(period.period.label).fontSize(14).fontWeight(FontWeight.Bold).fontColor(AppTheme.primary()).width('100%')
+                      Text(this.fullTimetablePeriodMetadata(period)).fontSize(12).fontColor(AppTheme.secondaryText()).width('100%')
+                    }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                    SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(18).fontColor([AppTheme.secondaryText()])
+                      .rotate({ angle: this.session.isShuttlePeriodExpanded(period.period.key()) ? 180 : 0 }).accessibilityLevel('no')
+                  }.width('100%').alignItems(VerticalAlign.Center)
+                }
+                  .type(ButtonType.Normal).padding(0).width('100%').constraintSize({ minHeight: ControlMetrics.height })
+                  .backgroundColor(Color.Transparent).accessibilityText(period.period.label)
+                  .accessibilityStateDescription(this.model.text(this.session.isShuttlePeriodExpanded(period.period.key()) ? '已展开' : '已折叠'))
+                  .onClick(() => this.toggleTimetablePeriod(period))
+                DisclosureClip({ expanded: this.session.isShuttlePeriodExpanded(period.period.key()) }) {
+                  Column({ space: 10 }) {
+                    ForEach(this.timetableDirections(daily, period), (schedule: ShuttleBusSchedule) => {
+              Column({ space: 5 }) {
+                Button() {
+                  Row({ space: 8 }) {
+                    Column({ space: 5 }) {
+                      Text(schedule.from + ' → ' + schedule.to)
+                        .fontSize(14).fontWeight(FontWeight.Bold).fontColor(AppTheme.primary()).width('100%')
+                    }.layoutWeight(1).alignItems(HorizontalAlign.Start)
+                    SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(18).fontColor([AppTheme.secondaryText()])
+                      .rotate({ angle: this.session.isShuttleSectionExpanded(this.timetableSectionKey(schedule)) ? 180 : 0 })
+                      .accessibilityLevel('no')
+                  }.width('100%').alignItems(VerticalAlign.Center)
+                }
+                  .type(ButtonType.Normal).padding(0).width('100%').constraintSize({ minHeight: ControlMetrics.height })
+                  .backgroundColor(Color.Transparent)
+                  .accessibilityText(schedule.period.label + ' · ' + schedule.from + ' → ' + schedule.to)
+                  .accessibilityStateDescription(this.model.text(this.session.isShuttleSectionExpanded(this.timetableSectionKey(schedule)) ? '已展开' : '已折叠'))
+                  .onClick(() => this.toggleTimetableSection(schedule))
+                DisclosureClip({ expanded: this.session.isShuttleSectionExpanded(this.timetableSectionKey(schedule)) }) {
+                Column({ space: 5 }) {
                 if (this.isWide()) {
                   Row({ space: 6 }) {
                     ForEach(this.shuttleWeekdays(), (weekday: string) => {
@@ -779,6 +805,8 @@ export struct QueryView {
                     .alignItems(VerticalAlign.Top)
                   }, (weekday: string) => schedule.period.key() + schedule.from + schedule.to + weekday)
                 }
+                }.width('100%').alignItems(HorizontalAlign.Start)
+                }
               }
               .width('100%')
               .padding(12)
@@ -787,12 +815,15 @@ export struct QueryView {
               .alignItems(HorizontalAlign.Start)
             }, (schedule: ShuttleBusSchedule) =>
               schedule.period.key() + schedule.from + schedule.to)
+                  }.width('100%').alignItems(HorizontalAlign.Start)
+                }
+              }.width('100%').padding(12).borderRadius(8).backgroundColor(AppTheme.surfaceVariant())
+                .alignItems(HorizontalAlign.Start)
+            }, (period: ShuttleBusSchedule) => period.period.key())
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
-          .transition(TransitionEffect.OPACITY.animation({ duration: this.fullTimetableMotionDuration, curve: Curve.EaseOut }))
           .id('query.shuttle.full-timetable.content')
-        }
       }
       .padding(16)
       .width('100%')

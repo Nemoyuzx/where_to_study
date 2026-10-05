@@ -1,7 +1,8 @@
 import { uiText } from './ui-text.js'
 import { uiDateLocale } from './ui-languages.js'
 import {useEffect,useState,useRef,useId} from 'react'
-import {listen} from '@tauri-apps/api/event'
+import {useCourseData} from './use-course-data.js'
+import AnimatedDisclosure from './AnimatedDisclosure.jsx'
 import {BookOpen,CheckCircle2,CalendarClock,Clock3,RefreshCw,ExternalLink,ChevronDown,Info,X} from 'lucide-react'
 import GradesPanel from './GradesPanel.jsx'
 import PrivateQueriesPanel from './PrivateQueriesPanel.jsx'
@@ -28,15 +29,19 @@ function CourseRow({course,items,language,source,onOpen,busy,error,onRefresh}) {
       {source==='qmplus'&&course.current_term_status==='other'&&<span className="course-chip">{text('其他学期', 'Other term')}</span>}
       {counts.pending>0&&<span className="course-chip"><Clock3 size={13}/>{text('待交', 'Pending')} {counts.pending}</span>}
       {counts.submitted>0&&<span className="course-chip"><CheckCircle2 size={13}/>{text('已交', 'Submitted')} {counts.submitted}</span>}
-    </span></span><ChevronDown className="course-disclosure-chevron" size={18} aria-hidden="true"/>
+    </span></span>
     </button>
+    <div className="course-row-trailing">
+    <button type="button" className="course-disclosure-button" aria-expanded={expanded} aria-controls={bodyID}
+      aria-label={course.name||course.id} onClick={()=>setExpanded(value=>!value)}><ChevronDown className="course-disclosure-chevron" size={19} aria-hidden="true"/></button>
     <button type="button" className="course-info-button" onClick={onOpen} aria-label={`${text('课程详情','Course details')} · ${course.name||course.id}`}><Info size={19} aria-hidden="true"/></button>
     </div>
-    <div id={bodyID} className={`weather-strip-reveal course-inline-reveal ${expanded?'expanded':''}`} aria-hidden={!expanded} inert={!expanded}>
-      <div className="weather-strip-reveal-clip"><div className="course-inline-body">
-        <CourseActivityBody course={course} source={source} items={items} language={language} busy={busy} error={error} onRefresh={onRefresh}/>
-      </div></div>
     </div>
+    <AnimatedDisclosure id={bodyID} expanded={expanded} className="course-inline-reveal">
+      <div className="course-inline-body">
+        <CourseActivityBody course={course} source={source} items={items} language={language} busy={busy} error={error} onRefresh={onRefresh}/>
+      </div>
+    </AnimatedDisclosure>
   </article>
 }
 
@@ -111,89 +116,43 @@ export function calendarCourseForAssignment(item,directory) {
   return matches.length===1?matches[0]:null
 }
 
-export function CalendarAssignmentCourseDetail({item,language,command,hasAcademicAccount,onClose}) {
+export function CalendarAssignmentCourseDetail({item,language,courseDataOwner,hasAcademicAccount,onClose}) {
   const text=(zh,english)=>uiText(language,zh,english)
-  const [course,setCourse]=useState(null),[items,setItems]=useState([item])
-  const [busy,setBusy]=useState(false),[error,setError]=useState('')
-  const request=useRef(0)
-  useEffect(()=>{
-    const revision=++request.current
-    if(hasAcademicAccount)command('fetch_course_list',{force:false}).then(value=>{
-      if(request.current!==revision)return
-      setCourse(calendarCourseForAssignment(item,value))
-    }).catch(()=>{})
-    return()=>{request.current++}
-  },[command,hasAcademicAccount,item])
+  const data=useCourseData(courseDataOwner)
+  const course=calendarCourseForAssignment(item,data.courses||[])
+  const items=course&&data.assignments!==null?assignmentsForCourse(data.assignments,course,data.courses||[]):[item]
   async function refresh() {
-    if(busy||!hasAcademicAccount)return
-    const revision=++request.current
-    setBusy(true);setError('')
-    try {
-      const [courses,assignments]=await Promise.all([
-        command('fetch_course_list',{force:false}),command('fetch_assignment_list',{force:true}),
-      ])
-      if(request.current!==revision)return
-      const matched=calendarCourseForAssignment(item,courses)
-      setCourse(matched)
-      // An unmatched course is not a proof that its assignments are empty.
-      if(matched)setItems(assignmentsForCourse(assignments,matched,courses))
-      else setError('详情受限或暂不可用，请以官方平台为准。')
-    }catch {
-      if(request.current===revision)setError('课程作业获取失败，请检查设置中的教学云平台密码。')
-    }finally {if(request.current===revision)setBusy(false)}
+    if(!data.cloudBusy&&hasAcademicAccount)await courseDataOwner?.refresh(true).catch(()=>{})
   }
   return <CourseDetail course={course||{id:item.course_id,name:item.course_name||text('课程作业','Assignments')}} source="ucloud" items={items} language={language}
-    busy={busy||!hasAcademicAccount} error={error} onRefresh={refresh} onClose={onClose}/>
+    busy={data.cloudBusy||!hasAcademicAccount} error={data.cloudError} onRefresh={refresh} onClose={onClose}/>
 }
 
-export default function CourseHub({command,language,hasAcademicAccount,onOpenAccount,examSnapshot,qmplusEnabled = false}) {
-  const en=language==='en'
+export default function CourseHub({command,language,hasAcademicAccount,onOpenAccount,examSnapshot,qmplusEnabled = false,courseDataOwner}) {
   const text=(zh,english,values)=>uiText(language,zh,english,values)
-  const [tab,setTab]=useState('courses'),[courses,setCourses]=useState(null),[qm,setQm]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('')
-  const [assignmentItems,setAssignmentItems]=useState(null),[selection,setSelection]=useState(null),[detailBusy,setDetailBusy]=useState(false),[detailError,setDetailError]=useState('')
+  const data=useCourseData(courseDataOwner)
+  const {courses,qm,assignments:assignmentItems,cloudBusy:busy,cloudError:cloudError}=data
+  const [tab,setTab]=useState('courses'),[error,setError]=useState('')
+  const [selection,setSelection]=useState(null),[detailBusy,setDetailBusy]=useState(false),[detailError,setDetailError]=useState('')
   const owner=useRef(null)
   if(!owner.current)owner.current=new CourseRequestOwner()
-  const previousAccount=useRef(hasAcademicAccount)
-  const qmplusEnabledRef=useRef(qmplusEnabled)
-  qmplusEnabledRef.current=qmplusEnabled
-  async function loadQM() {
-    if(!qmplusEnabledRef.current)return
-    const revision=owner.current.next('qm')
-    try {const value=await command('load_qmplus');if(qmplusEnabledRef.current&&owner.current.accepts('qm',revision))setQm(value)}catch{}
-  }
   async function reload(force=false) {
-    const revision=owner.current.next('directory')
-    setBusy(true);setError('')
-    void loadQM()
-    try {
-      const value=hasAcademicAccount?await command('fetch_course_list',{force}):[]
-      if(owner.current.accepts('directory',revision))setCourses(value)
-    }catch(reason){if(owner.current.accepts('directory',revision))setError(en?'Teaching Cloud courses could not be refreshed. Previous data is retained.':String(reason?.message||reason))}
-    finally{if(owner.current.accepts('directory',revision))setBusy(false)}
+    if(hasAcademicAccount)await courseDataOwner?.refresh(force).catch(()=>{})
   }
-  useEffect(()=>{owner.current.live=true;const lifecycle=owner.current.next('lifecycle');let remove
-    if(window.__TAURI_INTERNALS__)listen('qmplus:changed',()=>{if(owner.current.accepts('lifecycle',lifecycle))void loadQM()})
-      .then(fn=>{if(!owner.current.accepts('lifecycle',lifecycle))fn();else{remove=fn;void reload()}})
-      .catch(()=>{if(owner.current.accepts('lifecycle',lifecycle))void reload()})
-    else void reload()
-    return()=>{owner.current.dispose();remove?.()}
+  useEffect(()=>{owner.current.live=true
+    return()=>{owner.current.dispose()}
   },[])
   useEffect(()=>{
-    if(qmplusEnabled)void loadQM()
-    else {owner.current.next('qm');if(selection?.source==='qmplus')closeDetail()}
+    if(!qmplusEnabled&&selection?.source==='qmplus')closeDetail()
   },[qmplusEnabled])
   useEffect(()=>{
-    if(previousAccount.current===hasAcademicAccount)return
-    previousAccount.current=hasAcademicAccount
-    if(!hasAcademicAccount){owner.current.next('directory');owner.current.next('assignments');owner.current.next('detail');setCourses([]);setAssignmentItems(null);setDetailBusy(false);setBusy(false);setSelection(value=>value?.source==='ucloud'?null:value)}
-    else void reload()
+    if(!hasAcademicAccount){owner.current.next('detail');setDetailBusy(false);setSelection(value=>value?.source==='ucloud'?null:value)}
   },[hasAcademicAccount])
   async function refreshAssignments() {
-    const revision=owner.current.next('assignments'),detailRevision=owner.current.detail
+    const detailRevision=owner.current.detail
     setDetailBusy(true);setDetailError('')
     try {
-      const items=await command('fetch_assignment_list',{force:true})
-      if(owner.current.accepts('assignments',revision))setAssignmentItems(items)
+      await courseDataOwner?.refresh(true)
     } catch {if(owner.current.accepts('detail',detailRevision))setDetailError('课程作业获取失败，请检查设置中的教学云平台密码。')}
     finally {if(owner.current.accepts('detail',detailRevision))setDetailBusy(false)}
   }
@@ -210,14 +169,17 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
   return <section className="course-hub">
     <div className="query-hub-segments" role="tablist" aria-label={text('课程服务', 'Course services')}>{tabs.map(([key,Icon,label])=><button role="tab" aria-selected={key===tab} className={key===tab?'active':''} key={key} onClick={()=>setTab(key)}><Icon size={17}/>{label}</button>)}</div>
     <GradesPanel command={command} language={language} enabled={tab==='grades'} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount}/>
-    {['exams','assignments'].map(kind=><PrivateQueriesPanel key={kind} kind={kind} enabled={tab===kind} command={command} language={language} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount} examSnapshot={examSnapshot} assignmentSnapshot={assignmentItems} onAssignmentRequest={()=>owner.current.next('assignments')} onAssignmentSnapshot={(value,revision)=>{if(owner.current.accepts('assignments',revision))setAssignmentItems(value)}}/>)}
+    {['exams','assignments'].map(kind=><PrivateQueriesPanel key={kind} kind={kind} enabled={tab===kind} command={command} courseDataOwner={courseDataOwner} language={language} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount} examSnapshot={examSnapshot} assignmentSnapshot={assignmentItems}/>)}
     {tab==='courses'&&<>
       <header className="query-section-header"><div><h2>{text('教学云平台课程', 'Teaching Cloud courses')}</h2>{courses!==null&&<small>{courses.length} {text('门', 'courses')}</small>}</div><button disabled={busy} onClick={()=>reload(true)}><RefreshCw size={16}/>{text('刷新', 'Refresh')}</button></header>
-      {error&&<p role="alert">{error}</p>}{!hasAcademicAccount&&<button onClick={onOpenAccount}>{text('前往个人账户', 'Configure academic account')}</button>}
+      {(error||cloudError)&&<p role="alert">{text(error||cloudError,error||cloudError)}</p>}{!hasAcademicAccount&&<button onClick={onOpenAccount}>{text('前往个人账户', 'Configure academic account')}</button>}
+      {data.fetchedAt&&<small>{text('最近同步','Last synchronized')}：{time(data.fetchedAt,language)}</small>}
+      {data.cacheWarning&&<p role="status">{text('本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。','Course data was loaded, but the local cache was not updated. A restart may show the previous cache.')}</p>}
       <div className="course-list">{(courses||[]).map(course=><CourseRow key={course.id} course={course} items={cloudActivities(course)} language={language} source="ucloud" busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onOpen={()=>open('ucloud',course)}/>)}</div>
       {courses?.length===0&&<p>{text('当前接口没有返回课程。', 'No current courses returned.')}</p>}
       {qmplusEnabled&&<>
-      <header className="query-section-header"><div><div className="qmplus-title"><h2>QMplus · {text('EBU 课程', 'EBU courses')}</h2><small>{text('仅适用国院','For the International School only')}</small></div>{qm&&<small>{qmCourses.length} {text('门', 'courses')}</small>}</div><div className="course-actions"><button onClick={()=>command('connect_qmplus').catch(e=>setError(String(e)))}><ExternalLink size={16}/>{text('连接／同步', 'Connect / sync')}</button><button onClick={()=>reload()}><RefreshCw size={16}/>{text('读取同步结果', 'Load synchronized data')}</button></div></header>
+      <header className="query-section-header"><div><div className="qmplus-title"><h2>QMplus · {text('EBU 课程', 'EBU courses')}</h2><small>{text('仅适用国院','For the International School only')}</small></div>{qm&&<small>{qmCourses.length} {text('门', 'courses')}</small>}</div><div className="course-actions"><button onClick={()=>courseDataOwner?.syncQM(false).catch(()=>setError('无法打开 QMplus。'))}><ExternalLink size={16}/>{text('连接／同步', 'Connect / sync')}</button><button onClick={()=>courseDataOwner?.reloadQM().catch(()=>{})}><RefreshCw size={16}/>{text('读取同步结果', 'Load synchronized data')}</button></div></header>
+      {qm?.cache_warning&&<p role="status">{text('本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。','Course data was loaded, but the local cache was not updated. A restart may show the previous cache.')}</p>}
       {qm?.partial&&<p role="status">{text('同步不完整，可能保留上次成功数据及其原同步时间。', 'Partial synchronization; previous data and its original timestamp may be retained.')}</p>}
       {!qm&&<p>{text('请在设置连接 QMplus，并在官方网页完成 SSO／MFA。', 'Connect QMplus in Settings and complete official SSO/MFA.')}</p>}
       <div className="course-list">{qmCourses.map(course=><CourseRow key={course.id} course={course} items={qmActivities(course)} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div>

@@ -4,6 +4,8 @@ import { listen } from '@tauri-apps/api/event'
 import QmplusLoginSettings from './QmplusLoginSettings.jsx'
 import {uiFormat} from './ui-text.js'
 import {useLanguageTransition} from './use-language-transition.js'
+import {CourseDataOwner} from './course-data-owner.js'
+import LanguageCompletionMark from './LanguageCompletionMark.jsx'
 import {
   AlertTriangle,
   BellRing,
@@ -517,11 +519,11 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: '云课堂作业 / UCloud assignments',
-    body: '应用仅把密码通过 HTTPS 提交给 auth.bupt.edu.cn 完成统一认证，再用一次性票据换取内存令牌并从 apiucloud.bupt.edu.cn 读取作业。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\nThe password is submitted only to auth.bupt.edu.cn over HTTPS. A one-time ticket is exchanged for an in-memory token used with apiucloud.bupt.edu.cn. The app reads no browser cookies, sends no password to UCloud APIs, persists no ticket, cookie, token, or assignment, and reuses results in memory for at most ten minutes.',
+    body: '密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取仅在内存中的令牌后，从 apiucloud.bupt.edu.cn 读取课程和作业。应用不读取系统浏览器 Cookie，不向教学云数据接口发送密码，不把票据、Cookie、令牌、密码或密码摘要写入业务缓存。课程目录、教师姓名、作业标题、提交状态与截止时间等有界业务 DTO 可在应用私有区跨重启保存；它们绑定已保存账号的随机作用域及独立 owner epoch，不含学号或登录资料。启动先展示带原读取时间的缓存，再通过同一 owner 的共享请求在后台更新课程和作业；失败保留并标记此前数据，不声称它是新结果。更换账号、实际教学云凭据变更或清除本地数据会先撤销旧 owner，再清除其业务缓存，迟到响应不能写回旧资料。缓存超过 512 KiB 或写入失败时，本次合法结果仍可显示，但不覆盖上次成功磁盘缓存，并提示重启后可能显示旧结果。\n\nThe password is sent only to auth.bupt.edu.cn over HTTPS. A one-time ticket obtains an in-memory token used to read courses and assignments from apiucloud.bupt.edu.cn. System-browser cookies are not read, passwords are not sent to the Teaching Cloud data API, and tickets, cookies, tokens, passwords or password digests are never written into business caches. Bounded course directories, teacher names, assignment titles, submission states and deadlines may persist across restarts in app-private storage, bound to the saved account via an opaque scope and separate owner epoch, not an account number or sign-in record. Startup shows the original cache timestamp before one shared owner refreshes courses and assignments in the background. Failures retain labelled previous data rather than claim a new result. Account changes, actual Teaching Cloud credential changes and local-data clearing revoke the old owner before clearing its business cache; late results cannot restore it. A result exceeding the 512 KiB persistence limit or a failed write remains displayable without replacing the last-good disk cache, with a warning that a restart may show older data.',
   },
   {
     title: 'QMplus 独立连接 / Independent QMplus connection',
-    body: 'QMplus 与北邮账号独立，只在你主动连接时使用应用自己的隔离官方网页会话，不读取系统浏览器 Cookie，也不复用北邮密码。默认不保存 QMplus 密码；可明确选择独立安全保存和授权自动填写，Windows 使用 Credential Manager、Linux 使用 Secret Service、macOS 使用 Keychain，无安全存储时不退回明文。授权后，仅在已核验的官方 Microsoft 主文档自动选择精确匹配的已保存账号，并在已确认的账号／密码表单各尝试一次普通 Next／Sign in；未匹配的账号选择、验证码、MFA、保持登录、风险、协议及其它确认仍须本人处理。密码不进入普通设置、业务快照、日志、剪贴板、通知或小组件。Windows／Linux 使用应用私有的专用持久 WebEngine 目录，macOS 14 及以上使用独立命名的持久 WebKit 区，更旧 macOS 使用 incognito。Cookie 和网页存储由系统引擎在本机管理，不导出到普通设置、业务快照、日志或本项目服务器；不改变官方 Cookie 有效期或 MFA 策略，不保证永久登录或免 MFA。旧 incognito 会话不导出或迁移，新持久区首次使用需重新完成官方登录。重新核验同一已授权安全记录和相同密码后，重复保存可保留会话，但不能解除待清理屏障。更换资料、退出或清除时先持久记录清理意图并撤销旧连接；待清理区不能用于新连接。Windows／Linux 已用目录须真正重启进程后确认删除，macOS 命名区须确认引擎删除完成或标识已不存在，才可使用新网页区；安全保存新资料不代表旧 Cookie 已删除。清理或状态保存失败会提示，不声称删除成功。关闭“启用 QMplus”只暂停连接和同步，保留 Cookie、已保存资料及课程缓存；关闭自动填写撤销授权，删除资料或退出并清除会移除相应独立安全记录，失败须重试。只读同步仅获取 EBU 课程及已发布 Assignment／Quiz，不请求 QMplus 日历或 Timeline，不开始测验、提交作业或访问答案；业务快照不含 Cookie、sesskey、令牌或完整 HTML，只在进程内存中保留，真实部分失败保留明确标注的已核实或此前资料。不使用第三方 Worker，不向本项目服务器上传身份或课程；官方服务按其政策处理你提交的登录信息和网络元数据。\n\nQMplus is independent of BUPT credentials and uses an app-owned isolated official web session only when you connect, never system-browser cookies or BUPT passwords. QMplus password saving is off by default. Explicit secure saving and autofill authorization use Windows Credential Manager, Linux Secret Service or macOS Keychain, with no plaintext fallback. Verified official Microsoft main documents may select the exact saved account and fill verified username/password forms with one ordinary Next/Sign in submission per step. Unmatched account choices, CAPTCHA, MFA, staying signed in, risk, terms and other confirmations remain yours. Passwords do not enter ordinary settings, business snapshots, logs, clipboard, notifications or widgets. Windows/Linux use dedicated app-private persistent WebEngine directories; macOS 14+ uses a separate named persistent WebKit store, and older macOS uses incognito. The engine manages cookies and web storage locally, never exported into ordinary settings, business snapshots, logs or the project server. Official cookie lifetimes and MFA rules are unchanged; permanent sign-in or exemption from MFA is not guaranteed. Old incognito sessions are not exported or migrated; the new store requires a fresh official sign-in. Revalidating the same authorized secure record and password may preserve the session on resave, never remove a pending cleanup barrier. Credential replacement, logout or clearing first persists cleanup intent and retires the old connection; a pending store cannot be connected. Used Windows/Linux directories require a genuine process restart and confirmed deletion; macOS named stores require confirmed engine removal or an absent identifier before a new store is used. Saving new credentials is not proof that old cookies were deleted. Cleanup or metadata-write failures are reported, not treated as successful deletion. Turning off “Enable QMplus” pauses connection and sync while retaining cookies, saved credentials and course cache. Turning autofill off revokes authorization; deleting credentials or disconnecting and clearing removes the separate secure record, with failures reported for retry. Read-only sync retrieves EBU courses and published Assignment/Quiz information, never QMplus calendar/Timeline, quiz attempts, submissions or answers. Business snapshots exclude cookies, session keys, tokens and full HTML, stay in process memory, and retain clearly labelled verified or prior data on genuine partial failures. No third-party Worker or project server receives identity or course data. Official services process submitted sign-in information and network metadata under their policies.',
+    body: 'QMplus 与北邮账号独立，使用应用自己的隔离官方网页会话，不读取系统浏览器 Cookie，也不复用北邮密码。默认不保存 QMplus 密码；明确选择独立安全保存和自动填写授权后，Windows Credential Manager、Linux Secret Service 或 macOS Keychain 保存登录资料，无安全存储时不退回明文。仅在已核验的官方 Microsoft 主文档自动选择精确匹配的已保存账号，并在已确认的账号／密码表单各尝试一次普通 Next／Sign in；未匹配的账号选择、验证码、MFA、保持登录、风险、协议及其它确认仍须本人处理。Windows／Linux 使用应用私有的专用持久 WebEngine 目录，macOS 14 及以上使用独立命名的持久 WebKit 区，更旧 macOS 使用 incognito。Cookie 和网页存储由系统引擎在本机管理，不导出到普通设置、业务快照、日志或本项目服务器；不改变官方有效期或 MFA 策略，不保证永久登录或免 MFA。旧 incognito 会话不导出或迁移，新持久区首次使用需重新完成官方登录。经再次核验，同一已授权安全记录及相同密码的重复保存可保留会话，不解除待清理屏障。更换资料、退出或清除时先持久记录清理意图并撤销旧连接；Windows／Linux 已用目录须真正重启进程后确认删除，macOS 命名区须确认引擎删除完成或标识已不存在，才可使用新网页区；安全保存新资料不代表旧 Cookie 已删除，任何清理或状态保存失败均会提示。关闭“启用 QMplus”只暂停连接和同步，保留 Cookie、已保存资料及课程缓存；关闭自动填写撤销授权，删除资料或退出并清除会移除相应独立安全记录，失败不声称已删除。只读同步仅获取 EBU 课程及已发布 Assignment／Quiz，不请求 QMplus 日历或 Timeline，不开始测验、提交作业或访问答案。验证后的有界业务 DTO 可在应用私有区跨重启缓存，只绑定随机 profile 标识，不含账号、密码、Cookie、sesskey、认证令牌或完整 HTML。开启 QMplus 时先展示带原时间的缓存，再尝试有界后台更新：复用有效官方会话，已有明确授权时可继续一次普通官方登录；遇到 MFA、未知页面或超时，停止后台尝试并保留缓存和需连接状态，不自动弹窗，须你主动连接继续。真实部分失败保留明确标注的已核实或此前资料。更换身份或清除时，旧 profile 的业务缓存同样失效并清除。密码不进入业务快照、日志、剪贴板、通知或小组件；不使用第三方 Worker，不向本项目服务器上传身份或课程。官方服务按其政策处理你提交的登录信息和网络元数据。\n\nQMplus uses an app-owned isolated official session independent of BUPT credentials, never system-browser cookies or BUPT passwords. Password saving is off by default. Explicit secure saving and autofill authorization use Windows Credential Manager, Linux Secret Service or macOS Keychain without plaintext fallback. Only verified official Microsoft main documents may select the exact saved account and fill verified username/password forms with one ordinary Next/Sign in submission per step. Unmatched account choices, CAPTCHA, MFA, staying signed in, risk, terms and other confirmations require you. Windows/Linux use dedicated app-private persistent WebEngine directories; macOS 14+ uses a named persistent WebKit store, older macOS incognito. The engine manages cookies and web storage locally without exporting them into ordinary settings, business snapshots, logs or the project server. Official expiry and MFA rules are unchanged; permanent sign-in or MFA exemption is not guaranteed. Old incognito sessions are not exported or migrated; the new store requires a fresh official sign-in. Revalidating the same authorized secure record and password may preserve a resaved session, never bypass pending cleanup. Replacement, logout or clearing first persists cleanup intent and retires the old connection. Used Windows/Linux directories require a genuine restart and confirmed deletion; macOS named stores require confirmed removal or an absent identifier. Saving new credentials is not proof of old-cookie deletion; cleanup or metadata-write failures are reported. Feature Off retains cookies, credentials and course cache while pausing connection/sync. Autofill Off revokes authorization; credential deletion or disconnect-and-clear removes the separate secure record, with failures not claimed as successful deletion. Read-only sync retrieves EBU courses and published Assignment/Quiz information, never QMplus calendar/Timeline, quiz attempts, submissions or answers. Validated bounded business DTOs may persist in app-private storage across restarts, bound only to an opaque profile ID and excluding accounts, passwords, cookies, session keys, authentication tokens and full HTML. With QMplus enabled, startup shows the original cache timestamp before a bounded background refresh: a valid official session is reused, or an explicitly authorized ordinary sign-in may continue once. MFA, unknown pages or timeout stop the background attempt, retain cache and a reconnect status, and never open a popup automatically; you must explicitly connect to continue. Genuine partial failures retain clearly labelled verified or prior data. Identity replacement or clearing also invalidates and clears the old-profile business cache. Passwords never enter business snapshots, logs, clipboard, notifications or widgets. No third-party Worker or project server receives identity or course data. Official services process submitted sign-in information and network metadata under their policies.',
   },
   {
     title: '系统日历、通知与小组件 / Calendar, notifications, and widgets',
@@ -699,7 +701,10 @@ function browserPreviewCommand(name, payload = {}) {
       supports_calendar_import: false,
     }
   }
-  if (name === 'fetch_course_list') return [{id:'demo-course',name:'示例本学期课程（非实时数据）',teacher_names:['示例教师'],url:'https://ucloud.bupt.edu.cn/uclass/index.html#/student/homePage'}]
+  if (name === 'fetch_course_list') {
+    const courses=[{id:'demo-course',name:'示例本学期课程（非实时数据）',teacher_names:['示例教师'],url:'https://ucloud.bupt.edu.cn/uclass/index.html#/student/homePage'}]
+    return payload.catalogue?{courses,assignments:browserPreviewCommand('fetch_assignment_list'),fetched_at:new Date().toISOString(),cache_warning:false}:courses
+  }
   if (name === 'load_qmplus') return null
   if (name === 'connect_qmplus') throw new Error('请使用原生客户端的官方 QMplus 登录窗口。')
   if (name === 'disconnect_qmplus') return null
@@ -1590,6 +1595,8 @@ function App() {
     supports_calendar_import: false,
   })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
+  const courseDataOwner=useRef(null)
+  if(!courseDataOwner.current)courseDataOwner.current=new CourseDataOwner(command)
   const appShellRef = useRef(null)
   const languageReadinessRef = useRef({target:null,ready:false})
   const uiLanguage = resolvedUiLanguage(settings.uiLanguage, navigator.languages || [navigator.language])
@@ -1766,6 +1773,36 @@ function App() {
 
   const calendarMonthKey = calendarDate.slice(0, 7)
   const calendarScrollSurfaceKey = calendarSurfaceKey(calendarView, calendarDate)
+
+  useEffect(() => {
+    const clearing=loading==='clear-local-data'
+    courseDataOwner.current.configure({
+      cloudKey:`${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`,
+      cloudEnabled:settingsLoaded&&!clearing&&(!hasTauriRuntime()||settings.hasSavedPassword),
+      qmKey:localDataClearRevision.current,qmEnabled:settingsLoaded&&!clearing&&settings.qmplusEnabled,
+    })
+  },[settingsLoaded,settings.hasSavedPassword,settings.qmplusEnabled,calendarSupplementRevision,loading])
+
+  useEffect(()=>{
+    let release,live=true
+    if(hasTauriRuntime())listen('qmplus:changed',()=>{void courseDataOwner.current.reloadQM().catch(()=>{})})
+      .then(value=>{if(live)release=value;else value()}).catch(()=>{})
+    return()=>{live=false;release?.();courseDataOwner.current.dispose()}
+  },[])
+
+  useEffect(()=>{
+    let previous=courseDataOwner.current.getSnapshot().assignments
+    return courseDataOwner.current.subscribe(()=>{
+      const value=courseDataOwner.current.getSnapshot()
+      if(value.assignments===previous)return
+      previous=value.assignments
+      if(value.assignments===null){setAssignmentsByDate({});return}
+      setAssignmentsByDate(current=>Object.fromEntries(Object.keys(current).map(date=>[date,{
+        date,source:'https://ucloud.bupt.edu.cn/uclass/',unavailable_reason:null,
+        items:value.assignments.filter(item=>String(item.deadline||'').slice(0,10)===date),
+      }])))
+    })
+  },[])
 
   useEffect(() => {
     let live=true
@@ -3637,7 +3674,7 @@ function App() {
     setAssignmentsLoadingDate(date)
     setAssignmentsErrorByDate((current) => ({ ...current, [date]: '' }))
     try {
-      const data = await command('fetch_assignments', { date })
+      const data = await courseDataOwner.current.assignmentsForDates(date)
       if (revision !== assignmentsRevisionRef.current) return
       setAssignmentsByDate((current) => ({ ...current, [date]: data }))
     } catch (assignmentError) {
@@ -3670,10 +3707,7 @@ function App() {
     if (!requestedCalendarSupplementRanges.current.has(assignmentKey)) {
       requestedCalendarSupplementRanges.current.add(assignmentKey)
       if (selectedDateInRange) setAssignmentsLoadingDate(selectedDate)
-      tasks.push(command('fetch_assignment_calendar', {
-        start_date: startDate,
-        end_date: endDate,
-      }).then((data) => {
+      tasks.push(courseDataOwner.current.assignmentsForDates(startDate,endDate).then((data) => {
         if (accountDataRevision !== localDataClearRevision.current || assignmentCredentialRevision !== assignmentCredentialRevisionRef.current) return
         const itemsByDate = new Map()
         ;(data?.items || []).forEach((item) => {
@@ -3811,6 +3845,7 @@ function App() {
 
   async function clearAllLocalData() {
     languageTransition.cancel()
+    courseDataOwner.current.clear()
     await runTask('clear-local-data', async () => {
       const previousSavedCredential = { ...savedCredentialState.current }
       credentialStateRevision.current += 1
@@ -3880,6 +3915,7 @@ function App() {
   }
 
   function resetAssignmentCredentialCache() {
+    courseDataOwner.current.resetCloud()
     assignmentsRevisionRef.current += 1
     assignmentCredentialRevisionRef.current += 1
     requestedCalendarSupplementRanges.current.clear()
@@ -4072,6 +4108,7 @@ function App() {
           {activePage === 'courses' ? <CourseHub
             key={`courses:${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`}
             command={command} language={uiLanguage} hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
+            courseDataOwner={courseDataOwner.current}
             qmplusEnabled={settings.qmplusEnabled}
             examSnapshot={schedule?.exam_schedule} onOpenAccount={()=>setActivePage('settings')}
           /> : null}
@@ -5350,6 +5387,7 @@ function App() {
       {calendarAssignmentDetail ? <CalendarAssignmentCourseDetail
         key={`assignment:${calendarAssignmentDetail.id}:${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`}
         item={calendarAssignmentDetail} command={command} language={uiLanguage}
+        courseDataOwner={courseDataOwner.current}
         hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
         onClose={()=>setCalendarAssignmentDetail(null)}/> : null}
       {privacyPolicyOpen ? (
@@ -5387,7 +5425,7 @@ function App() {
         data-phase={languageTransition.overlay.phase} data-target-locale={languageTransition.overlay.target || ''}
         aria-hidden={languageTransition.overlay.phase==='idle'}>
         {languageTransition.overlay.phase!=='idle'&&<div className="language-transition-status" role="status" aria-live="polite">
-          {languageTransition.overlay.completed ? <CheckCircle2 size={30} aria-hidden="true"/> : <Loader2 size={30} className="spin" aria-hidden="true"/>}
+          {languageTransition.overlay.completed ? <LanguageCompletionMark key={languageTransition.overlay.revision}/> : <Loader2 size={30} className="spin" aria-hidden="true"/>}
           <strong>{languageTransition.overlay.completed ? t('完成') : 'Switching…'}</strong>
         </div>}
       </div>

@@ -25,6 +25,14 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     let credentialAuthorization: QMplusCredentialAuthorization
     let credentialDraft = QMplusCredentialDraft()
     private static let identifierKey = "qmplusWebsiteDataStoreIdentifier"
+    private static var warmedBusinessScopes = Set<CourseBusinessCacheScope>()
+    private let businessCache: CourseBusinessCacheStorage
+    private var businessCacheRevision: UInt64 = 0
+    private var businessCacheBlocked = false
+    private var cachedSnapshotScope: CourseBusinessCacheScope?
+    private var requestBusinessScope: CourseBusinessCacheScope?
+    private var cachedSnapshotPartial = false
+    private var businessCacheRestoreTask: Task<Void, Never>?
     @Published var isShowingConnection = false
     @Published private(set) var snapshot: QMplusSnapshot?
     @Published private(set) var isSyncing = false
@@ -80,6 +88,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     private let autofillLedger = QMplusAutofillLedger()
     private var automaticLoginSuspended = false
     private var authenticationRecognitionSuspended = false
+    private var backgroundOnly = false
     private var autofillPipeline: QMplusAutofillPipeline?
     private var autofillDocument: OwnedAutofillDocument?
     private var viewportWaitTask: Task<Void, Never>?
@@ -123,11 +132,81 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     init(defaults: UserDefaults = .standard,
          credentialStore: any QMplusCredentialStoring = QMplusKeychainCredentialStore(),
          authorizationJournal: (any QMplusCredentialAuthorizationJournaling)? = nil,
-         allowsCredentialStorage: Bool = !AppLaunchConfiguration.isXCTestRunning && !AppLaunchConfiguration.isUITesting && !AppLaunchConfiguration.isReviewDemo) {
+         allowsCredentialStorage: Bool = !AppLaunchConfiguration.isXCTestRunning && !AppLaunchConfiguration.isUITesting && !AppLaunchConfiguration.isReviewDemo,
+         businessCache: CourseBusinessCacheStorage = .shared) {
         self.defaults = defaults
+        self.businessCache = businessCache
         credentialAuthorization = QMplusCredentialAuthorization(storage: credentialStore,
             journal: authorizationJournal ?? QMplusDefaultsAuthorizationJournal(defaults: defaults), allowsStorage: allowsCredentialStorage)
         super.init()
+        businessCacheRestoreTask = Task { [weak self] in
+            guard let self else { return }
+            await self.restoreCachedBusinessSnapshot()
+        }
+    }
+
+    /// Await this before Root's independent startup warm job. No credentials or
+    /// browser state are read by cache restore; decoding runs off the main actor.
+    func prepareCachedSnapshot() async {
+        if let task = businessCacheRestoreTask { await task.value }
+        else { await restoreCachedBusinessSnapshot() }
+    }
+
+    func launchWarmOnce(sampleMode: Bool) async {
+        guard featureEnabled, !sampleMode else { return }
+        await prepareCachedSnapshot()
+        guard featureEnabled, !businessCacheBlocked, let scope = try? currentBusinessScope(),
+              Self.warmedBusinessScopes.insert(scope).inserted else { return }
+        connect(sampleMode: sampleMode, background: true)
+    }
+
+    private func currentBusinessScope() throws -> CourseBusinessCacheScope {
+        guard !businessCacheBlocked else { throw CancellationError() }
+        let owner = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:))?.uuidString ?? "legacy"
+        return try businessCache.scope(kind: .qmplus, owner: owner)
+    }
+
+    private func restoreCachedBusinessSnapshot() async {
+        let revision = businessCacheRevision
+        let storage = businessCache
+        let owner = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:))?.uuidString ?? "legacy"
+        let value = await Task.detached(priority: .utility) { () -> CourseBusinessCachedValue<QMplusSnapshot>? in
+            guard let scope = try? storage.scope(kind: .qmplus, owner: owner),
+                  let cached = try? storage.load(kind: .qmplus, scope: scope,
+                    maximumBytes: QMplusSnapshotPolicy.maximumBytes + 2048, as: QMplusSnapshot.self),
+                  let data = try? JSONEncoder().encode(cached.payload),
+                  let validated = try? QMplusSnapshotPolicy.decode(data), storage.isCurrent(scope, kind: .qmplus) else { return nil }
+            return .init(schemaVersion: 1, scope: scope, fetchedAt: validated.fetchedAt,
+                         partial: cached.partial, payload: validated)
+        }.value
+        guard !Task.isCancelled, revision == businessCacheRevision, let value,
+              let current = try? currentBusinessScope(), current == value.scope,
+              businessCache.isCurrent(current, kind: .qmplus), snapshot == nil else { return }
+        snapshot = value.payload
+        cachedSnapshotScope = current
+        cachedSnapshotPartial = value.partial
+        isPartial = value.partial
+        isRetainingPreviousSnapshot = true
+    }
+
+    /// A proven identity mismatch retires only business data. Keep the visible
+    /// official page and its navigation intact; never reload or submit a form.
+    @discardableResult
+    func invalidateBusinessCacheForIdentityChange() -> Bool {
+        businessCacheRevision &+= 1
+        businessCacheRestoreTask?.cancel(); businessCacheRestoreTask = nil
+        endPendingSync(stopLoading: false)
+        snapshot = nil; cachedSnapshotScope = nil; requestBusinessScope = nil
+        cachedSnapshotPartial = false; isPartial = false; isRetainingPreviousSnapshot = false
+        businessCacheBlocked = true
+        do {
+            try businessCache.rotateQMplusEpoch()
+            businessCacheBlocked = false
+            return true
+        } catch {
+            statusKey = "QMplus 同步组件不可用"
+            return false
+        }
     }
 
     @discardableResult
@@ -148,15 +227,27 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         credentialDraft.clear()
     }
 
-    func connect(sampleMode: Bool) {
+    func connect(sampleMode: Bool, background: Bool = false) {
         guard featureEnabled, !sampleMode else { return }
         if hasActiveConnection {
-            if isQuietConnection { presentExistingConnection(stopAutofill: false) }
-            return
+            if background { return }
+            // Upgrade interaction permission on the same active owner. Do not
+            // restart a live SSO/password flow just because Connect was tapped.
+            backgroundOnly = false
+            if isQuietConnection, !hasActiveAutofillLedger, !isSyncing, webView?.isLoading != true {
+                endPresentation()
+            } else {
+                if isQuietConnection, let browser = webView, !isSyncing, !browser.isLoading {
+                    cancelAuthenticationProbe()
+                    reviewCurrentDocument(in: browser)
+                }
+                return
+            }
         }
+        backgroundOnly = background
         credentialAuthorization.restoreAuthorization()
         let hasIsolatedSession = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:)) != nil
-        let quiet = supportsPersistentIsolation && (hasIsolatedSession || credentialAuthorization.isEnabled)
+        let quiet = background || (supportsPersistentIsolation && (hasIsolatedSession || credentialAuthorization.isEnabled))
         guard beginConnectionOwner(quiet: quiet) else { return }
         if quiet {
             let context = loginGate.context
@@ -210,6 +301,12 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     private func presentExistingConnection(stopAutofill: Bool = true) {
         guard hasActiveConnection else { return }
+        if backgroundOnly {
+            endPresentation()
+            statusKey = "请先在官方 QMplus 网页完成登录。"
+            isRetainingPreviousSnapshot = snapshot != nil
+            return
+        }
         if let browser = popupWebView ?? webView, isAutofillApplicationInactive(browser) {
             stopAutomaticLoginForInactiveScene(); return
         }
@@ -324,6 +421,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     // Starting a flight does not log in, touch cookies or launch a browser.
     func beginSynchronization() -> UInt64? {
         guard featureEnabled, !isSyncing else { return nil }
+        guard let scope = try? currentBusinessScope() else { statusKey = "QMplus 同步组件不可用"; return nil }
+        requestBusinessScope = scope
         generation &+= 1
         isSyncing = true
         statusKey = "正在同步 QMplus 课程与活动…"
@@ -351,17 +450,35 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 return
             }
             let next = try QMplusSnapshotPolicy.decode(data)
+            guard let scope = requestBusinessScope, !businessCacheBlocked,
+                  let current = try? currentBusinessScope(), current == scope,
+                  businessCache.isCurrent(scope, kind: .qmplus) else { finishFailure(request: request); return }
             // Partial, restricted or missing data is never evidence of deletion.
             // Restricted modules are a normal permission fact, not a failed
             // request. They must not freeze unrelated new courses/deadlines.
             isPartial = envelope.partial || !next.warnings.isEmpty
-            let hasPrevious = snapshot != nil
+            let hasPrevious = snapshot != nil && cachedSnapshotScope == scope
             isRetainingPreviousSnapshot = isPartial && hasPrevious
-            if !isPartial || !hasPrevious { snapshot = next }
+            let replacesSnapshot = !isPartial || !hasPrevious
+            if replacesSnapshot {
+                businessCacheRevision &+= 1
+                snapshot = next; cachedSnapshotScope = scope; cachedSnapshotPartial = isPartial
+            }
             statusKey = isPartial
                 ? (hasPrevious ? "QMplus 同步不完整，保留上次快照并请重试" : "QMplus 同步不完整，部分信息尚未获取，请重试")
                 : "QMplus 同步完成"
             finish(request: request)
+            if replacesSnapshot {
+                do {
+                    try businessCache.save(CourseBusinessCachedValue(schemaVersion: 1, scope: scope,
+                        fetchedAt: next.fetchedAt, partial: cachedSnapshotPartial, payload: next),
+                        kind: .qmplus, maximumBytes: QMplusSnapshotPolicy.maximumBytes + 2048)
+                } catch {
+                    if businessCache.isCurrent(scope, kind: .qmplus) {
+                        statusKey = "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。"
+                    }
+                }
+            }
         } catch { finishFailure(request: request) }
     }
 
@@ -404,6 +521,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     func endPresentation() {
+        backgroundOnly = false
         preservingAutomaticSheetDismissal = false
         loginGate.endPresentation()
         cancelAutofill()
@@ -422,6 +540,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     func suspend() {
+        businessCacheRevision &+= 1
+        businessCacheRestoreTask?.cancel(); businessCacheRestoreTask = nil
         endPresentation()
         credentialAuthorization.suspendInMemory()
         credentialDraft.clear()
@@ -438,6 +558,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     private func clearOfficialSession() {
+        _ = invalidateBusinessCacheForIdentityChange()
         endPresentation()
         isShowingConnection = false
         snapshot = nil
@@ -685,6 +806,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 if self.isAutofillApplicationInactive(browser) { self.stopAutomaticLoginForInactiveScene(); return }
                 self.statusKey = "QMplus 自动填写已停止，请在官方网页手动完成登录或验证。"
                 self.presentExistingConnection()
+            }, identityMismatch: { [weak self, weak browser] in
+                guard let self, let browser, self.ownsAutofillDocument(document, browser: browser) else { return }
+                _ = self.invalidateBusinessCacheForIdentityChange()
             }, progress: { [weak self, weak browser] state in
                 guard let self, let browser, self.acceptsAutofillDocument(document, browser: browser) else { return }
                 switch state {
@@ -754,7 +878,18 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                           browser === self.webView, !browser.isLoading else { return }
                     if linkError == nil, eligible as? Bool == true,
                        self.beginOfficialSSOIfAllowed(in: browser, context: context) { return }
-                    self.continueAuthenticationReview(in: browser, context: context, attempt: attempt)
+                    browser.evaluateJavaScript(QMplusConnectionPolicy.officialLoginEntryScript) { [weak self, weak browser] entry, entryError in
+                        guard let self, let browser, browser === self.webView, !browser.isLoading,
+                              self.loginGate.accepts(context), self.hasActiveAuthenticationRecognition,
+                              self.hasActiveAutofillLedger, self.credentialAuthorization.isEnabled else { return }
+                        if entryError == nil, entry as? Bool == true,
+                           self.autofillLedger.canStartOfficialLogin(presentation: context.presentation,
+                                credentialRevision: self.credentialAuthorization.credentialRevision),
+                           browser.url?.path != "/login/index.php", self.loginGate.claimLoginEntry(context: context) {
+                            self.cancelAuthenticationProbe()
+                            self.activeNavigation = browser.load(URLRequest(url: QMplusConnectionPolicy.loginEntryURL))
+                        } else { self.continueAuthenticationReview(in: browser, context: context, attempt: attempt) }
+                    }
                 }
             } else {
                 self.continueAuthenticationReview(in: browser, context: context, attempt: attempt)

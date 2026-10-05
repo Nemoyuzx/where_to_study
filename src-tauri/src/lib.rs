@@ -6,6 +6,7 @@ pub mod classrooms;
 mod classrooms_store;
 pub mod config;
 pub mod course_deletions;
+mod course_cache_store;
 #[cfg(not(mobile))]
 mod course_reminders;
 pub mod credential_store;
@@ -1088,6 +1089,7 @@ fn save_saved_settings_sync(
             let assignment_credentials_changed = plan.assignment_credentials_changed();
             if assignment_credentials_changed {
                 assignments::clear_cache();
+                course_cache_store::rotate_cloud_owner(&app)?;
             }
             // Invalidate before attempting the secure-store transaction: a
             // failed settings write followed by a failed rollback is uncertain.
@@ -1132,6 +1134,9 @@ fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
         errors.push(format!("课程通知清理失败：{error}"));
     }
     assignments::clear_cache();
+    if let Err(error) = course_cache_store::rotate_cloud_owner(app) {
+        errors.push(error);
+    }
     if let Err(error) = schedule_store::clear(app) {
         errors.push(error.message);
     }
@@ -1188,6 +1193,9 @@ fn clear_local_data_sync(app: tauri::AppHandle) -> Result<bool, String> {
                 errors.push(format!("课程通知清理失败：{error}"));
             }
             assignments::clear_cache();
+            if let Err(error) = course_cache_store::rotate_cloud_owner(&app) {
+                errors.push(error);
+            }
             if let Err(error) = credential_store::save(&credential_store::Credentials::default()) {
                 errors.push(error.message);
             }
@@ -1741,64 +1749,68 @@ async fn fetch_assignments(payload: AssignmentsRequest) -> Result<AssignmentsRes
 struct AssignmentQueryRequest {
     #[serde(default)]
     force: bool,
+    #[serde(default)]
+    catalogue: bool,
+    #[serde(default)]
+    cache_only: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(untagged)]
+enum CourseQueryResult {
+    Directory(Vec<assignments::CourseRef>),
+    Catalogue(Option<course_cache_store::CloudCatalogue>),
+}
+
+async fn read_or_fetch_cloud_catalogue(app: &tauri::AppHandle, force: bool, cache_only: bool)
+    -> Result<Option<course_cache_store::CloudCatalogue>, String> {
+    let generation=LOCAL_DATA.begin();
+    let (credentials,revision,epoch)=LOCAL_DATA.with_current_account(generation,|| {
+        let credentials=load_saved_credentials_with_scope()?.ok_or("请先在设置中保存教务账号和密码。")?;
+        Ok((credentials,assignments::credential_revision(),course_cache_store::cloud_owner(app).ok()))
+    }).map_err(LocalDataAccessError::message)?;
+    if let Some(epoch)=epoch.as_ref().filter(|_| assignments::cached_catalogue(&credentials.account_scope,revision).is_none()) {
+        LOCAL_DATA.with_current_account(generation,|| {
+            assignments::ensure_credential_revision(revision)?;
+            if let Some(value)=course_cache_store::load_cloud(app,&credentials.account_scope,epoch)? {
+                assignments::restore_catalogue(&credentials.account_scope,revision,value).map_err(|error| error.message)?;
+            }
+            Ok(())
+        }).map_err(LocalDataAccessError::message)?;
+    }
+    if cache_only {
+        return LOCAL_DATA.with_current_account(generation,|| {
+            assignments::ensure_credential_revision(revision)?;
+            Ok(assignments::cached_catalogue(&credentials.account_scope,revision))
+        }).map_err(LocalDataAccessError::message);
+    }
+    let mut value=assignments::fetch_catalogue(&credentials.account,&credentials.assignment_password(),
+        &credentials.account_scope,revision,force).await.map_err(|error| error.message)?;
+    LOCAL_DATA.with_current_account(generation,|| {
+        assignments::ensure_credential_revision(revision)?;
+        value.cache_warning=epoch.as_ref().is_none_or(|epoch| {
+            !course_cache_store::save_cloud(app,&credentials.account_scope,epoch,&value).unwrap_or(false)
+        });
+        Ok(Some(value))
+    }).map_err(LocalDataAccessError::message)
 }
 
 #[tauri::command]
 async fn fetch_assignment_list(
+    app: tauri::AppHandle,
     payload: AssignmentQueryRequest,
 ) -> Result<Vec<AssignmentDeadlineItem>, String> {
-    let generation = LOCAL_DATA.begin();
-    let (credentials, revision) = LOCAL_DATA
-        .with_current_account(generation, || {
-            let credentials = load_saved_credentials_with_scope()?
-                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
-            Ok((credentials, assignments::credential_revision()))
-        })
-        .map_err(LocalDataAccessError::message)?;
-    let items = assignments::fetch_assignment_list(
-        &credentials.account,
-        credentials.assignment_password(),
-        &credentials.account_scope,
-        revision,
-        payload.force,
-    )
-    .await
-    .map_err(|e| e.message)?;
-    LOCAL_DATA
-        .with_current_account(generation, || {
-            assignments::ensure_credential_revision(revision)?;
-            Ok(items)
-        })
-        .map_err(LocalDataAccessError::message)
+    Ok(read_or_fetch_cloud_catalogue(&app,payload.force,false).await?.map(|value| value.assignments).unwrap_or_default())
 }
 
 #[tauri::command]
 async fn fetch_course_list(
+    app: tauri::AppHandle,
     payload: AssignmentQueryRequest,
-) -> Result<Vec<assignments::CourseRef>, String> {
-    let generation = LOCAL_DATA.begin();
-    let (credentials, revision) = LOCAL_DATA
-        .with_current_account(generation, || {
-            let credentials = load_saved_credentials_with_scope()?
-                .ok_or_else(|| "请先在设置中保存教务账号和密码。".to_string())?;
-            Ok((credentials, assignments::credential_revision()))
-        })
-        .map_err(LocalDataAccessError::message)?;
-    let response = assignments::fetch_course_list(
-        &credentials.account,
-        credentials.assignment_password(),
-        &credentials.account_scope,
-        revision,
-        payload.force,
-    )
-    .await
-    .map_err(|e| e.message)?;
-    LOCAL_DATA
-        .with_current_account(generation, || {
-            assignments::ensure_credential_revision(revision)?;
-            Ok(response)
-        })
-        .map_err(LocalDataAccessError::message)
+) -> Result<CourseQueryResult, String> {
+    let value=read_or_fetch_cloud_catalogue(&app,payload.force,payload.cache_only).await?;
+    if payload.catalogue || payload.cache_only { Ok(CourseQueryResult::Catalogue(value)) }
+    else { Ok(CourseQueryResult::Directory(value.map(|value| value.courses).unwrap_or_default())) }
 }
 
 #[tauri::command]

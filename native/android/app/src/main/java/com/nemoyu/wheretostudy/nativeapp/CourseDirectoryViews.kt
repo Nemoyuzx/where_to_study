@@ -59,9 +59,13 @@ internal fun courseDirectoryRow(context: MainActivity, key: String, name: String
         addView(ImageView(context).apply {
             tag = "$key.disclosure.indicator"
             setImageResource(R.drawable.ic_chevron_down)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(context.dp(7), context.dp(7), context.dp(7), context.dp(7))
             bindTheme("courseChevronTint") { imageTintList = ColorStateList.valueOf(Palette.muted) }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }, LinearLayout.LayoutParams(context.dp(18), context.dp(18)).apply { marginStart = context.dp(12) })
+        }, LinearLayout.LayoutParams(context.dp(UiMetrics.controlHeightDp), context.dp(UiMetrics.controlHeightDp)).apply {
+            gravity = Gravity.CENTER_VERTICAL; marginStart = context.dp(12)
+        })
         if (onDetails != null) addView(ImageView(context).apply {
             tag = "$key.details"
             setImageResource(R.drawable.ic_settings_info); scaleType = ImageView.ScaleType.CENTER_INSIDE
@@ -70,7 +74,9 @@ internal fun courseDirectoryRow(context: MainActivity, key: String, name: String
             contentDescription = context.uiText("课程详情")
             isClickable = true; isFocusable = true
             setOnClickListener { if (isAttachedToWindow) onDetails() }
-        }, LinearLayout.LayoutParams(context.dp(UiMetrics.controlHeightDp), context.dp(UiMetrics.controlHeightDp)))
+        }, LinearLayout.LayoutParams(context.dp(UiMetrics.controlHeightDp), context.dp(UiMetrics.controlHeightDp)).apply {
+            gravity = Gravity.CENTER_VERTICAL
+        })
     }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     addView(View(context).apply { setThemeBackgroundColor { Palette.border } },
         LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1).apply { marginStart = context.dp(52) })

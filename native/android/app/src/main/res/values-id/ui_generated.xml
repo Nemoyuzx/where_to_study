@@ -902,4 +902,5 @@
     <string name="ui_generated_fd4480c6c08ea3">"Menonaktifkan “Aktifkan QMplus” hanya menjeda koneksi dan sinkronisasi; informasi masuk tersimpan, sesi, dan cache mata kuliah tetap disimpan. Gunakan kontrol terpisah untuk mematikan isi otomatis, menghapus informasi masuk, atau memutus koneksi dan menghapus data."</string>
     <string name="ui_generated_b5e960a8c37808">"Sesi web QMplus perlu dihapus. Silakan mulai ulang aplikasi."</string>
     <string name="ui_generated_127d5412a91688">"Sesi web QMplus tidak dapat dihapus atau disimpan. Silakan coba lagi."</string>
+    <string name="ui_generated_0eae03943703e2">"Data mata kuliah telah diambil, tetapi cache lokal tidak diperbarui. Data lama mungkin muncul setelah aplikasi dimulai ulang."</string>
 </resources>

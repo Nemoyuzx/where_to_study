@@ -16,6 +16,7 @@ import {
 import { calendarDeadlineVisualKind, shanghaiDateString } from './planner-domain.js'
 import { uiDateLocale } from './ui-languages.js'
 import { uiText } from './ui-text.js'
+import AnimatedDisclosure from './AnimatedDisclosure.jsx'
 import {
   buildShuttleDayView,
   buildShuttleTimetable,
@@ -90,28 +91,32 @@ function QueryError({ fallback, language, message, onRetry, t }) {
 }
 
 export function ShuttleFullTimetableCard({ title, description, sourceURL, sourceLabel, children }) {
-  const [expanded, setExpanded] = useState(false)
-  const detailsID = useId()
-
   return (
     <section className="shuttle-full-timetable" aria-label={title}>
       <header className="shuttle-full-heading">
-        <button type="button" className="weather-strip-toggle shuttle-full-toggle"
-          aria-label={title} aria-expanded={expanded} aria-controls={detailsID}
-          onClick={() => setExpanded((value) => !value)}>
+        <div className="shuttle-full-overview">
           <BusFront size={20} aria-hidden="true" />
           <span className="weather-strip-heading"><strong>{title}</strong><span>{description}</span></span>
-          <ChevronDown className="weather-strip-chevron" size={18} aria-hidden="true" />
-        </button>
+        </div>
         {sourceURL ? <a href={sourceURL} target="_blank" rel="noreferrer">{sourceLabel}<ExternalLink size={14} /></a> : null}
       </header>
-      <div className={`weather-strip-reveal ${expanded ? 'expanded' : ''}`} aria-hidden={!expanded} inert={!expanded}>
-        <div className="weather-strip-reveal-clip">
-          <div className="shuttle-full-timetable-content" id={detailsID}>{children}</div>
-        </div>
-      </div>
+      <div className="shuttle-full-timetable-content">{children}</div>
     </section>
   )
+}
+
+export function ShuttleTimetableDisclosure({title,subtitle,status,className='',children}) {
+  const [expanded,setExpanded]=useState(false)
+  const id=useId()
+  return <section className={className}>
+    <button type="button" className="shuttle-subsection-toggle" aria-expanded={expanded} aria-controls={id}
+      aria-label={title} onClick={()=>setExpanded(value=>!value)}>
+      <span><strong>{title}</strong>{subtitle&&<small>{subtitle}</small>}</span>
+      {status&&<small className="shuttle-subsection-status">{status}</small>}
+      <ChevronDown size={18} className="shuttle-subsection-chevron" aria-hidden="true"/>
+    </button>
+    <AnimatedDisclosure expanded={expanded} id={id}>{children}</AnimatedDisclosure>
+  </section>
 }
 
 export default function QueryHub({
@@ -379,18 +384,12 @@ export default function QueryHub({
                     'The newest notice has no verified timetable; the tables below come from the previous parsed notice for reference.')}</p>
                 ) : null}
                 {shuttleTimetable.periods.length ? shuttleTimetable.periods.map(({ key, period, state, routes }) => (
-                  <div className={`shuttle-full-period ${state}`} key={key}>
-                    <header>
-                      <div><h4>{period.label}</h4><span>{periodLabel(period, language)}</span></div>
-                      <small>{statusLabel(state, t)}</small>
-                    </header>
+                  <ShuttleTimetableDisclosure className={`shuttle-full-period ${state}`} key={key}
+                    title={period.label} subtitle={periodLabel(period,language)} status={statusLabel(state,t)}>
                     <div className="shuttle-full-routes">
                       {routes.map((route, routeIndex) => (
-                        <article className="shuttle-full-route" key={`${route.from}-${route.to}-${routeIndex}`}>
-                          <header>
-                            <strong>{route.from} → {route.to}</strong>
-                            {route.stop ? <span><MapPin size={13} />{route.stop}</span> : null}
-                          </header>
+                        <ShuttleTimetableDisclosure className="shuttle-full-route" key={`${route.from}-${route.to}-${routeIndex}`}
+                          title={`${route.from} → ${route.to}`} subtitle={route.stop}>
                           <div className="shuttle-full-table-scroll" role="region" aria-label={`${route.from} → ${route.to}`} tabIndex={0}>
                             <table className="shuttle-full-table">
                               <thead><tr>
@@ -412,10 +411,10 @@ export default function QueryHub({
                               </tbody>
                             </table>
                           </div>
-                        </article>
+                        </ShuttleTimetableDisclosure>
                       ))}
                     </div>
-                  </div>
+                  </ShuttleTimetableDisclosure>
                 )) : (
                   <p className="query-empty">{text('暂无可安全展示的完整时刻表，请查看通知原文。',
                     'No verified full timetable is available. Please check the source notice.')}</p>

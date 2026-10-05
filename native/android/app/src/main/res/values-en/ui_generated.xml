@@ -902,4 +902,5 @@
     <string name="ui_generated_fd4480c6c08ea3">"Turning off “Enable QMplus” only pauses connection and sync; saved credentials, the session and course cache are retained. Use the separate controls to turn off autofill, delete credentials, or disconnect and clear data."</string>
     <string name="ui_generated_b5e960a8c37808">"The QMplus web session needs to be cleared. Please restart the app."</string>
     <string name="ui_generated_127d5412a91688">"The QMplus web session could not be cleared or saved. Please try again."</string>
+    <string name="ui_generated_0eae03943703e2">"Course data was fetched, but the local cache was not updated. Earlier cached data may appear after restarting."</string>
 </resources>

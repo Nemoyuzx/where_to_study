@@ -19,6 +19,9 @@ export class QMPlusAuthNavigationPolicy {
     return url === QMPlusAuthNavigationPolicy.qmLoginPage || url === QMPlusAuthNavigationPolicy.qmGuestLanding ||
       url === QMPlusAuthNavigationPolicy.qmHome;
   }
+  static isQMGuestEntry(url: string): boolean {
+    return QMPlusAuthNavigationPolicy.isQMLoginLanding(url) || url === QMPlusURLPolicy.home || url === 'https://qmplus.qmul.ac.uk/my';
+  }
   static isOfficialQMPage(url: string): boolean { return /^https:\/\/qmplus\.qmul\.ac\.uk\//.test(url); }
   private static readonly microsoftPage: RegExp =
     /^https:\/\/login\.microsoftonline\.com\/569df091-b013-40e3-86ee-bd9cb9e25814\/(?:saml2|login)(?:[?#][^\s]*)?$/;
@@ -30,7 +33,7 @@ export class QMPlusAuthNavigationPolicy {
   static shouldStartSAML(url: string, currentURL: string, active: boolean,
     authorized: boolean, alreadyStarted: boolean): boolean {
     return active && authorized && !alreadyStarted &&
-      QMPlusAuthNavigationPolicy.isQMLoginLanding(url) && currentURL === url;
+      QMPlusAuthNavigationPolicy.isQMGuestEntry(url) && currentURL === url;
   }
 }
 
@@ -212,6 +215,7 @@ export struct QMPlusConnectionView {
   private loginOwner: QMPlusLoginOwner | null = null;
   private authAuthorization: QMPlusLoginAuthorization | null = null;
   private authSAMLStarted: boolean = false;
+  private authPlainLoginStarted: boolean = false;
   private authTimer: number = -1;
   private resolveAuthDelay: (() => void) | null = null;
   private autoSyncPending: boolean = true;
@@ -230,6 +234,7 @@ export struct QMPlusConnectionView {
     this.authAuthorization = null;
     this.authLedger.begin();
     this.authSAMLStarted = false;
+    this.authPlainLoginStarted = false;
     this.autoSyncPending = !this.session.explicitDetailRequest;
     this.detailTargetRestored = false;
     this.profileInitializationStarted = false;
@@ -274,7 +279,7 @@ export struct QMPlusConnectionView {
     const owner: QMPlusLoginOwner = this.session.loginOwner();
     this.loginOwner = owner;
     this.session.bindLoginWeb(owner, (): void => this.retireOfficialWeb(), (): void => this.restartOfficialWeb());
-    this.authLedger.begin(); this.authSAMLStarted = false;
+    this.authLedger.begin(); this.authSAMLStarted = false; this.authPlainLoginStarted = false;
     this.autoSyncPending = true; this.detailTargetRestored = false; this.dashboardRestored = false;
     this.officialPageAuthenticated = false; this.documentReadyURL = '';
     this.profileInitializationStarted = false;
@@ -793,16 +798,20 @@ export struct QMPlusConnectionView {
     if (!this.sameOwnedPage(owner, page, url)) { return; }
     const approved: string = this.decodeAuthReply(await this.controller.runJavaScript(
       '(function(){if(location.href!==' + JSON.stringify(url) + ')return false;const kind=' + source +
-      ';if(kind!=="guest")return false;const targets=new Set(Array.from(document.querySelectorAll("a[href]")).flatMap(a=>{' +
-      'try{const u=new URL(a.getAttribute("href"),location.href);return u.href===' + JSON.stringify(QMPlusAuthNavigationPolicy.qmSAMLStart) +
-      '&&!u.username&&!u.password&&!u.search&&!u.hash?[u.href]:[];}catch{return[];}}));return targets.size===1;})()'));
+      ';if(kind!=="guest")return "none";const saml=' + JSON.stringify(QMPlusAuthNavigationPolicy.qmSAMLStart) +
+      ',login=' + JSON.stringify(QMPlusAuthNavigationPolicy.qmLoginPage) +
+      ';const targets=new Set(Array.from(document.querySelectorAll("a[href]")).flatMap(a=>{' +
+      'try{const u=new URL(a.getAttribute("href"),location.href);return u.origin==="https://qmplus.qmul.ac.uk"&&[saml,login].includes(u.href)' +
+      '&&!u.username&&!u.password&&!u.search&&!u.hash?[u.href]:[];}catch{return[];}}));return targets.has(saml)?"saml":targets.has(login)?"login":"none";})()'));
     if (!this.sameOwnedPage(owner, page, url)) { return; }
-    if (approved !== 'true') { this.requireManualAuth(''); return; }
+    if (!['saml', 'login'].includes(approved) || (approved === 'login' && (this.authPlainLoginStarted || url === QMPlusAuthNavigationPolicy.qmLoginPage))) {
+      this.requireManualAuth(''); return;
+    }
     if (!await this.ensureAuthAuthorization(owner, page, url)) { return; }
-    this.authSAMLStarted = true;
+    if (approved === 'saml') { this.authSAMLStarted = true; } else { this.authPlainLoginStarted = true; }
     try {
       // 不附带账号、密码或任意网页提供的查询参数。
-      this.controller.loadUrl(QMPlusAuthNavigationPolicy.qmSAMLStart);
+      this.controller.loadUrl(approved === 'saml' ? QMPlusAuthNavigationPolicy.qmSAMLStart : QMPlusAuthNavigationPolicy.qmLoginPage);
     } catch (e) {
       if (owner === this.authPresentationRevision) { this.requireManualAuth(''); }
     }
@@ -849,7 +858,7 @@ export struct QMPlusConnectionView {
         if (this.loginOwner !== null) { this.session.noteOfficialPageError(this.loginOwner); }
         this.requireManualAuth('UNSUPPORTED_PAGE'); return;
       }
-      if (kind === 'guest' && QMPlusAuthNavigationPolicy.isQMLoginLanding(url)) {
+      if (kind === 'guest' && QMPlusAuthNavigationPolicy.isQMGuestEntry(url)) {
         await this.maybeStartSAML(owner, page, url); return;
       }
       if (kind === 'authenticated' && QMPlusAuthNavigationPolicy.isQMLoginLanding(url) && !this.dashboardRestored) {

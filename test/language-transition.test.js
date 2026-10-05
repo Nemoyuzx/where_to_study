@@ -46,7 +46,7 @@ test('cover precedes commit and target layout plus a paint precede reveal',()=>{
   f.advance(100);assert.equal(f.phase(),'waiting')
   f.state.ready=true
   f.advance(100);assert.equal(f.phase(),'completed');assert.equal(f.published.at(-1).completed,true)
-  f.advance(300);assert.equal(f.phase(),'revealing')
+  f.advance(800);assert.equal(f.phase(),'revealing')
   f.advance(220);assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
 })
 
@@ -62,7 +62,7 @@ test('a layout that changes again before paint is not acknowledged early',()=>{
   assert.equal(f.phase(),'waiting')
   f.state.ready=true;f.advance(100)
   assert.equal(f.phase(),'completed')
-  f.advance(300);assert.equal(f.phase(),'revealing')
+  f.advance(800);assert.equal(f.phase(),'revealing')
   f.advance(220);assert.equal(f.phase(),'idle')
 })
 
@@ -72,7 +72,7 @@ test('stale layout callbacks cannot reveal a newer transition',()=>{
   f.owner.request('zh-Hans','zh-Hans','en')
   for(const action of stale)action()
   assert.equal(f.phase(),'covering')
-  f.advance(1000);assert.equal(f.state.locale,'zh-Hans');assert.equal(f.phase(),'idle')
+  f.advance(1400);assert.equal(f.state.locale,'zh-Hans');assert.equal(f.phase(),'idle')
 })
 
 test('leave or background commits a pending explicit choice and releases all work',()=>{
@@ -114,7 +114,7 @@ test('a newer language cancels the old completion dwell and its fade',()=>{
   f.advance(150);assert.equal(f.phase(),'waiting')
   f.advance(20);assert.equal(f.phase(),'completed')
   assert.equal(f.published.at(-1).target,'zh-Hans')
-  f.advance(600);assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+  f.advance(1100);assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
 })
 
 test('a late native rejection cannot cancel a new choice before its language commit',()=>{

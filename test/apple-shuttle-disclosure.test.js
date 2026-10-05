@@ -8,10 +8,11 @@ const queries = read('native/apple/Sources/Shared/InformationQueriesView.swift')
 const fullTable = queries.slice(queries.indexOf('private func shuttleFullTimetable('),
   queries.indexOf('private func shuttleFullScheduleCard('))
 
-test('Apple full timetable uses a native disclosure with isolated default-collapsed state', () => {
+// Updated specifications only; local automated execution remains disabled.
+test('Apple timetable periods and directions use stable default-collapsed clipped content', () => {
   assert.match(disclosure, /@State private var isExpanded = false/)
-  assert.match(disclosure, /DisclosureGroup\(isExpanded: \$isExpanded\)/)
-  assert.match(disclosure, /\.animation\([\s\S]*?\.easeOut\(duration: 0\.16\), value: isExpanded\)/)
+  assert.match(disclosure, /ExpandableContent\(expanded: isExpanded\)/)
+  assert.match(disclosure, /\.easeInOut\(duration: 0\.22\)/)
   assert.match(disclosure, /accessibilityReduceMotion/)
   assert.match(disclosure, /isExpanded \? "已展开" : "已折叠"/)
   assert.match(disclosure, /queries\.shuttle\.full-timetable\.toggle/)
@@ -19,9 +20,10 @@ test('Apple full timetable uses a native disclosure with isolated default-collap
   assert.doesNotMatch(disclosure, /Task\s*\{|\.task\b|\.load\(|\.reset\(|selectedMode|shuttleStore|URLSession/)
 })
 
-test('Only the complete table is folded and all planned data remains available', () => {
+test('The complete table stays visible while each period and direction has a disclosure', () => {
   assert.match(fullTable, /ShuttleFullTimetableDisclosure\(language: model\.appLanguage\)/)
-  assert.match(fullTable, /ForEach\(notice\.schedules\)/)
+  assert.match(fullTable, /ForEach\(shuttlePeriods\(notice\.schedules\)/)
+  assert.match(fullTable, /ForEach\(group\.schedules\)/)
   assert.match(fullTable, /shuttleFullScheduleCard\(schedule\)/)
   assert.match(fullTable, /Label\("完整班车时刻表", systemImage: "bus\.doubledecker"\)/)
   assert.match(fullTable, /queries\.shuttle\.full-timetable/)
@@ -34,7 +36,7 @@ test('Only the complete table is folded and all planned data remains available',
   const rows = queries.slice(queries.indexOf('private func shuttleFullScheduleCard('),
     queries.indexOf('private func shuttlePeriodState('))
   assert.match(rows, /ShuttleBusTodayLogic\.fullWeek\(for: schedule\)/)
-  for (const rawField of ['schedule.period.label', 'schedule.from', 'schedule.to', 'departure.departureTime', 'departure.service.vehicle']) {
+  for (const rawField of ['schedule.from', 'schedule.to', 'departure.departureTime', 'departure.service.vehicle']) {
     assert.ok(rows.includes(rawField), rawField)
   }
 })

@@ -52,6 +52,20 @@ export class QuerySession {
   @Trace shuttleError: string = '';
   @Trace shuttleFetchedAtMillis: number = 0;
   @Trace fullTimetableExpanded: boolean = false;
+  @Trace expandedShuttleSections: string[] = [];
+  @Trace expandedShuttlePeriods: string[] = [];
+
+  isShuttlePeriodExpanded(key: string): boolean { return this.expandedShuttlePeriods.includes(key); }
+  toggleShuttlePeriod(key: string): void {
+    this.expandedShuttlePeriods = this.isShuttlePeriodExpanded(key) ?
+      this.expandedShuttlePeriods.filter((value: string): boolean => value !== key) : this.expandedShuttlePeriods.concat(key);
+  }
+
+  isShuttleSectionExpanded(key: string): boolean { return this.expandedShuttleSections.includes(key); }
+  toggleShuttleSection(key: string): void {
+    this.expandedShuttleSections = this.isShuttleSectionExpanded(key) ?
+      this.expandedShuttleSections.filter((value: string): boolean => value !== key) : this.expandedShuttleSections.concat(key);
+  }
 
   toggleFullTimetable(): void { this.fullTimetableExpanded = !this.fullTimetableExpanded; }
 

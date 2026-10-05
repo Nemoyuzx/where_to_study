@@ -5,6 +5,7 @@
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { FrameCallback, FrameNode, window } from '@kit.ArkUI';
 import { settings } from '@kit.BasicServicesKit';
+import { vibrator } from '@kit.SensorServiceKit';
 import { AppModel } from '../model/AppModel';
 import { AppLaunchConfiguration } from '../model/LaunchSupport';
 import { AppSection, AppSectionInfo } from '../common/AppSection';
@@ -64,6 +65,8 @@ export struct RootView {
   @Local languageOverlayVisible: boolean = false;
   @Local languageOverlayOpacity: number = 0;
   @Local languageOverlayCompleted: boolean = false;
+  @Local languageCircleProgress: number = 0;
+  @Local languageCheckProgress: number = 0;
   private languageLastTreeGeometry: number[] = [];
   private languageReducedMotion: boolean = false;
   private languageTransitionEpoch: number = 0;
@@ -92,6 +95,7 @@ export struct RootView {
   @Monitor('model.qmplusEnabled')
   onQMplusEnabledChanged(monitor: IMonitor): void {
     this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled && !this.model.isSampleMode());
+    if (this.model.qmplusEnabled && !this.model.isSampleMode()) { void this.qmPlusSession.startWarmRefresh(); }
     if (!this.model.qmplusEnabled && this.courseSession.selectedCourseSource === 'qmplus') {
       this.courseSession.closeCourse();
     }
@@ -105,7 +109,11 @@ export struct RootView {
     this.navigationAvoidanceActive = true;
     this.attachPhoneNavigationAvoidance();
     // 与 iOS 端 AppModel.init + RootView.onAppear 对应：引导加载后按需刷新当天教室。
-    this.model.launch();
+    this.model.launch().then((): void => {
+      if (!this.navigationAvoidanceActive || this.model.isSampleMode()) { return; }
+      this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled);
+      void this.qmPlusSession.startWarmRefresh();
+    });
     this.model.refreshClassroomsIfNeeded();
     if (this.deadlineRefreshTimer < 0) {
       this.deadlineRefreshTimer = setInterval(() => {
@@ -128,6 +136,7 @@ export struct RootView {
   }
 
   onPageShow(): void {
+    this.qmPlusSession.setLoginForeground(true);
     // 对应 iOS scenePhase == .active 时的刷新。
     this.model.refreshClassroomsIfNeeded();
     this.model.refreshDailyCourseNotificationAuthorization();
@@ -162,6 +171,8 @@ export struct RootView {
         if (event === window.WindowEventType.WINDOW_INACTIVE || event === window.WindowEventType.WINDOW_HIDDEN) {
           this.qmPlusSession.cancelQuietLoginOnBackground();
           this.cancelLanguageTransition(true);
+        } else if (event === window.WindowEventType.WINDOW_ACTIVE || event === window.WindowEventType.WINDOW_SHOWN) {
+          this.qmPlusSession.setLoginForeground(true);
         }
       };
       this.qmWindowListener = qmListener;
@@ -241,6 +252,8 @@ export struct RootView {
     this.languageOverlayOpacity = 0;
     this.languageOverlayVisible = false;
     this.languageOverlayCompleted = false;
+    this.languageCircleProgress = 0;
+    this.languageCheckProgress = 0;
     this.languageOverlayFading = false;
     this.languageStableFrames = 0;
     if (commitIntent && target !== null &&
@@ -379,20 +392,61 @@ export struct RootView {
     this.languageOverlayFading = true;
     this.languageOverlayCompleted = true;
     this.clearLanguageTransitionTimer();
+    // Completion is reached only after task ACKs, target resources, restored
+    // anchors and three stable frames. This deadline merely removes the mask
+    // if a drawing callback disappears; it never manufactures completion.
     this.languageTransitionTimer = setTimeout((): void => {
-      this.languageTransitionTimer = -1;
+      if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
+    }, 1100);
+    this.languageSuccessHaptic(epoch);
+    this.postLanguageFrame(epoch, (): void => {
+      this.getUIContext().animateTo({ duration: this.languageReducedMotion ? 0 : 210, curve: Curve.EaseOut,
+        onFinish: (): void => {
+          if (epoch !== this.languageTransitionEpoch) { return; }
+          this.getUIContext().animateTo({ duration: this.languageReducedMotion ? 0 : 150, curve: Curve.EaseOut,
+            onFinish: (): void => {
+              if (epoch !== this.languageTransitionEpoch) { return; }
+              this.finishLanguageCompletion(epoch);
+            }
+          }, (): void => { this.languageCheckProgress = 1; });
+        }
+      }, (): void => { this.languageCircleProgress = 1; });
+    });
+  }
+
+  private languageSuccessHaptic(epoch: number): void {
+    if (epoch !== this.languageTransitionEpoch || !this.languageOverlayCompleted ||
+      !this.navigationAvoidanceActive || !this.qmPlusSession.loginForeground) { return; }
+    try { vibrator.startVibration({ type: 'time', duration: 12 }, { usage: 'touch' }).catch((): void => {}); } catch (e) {}
+  }
+
+  private finishLanguageCompletion(epoch: number): void {
+    this.clearLanguageTransitionTimer();
+    // Separate the two supported-device pulses even with Reduce Motion. This
+    // bounded hold comes after proven completion, never acts as a task ACK.
+    this.languageTransitionTimer = setTimeout((): void => {
       if (epoch !== this.languageTransitionEpoch) { return; }
+      this.languageSuccessHaptic(epoch);
       this.languageTransitionTimer = setTimeout((): void => {
         if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
       }, 340);
-    this.getUIContext().animateTo({ duration: this.languageReducedMotion ? 0 : 190, curve: Curve.EaseOut,
-      onFinish: (): void => {
-        if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
-      }
-    }, (): void => {
-      this.languageOverlayOpacity = 0;
-    });
-    }, 140);
+      this.getUIContext().animateTo({ duration: this.languageReducedMotion ? 0 : 190, curve: Curve.EaseOut,
+        onFinish: (): void => { if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); } }
+      }, (): void => { this.languageOverlayOpacity = 0; });
+    }, 100);
+  }
+
+  @Builder
+  languageCompletionMark() {
+    Stack({ alignContent: Alignment.Center }) {
+      Circle().width(36).height(36).fill(Color.Transparent).stroke(AppTheme.primary()).strokeWidth(2.5)
+        .strokeDashArray([114, 114]).strokeDashOffset(114 * (1 - this.languageCircleProgress))
+        .rotate({ angle: -90 })
+      Path().width(40).height(40).commands('M 11 20 L 17 26 L 29 13')
+        .fill(Color.Transparent).stroke(AppTheme.primary()).strokeWidth(2.5)
+        .strokeLineCap(LineCapStyle.Round).strokeLineJoin(LineJoinStyle.Round)
+        .strokeDashArray([27, 27]).strokeDashOffset(27 * (1 - this.languageCheckProgress))
+    }.width(40).height(40).accessibilityLevel('no')
   }
   private visibleBottomInsetVp(mainWindow: window.Window, type: window.AvoidAreaType): number {
     try {
@@ -477,12 +531,13 @@ export struct RootView {
       if (this.languageOverlayVisible) {
         Column({ space: 10 }) {
           if (this.languageOverlayCompleted) {
-            SymbolGlyph($r('sys.symbol.checkmark_circle')).fontSize(30).fontColor([AppTheme.primary()])
+            this.languageCompletionMark()
           } else {
             Text('Switching…').fontSize(15).fontColor(AppTheme.text())
           }
         }
           .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
+          .direction(Direction.Ltr)
           .width('100%').height('100%')
           .backgroundBlurStyle(BlurStyle.Regular)
           .opacity(this.languageOverlayOpacity)

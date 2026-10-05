@@ -10,15 +10,16 @@ struct QMplusLoginSynchronizationGate: Equatable, Sendable {
     var isPresented: Bool { ownerKind == .visible }
     var isActive: Bool { ownerKind != nil }
     private(set) var hasAttemptedAutomaticSync = false
+    private(set) var hasFollowedLoginEntry = false
 
     var context: Context { Context(presentation: presentation, document: document) }
     mutating func beginPresentation() {
         presentation &+= 1; document &+= 1
-        ownerKind = .visible; hasAttemptedAutomaticSync = false
+        ownerKind = .visible; hasAttemptedAutomaticSync = false; hasFollowedLoginEntry = false
     }
     mutating func beginQuietConnection() {
         presentation &+= 1; document &+= 1
-        ownerKind = .quiet; hasAttemptedAutomaticSync = false
+        ownerKind = .quiet; hasAttemptedAutomaticSync = false; hasFollowedLoginEntry = false
     }
     mutating func presentExistingConnection() { if isActive { ownerKind = .visible } }
     mutating func hideExistingConnection() { if isActive { ownerKind = .quiet } }
@@ -28,6 +29,11 @@ struct QMplusLoginSynchronizationGate: Equatable, Sendable {
     mutating func claimAutomaticSync(authenticated: Bool, context: Context) -> Bool {
         guard authenticated, accepts(context), !hasAttemptedAutomaticSync else { return false }
         hasAttemptedAutomaticSync = true
+        return true
+    }
+    mutating func claimLoginEntry(context: Context) -> Bool {
+        guard accepts(context), !hasFollowedLoginEntry else { return false }
+        hasFollowedLoginEntry = true
         return true
     }
 }
@@ -61,13 +67,28 @@ enum QMplusConnectionPolicy {
         return source.trimmingCharacters(in: .whitespacesAndNewlines)
     }()
     static let authenticatedPageScript = "(\(pageStatusScript)) === 'authenticated'"
+    static let loginEntryURL = URL(string: "https://qmplus.qmul.ac.uk/login/index.php")!
+    static let officialLoginEntryScript = """
+        (() => {
+            if (window.top !== window || location.origin !== 'https://qmplus.qmul.ac.uk') return false;
+            if ((\(pageStatusScript)) !== 'guest') return false;
+            return Array.from(document.querySelectorAll('a[href]')).slice(0,512).some(link => {
+                try {
+                    const url = new URL(link.getAttribute('href'), location.origin);
+                    return url.origin === location.origin && !url.username && !url.password
+                        && url.pathname === '/login/index.php' && !url.search && !url.hash;
+                } catch { return false; }
+            });
+        })()
+        """
 
     // This only confirms an official entry link; it never follows a page-supplied
     // query or reads credentials. Repeated header/footer links share one target.
     static let officialSSOEntryScript = """
         (() => {
             if (window.top !== window || location.origin !== 'https://qmplus.qmul.ac.uk') return false;
-            return Array.from(document.querySelectorAll('a[href]')).some(link => {
+            if ((\(pageStatusScript)) !== 'guest') return false;
+            return Array.from(document.querySelectorAll('a[href]')).slice(0,512).some(link => {
                 try {
                     const url = new URL(link.getAttribute('href'), location.origin);
                     return url.origin === location.origin && !url.username && !url.password

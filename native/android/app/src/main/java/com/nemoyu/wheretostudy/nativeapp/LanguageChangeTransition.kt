@@ -31,9 +31,10 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
     private var host = WeakReference<ViewGroup>(null)
     private var content = WeakReference<View>(null)
     private var cover: FrameLayout? = null
-    private var completionIcon: ImageView? = null
+    private var completionIcon: LanguageSuccessMark? = null
     private var progressLabel: TextView? = null
     private var completionDelay: Runnable? = null
+    private var secondHaptic: Runnable? = null
     private var reducedMotion = false
     private var bitmap: Bitmap? = null
     private var animator: ValueAnimator? = null
@@ -72,11 +73,11 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
             }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         }
-        layer.addView(ImageView(host.context).apply {
-            completionIcon = this; setImageResource(R.drawable.ic_section_check)
-            imageTintList = android.content.res.ColorStateList.valueOf(Palette.primaryText)
+        layer.addView(LanguageSuccessMark(host.context).apply {
+            completionIcon = this
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
             visibility = View.GONE
-        }, FrameLayout.LayoutParams(host.context.dp(30), host.context.dp(30), Gravity.CENTER))
+        }, FrameLayout.LayoutParams(host.context.dp(52), host.context.dp(52), Gravity.CENTER))
         cover = layer
         host.addView(layer, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         phase = "covering"
@@ -163,13 +164,15 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
                 removeObserver(); phase = "complete"
                 deadline?.let(handler::removeCallbacks); deadline = null
                 progressLabel?.visibility = View.GONE; completionIcon?.visibility = View.VISIBLE
+                completionIcon?.play(reducedMotion)
+                playSuccessHaptics(token)
                 completionDelay = Runnable {
                   if (revision.get() != token) return@Runnable
                   completionDelay = null; phase = "revealing"
                   animate(token, 1f, 0f, if (reducedMotion) 0 else 220, { progress ->
                     if (nativeBlur) setNativeBlur(progress) else cover?.alpha = progress
                   }) { if (revision.get() == token) cleanup() }
-                }.also { handler.postDelayed(it, 140) }
+                }.also { handler.postDelayed(it, 600) }
             } else root.postInvalidateOnAnimation()
             true
         }.also(root.viewTreeObserver::addOnPreDrawListener)
@@ -177,6 +180,16 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
     }
 
     private fun applyPending() { val change = pendingApply; pendingApply = null; change?.invoke() }
+
+    private fun playSuccessHaptics(token: Long) {
+        fun pulse() {
+            host.get()?.takeIf { revision.get() == token && phase == "complete" &&
+                it.isAttachedToWindow && it.hasWindowFocus() }?.performHapticFeedback(
+                android.view.HapticFeedbackConstants.CLOCK_TICK)
+        }
+        pulse()
+        secondHaptic = Runnable { secondHaptic = null; pulse() }.also { handler.postDelayed(it, 120) }
+    }
 
     private fun layoutGeometry(root: View): List<Int>? {
         if (root.visibility != View.VISIBLE) return null
@@ -216,6 +229,7 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
         animator?.removeAllListeners(); animator?.cancel(); animator = null
         deadline?.let(handler::removeCallbacks); deadline = null
         completionDelay?.let(handler::removeCallbacks); completionDelay = null
+        secondHaptic?.let(handler::removeCallbacks); secondHaptic = null
         leaseWait?.let(handler::removeCallbacks); leaseWait = null
         removeObserver(); targetReady = null; stableLayout.reset()
         if (nativeBlur && Build.VERSION.SDK_INT >= 31) content.get()?.setRenderEffect(null)

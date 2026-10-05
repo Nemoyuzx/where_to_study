@@ -15,6 +15,10 @@ const source=readFileSync(new URL('../src/QueryHub.jsx',import.meta.url),'utf8')
 const css=readFileSync(new URL('../src/App.css',import.meta.url),'utf8')
 const dependencies={'react':React,'react/jsx-runtime':jsxRuntime,'lucide-react':icons,
   './planner-domain.js':planner,'./ui-languages.js':dateLocales,'./ui-text.js':labels,'./query-domain.js':query}
+const animated={exports:{}}
+new Function('require','module','exports',transformSync(readFileSync(new URL('../src/AnimatedDisclosure.jsx',import.meta.url),'utf8'),
+  {loader:'jsx',jsx:'automatic',format:'cjs',target:'es2022'}).code)(name=>dependencies[name],animated,animated.exports)
+dependencies['./AnimatedDisclosure.jsx']=animated.exports.default
 const module={exports:{}}
 const code=transformSync(source,{loader:'jsx',jsx:'automatic',format:'cjs',target:'es2022'}).code
 new Function('require','module','exports',code)(name=>{
@@ -22,6 +26,7 @@ new Function('require','module','exports',code)(name=>{
   return dependencies[name]
 },module,module.exports)
 const Card=module.exports.ShuttleFullTimetableCard
+const Disclosure=module.exports.ShuttleTimetableDisclosure
 const props={title:'完整班车时刻表',description:'按运行时段、方向和星期查看计划班次。',
   sourceURL:'https://example.invalid/shuttle-notice',sourceLabel:'后勤部原文',
   children:React.createElement('table',null,React.createElement('tbody',null,
@@ -42,21 +47,18 @@ function interactiveCard(initialProps) {
     return [value,next=>{value=typeof next==='function'?next(value):next}]
   },useId:()=> 'shuttle-fixture-details'}
   return {render(){const prior=internals.H;internals.H=dispatcher
-    try{return Card(initialProps)}finally{internals.H=prior}
+    try{return Disclosure(initialProps)}finally{internals.H=prior}
   }}
 }
 
-test('full timetable renders collapsed with a labelled control, inert retained content and an always-visible source',()=>{
+test('full timetable overview and source stay visible without an overall disclosure',()=>{
   const markup=renderToStaticMarkup(React.createElement(Card,props))
   assert.match(markup,/aria-label="完整班车时刻表"/)
-  assert.match(markup,/aria-expanded="false"/)
-  assert.match(markup,/aria-hidden="true" inert=""/)
+  assert.doesNotMatch(markup,/aria-expanded|aria-hidden="true" inert=""/)
   assert.match(markup,/<table><tbody><tr><td>08:00<\/td>/)
   assert.match(markup,/<header[^>]*>[\s\S]*href="https:\/\/example\.invalid\/shuttle-notice"[\s\S]*后勤部原文/)
   const controls=[...markup.matchAll(/aria-controls="([^"]+)"/g)].map(match=>match[1])
-  assert.equal(controls.length,1)
-  assert.ok(markup.includes(`id="${controls[0]}"`))
-  assert.match(markup,/weather-strip-chevron/)
+  assert.equal(controls.length,0)
 })
 
 test('expand and collapse update only disclosure state and preserve the timetable children and source',()=>{
@@ -65,39 +67,35 @@ test('expand and collapse update only disclosure state and preserve the timetabl
   function render(){
     const tree=instance.render(),nodes=descendants(tree)
     const button=nodes.find(node=>node.type==='button')
-    const reveal=nodes.find(node=>node.props.className?.includes('weather-strip-reveal')&&node.props.inert!==undefined)
+    const reveal=nodes.find(node=>node.props.id===button.props['aria-controls'])
     const content=nodes.find(node=>node.props.id===button.props['aria-controls'])
-    const link=nodes.find(node=>node.type==='a')
     assert.equal(content.props.children,props.children)
-    assert.equal(link.props.href,props.sourceURL)
     return {button,reveal}
   }
   const closed=render()
   assert.equal(closed.button.props['aria-expanded'],false)
-  assert.equal(closed.reveal.props.inert,true)
+  assert.equal(closed.reveal.props.expanded,false)
   closed.button.props.onClick()
   const expanded=render()
   assert.equal(expanded.button.props['aria-expanded'],true)
-  assert.equal(expanded.reveal.props['aria-hidden'],false)
-  assert.equal(expanded.reveal.props.inert,false)
-  assert.ok(expanded.reveal.props.className.includes('expanded'))
+  assert.equal(expanded.reveal.props.expanded,true)
   expanded.button.props.onClick()
   const collapsed=render()
   assert.equal(collapsed.button.props['aria-expanded'],false)
-  assert.equal(collapsed.reveal.props.inert,true)
+  assert.equal(collapsed.reveal.props.expanded,false)
   assert.equal(requests,0)
 })
 
 test('independent cards have unique controlled regions and share default state across layouts',()=>{
   const markup=renderToStaticMarkup(React.createElement('div',null,
-    React.createElement(Card,{...props,key:'mobile'}),React.createElement(Card,{...props,key:'desktop'})))
+    React.createElement(Disclosure,{...props,key:'period'}),React.createElement(Disclosure,{...props,key:'direction'})))
   const controls=[...markup.matchAll(/aria-controls="([^"]+)"/g)].map(match=>match[1])
   assert.equal(new Set(controls).size,2)
   assert.equal([...markup.matchAll(/aria-expanded="false"/g)].length,2)
   for(const id of controls)assert.ok(markup.includes(`id="${id}"`))
-  const component=source.slice(source.indexOf('export function ShuttleFullTimetableCard'),source.indexOf('export default function QueryHub'))
+  const component=source.slice(source.indexOf('export function ShuttleTimetableDisclosure'),source.indexOf('export default function QueryHub'))
   assert.doesNotMatch(component,/command\(|fetch\(|useEffect|matchMedia|innerWidth|setShuttle|[▼▲▾▴]/)
-  assert.match(component,/<ChevronDown[^>]*className="weather-strip-chevron"/)
-  assert.match(css,/\.weather-strip-toggle\[aria-expanded='true'\] \.weather-strip-chevron\s*\{\s*transform: rotate\(180deg\)/)
+  assert.match(component,/<ChevronDown[^>]*className="shuttle-subsection-chevron"/)
+  assert.match(css,/\.shuttle-subsection-toggle\[aria-expanded='true'\] \.shuttle-subsection-chevron\s*\{\s*transform: rotate\(180deg\)/)
   assert.match(css,/@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.weather-strip-reveal,\s*\.weather-strip-chevron\s*\{\s*transition: none/)
 })

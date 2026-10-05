@@ -129,6 +129,8 @@ export class AppLocalization {
     '启用 QMplus': 'Enable QMplus',
     '仅适用国院': 'International School only',
     '无法保存本地偏好。': 'Unable to save local preferences.',
+    '本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。':
+      'Course data was fetched, but the local cache was not updated. Earlier cached data may appear after restarting.',
     '今日课程': 'Today\'s Courses',
     '今天可以自由安排': 'No classes today',
     '课程进行中': 'In progress',

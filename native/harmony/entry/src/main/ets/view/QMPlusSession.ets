@@ -1,10 +1,11 @@
 // QMplus 的官方 ArkWeb 会话与教务/教学云账号完全分离。
-// 课程快照只在内存；只有用户显式选择保存时，Microsoft 登录资料才进入独立
+// 合法业务 DTO 可进入独立作用域缓存；只有用户显式选择保存时，Microsoft 登录资料才进入独立
 // ASSET 资产，授权nonce进入非敏感偏好；Cookie/sesskey永不跨业务桥。
 import { webview } from '@kit.ArkWeb';
 import { QMPlusSnapshot, QMPlusSnapshotParser, QMPlusURLPolicy } from '../net/QMPlusSnapshot';
 import { PreferencesStore } from '../store/PreferencesStore';
 import { QMPlusWebProfileStore, QMPlusWebProfileStoring } from '../store/QMPlusWebProfileStore';
+import { CourseDTOCacheStore } from '../store/CourseDTOCacheStore';
 import { AssetQMPlusSavedLoginStore, newQMPlusRecordID, QMPlusSavedLogin,
   QMPlusSavedLoginStoring } from '../store/QMPlusSavedLoginStore';
 
@@ -86,6 +87,11 @@ export class QMPlusSession {
   private loginSettingsRevision: number = 0;
   private restoredLoginSettings: boolean = false;
   private quietDeadlineTimer: number = -1;
+  private readonly businessCache: CourseDTOCacheStore = new CourseDTOCacheStore('qmplus');
+  private cacheRevision: number = 0;
+  private cacheRestore: Promise<void> | null = null;
+  private silentRefreshOwner: boolean = false;
+  private warmRefreshStarted: boolean = false;
 
   constructor(clearIncognitoData?: () => void, savedLoginStore?: QMPlusSavedLoginStoring,
     authorizationJournal?: QMPlusAuthorizationJournal, recordIDFactory?: () => string,
@@ -118,6 +124,31 @@ export class QMPlusSession {
       this.autoFillEnabled = false;
       this.loginSettingsError = '无法读取 QMplus 登录资料，自动填写已关闭。';
     }
+  }
+
+  async restoreBusinessCache(): Promise<void> {
+    if (this.cacheRestore !== null) { return await this.cacheRestore; }
+    const revision: number = this.cacheRevision;
+    const scope: string = this.webProfile?.businessScope?.() ?? '';
+    const work: Promise<void> = (async (): Promise<void> => {
+      if (!/^[0-9a-f]{32}$/.test(scope) || this.webProfile === null || !this.webProfile.isReady()) { return; }
+      const cached: QMPlusSnapshot | null = await this.businessCache.loadQM(scope);
+      if (cached !== null && revision === this.cacheRevision && this.snapshot === null &&
+        this.webProfile.isReady() && this.webProfile.businessScope?.() === scope) {
+        this.snapshot = cached;
+      }
+    })();
+    this.cacheRestore = work;
+    await work;
+  }
+
+  async startWarmRefresh(): Promise<void> {
+    await this.restoreBusinessCache();
+    await this.restoreSavedLoginStatus();
+    if (this.warmRefreshStarted || !this.isFeatureEnabled || !this.loginForeground || this.loginVisible || this.loginSettingsBusy) { return; }
+    if (!this.savedLoginAvailable && this.snapshot === null && !(this.webProfile?.hasBeenMounted?.() ?? false)) { return; }
+    this.warmRefreshStarted = true;
+    this.openLogin(QMPlusURLPolicy.home, true);
   }
 
   loginOwner(): QMPlusLoginOwner {
@@ -458,11 +489,17 @@ export class QMPlusSession {
     return flushed && this.isOfficialWebReady(owner);
   }
 
-  openLogin(url: string = QMPlusURLPolicy.home): void {
+  openLogin(url: string = QMPlusURLPolicy.home, silentRefresh: boolean = false): void {
     if (!this.isFeatureEnabled || this.loginSettingsBusy || (this.webProfile === null &&
       QMPlusSession.ownedWebClearPendingInProcess && !this.clearOwnedWebSession())) { return; }
     if (this.loginVisible) {
-      if ((this.errorCode !== 'QM_ERROR_PAGE' && this.errorCode !== 'QM_WEB_CLEAR_PENDING') || this.officialPageLoading) { this.presentLogin(); return; }
+      if (!silentRefresh) { this.silentRefreshOwner = false; }
+      // Explicit Connect may upgrade a running quiet owner, but must not reveal
+      // a loading landing or interrupt its SAML/MFA callback with another GET.
+      if ((this.errorCode !== 'QM_ERROR_PAGE' && this.errorCode !== 'QM_WEB_CLEAR_PENDING') || this.officialPageLoading) {
+        if (this.loginPresented) { this.presentLogin(); }
+        return;
+      }
       const restart: (() => void) | null = this.restartOwnedWeb;
       this.closeLogin();
       this.openLogin(QMPlusURLPolicy.home);
@@ -479,7 +516,8 @@ export class QMPlusSession {
     this.explicitDetailRequest = this.targetURL !== QMPlusURLPolicy.home &&
       this.targetURL !== 'https://qmplus.qmul.ac.uk/my';
     this.loginVisible = true;
-    this.loginPresented = this.explicitDetailRequest || !this.autoFillEnabled;
+    this.silentRefreshOwner = silentRefresh;
+    this.loginPresented = !silentRefresh && (this.explicitDetailRequest || !this.autoFillEnabled);
     if (!this.loginPresented) {
       const revision: number = this.loginPresentationRevision;
       this.quietDeadlineTimer = setTimeout((): void => {
@@ -513,6 +551,7 @@ export class QMPlusSession {
     this.cancelSync();
     this.loginVisible = false;
     this.loginPresented = false;
+    this.silentRefreshOwner = false;
     this.officialWebProfileReady = this.webProfile === null;
     this.targetURL = QMPlusURLPolicy.home;
   }
@@ -543,6 +582,22 @@ export class QMPlusSession {
       } else {
         this.snapshot = next;
         this.showingStalePartial = false;
+        const scope: string = this.webProfile?.businessScope?.() ?? '';
+        const revision: number = this.cacheRevision;
+        const current: () => boolean = (): boolean => revision === this.cacheRevision &&
+          this.webProfile !== null && this.webProfile.isReady() && this.webProfile.businessScope?.() === scope;
+        if (/^[0-9a-f]{32}$/.test(scope) && current()) {
+          const warn: () => void = (): void => {
+            if (current()) { this.error = '本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。'; }
+          };
+          this.businessCache.saveQM(scope, raw, current).then((saved: boolean): void => { if (!saved) { warn(); } }).catch(warn);
+        } else if (this.webProfile !== null) {
+          Promise.resolve().then((): void => {
+            if (revision === this.cacheRevision && this.snapshot === next) {
+              this.error = '本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。';
+            }
+          });
+        }
       }
       this.error = '';
       this.errorCode = '';
@@ -592,6 +647,9 @@ export class QMPlusSession {
   private clearConnection(): boolean {
     // Persist the fence before changing identity or touching engine storage.
     const pendingSaved: boolean = this.webProfile === null || this.webProfile.markClearPending();
+    this.cacheRevision++;
+    this.cacheRestore = null;
+    this.businessCache.clear().catch(() => {});
     const webStopped: boolean = this.stopOwnedLoginWeb();
     this.cancelQuietDeadline();
     this.cancelSync();
@@ -661,6 +719,14 @@ export class QMPlusSession {
 
   presentLogin(): void {
     if (!this.loginVisible) { return; }
+    if (this.silentRefreshOwner) {
+      // Silent startup has no authority to open an MFA/error/unknown window.
+      // Retire this owner; a later explicit connection uses a fresh fixed GET.
+      if (this.error.length === 0) { this.error = '请先在官方 QMplus 网页完成登录。'; }
+      if (this.errorCode.length === 0) { this.errorCode = 'QM_LOGIN_REQUIRED'; }
+      this.closeLogin();
+      return;
+    }
     this.cancelQuietDeadline();
     this.loginPresented = true;
   }

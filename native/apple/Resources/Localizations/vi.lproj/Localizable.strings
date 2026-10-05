@@ -354,6 +354,7 @@
 "本学期暂无教学云课程" = "Học kỳ này chưa có môn trên nền tảng học tập";
 "本学期课程" = "Môn học học kỳ này";
 "本应用不会自动开启或更改系统网络辅助，也不能保证 Wi-Fi 与蜂窝网络同时使用。蜂窝数据或个人热点可能产生额外费用，请自行确认套餐。" = "Ứng dụng không tự bật hoặc thay đổi hỗ trợ mạng của hệ thống và không thể bảo đảm dùng Wi-Fi cùng dữ liệu di động đồng thời. Dữ liệu di động hoặc Điểm truy cập cá nhân có thể phát sinh phí. Hãy kiểm tra gói cước.";
+"本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。" = "Đã tải dữ liệu môn học nhưng chưa cập nhật bộ nhớ đệm cục bộ. Dữ liệu cũ có thể xuất hiện sau khi khởi động lại.";
 "本课已同步作业" = "Bài tập môn này đã đồng bộ";
 "本课已同步活动" = "Hoạt động môn này đã đồng bộ";
 "本课缓存已清除或不再可用。" = "Bộ nhớ đệm của môn này đã bị xóa hoặc không còn khả dụng.";

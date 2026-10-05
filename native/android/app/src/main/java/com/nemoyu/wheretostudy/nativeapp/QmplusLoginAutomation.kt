@@ -21,6 +21,7 @@ internal class QmplusLoginAutomationGate {
     private var selectedAccountDocument: Long? = null
     private var claimedAccountDocument: Long? = null
     private var attemptedSSO = false
+    private var attemptedLoginEntry = false
     private var attemptedDashboard = false
 
     fun beginDocument(): Long {
@@ -42,6 +43,11 @@ internal class QmplusLoginAutomationGate {
     fun claimSSO(expectedDocument: Long, savedOptIn: Boolean): Boolean {
         if (!savedOptIn || !accepts(expectedDocument) || requiresManualInteraction || attemptedSSO || hasAttemptedCredentialSubmission()) return false
         attemptedSSO = true; return true
+    }
+    fun claimLoginEntry(expectedDocument: Long, savedOptIn: Boolean): Boolean {
+        if (!savedOptIn || !accepts(expectedDocument) || requiresManualInteraction || attemptedLoginEntry ||
+            attemptedSSO || hasAttemptedCredentialSubmission()) return false
+        attemptedLoginEntry = true; return true
     }
     fun claimDashboard(expectedDocument: Long): Boolean {
         if (!accepts(expectedDocument) || attemptedDashboard) return false
@@ -82,9 +88,11 @@ internal object QmplusLoginPagePolicy {
     // tenants/origins/paths remain visible and user-operated, not guessed.
     private const val QM_TENANT = "569df091-b013-40e3-86ee-bd9cb9e25814"
     const val SSO_START_URL = "https://qmplus.qmul.ac.uk/auth/saml2/login.php"
+    const val LOGIN_ENTRY_URL = "https://qmplus.qmul.ac.uk/login/index.php"
     fun isSSOEntry(value: String): Boolean = trustedURI(value)?.let {
         it.host.equals("qmplus.qmul.ac.uk", true) &&
             ((it.rawPath == "/login/index.php" && it.rawQuery == null) ||
+                (it.rawPath in setOf("/my", "/my/") && it.rawQuery == null) ||
                 (it.rawPath == "/" && it.rawQuery in listOf(null, "redirect=0")))
     } == true
     fun isSSOTransit(value: String): Boolean = trustedURI(value)?.let {
@@ -121,6 +129,16 @@ internal object QmplusLoginPagePolicy {
           })); return targets.size === 1;
         })()
     """.trimIndent()
+    fun approvedGuestEntryScript(pageScript: String): String = """
+        (() => { const kind = $pageScript; if (kind !== 'guest') return 'none';
+          const targets = new Set(Array.from(document.querySelectorAll('a[href]')).flatMap(link => {
+            try { const u = new URL(link.getAttribute('href'), location.href);
+              return u.origin === 'https://qmplus.qmul.ac.uk' && !u.username && !u.password && !u.search && !u.hash &&
+                [ '$SSO_START_URL', '$LOGIN_ENTRY_URL' ].includes(u.href) ? [u.href] : [];
+            } catch { return []; }
+          })); return targets.has('$SSO_START_URL') ? 'saml' : targets.has('$LOGIN_ENTRY_URL') ? 'login' : 'none';
+        })()
+    """.trimIndent()
 }
 
 internal enum class QmplusPageKind {
@@ -140,6 +158,7 @@ internal interface QmplusAuthRenderer {
     val active: Boolean
     fun evaluate(script: String, completion: (String) -> Unit)
     fun navigateToOfficialSSO()
+    fun navigateToOfficialLogin() {}
     fun openBusinessPage(value: String)
 }
 internal interface QmplusAuthCredentials {
@@ -156,6 +175,9 @@ internal interface QmplusAuthScheduler {
 internal data class QmplusAuthObservation(val stage: String, val document: String, val accountMatch: Boolean, val reason: String)
 
 internal object QmplusAuthResultCodec {
+    fun guestEntry(encoded: String): String? = encoded.takeIf { it.length <= 32 }?.let {
+        runCatching { JSONArray("[$it]").get(0) as? String }.getOrNull()
+    }?.takeIf { it in setOf("saml", "login", "none") }
     private val reasons = setOf("READY", "AUTHENTICATED", "LOADING", "INVALID_NONCE", "STALE_DOCUMENT", "UNTRUSTED_CONTEXT",
         "UNSUPPORTED_PAGE", "ACCOUNT_CHOOSER", "ACCOUNT_HINT_REQUIRED", "FORM_UNTRUSTED", "INTERFERENCE", "KNOWN_FORM_ABSENT", "ACCOUNT_MISMATCH",
         "USERNAME_NOT_SUBMITTED", "ALREADY_ATTEMPTED")
@@ -290,13 +312,16 @@ internal class QmplusAuthFlow(
             if (kind == QmplusPageKind.GUEST && QmplusLoginPagePolicy.isSSOEntry(value) && !owner.manual && owner.savedOptIn) {
                 owner.authorized(document, value) {
                     owner.busy = true
-                    owner.evaluate(document, value, owner.guarded(value, QmplusLoginPagePolicy.approvedSSOEntryScript(owner.pageScript))) approvalReply@{ approved ->
+                    owner.evaluate(document, value, owner.guarded(value, QmplusLoginPagePolicy.approvedGuestEntryScript(owner.pageScript))) approvalReply@{ approved ->
                         if (!owner.checkedCurrent(document, value) || owner.manual) return@approvalReply
                         owner.busy = false
-                        if (approved != "true") { owner.manualRequired(); return@approvalReply }
+                        val entry = QmplusAuthResultCodec.guestEntry(approved)
+                        if (entry !in setOf("saml", "login")) { owner.manualRequired(); return@approvalReply }
                         owner.authorized(document, value) {
-                            if (owner.gate.claimSSO(document, true)) {
+                            if (entry == "saml" && owner.gate.claimSSO(document, true)) {
                                 owner.reportPhase("sso_navigation"); owner.renderer.navigateToOfficialSSO()
+                            } else if (entry == "login" && value != QmplusLoginPagePolicy.LOGIN_ENTRY_URL && owner.gate.claimLoginEntry(document, true)) {
+                                owner.reportPhase("login_entry_navigation"); owner.renderer.navigateToOfficialLogin()
                             } else owner.manualRequired()
                         }
                     }

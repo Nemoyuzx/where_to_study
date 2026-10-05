@@ -416,7 +416,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
             XCTAssertFalse(QMplusAutofillPolicy.isTrustedMicrosoftDocument(URL(string: value)), value)
         }
         XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/login/index.php")))
-        XCTAssertFalse(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/my/")))
+        XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/my/")))
         XCTAssertNil(QMplusAutofillPolicy.ssoURL.query)
         XCTAssertEqual(QMplusAutofillPolicy.ssoURL.absoluteString, "https://qmplus.qmul.ac.uk/auth/saml2/login.php")
         let ledger = QMplusAutofillLedger()
@@ -435,6 +435,21 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/login/index.php")))
         XCTAssertEqual(QMplusAutofillPolicy.ssoURL.absoluteString, "https://qmplus.qmul.ac.uk/auth/saml2/login.php")
         XCTAssertNil(QMplusAutofillPolicy.ssoURL.query)
+    }
+
+    func testOfficialGuestEntryCannotRestartAfterAccountOrCredentialSteps() {
+        let ledger = QMplusAutofillLedger()
+        ledger.begin(presentation: 1, credentialRevision: 2)
+        XCTAssertTrue(ledger.canStartOfficialLogin(presentation: 1, credentialRevision: 2))
+        XCTAssertTrue(ledger.claim(state(.account, match: true), presentation: 1, credentialRevision: 2))
+        XCTAssertFalse(ledger.canStartOfficialLogin(presentation: 1, credentialRevision: 2))
+        XCTAssertFalse(ledger.claimSSO(presentation: 1, credentialRevision: 2))
+        ledger.recordAccountSelection(document: "nonceA123", presentation: 1, credentialRevision: 2)
+        XCTAssertTrue(ledger.claim(state(.password, match: true), presentation: 1, credentialRevision: 2))
+        XCTAssertFalse(ledger.claimSSO(presentation: 1, credentialRevision: 2))
+        ledger.begin(presentation: 2, credentialRevision: 2)
+        XCTAssertTrue(ledger.claim(state(.username), presentation: 2, credentialRevision: 2))
+        XCTAssertFalse(ledger.claimSSO(presentation: 2, credentialRevision: 2))
     }
 
     func testOtherQMplusLandingQueriesAndForeignHostsRemainManual() {

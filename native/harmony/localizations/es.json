@@ -1532,5 +1532,6 @@
   "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Solo en páginas oficiales de inicio de sesión verificadas se selecciona automáticamente la cuenta guardada que coincide exactamente y se completan el usuario y la contraseña, con un máximo de un intento por paso. Las cuentas que no coincidan, MFA, CAPTCHA, mantener la sesión y las confirmaciones de riesgos o condiciones requieren tu intervención.",
   "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos.",
   "QMplus 网页会话需要清理，请重新启动应用。": "Es necesario borrar la sesión web de QMplus. Reinicia la aplicación.",
-  "QMplus 网页会话尚未清除或保存失败，请重试。": "No se pudo borrar o guardar la sesión web de QMplus. Vuelve a intentarlo."
+  "QMplus 网页会话尚未清除或保存失败，请重试。": "No se pudo borrar o guardar la sesión web de QMplus. Vuelve a intentarlo.",
+  "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Se obtuvieron los datos de los cursos, pero no se actualizó la caché local. Al reiniciar podrían aparecer datos anteriores."
 }

@@ -5,16 +5,19 @@
 import { asset } from '@kit.AssetStoreKit';
 import { util } from '@kit.ArkTS';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { cryptoFramework } from '@kit.CryptoArchitectureKit';
 
 export class Credentials {
   account: string;
   password: string;
   cloudPassword: string;
+  cacheScope: string;
 
-  constructor(account: string, password: string, cloudPassword: string = '') {
+  constructor(account: string, password: string, cloudPassword: string = '', cacheScope: string = '') {
     this.account = account;
     this.password = password;
     this.cloudPassword = cloudPassword;
+    this.cacheScope = /^[0-9a-f]{32}$/.test(cacheScope) ? cacheScope : '';
   }
 
   effectiveCloudPassword(): string {
@@ -34,6 +37,7 @@ export class Credentials {
     const out: Record<string, Object> = {};
     out['account'] = this.account;
     out['password'] = this.password;
+    if (this.cacheScope.length > 0) { out['cacheScope'] = this.cacheScope; }
     if (this.cloudPassword.length > 0) {
       out['cloudPassword'] = this.cloudPassword;
     }
@@ -45,7 +49,8 @@ export class Credentials {
     return new Credentials(
       typeof raw['account'] === 'string' ? raw['account'] as string : '',
       typeof raw['password'] === 'string' ? raw['password'] as string : '',
-      typeof raw['cloudPassword'] === 'string' ? raw['cloudPassword'] as string : ''
+      typeof raw['cloudPassword'] === 'string' ? raw['cloudPassword'] as string : '',
+      typeof raw['cacheScope'] === 'string' ? raw['cacheScope'] as string : ''
     );
   }
 }
@@ -81,11 +86,15 @@ export function credentialQueryAttributes(alias: string): asset.AssetMap {
 const ASSET_NOT_FOUND: number = 24000002;
 
 export class AssetCredentialStore implements CredentialStoring {
+  private static mutations: Map<string, Promise<void>> = new Map<string, Promise<void>>();
+  private static scopes: Map<string, string> = new Map<string, string>();
   private readonly alias: string;
 
   constructor(alias: string = 'bupt-jwgl') {
     this.alias = alias;
   }
+
+  currentCacheScope(): string { return AssetCredentialStore.scopes.get(this.alias) ?? ''; }
 
   private aliasAttr(): asset.AssetMap {
     const map: asset.AssetMap = new Map();
@@ -94,7 +103,7 @@ export class AssetCredentialStore implements CredentialStoring {
     return map;
   }
 
-  async load(): Promise<Credentials | null> {
+  private async readRaw(): Promise<Credentials | null> {
     try {
       const results: Array<asset.AssetMap> = await asset.query(
         credentialQueryAttributes(this.alias));
@@ -116,7 +125,7 @@ export class AssetCredentialStore implements CredentialStoring {
     }
   }
 
-  async save(credentials: Credentials): Promise<void> {
+  private async writeRaw(credentials: Credentials): Promise<void> {
     const updateAttr: asset.AssetMap = credentialUpdateAttributes(credentials);
     try {
       await asset.update(this.aliasAttr(), updateAttr);
@@ -137,14 +146,14 @@ export class AssetCredentialStore implements CredentialStoring {
       }
     }
     // 往返校验防止系统存储异常被误报为保存成功。
-    const stored: Credentials | null = await this.load();
+    const stored: Credentials | null = await this.readRaw();
     if (stored === null || stored.account !== credentials.account ||
-      stored.password !== credentials.password || stored.cloudPassword !== credentials.cloudPassword) {
+      stored.password !== credentials.password || stored.cloudPassword !== credentials.cloudPassword || stored.cacheScope !== credentials.cacheScope) {
       throw new Error('系统安全存储不可用，账号密码未能保存，请稍后重试。');
     }
   }
 
-  async clear(): Promise<void> {
+  private async removeRaw(): Promise<void> {
     try {
       await asset.remove(this.aliasAttr());
     } catch (e) {
@@ -154,5 +163,63 @@ export class AssetCredentialStore implements CredentialStoring {
       }
       throw new Error('系统安全存储操作失败（' + err.code.toString() + '）。');
     }
+  }
+
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    const work: Promise<void> = (AssetCredentialStore.mutations.get(this.alias) ?? Promise.resolve())
+      .catch((): void => {}).then(operation);
+    AssetCredentialStore.mutations.set(this.alias, work.catch((): void => {}));
+    return work;
+  }
+
+  private newScope(): string {
+    const bytes: Uint8Array = cryptoFramework.createRandom().generateRandomSync(16).data;
+    let value: string = '';
+    for (const byte of bytes) { value += byte.toString(16).padStart(2, '0'); }
+    bytes.fill(0);
+    return value;
+  }
+
+  async load(): Promise<Credentials | null> {
+    let result: Credentials | null = null;
+    await this.enqueue(async (): Promise<void> => {
+      const record: Credentials | null = await this.readRaw();
+      result = record;
+      AssetCredentialStore.scopes.set(this.alias, record?.cacheScope ?? '');
+      if (record === null || record.cacheScope.length > 0) { return; }
+      try {
+        const migrated: Credentials = new Credentials(record.account, record.password, record.cloudPassword, this.newScope());
+        await this.writeRaw(migrated);
+        result = migrated;
+        AssetCredentialStore.scopes.set(this.alias, migrated.cacheScope);
+      } catch (e) {
+        // Valid credentials remain usable; unverified scope never restores or
+        // persists business DTOs, and never substitutes a password-derived hash.
+        result = new Credentials(record.account, record.password, record.cloudPassword);
+        AssetCredentialStore.scopes.set(this.alias, '');
+      }
+    });
+    return result;
+  }
+
+  async save(credentials: Credentials): Promise<void> {
+    await this.enqueue(async (): Promise<void> => {
+      const previous: Credentials | null = await this.readRaw();
+      const unchanged: boolean = previous !== null && previous.account === credentials.account &&
+        previous.password === credentials.password && previous.cloudPassword === credentials.cloudPassword;
+      if (unchanged && previous !== null && previous.cacheScope.length > 0) {
+        credentials.cacheScope = previous.cacheScope;
+        AssetCredentialStore.scopes.set(this.alias, previous.cacheScope); return;
+      }
+      AssetCredentialStore.scopes.set(this.alias, '');
+      credentials.cacheScope = this.newScope();
+      await this.writeRaw(credentials);
+      AssetCredentialStore.scopes.set(this.alias, credentials.cacheScope);
+    });
+  }
+
+  async clear(): Promise<void> {
+    AssetCredentialStore.scopes.set(this.alias, '');
+    await this.enqueue((): Promise<void> => this.removeRaw());
   }
 }

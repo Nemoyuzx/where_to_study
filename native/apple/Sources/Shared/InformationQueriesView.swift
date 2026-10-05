@@ -494,52 +494,57 @@ struct InformationQueriesView: View {
     private func shuttleFullTimetable(_ snapshot: ShuttleBusSnapshot) -> some View {
         if let notice = ShuttleBusTodayLogic.scheduleNotice(in: snapshot),
            !notice.schedules.isEmpty {
-            ShuttleFullTimetableDisclosure(language: model.appLanguage) {
-                VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                    Label("完整班车时刻表", systemImage: "bus.doubledecker").font(.headline)
                     Text("按运行时段、方向和星期展示学校公布的计划班次；实际运行以官方通知为准。")
                         .font(.caption)
                         .foregroundStyle(theme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 280, maximum: 560), spacing: 16)],
-                        alignment: .leading,
-                        spacing: 16
-                    ) {
-                        ForEach(notice.schedules) { schedule in
-                            shuttleFullScheduleCard(schedule)
+                    ForEach(shuttlePeriods(notice.schedules), id: \.period.id) { group in
+                        Surface {
+                            ShuttleFullTimetableDisclosure(language: model.appLanguage) {
+                                VStack(spacing: 12) {
+                                    ForEach(group.schedules) { schedule in shuttleFullScheduleCard(schedule) }
+                                }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(group.period.label).font(.headline)
+                                    if let start = group.period.startDate {
+                                        Text(group.period.endDate.map { "\(start) – \($0)" } ?? "\(start) 起")
+                                            .font(.caption).foregroundStyle(theme.secondaryText)
+                                    }
+                                    if let state = shuttlePeriodState(group.period, today: StrictContractDateParser.string(from: .now)) {
+                                        Text(model.localized(state)).font(.caption).foregroundStyle(theme.secondaryText)
+                                    }
+                                }
+                            }
                         }
+                        .accessibilityIdentifier("queries.shuttle.period.\(group.period.id)")
                     }
-                }
-            } label: {
-                Label("完整班车时刻表", systemImage: "bus.doubledecker")
-                    .font(.headline)
             }
             .accessibilityIdentifier("queries.shuttle.full-timetable")
         }
     }
 
+    private struct ShuttlePeriodGroup {
+        let period: ShuttleBusPeriod
+        var schedules: [ShuttleBusSchedule]
+    }
+
+    private func shuttlePeriods(_ schedules: [ShuttleBusSchedule]) -> [ShuttlePeriodGroup] {
+        var result: [ShuttlePeriodGroup] = []
+        for schedule in schedules {
+            if let index = result.firstIndex(where: { $0.period == schedule.period }) {
+                result[index].schedules.append(schedule)
+            } else { result.append(ShuttlePeriodGroup(period: schedule.period, schedules: [schedule])) }
+        }
+        return result
+    }
+
     private func shuttleFullScheduleCard(_ schedule: ShuttleBusSchedule) -> some View {
-        let today = StrictContractDateParser.string(from: .now)
         return Surface {
+            ShuttleFullTimetableDisclosure(language: model.appLanguage) {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(schedule.period.label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(theme.secondaryText)
-                    Spacer(minLength: 4)
-                    if let periodState = shuttlePeriodState(schedule.period, today: today) {
-                        Text(model.localized(periodState))
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(theme.secondaryText)
-                    }
-                }
-                if let start = schedule.period.startDate {
-                    Text(schedule.period.endDate.map { "\(start) – \($0)" } ?? "\(start) 起")
-                        .font(.caption)
-                        .foregroundStyle(theme.secondaryText)
-                }
-                Text("\(schedule.from) → \(schedule.to)")
-                    .font(.headline)
                 ForEach(ShuttleBusTodayLogic.fullWeek(for: schedule)) { weekday in
                     HStack(alignment: .top, spacing: 10) {
                         Text(model.localized(weekday.title))
@@ -574,7 +579,11 @@ struct InformationQueriesView: View {
                     if weekday.key != "sunday" { Divider() }
                 }
             }
+            } label: {
+                Text("\(schedule.from) → \(schedule.to)").font(.headline)
+            }
         }
+        .accessibilityIdentifier("queries.shuttle.direction.\(schedule.id)")
     }
 
     private func shuttlePeriodState(_ period: ShuttleBusPeriod, today: String) -> String? {

@@ -957,6 +957,24 @@ internal class CalendarDailyInfoRepository(
     private val observers = ConcurrentHashMap<Any, (String) -> Unit>()
     private val closed = AtomicBoolean(false)
 
+    init {
+        // Hydration is IO-only; all pages and the warm refresh still share the
+        // same assignment client, its authenticated session and single-flights.
+        val warmRevision = assignmentRevision.get()
+        if (!usesSampleData && assignmentClient != null) worker.execute {
+            if (assignmentClient.restoreBusinessCache()) publishAssignments(warmRevision) {
+                assignmentClient.cached()?.let { items ->
+                    queryAssignmentItems = items
+                    assignmentsByDate.putAll(items.groupBy { it.deadline.take(10) })
+                }
+                postCompletion(COURSES_CHANGE_KEY) {}
+                postCompletion(ASSIGNMENTS_CHANGE_KEY) {}
+                loadCurrentCourses(true)
+                loadAllAssignments(true)
+            }
+        }
+    }
+
     fun almanac(date: String): AlmanacInfo? = almanacByDate[date]
     fun almanacError(date: String): String? = almanacErrors[date]
     fun isLoadingAlmanac(date: String): Boolean = date in loadingAlmanac
@@ -986,7 +1004,7 @@ internal class CalendarDailyInfoRepository(
     fun isLoadingAssignments(date: String): Boolean = date in loadingAssignments
     fun allAssignments(): List<AssignmentDeadlineItem>? = assignmentClient?.cached() ?: queryAssignmentItems
     fun currentTeachingCloudCourses(): List<TeachingCloudCourse>? = assignmentClient?.cachedCourses() ?: queryCourseItems
-    fun currentCoursesError(): String? = queryCourseError
+    fun currentCoursesError(): String? = queryCourseError ?: assignmentClient?.cachePersistenceWarning
     fun isLoadingCurrentCourses(): Boolean = loadingCurrentCourses.get()
 
     fun loadCurrentCourses(force: Boolean = false) {
@@ -1014,7 +1032,7 @@ internal class CalendarDailyInfoRepository(
             }
         } catch (_: RejectedExecutionException) { publishAssignments(requestRevision) { loadingCurrentCourses.set(false) } }
     }
-    fun allAssignmentsError(): String? = queryAssignmentError
+    fun allAssignmentsError(): String? = queryAssignmentError ?: assignmentClient?.cachePersistenceWarning
     fun isLoadingAllAssignments(): Boolean = loadingAllAssignments.get()
 
     fun loadAllAssignments(force: Boolean = false) {

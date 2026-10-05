@@ -10,7 +10,7 @@ final class LanguageChangeTransition {
     static let layoutDelay: TimeInterval = 0.06
     static let revealDuration: TimeInterval = 0.22
     static let layoutTimeout: TimeInterval = 12
-    static let completionDuration: TimeInterval = 0.18
+    static let completionDuration: TimeInterval = 0.60
 
     // An explicitly requested DEBUG/demo slow-motion mode makes the native
     // material observable without screenshot capture inside the application.
@@ -229,7 +229,7 @@ final class LanguageChangeTransition {
 
 private final class LanguageTransitionEffectView: NSVisualEffectView {
     private let progressLabel = NSTextField(labelWithString: "Switching…")
-    private let completionImage = NSImageView()
+    private let completionImage = LanguageCompletionMark(frame: .zero)
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
@@ -243,8 +243,6 @@ private final class LanguageTransitionEffectView: NSVisualEffectView {
         progressLabel.font = .systemFont(ofSize: 22, weight: .semibold)
         progressLabel.textColor = .labelColor
         progressLabel.translatesAutoresizingMaskIntoConstraints = false
-        completionImage.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
-        completionImage.contentTintColor = .labelColor
         completionImage.translatesAutoresizingMaskIntoConstraints = false
         completionImage.isHidden = true
         addSubview(progressLabel); addSubview(completionImage)
@@ -254,11 +252,11 @@ private final class LanguageTransitionEffectView: NSVisualEffectView {
             progressLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 20),
             completionImage.centerXAnchor.constraint(equalTo: centerXAnchor),
             completionImage.centerYAnchor.constraint(equalTo: centerYAnchor),
-            completionImage.widthAnchor.constraint(equalToConstant: 36), completionImage.heightAnchor.constraint(equalToConstant: 36)
+            completionImage.widthAnchor.constraint(equalToConstant: 52), completionImage.heightAnchor.constraint(equalToConstant: 52)
         ])
     }
-    func showProgress() { progressLabel.isHidden = false; completionImage.isHidden = true }
-    func showCompletion() { progressLabel.isHidden = true; completionImage.isHidden = false }
+    func showProgress() { progressLabel.isHidden = false; completionImage.isHidden = true; completionImage.reset() }
+    func showCompletion() { progressLabel.isHidden = true; completionImage.isHidden = false; completionImage.play() }
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
     override func hitTest(_ point: NSPoint) -> NSView? { bounds.contains(convert(point, from: superview)) ? self : nil }
     override func mouseDown(with _: NSEvent) {}

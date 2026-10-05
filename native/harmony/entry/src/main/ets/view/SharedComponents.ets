@@ -1,5 +1,55 @@
 // 与 Android UiSupport.kt 的 pageTitle/surface 及各处重复使用的小部件对应。
 import { AppTheme } from '../common/AppTheme';
+import { accessibility } from '@kit.AccessibilityKit';
+
+// Keep expansion top-anchored. A measured ideal-size body remains mounted
+// after its first expansion; clipping its viewport does not recreate drafts,
+// reset page sessions or initiate data loads on every tap.
+@ComponentV2
+export struct DisclosureClip {
+  @Param expanded: boolean = false;
+  @BuilderParam content: () => void;
+  @Local mounted: boolean = false;
+  @Local viewportHeight: number = 0;
+  private bodyHeight: number = 0;
+
+  aboutToAppear(): void { this.mounted = this.expanded; }
+
+  @Monitor('expanded')
+  onExpandedChanged(): void {
+    if (this.expanded) { this.mounted = true; }
+    this.updateHeight();
+  }
+
+  private updateHeight(): void {
+    const target: number = this.expanded ? this.bodyHeight : 0;
+    if (target === this.viewportHeight) { return; }
+    let reduced: boolean = false;
+    try { reduced = accessibility.isAnimationReduceEnabledSync(); } catch (e) {}
+    this.getUIContext().animateTo({ duration: reduced ? 0 : 180, curve: Curve.EaseOut }, (): void => {
+      this.viewportHeight = target;
+    });
+  }
+
+  build() {
+    Column() {
+      if (this.mounted) {
+        Column() { this.content(); }
+          .width('100%').height(LayoutPolicy.fixAtIdealSize)
+          .alignItems(HorizontalAlign.Start)
+          .onAreaChange((oldArea: Area, area: Area): void => {
+            const height: number = Number(area.height);
+            if (!Number.isFinite(height) || height < 0 || Math.abs(height - this.bodyHeight) < 0.5) { return; }
+            this.bodyHeight = height; this.updateHeight();
+          })
+      }
+    }
+      .width('100%').height(this.viewportHeight).clip(true)
+      .alignItems(HorizontalAlign.Start)
+      .hitTestBehavior(this.expanded ? HitTestMode.Default : HitTestMode.None)
+      .accessibilityLevel(this.expanded ? 'auto' : 'no-hide-descendants')
+  }
+}
 
 // 对应 PageTitle：小标题 eyebrow（大写）+ 大标题。
 @ComponentV2

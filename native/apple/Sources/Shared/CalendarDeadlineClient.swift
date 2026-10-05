@@ -170,7 +170,7 @@ struct PublicDeadlineSnapshot: Equatable, Sendable {
     let usedBackup: Bool
 }
 
-struct AssignmentDeadlineItem: Identifiable, Equatable, Sendable {
+struct AssignmentDeadlineItem: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let courseName: String?
@@ -216,9 +216,38 @@ protocol AssignmentDeadlineFetching: Sendable {
     func fetch(date: String) async throws -> [AssignmentDeadlineItem]
     func fetch(dates: [String]) async throws -> [String: [AssignmentDeadlineItem]]
     func reset() async
+    func cachedAssignmentResult() async throws -> AssignmentDeadlineResult?
+    func fetchAssignmentResult(force: Bool) async throws -> AssignmentDeadlineResult
+    func fetchAssignmentResult(dates: [String], force: Bool) async throws -> AssignmentDeadlineResult
+    func isAssignmentScopeCurrent(_ scope: CourseBusinessCacheScope) -> Bool
+}
+
+struct AssignmentDeadlineResult: Sendable {
+    let items: [AssignmentDeadlineItem]
+    let fetchedAt: String
+    var scope: CourseBusinessCacheScope? = nil
+    var partial = false
+    var retainingPrevious = false
+    var cachePersistenceFailed = false
+    var coversAllCourses = true
+}
+
+private struct UCloudPartialAssignmentError: Error, Sendable {
+    let items: [AssignmentDeadlineItem]
 }
 
 extension AssignmentDeadlineFetching {
+    func cachedAssignmentResult() async throws -> AssignmentDeadlineResult? { nil }
+    func isAssignmentScopeCurrent(_: CourseBusinessCacheScope) -> Bool { true }
+    func fetchAssignmentResult(force: Bool) async throws -> AssignmentDeadlineResult {
+        let items = try await fetchAll(force: force)
+        return .init(items: items, fetchedAt: SJDClassroomClient.timestamp())
+    }
+    func fetchAssignmentResult(dates: [String], force: Bool) async throws -> AssignmentDeadlineResult {
+        let grouped = try await fetch(dates: dates)
+        return .init(items: dates.sorted().flatMap { grouped[$0] ?? [] }, fetchedAt: SJDClassroomClient.timestamp(),
+                     coversAllCourses: false)
+    }
     func fetchAll(force: Bool) async throws -> [AssignmentDeadlineItem] {
         throw CalendarDeadlineError.service("课程作业查询暂不可用，请稍后重试。")
     }
@@ -869,10 +898,12 @@ struct PublicDeadlineClient: PublicDeadlineFetching {
 }
 
 actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFetching {
+    static let shared = UCloudAssignmentClient()
     private struct Cache {
         let account: String
         let fetchedAt: Date
         let items: [AssignmentDeadlineItem]
+        var partial = false
     }
 
     private final class AuthenticatedSession: Sendable {
@@ -924,6 +955,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
     nonisolated static func resetSessions() { sessions.reset() }
 
     private let credentialStore: any CredentialStoring
+    private nonisolated let businessCache: CourseBusinessCacheStorage
     private let fetchAllProvider: (@Sendable (Credentials) async throws -> [AssignmentDeadlineItem])?
     private let fetchCoursesProvider: @Sendable (Credentials) async throws -> [TeachingCloudCourse]
     private let flightSelectionObserver: (@Sendable (Bool) -> Void)?
@@ -931,12 +963,27 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
     private var courseCache: CourseCache?
     private var courseFlight: CourseFlight?
     private var activeCredentials: Credentials?
+    private var activeScope: CourseBusinessCacheScope?
+    private var restoredScope: CourseBusinessCacheScope?
+    private var launchWarmAttempted = false
+    private var courseAttempted = false
+    private var assignmentAttempted = false
+    private var coursePersistenceFailed = false
+    private var assignmentPersistenceFailed = false
+    private var assignmentPartial = false
+    private var assignmentRetainingPrevious = false
+    private var assignmentPreparations = Set<UInt64>()
+    private var courseLastAttemptAt: Date?
+    private var assignmentLastAttemptAt: Date?
+    private var courseHasLiveResult = false
+    private var courseRetainingPrevious = false
     private var inFlightFetches = [String: InFlightFetch]()
     private var revision: UInt64 = 0
     private var nextFlightID: UInt64 = 0
 
-    init(credentialStore: any CredentialStoring = KeychainCredentialStore()) {
+    init(credentialStore: any CredentialStoring = KeychainCredentialStore(), businessCache: CourseBusinessCacheStorage = .shared) {
         self.credentialStore = credentialStore
+        self.businessCache = businessCache
         fetchAllProvider = nil
         fetchCoursesProvider = { try await Self.fetchCurrentCourses(credentials: $0) }
         flightSelectionObserver = nil
@@ -946,9 +993,11 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
         credentialStore: any CredentialStoring,
         fetchAll: @escaping @Sendable (Credentials) async throws -> [AssignmentDeadlineItem],
         fetchCourses: (@Sendable (Credentials) async throws -> [TeachingCloudCourse])? = nil,
-        flightSelectionObserver: (@Sendable (Bool) -> Void)? = nil
+        flightSelectionObserver: (@Sendable (Bool) -> Void)? = nil,
+        businessCache: CourseBusinessCacheStorage = .shared
     ) {
         self.credentialStore = credentialStore
+        self.businessCache = businessCache
         fetchAllProvider = fetchAll
         fetchCoursesProvider = fetchCourses ?? { try await Self.fetchCurrentCourses(credentials: $0) }
         self.flightSelectionObserver = flightSelectionObserver
@@ -963,45 +1012,175 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
         try await accountWideItems(force: force)
     }
 
+    nonisolated func isCourseScopeCurrent(_ scope: CourseBusinessCacheScope) -> Bool {
+        businessCache.isCurrent(scope, kind: .courses)
+    }
+
+    nonisolated func isAssignmentScopeCurrent(_ scope: CourseBusinessCacheScope) -> Bool {
+        businessCache.isCurrent(scope, kind: .assignments)
+    }
+
+    func cachedCourseResult() async throws -> TeachingCloudCourseResult? {
+        _ = try normalizedCurrentCredentials()
+        restoreDiskCacheIfNeeded()
+        guard let courseCache, let scope = activeScope, isCourseScopeCurrent(scope) else { return nil }
+        return .init(courses: courseCache.courses, fetchedAt: courseCache.fetchedAt, scope: scope,
+                     retainingPrevious: courseRetainingPrevious, cachePersistenceFailed: coursePersistenceFailed,
+                     ownerAccount: courseCache.account)
+    }
+
+    func fetchCourseResult(force: Bool) async throws -> TeachingCloudCourseResult {
+        let credentials = try normalizedCurrentCredentials()
+        let scope = activeScope, requestRevision = revision
+        _ = try await fetchCurrentCourses(force: force)
+        guard requestRevision == revision, try normalizedCurrentCredentials() == credentials, activeScope == scope,
+              let result = try await cachedCourseResult() else { throw CancellationError() }
+        guard result.scope == scope, requestRevision == revision else { throw CancellationError() }
+        return result
+    }
+
+    func cachedAssignmentResult() async throws -> AssignmentDeadlineResult? {
+        _ = try normalizedCurrentCredentials()
+        restoreDiskCacheIfNeeded()
+        guard let cache, let scope = activeScope, isAssignmentScopeCurrent(scope) else { return nil }
+        return .init(items: cache.items, fetchedAt: Self.timestamp(cache.fetchedAt), scope: scope,
+                     partial: assignmentPartial || cache.partial, retainingPrevious: assignmentRetainingPrevious,
+                     cachePersistenceFailed: assignmentPersistenceFailed)
+    }
+
+    func fetchAssignmentResult(force: Bool) async throws -> AssignmentDeadlineResult {
+        let credentials = try normalizedCurrentCredentials()
+        let scope = activeScope, requestRevision = revision
+        _ = try await accountWideItems(force: force)
+        guard requestRevision == revision, try normalizedCurrentCredentials() == credentials, activeScope == scope,
+              let result = try await cachedAssignmentResult() else { throw CancellationError() }
+        guard result.scope == scope, requestRevision == revision else { throw CancellationError() }
+        return result
+    }
+
+    func fetchAssignmentResult(dates: [String], force: Bool) async throws -> AssignmentDeadlineResult {
+        guard dates.allSatisfy({ StrictContractDateParser.date(from: $0) != nil }) else {
+            throw CalendarDeadlineError.service("作业日期格式不正确。")
+        }
+        return try await fetchAssignmentResult(force: force)
+    }
+
+    // Root invokes this independently of the selected page. The marker belongs
+    // to the canonical actor/credential+epoch owner, not each window or surface.
+    func launchWarmOnce() async {
+        do {
+            _ = try normalizedCurrentCredentials()
+            restoreDiskCacheIfNeeded()
+            guard !launchWarmAttempted else { return }
+            launchWarmAttempted = true
+            _ = try await fetchAssignmentResult(force: false)
+        } catch { /* Views retain their labelled last-good DTO and timestamps. */ }
+    }
+
+    private func restoreDiskCacheIfNeeded() {
+        guard let scope = activeScope, restoredScope != scope else { return }
+        restoredScope = scope
+        if let value = try? businessCache.load(kind: .courses, scope: scope, maximumBytes: Self.maximumAPIBytes,
+            as: [TeachingCloudCourse].self), let date = QMplusSnapshotPolicy.utcDate(value.fetchedAt),
+           value.payload.count <= Self.maximumCourses,
+           Set(value.payload.map(\.id)).count == value.payload.count,
+           value.payload.allSatisfy({ !$0.id.isEmpty && $0.teacherNames.allSatisfy { !$0.isEmpty } }),
+           isCourseScopeCurrent(scope) {
+            courseCache = .init(account: activeCredentials?.account ?? "", fetchedAt: date, courses: value.payload)
+            courseRetainingPrevious = true
+        }
+        if let value = try? businessCache.load(kind: .assignments, scope: scope, maximumBytes: Self.maximumAPIBytes,
+            as: [AssignmentDeadlineItem].self), let date = QMplusSnapshotPolicy.utcDate(value.fetchedAt),
+           value.payload.count <= Self.maximumAssignments,
+           value.payload.allSatisfy({ !$0.id.isEmpty && !$0.title.isEmpty && AssignmentDeadlineParser.isValidCachedDeadline($0.deadline) }),
+           isAssignmentScopeCurrent(scope) {
+            cache = .init(account: activeCredentials?.account ?? "", fetchedAt: date, items: value.payload, partial: value.partial)
+            assignmentPartial = value.partial; assignmentRetainingPrevious = true
+        }
+    }
+
+    private static func timestamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+
+    private static func isRecent(_ date: Date?) -> Bool {
+        guard let date else { return false }
+        let elapsed = Date().timeIntervalSince(date)
+        return elapsed >= 0 && elapsed < cacheLifetime
+    }
+
+    private static func withBudget<T: Sendable>(_ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask { try await Task.sleep(for: .seconds(120)); throw URLError(.timedOut) }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw CancellationError() }
+            return result
+        }
+    }
+
     func fetchCurrentCourses(force: Bool = false) async throws -> [TeachingCloudCourse] {
         let credentials = try normalizedCurrentCredentials()
-        if !force, let courseCache, courseCache.account == credentials.account,
-           Date().timeIntervalSince(courseCache.fetchedAt) < Self.cacheLifetime {
+        restoreDiskCacheIfNeeded()
+        guard let scope = activeScope else { throw CancellationError() }
+        if !force, courseAttempted, courseFlight == nil, let courseCache, courseCache.account == credentials.account,
+           Self.isRecent(courseHasLiveResult ? courseCache.fetchedAt : courseLastAttemptAt) {
             return courseCache.courses
         }
         let selected: CourseFlight
         if let courseFlight { selected = courseFlight } else {
+            courseAttempted = true
+            courseLastAttemptAt = .now
             nextFlightID &+= 1
             let provider = fetchCoursesProvider
             selected = CourseFlight(id: nextFlightID, revision: revision,
-                                    task: Task { try await provider(credentials) })
+                                    task: Task { try await Self.withBudget { try await provider(credentials) } })
             courseFlight = selected
         }
         do {
             let courses = try await selected.task.value
             guard selected.revision == revision,
-                  try normalizedCurrentCredentials() == credentials else { throw CancellationError() }
+                  try normalizedCurrentCredentials() == credentials, activeScope == scope,
+                  businessCache.isCurrent(scope, kind: .courses) else { throw CancellationError() }
             if courseFlight?.id == selected.id {
                 courseCache = CourseCache(account: credentials.account, fetchedAt: .now, courses: courses)
+                coursePersistenceFailed = false
+                courseHasLiveResult = true; courseRetainingPrevious = false
+                if let courseCache {
+                    do {
+                        try businessCache.save(CourseBusinessCachedValue(schemaVersion: 1, scope: scope,
+                            fetchedAt: Self.timestamp(courseCache.fetchedAt), partial: false, payload: courses),
+                            kind: .courses, maximumBytes: Self.maximumAPIBytes)
+                    } catch {
+                        guard businessCache.isCurrent(scope, kind: .courses) else { throw CancellationError() }
+                        coursePersistenceFailed = true
+                    }
+                }
                 courseFlight = nil
             }
             return courses
         } catch {
             if courseFlight?.id == selected.id { courseFlight = nil }
+            if selected.revision == revision { courseRetainingPrevious = courseCache != nil }
             throw error
         }
     }
 
     private func normalizedCurrentCredentials() throws -> Credentials {
-        guard let credentials = try credentialStore.load(),
-              !credentials.account.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !credentials.effectiveTeachingCloudPassword.isEmpty else {
+        let credentials: Credentials
+        let scope: CourseBusinessCacheScope
+        do { (credentials, scope) = try businessCache.ucloudCredentialBinding(store: credentialStore) }
+        catch {
             invalidateAuthentication()
-            throw CalendarDeadlineError.service("请先在设置中保存教务账号和密码。")
+            throw error
         }
         let normalized = Credentials(account: credentials.account.trimmingCharacters(in: .whitespacesAndNewlines),
                                      password: credentials.effectiveTeachingCloudPassword)
-        if activeCredentials != normalized { invalidateAuthentication(); activeCredentials = normalized }
+        if activeCredentials != normalized || activeScope != scope {
+            invalidateAuthentication(); activeCredentials = normalized; activeScope = scope
+        }
         return normalized
     }
 
@@ -1027,11 +1206,12 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
 
     private func accountWideItems(force: Bool = false) async throws -> [AssignmentDeadlineItem] {
         let normalizedCredentials = try normalizedCurrentCredentials()
+        restoreDiskCacheIfNeeded()
+        guard let scope = activeScope else { throw CancellationError() }
         let account = normalizedCredentials.account
         let allItems: [AssignmentDeadlineItem]
-        if !force, let cache,
-           cache.account == account,
-           Date().timeIntervalSince(cache.fetchedAt) < Self.cacheLifetime {
+        if !force, assignmentAttempted, assignmentPreparations.isEmpty, inFlightFetches[account] == nil,
+           let cache, cache.account == account, Self.isRecent(assignmentLastAttemptAt) {
             allItems = cache.items
         } else {
             let flight: InFlightFetch
@@ -1040,8 +1220,12 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
                 flight = existing
                 isFlightLeader = false
             } else {
+                assignmentAttempted = true
+                assignmentLastAttemptAt = .now
                 nextFlightID &+= 1
                 let flightID = nextFlightID
+                assignmentPreparations.insert(flightID)
+                defer { assignmentPreparations.remove(flightID) }
                 let requestRevision = revision
                 let fetchAllProvider = fetchAllProvider
                 let currentCourses = fetchAllProvider == nil ? try await fetchCurrentCourses(force: force) : nil
@@ -1056,8 +1240,10 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
                         id: flightID,
                         revision: requestRevision,
                         task: Task {
-                            if let fetchAllProvider { return try await fetchAllProvider(normalizedCredentials) }
-                            return try await Self.fetchAll(credentials: normalizedCredentials, courses: currentCourses ?? [])
+                            try await Self.withBudget {
+                                if let fetchAllProvider { return try await fetchAllProvider(normalizedCredentials) }
+                                return try await Self.fetchAll(credentials: normalizedCredentials, courses: currentCourses ?? [])
+                            }
                         }
                     )
                     inFlightFetches[account] = flight
@@ -1071,17 +1257,48 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
                 if inFlightFetches[account]?.id == flight.id {
                     inFlightFetches.removeValue(forKey: account)
                 }
+                if let partial = error as? UCloudPartialAssignmentError,
+                   activeScope == scope, businessCache.isCurrent(scope, kind: .assignments) {
+                    assignmentPartial = true
+                    if let cache, cache.account == account {
+                        assignmentRetainingPrevious = true
+                        return cache.items
+                    }
+                    let next = Cache(account: account, fetchedAt: .now, items: partial.items, partial: true)
+                    cache = next
+                    do {
+                        try businessCache.save(CourseBusinessCachedValue(schemaVersion: 1, scope: scope,
+                            fetchedAt: Self.timestamp(next.fetchedAt), partial: true, payload: next.items),
+                            kind: .assignments, maximumBytes: Self.maximumAPIBytes)
+                    } catch {
+                        guard businessCache.isCurrent(scope, kind: .assignments) else { throw CancellationError() }
+                        assignmentPersistenceFailed = true
+                    }
+                    return next.items
+                }
                 throw error
             }
-            let latest = try credentialStore.load()
+            let (latest, latestScope) = try businessCache.ucloudCredentialBinding(store: credentialStore)
             guard revision == flight.revision,
-                  latest?.account.trimmingCharacters(in: .whitespacesAndNewlines) == account,
-                  latest?.effectiveTeachingCloudPassword == normalizedCredentials.password
+                  latest.account.trimmingCharacters(in: .whitespacesAndNewlines) == account,
+                  latest.effectiveTeachingCloudPassword == normalizedCredentials.password,
+                  latestScope == scope
             else {
                 throw CancellationError()
             }
             if inFlightFetches[account]?.id == flight.id {
                 cache = Cache(account: account, fetchedAt: Date(), items: allItems)
+                assignmentPartial = false; assignmentRetainingPrevious = false; assignmentPersistenceFailed = false
+                if let cache {
+                    do {
+                        try businessCache.save(CourseBusinessCachedValue(schemaVersion: 1, scope: scope,
+                            fetchedAt: Self.timestamp(cache.fetchedAt), partial: cache.partial, payload: cache.items),
+                            kind: .assignments, maximumBytes: Self.maximumAPIBytes)
+                    } catch {
+                        guard businessCache.isCurrent(scope, kind: .assignments) else { throw CancellationError() }
+                        assignmentPersistenceFailed = true
+                    }
+                }
                 inFlightFetches.removeValue(forKey: account)
             }
         }
@@ -1100,6 +1317,13 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
         courseFlight?.task.cancel()
         courseFlight = nil
         activeCredentials = nil
+        activeScope = nil; restoredScope = nil
+        launchWarmAttempted = false; courseAttempted = false; assignmentAttempted = false
+        coursePersistenceFailed = false; assignmentPersistenceFailed = false
+        assignmentPartial = false; assignmentRetainingPrevious = false
+        assignmentPreparations.removeAll()
+        courseLastAttemptAt = nil; assignmentLastAttemptAt = nil
+        courseHasLiveResult = false; courseRetainingPrevious = false
         let invalidated = inFlightFetches.values.map(\.task)
         inFlightFetches.removeAll()
         invalidated.forEach { $0.cancel() }
@@ -1148,6 +1372,7 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
         var successfulCourseRequests = 0
         var firstCourseError: Error?
         for course in courses {
+            try Task.checkCancellation()
             let body: [String: Any] = [
                 "siteId": course.id,
                 "userId": authenticated.userID,
@@ -1201,7 +1426,9 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
             // The supplementary undone feed is optional. Other request failures
             // keep the original course-list behavior and never trigger login.
         }
-        return merge(allItems)
+        let merged = merge(allItems)
+        if firstCourseError != nil { throw UCloudPartialAssignmentError(items: merged) }
+        return merged
     }
 
     private static func authenticate(credentials: Credentials) async throws -> AuthenticationSession<AuthenticatedSession> {
@@ -1534,6 +1761,7 @@ private extension String {
 }
 
 enum AssignmentDeadlineParser {
+    static func isValidCachedDeadline(_ value: String) -> Bool { parseAssignmentDate(value) != nil }
     static func parse(data: Data, requestedDate: String) throws -> [AssignmentDeadlineItem] {
         guard StrictContractDateParser.date(from: requestedDate) != nil else {
             throw CalendarDeadlineError.service("作业日期格式不正确。")
@@ -1851,6 +2079,9 @@ final class CalendarDeadlineStore: ObservableObject {
     @Published private(set) var assignmentQueryError = ""
     @Published private(set) var isLoadingAssignmentQuery = false
     @Published private(set) var assignmentQueryFetchedAt: String?
+    @Published private(set) var isRefreshingAssignmentQuery = false
+    @Published private(set) var isPartialAssignmentQuery = false
+    @Published private(set) var isRetainingPreviousAssignments = false
     private var assignmentQueryAttempted = false
     @Published private(set) var isLoadingPublicFeed = false
     @Published private(set) var publicFeedError = ""
@@ -1873,7 +2104,7 @@ final class CalendarDeadlineStore: ObservableObject {
 
     init(
         client: any PublicDeadlineFetching = PublicDeadlineClient(),
-        assignmentClient: any AssignmentDeadlineFetching = UCloudAssignmentClient(),
+        assignmentClient: any AssignmentDeadlineFetching = UCloudAssignmentClient.shared,
         customClientFactory: @escaping @Sendable (URL) throws -> any CustomDeadlineFeedFetching = {
             try CustomDeadlineFeedClient(sourceURL: $0)
         }
@@ -2163,9 +2394,48 @@ final class CalendarDeadlineStore: ObservableObject {
         await loadAssignments(dates: [date], sampleMode: sampleMode, force: force)
     }
 
+    func restoreCachedAssignments(sampleMode: Bool) async {
+        guard !sampleMode else { return }
+        let revision = assignmentRevision
+        await assignmentResetTask?.value
+        guard revision == assignmentRevision, let result = try? await assignmentClient.cachedAssignmentResult(),
+              revision == assignmentRevision, !Task.isCancelled, acceptsAssignmentResult(result) else { return }
+        installAssignmentResult(result, dates: [], fromCache: true)
+    }
+
+    private func acceptsAssignmentResult(_ result: AssignmentDeadlineResult) -> Bool {
+        result.scope.map { assignmentClient.isAssignmentScopeCurrent($0) } ?? true
+    }
+
+    private func installAssignmentResult(_ result: AssignmentDeadlineResult, dates: [String], fromCache: Bool) {
+        let grouped = Dictionary(grouping: result.items, by: { String($0.deadline.prefix(10)) })
+        isPartialAssignmentQuery = result.partial
+        isRetainingPreviousAssignments = result.retainingPrevious
+        if result.coversAllCourses {
+            assignmentQueryItems = result.items
+            assignmentQueryFetchedAt = result.fetchedAt
+        }
+        let keys = result.coversAllCourses ? Set(assignmentsByDate.keys).union(grouped.keys).union(dates) : Set(dates)
+        var next = assignmentsByDate
+        var errors = assignmentUnavailableByDate
+        for date in keys {
+            if result.partial, grouped[date] == nil, next[date] != nil { continue }
+            next[date] = grouped[date] ?? []
+            if result.partial {
+                errors[date] = "以下内容仅来自本机已同步缓存；未列出不代表已经提交或没有作业。"
+            } else { errors.removeValue(forKey: date) }
+        }
+        assignmentsByDate = next; assignmentUnavailableByDate = errors
+        assignmentQueryError = result.cachePersistenceFailed
+            ? "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。"
+            : (result.partial ? "以下内容仅来自本机已同步缓存；未列出不代表已经提交或没有作业。" : "")
+    }
+
     func loadAssignments(dates: [String], sampleMode: Bool, force: Bool = false) async {
         let revisionBeforeReset = assignmentRevision
         await assignmentResetTask?.value
+        guard revisionBeforeReset == assignmentRevision else { return }
+        if !sampleMode { await restoreCachedAssignments(sampleMode: false) }
         guard revisionBeforeReset == assignmentRevision else { return }
         let requestedDates = Array(Set(dates)).sorted().filter { date in
             (force || assignmentsByDate[date] == nil) && !loadingAssignmentDates.contains(date)
@@ -2197,22 +2467,15 @@ final class CalendarDeadlineStore: ObservableObject {
             }
         }
         do {
-            let itemsByDate = try await assignmentClient.fetch(dates: requestedDates)
-            guard assignmentRevision == requestRevision else { return }
-            var updatedAssignments = assignmentsByDate
-            var updatedUnavailable = assignmentUnavailableByDate
-            for date in requestedDates {
-                updatedAssignments[date] = itemsByDate[date] ?? []
-                updatedUnavailable.removeValue(forKey: date)
-            }
-            assignmentsByDate = updatedAssignments
-            assignmentUnavailableByDate = updatedUnavailable
+            let result = try await assignmentClient.fetchAssignmentResult(dates: requestedDates, force: force)
+            guard assignmentRevision == requestRevision, acceptsAssignmentResult(result) else { return }
+            installAssignmentResult(result, dates: requestedDates, fromCache: false)
         } catch {
             guard assignmentRevision == requestRevision else { return }
             var updatedAssignments = assignmentsByDate
             var updatedUnavailable = assignmentUnavailableByDate
             for date in requestedDates {
-                updatedAssignments[date] = []
+                if updatedAssignments[date] == nil { updatedAssignments[date] = [] }
                 updatedUnavailable[date] = error.localizedDescription
             }
             assignmentsByDate = updatedAssignments
@@ -2224,7 +2487,10 @@ final class CalendarDeadlineStore: ObservableObject {
         let beforeReset = assignmentRevision
         await assignmentResetTask?.value
         guard beforeReset == assignmentRevision, !isLoadingAssignmentQuery,
+              !isRefreshingAssignmentQuery,
               force || !assignmentQueryAttempted else { return }
+        if !sampleMode { await restoreCachedAssignments(sampleMode: false) }
+        guard beforeReset == assignmentRevision, !isRefreshingAssignmentQuery else { return }
         assignmentQueryAttempted = true
         if sampleMode {
             let today = StrictContractDateParser.string(from: .now)
@@ -2234,24 +2500,18 @@ final class CalendarDeadlineStore: ObservableObject {
             return
         }
         let requestRevision = assignmentRevision
-        isLoadingAssignmentQuery = true
+        isRefreshingAssignmentQuery = true
+        isLoadingAssignmentQuery = assignmentQueryItems == nil
         assignmentQueryError = ""
-        defer { if requestRevision == assignmentRevision { isLoadingAssignmentQuery = false } }
+        defer { if requestRevision == assignmentRevision { isLoadingAssignmentQuery = false; isRefreshingAssignmentQuery = false } }
         do {
-            let items = try await assignmentClient.fetchAll(force: force)
-            guard requestRevision == assignmentRevision else { return }
-            assignmentQueryItems = items
-            assignmentQueryFetchedAt = SJDClassroomClient.timestamp()
-            let grouped = Dictionary(grouping: items, by: { String($0.deadline.prefix(10)) })
-            // Update dates already loaded by the calendar, including newly empty
-            // dates, and share new results with subsequent calendar navigation.
-            for date in Set(assignmentsByDate.keys).union(grouped.keys) {
-                assignmentsByDate[date] = grouped[date] ?? []
-                assignmentUnavailableByDate.removeValue(forKey: date)
-            }
+            let result = try await assignmentClient.fetchAssignmentResult(force: force)
+            guard requestRevision == assignmentRevision, acceptsAssignmentResult(result) else { return }
+            installAssignmentResult(result, dates: [], fromCache: false)
         } catch {
             guard requestRevision == assignmentRevision else { return }
             assignmentQueryError = "课程作业获取失败，请检查个人账户中的教学云密码或稍后重试。"
+            isRetainingPreviousAssignments = assignmentQueryItems != nil
         }
     }
 
@@ -2262,6 +2522,7 @@ final class CalendarDeadlineStore: ObservableObject {
         assignmentQueryFetchedAt = nil
         assignmentQueryAttempted = false
         isLoadingAssignmentQuery = false
+        isRefreshingAssignmentQuery = false; isPartialAssignmentQuery = false; isRetainingPreviousAssignments = false
         assignmentsByDate.removeAll()
         assignmentUnavailableByDate.removeAll()
         loadingAssignmentDates.removeAll()
