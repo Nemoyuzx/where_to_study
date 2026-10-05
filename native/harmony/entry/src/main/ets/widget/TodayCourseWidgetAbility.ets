@@ -32,7 +32,9 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
     this.dimensions.delete(formId);
   }
 
-  private static defaultPreferences(): WidgetCoursePreferences {
+  private defaultPreferences(): WidgetCoursePreferences {
+    const saved: WidgetCoursePreferences | null = WidgetSync.loadPreferencesSync(this.context.filesDir);
+    if (saved !== null) { return saved; }
     return new WidgetCoursePreferences(true, true, WidgetCoursePreferences.defaultLimit,
       AppLanguageInfo.resolved(AppLanguage.system, AppLanguageInfo.systemLanguage()));
   }
@@ -52,7 +54,7 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
       // 后续在 onUpdateForm 成功提交数据后设置下一次刷新。
     }
     const preferences: WidgetCoursePreferences =
-      archive?.preferences ?? TodayCourseWidgetAbility.defaultPreferences();
+      archive?.preferences ?? this.defaultPreferences();
     return formBindingData.createFormBindingData(
       this.themedBinding(archive, preferences, dimensionValue));
   }
@@ -81,7 +83,7 @@ export default class TodayCourseWidgetAbility extends FormExtensionAbility {
       const archive: WidgetArchive | null = await WidgetSync.loadArchive(
         TodayCourseWidgetData.archiveFilePath(filesDir));
       const preferences: WidgetCoursePreferences =
-        archive?.preferences ?? TodayCourseWidgetAbility.defaultPreferences();
+        archive?.preferences ?? this.defaultPreferences();
       const data: formBindingData.FormBindingData =
         formBindingData.createFormBindingData(
           this.themedBinding(archive, preferences, dimensionValue));

@@ -1530,5 +1530,7 @@
   "默认校区": "Kampus bawaan",
   "默认青绿": "Hijau kebiruan klasik",
   "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Hanya pada laman masuk resmi yang telah diverifikasi, aplikasi dapat memilih akun yang cocok persis dengan akun tersimpan dan mengisi nama pengguna serta kata sandi, dengan paling banyak satu upaya per langkah. Pemilihan akun yang tidak cocok, MFA, CAPTCHA, tetap masuk, serta konfirmasi risiko dan ketentuan tetap memerlukan tindakan Anda.",
-  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Menonaktifkan “Aktifkan QMplus” hanya menjeda koneksi dan sinkronisasi; informasi masuk tersimpan, sesi, dan cache mata kuliah tetap disimpan. Gunakan kontrol terpisah untuk mematikan isi otomatis, menghapus informasi masuk, atau memutus koneksi dan menghapus data."
+  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Menonaktifkan “Aktifkan QMplus” hanya menjeda koneksi dan sinkronisasi; informasi masuk tersimpan, sesi, dan cache mata kuliah tetap disimpan. Gunakan kontrol terpisah untuk mematikan isi otomatis, menghapus informasi masuk, atau memutus koneksi dan menghapus data.",
+  "QMplus 网页会话需要清理，请重新启动应用。": "Sesi web QMplus perlu dihapus. Silakan mulai ulang aplikasi.",
+  "QMplus 网页会话尚未清除或保存失败，请重试。": "Sesi web QMplus tidak dapat dihapus atau disimpan. Silakan coba lagi."
 }

@@ -11,6 +11,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InformationQueryLogicTest {
+    @Test fun fullShuttleTimetableIsInitiallyCollapsedAndSessionOnlyTogglesItsBody() {
+        val session = InformationQuerySessionState()
+        assertFalse(session.fullTimetableExpanded)
+        session.query = "preserve-search"
+        session.modeScrollY[InformationQueryMode.SHUTTLE] = 120
+        session.toggleFullTimetable()
+        assertTrue(session.fullTimetableExpanded)
+        session.selectedMode = InformationQueryMode.IMPORTANT_EVENTS
+        session.selectedMode = InformationQueryMode.SHUTTLE
+        assertTrue(session.fullTimetableExpanded)
+        repeat(31) { session.toggleFullTimetable() }
+        assertFalse(session.fullTimetableExpanded)
+        assertEquals("preserve-search", session.query)
+        assertEquals(120, session.modeScrollY[InformationQueryMode.SHUTTLE])
+        assertFalse(InformationQuerySessionState().fullTimetableExpanded)
+    }
+
     @Test
     fun fixedPhoneSegmentsUseIconsWhenTheLabelAndIconCannotFit() {
         assertTrue(InformationQueryLayoutLogic.usesIconOnlyTabs(70, 60f, 22, 4, 8))

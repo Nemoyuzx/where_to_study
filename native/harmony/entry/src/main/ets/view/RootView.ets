@@ -63,6 +63,9 @@ export struct RootView {
   private qmWindowListener: ((event: window.WindowEventType) => void) | null = null;
   @Local languageOverlayVisible: boolean = false;
   @Local languageOverlayOpacity: number = 0;
+  @Local languageOverlayCompleted: boolean = false;
+  private languageLastTreeGeometry: number[] = [];
+  private languageReducedMotion: boolean = false;
   private languageTransitionEpoch: number = 0;
   private languageAppliedRequestEpoch: number = 0;
   private languageTransitionTarget: AppLanguage | null = null;
@@ -112,6 +115,7 @@ export struct RootView {
   }
 
   aboutToDisappear(): void {
+    this.settingsSession.clearTransientPasswords();
     this.cancelLanguageTransition(true);
     this.navigationAvoidanceActive = false;
     this.querySession.dispose();
@@ -207,6 +211,7 @@ export struct RootView {
 
   private resetLanguageLayoutSamples(): void {
     this.languageStableFrames = 0;
+    this.languageLastTreeGeometry = [];
     this.languageLastCardX = Number.NaN;
     this.languageLastCardY = Number.NaN;
     this.languageLastCardWidth = Number.NaN;
@@ -235,6 +240,7 @@ export struct RootView {
     this.settingsSession.requestedLanguageRawValue = '';
     this.languageOverlayOpacity = 0;
     this.languageOverlayVisible = false;
+    this.languageOverlayCompleted = false;
     this.languageOverlayFading = false;
     this.languageStableFrames = 0;
     if (commitIntent && target !== null &&
@@ -254,15 +260,10 @@ export struct RootView {
       this.settingsSession.showingLanguagePicker = false;
       return;
     }
-    if (this.reduceLanguageMotion()) {
-      this.cancelLanguageTransition(false);
-      const revision: number = ++this.languageTransitionEpoch;
-      this.languageAppliedRequestEpoch = revision;
-      this.settingsSession.requestLanguage(target);
-      return;
-    }
+    this.languageReducedMotion = this.reduceLanguageMotion();
     const epoch: number = ++this.languageTransitionEpoch;
     this.languageTransitionTarget = target;
+    this.languageOverlayCompleted = false;
     this.languageOverlayFading = false;
     this.resetLanguageLayoutSamples();
     this.clearLanguageTransitionTimer();
@@ -277,10 +278,10 @@ export struct RootView {
       // Missing frames or layout are an interrupted transition, not proof that
       // the target is ready. Retire the mask and preserve the accepted choice.
       this.cancelLanguageTransition(true);
-    }, 1600);
+    }, 5000);
     // 先给独立模糊层一个实际布局帧，再覆盖内容；不能让文字变化跟随整页动画。
     this.postLanguageFrame(epoch, (): void => {
-      this.getUIContext().animateTo({ duration: 110, curve: Curve.EaseOut,
+      this.getUIContext().animateTo({ duration: this.languageReducedMotion ? 0 : 110, curve: Curve.EaseOut,
         onFinish: (): void => {
           if (epoch !== this.languageTransitionEpoch) { return; }
           this.requestLanguageUnderOverlay(epoch);
@@ -312,11 +313,13 @@ export struct RootView {
       return;
     }
     let sampled: boolean = false;
-    if (this.languageAppliedRequestEpoch === epoch && this.model.languageSetting() === target) {
+    if (this.languageAppliedRequestEpoch === epoch && this.model.languageChangeReady(target)) {
       try {
         const card: FrameNode | null = this.getUIContext().getAttachedFrameNodeById('settings_language_surface');
         const targetNode: FrameNode | null = this.getUIContext().getAttachedFrameNodeById('settings.language.current.target.' + target);
-        if (card !== null && targetNode !== null) {
+        const mainNode: FrameNode | null = this.getUIContext().getAttachedFrameNodeById('language.main.ui.' + target);
+        const tree: number[] | null = mainNode === null ? null : this.languageTreeGeometry(mainNode);
+        if (card !== null && targetNode !== null && tree !== null) {
           const position = card.getPositionToWindow();
           const bounds = card.getMeasuredSize();
           const targetPosition = targetNode.getPositionToWindow();
@@ -326,7 +329,9 @@ export struct RootView {
           if (geometry.every((value: number): boolean => Number.isFinite(value)) &&
             bounds.width > 0 && bounds.height > 0 && targetBounds.width > 0 && targetBounds.height > 0) {
             sampled = true;
-            const stable: boolean = Math.abs(position.x - this.languageLastCardX) <= 1 &&
+            const stable: boolean = tree.length === this.languageLastTreeGeometry.length && tree.every(
+              (value: number, index: number): boolean => Math.abs(value - this.languageLastTreeGeometry[index]) <= 1) &&
+              Math.abs(position.x - this.languageLastCardX) <= 1 &&
               Math.abs(position.y - this.languageLastCardY) <= 1 &&
               Math.abs(bounds.width - this.languageLastCardWidth) <= 1 &&
               Math.abs(bounds.height - this.languageLastCardHeight) <= 1 &&
@@ -334,12 +339,13 @@ export struct RootView {
               Math.abs(targetPosition.y - this.languageLastTargetY) <= 1 &&
               Math.abs(targetBounds.width - this.languageLastTargetWidth) <= 1 &&
               Math.abs(targetBounds.height - this.languageLastTargetHeight) <= 1;
-            this.languageStableFrames = stable ? this.languageStableFrames + 1 : 0;
+            this.languageStableFrames = stable ? this.languageStableFrames + 1 : 1;
+            this.languageLastTreeGeometry = tree;
             this.languageLastCardX = position.x; this.languageLastCardY = position.y;
             this.languageLastCardWidth = bounds.width; this.languageLastCardHeight = bounds.height;
             this.languageLastTargetX = targetPosition.x; this.languageLastTargetY = targetPosition.y;
             this.languageLastTargetWidth = targetBounds.width; this.languageLastTargetHeight = targetBounds.height;
-            if (this.languageStableFrames >= 2) { this.fadeLanguageOverlay(epoch); return; }
+            if (this.languageStableFrames >= 3) { this.fadeLanguageOverlay(epoch); return; }
           }
         }
       } catch (e) {}
@@ -348,21 +354,45 @@ export struct RootView {
     this.postLanguageFrame(epoch, (): void => this.sampleLanguageLayout(epoch));
   }
 
+  private languageTreeGeometry(root: FrameNode): number[] | null {
+    const nodes: FrameNode[] = [root];
+    const result: number[] = [];
+    for (let index: number = 0; index < nodes.length; index++) {
+      if (index >= 2048) { return null; }
+      const node: FrameNode = nodes[index];
+      const position = node.getPositionToWindow();
+      const size = node.getMeasuredSize();
+      const values: number[] = [position.x, position.y, size.width, size.height, node.getChildrenCount()];
+      if (!values.every((value: number): boolean => Number.isFinite(value))) { return null; }
+      result.push(...values);
+      for (let childIndex: number = 0; childIndex < node.getChildrenCount(); childIndex++) {
+        const child: FrameNode | null = node.getChild(childIndex);
+        if (child !== null) { nodes.push(child); }
+      }
+    }
+    return result;
+  }
+
   private fadeLanguageOverlay(epoch: number): void {
     if (epoch !== this.languageTransitionEpoch || this.languageTransitionTarget === null ||
       this.languageOverlayFading) { return; }
     this.languageOverlayFading = true;
+    this.languageOverlayCompleted = true;
     this.clearLanguageTransitionTimer();
     this.languageTransitionTimer = setTimeout((): void => {
-      if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
-    }, 340);
-    this.getUIContext().animateTo({ duration: 190, curve: Curve.EaseOut,
+      this.languageTransitionTimer = -1;
+      if (epoch !== this.languageTransitionEpoch) { return; }
+      this.languageTransitionTimer = setTimeout((): void => {
+        if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
+      }, 340);
+    this.getUIContext().animateTo({ duration: this.languageReducedMotion ? 0 : 190, curve: Curve.EaseOut,
       onFinish: (): void => {
         if (epoch === this.languageTransitionEpoch) { this.cancelLanguageTransition(true); }
       }
     }, (): void => {
       this.languageOverlayOpacity = 0;
     });
+    }, 140);
   }
   private visibleBottomInsetVp(mainWindow: window.Window, type: window.AvoidAreaType): number {
     try {
@@ -416,6 +446,7 @@ export struct RootView {
       }
       .width('100%')
       .height('100%')
+      .id('language.main.ui.' + this.model.languageSetting())
 
       if (this.settingsFavoriteManagerVisible) {
         SettingsView({
@@ -444,7 +475,14 @@ export struct RootView {
           .transition(TransitionEffect.OPACITY.animation({ duration: 180, curve: Curve.EaseOut }))
       }
       if (this.languageOverlayVisible) {
-        Column() {}
+        Column({ space: 10 }) {
+          if (this.languageOverlayCompleted) {
+            SymbolGlyph($r('sys.symbol.checkmark_circle')).fontSize(30).fontColor([AppTheme.primary()])
+          } else {
+            Text('Switching…').fontSize(15).fontColor(AppTheme.text())
+          }
+        }
+          .justifyContent(FlexAlign.Center).alignItems(HorizontalAlign.Center)
           .width('100%').height('100%')
           .backgroundBlurStyle(BlurStyle.Regular)
           .opacity(this.languageOverlayOpacity)
@@ -515,7 +553,8 @@ export struct RootView {
         if (this.currentSection === AppSection.planner) {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
-          CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth() })
+          CalendarSectionView({ containerWidth: this.containerWidth - this.sidebarWidth(), qmPlusSession: this.qmPlusSession,
+            onOpenCourse: (source: string, id: string): boolean => this.openCalendarCourse(source, id) })
             .direction(Direction.Ltr)
         } else if (this.currentSection === AppSection.courses) {
           CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
@@ -607,7 +646,8 @@ export struct RootView {
         if (this.currentSection === AppSection.planner) {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
-          CalendarSectionView({ containerWidth: this.containerWidth })
+          CalendarSectionView({ containerWidth: this.containerWidth, qmPlusSession: this.qmPlusSession,
+            onOpenCourse: (source: string, id: string): boolean => this.openCalendarCourse(source, id) })
             .direction(Direction.Ltr)
         } else if (this.currentSection === AppSection.courses) {
           CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
@@ -685,7 +725,8 @@ export struct RootView {
     if (section === AppSection.planner) {
       PlannerView()
     } else if (section === AppSection.calendar) {
-      CalendarSectionView({ containerWidth: this.containerWidth })
+      CalendarSectionView({ containerWidth: this.containerWidth, qmPlusSession: this.qmPlusSession,
+        onOpenCourse: (source: string, id: string): boolean => this.openCalendarCourse(source, id) })
         .direction(Direction.Ltr)
     } else if (section === AppSection.courses) {
       CourseView({ session: this.courseSession, qmPlusSession: this.qmPlusSession,
@@ -698,7 +739,19 @@ export struct RootView {
     }
   }
 
+  private openCalendarCourse(source: string, id: string): boolean {
+    const known: boolean = source === 'ucloud' ? this.model.cloudCourses.some((course): boolean => course.id === id) :
+      source === 'qmplus' && this.model.qmplusEnabled && !this.model.isSampleMode() &&
+        (this.qmPlusSession.snapshot?.courses.some((course): boolean => course.id === id) ?? false);
+    if (!known) { return false; }
+    this.courseSession.skipNextAutomaticCourseLoad = true;
+    this.courseSession.openCourse(source, id);
+    this.selectSection(AppSection.courses);
+    return true;
+  }
+
   selectSection(section: AppSection): void {
+    if (section !== AppSection.settings) { this.settingsSession.clearTransientPasswords(); }
     if (section !== AppSection.settings && this.languageTransitionTarget !== null) { this.cancelLanguageTransition(true); }
     hilog.info(0x0000, 'RootView', 'selectSection -> %{public}s', section);
     if (section !== this.currentSection && this.qmPlusSession.loginVisible) {

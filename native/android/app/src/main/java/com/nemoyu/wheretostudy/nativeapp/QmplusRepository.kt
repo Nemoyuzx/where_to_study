@@ -188,8 +188,22 @@ internal class QmplusRepository(context: Context,
                         beforeSavePublication?.invoke()
                         synchronized(stateLock) {
                             check(!closed.get() && revision == token.first && savedLoginStore?.status()?.revision == token.second)
+                            val store = checkNotNull(savedLoginStore)
+                            // An explicit resave of the identical authorized
+                            // record must not log out an otherwise valid session.
+                            // Compare secrets only on this worker and erase the
+                            // loaded buffer; a pending cleanup never takes this path.
+                            val unchanged = if (savedLoginStatus.enabled && !cookiesNeedClearing) {
+                                val saved = store.load(token.second)
+                                try {
+                                    saved != null && saved.account == account.trim() &&
+                                        saved.password.contentEquals(ownedPassword) &&
+                                        store.status() == savedLoginStatus
+                                } finally { saved?.erase() }
+                            } else false
+                            if (unchanged) return@synchronized savedLoginStatus
                             clearInternal(preservingPendingLogin = true)
-                            val savedStatus = checkNotNull(savedLoginStore).save(account, ownedPassword, true, savedLoginStatus.revision)
+                            val savedStatus = store.save(account, ownedPassword, true, savedLoginStatus.revision)
                             savedLoginStatus = savedStatus
                             savedStatus
                         }

@@ -4,6 +4,7 @@
 import { webview } from '@kit.ArkWeb';
 import { QMPlusSnapshot, QMPlusSnapshotParser, QMPlusURLPolicy } from '../net/QMPlusSnapshot';
 import { PreferencesStore } from '../store/PreferencesStore';
+import { QMPlusWebProfileStore, QMPlusWebProfileStoring } from '../store/QMPlusWebProfileStore';
 import { AssetQMPlusSavedLoginStore, newQMPlusRecordID, QMPlusSavedLogin,
   QMPlusSavedLoginStoring } from '../store/QMPlusSavedLoginStore';
 
@@ -44,13 +45,16 @@ export class QMPlusSession {
   // ArkWeb 文档要求先加载 Web 组件再调用 WebStorage；Root Session 重建不代表
   // 本进程的 incognito profile 未被使用过。
   private static ownedWebLoadedInProcess: boolean = false;
-  // An incognito profile survives root/session recreation in this process,
-  // though it cannot survive process death. Failed clearing fences that owner.
-  // A future persistent Web profile must replace this with a durable fence.
+  // Legacy injected synchronous clearing backend used by pure test fixtures.
+  // Production uses QMPlusWebProfileStore's durable, independently stored fence.
   private static ownedWebClearPendingInProcess: boolean = false;
   private static nextSessionID: number = 0;
+  // All Root/Session instances use one ASSET alias and authorization key. Drain
+  // an older instance's already-started write before a recreated Root clears it.
+  private static savedLoginMutationInProcess: Promise<boolean> = Promise.resolve(true);
   private readonly sessionID: number = ++QMPlusSession.nextSessionID;
   @Trace loginVisible: boolean = false;
+  @Trace officialWebProfileReady: boolean = false;
   @Trace isFeatureEnabled: boolean = true;
   // Mount the same ArkWeb with a real viewport during an authorized quiet flow.
   // Presentation is separate from ownership; unknown/MFA pages reveal this owner.
@@ -75,21 +79,24 @@ export class QMPlusSession {
   private restartOwnedWeb: (() => void) | null = null;
   private officialPageLoading: boolean = false;
   private readonly clearIncognitoData: () => void;
+  private readonly webProfile: QMPlusWebProfileStoring | null;
   private readonly savedLoginStore: QMPlusSavedLoginStoring;
   private readonly authorizationJournal: QMPlusAuthorizationJournal;
   private readonly recordIDFactory: () => string;
   private loginSettingsRevision: number = 0;
   private restoredLoginSettings: boolean = false;
-  private loginMutation: Promise<boolean> = Promise.resolve(true);
   private quietDeadlineTimer: number = -1;
 
   constructor(clearIncognitoData?: () => void, savedLoginStore?: QMPlusSavedLoginStoring,
-    authorizationJournal?: QMPlusAuthorizationJournal, recordIDFactory?: () => string) {
+    authorizationJournal?: QMPlusAuthorizationJournal, recordIDFactory?: () => string,
+    webProfile?: QMPlusWebProfileStoring) {
     this.clearIncognitoData = clearIncognitoData ?? ((): void => {
       webview.WebCookieManager.clearAllCookiesSync(true);
       webview.WebStorage.deleteAllData(true);
     });
     this.savedLoginStore = savedLoginStore ?? new AssetQMPlusSavedLoginStore();
+    this.webProfile = webProfile ?? (clearIncognitoData === undefined ? new QMPlusWebProfileStore() : null);
+    this.officialWebProfileReady = this.webProfile === null;
     this.authorizationJournal = authorizationJournal ?? new PreferencesStore();
     this.recordIDFactory = recordIDFactory ?? ((): string => newQMPlusRecordID());
   }
@@ -150,21 +157,21 @@ export class QMPlusSession {
   }
 
   isAuthorizationCurrent(authorization: QMPlusLoginAuthorization): boolean {
-    return this.isLoginOwnerCurrent(authorization.owner) && this.autoFillEnabled &&
+    return this.isOfficialWebReady(authorization.owner) && this.autoFillEnabled &&
       this.loginForeground && !this.loginSettingsBusy &&
       authorization.foregroundRevision === this.loginForegroundRevision &&
       authorization.settingsRevision === this.loginSettingsRevision;
   }
 
   async captureLoginAuthorization(owner: QMPlusLoginOwner): Promise<QMPlusLoginAuthorization | null> {
-    if (!this.isLoginOwnerCurrent(owner) || !this.loginForeground || !this.autoFillEnabled || this.loginSettingsBusy) { return null; }
+    if (!this.isOfficialWebReady(owner) || !this.loginForeground || !this.autoFillEnabled || this.loginSettingsBusy) { return null; }
     const settingsRevision: number = this.loginSettingsRevision;
     const foregroundRevision: number = this.loginForegroundRevision;
     try {
       const login: QMPlusSavedLogin | null = await this.savedLoginStore.load();
       const authorization: string | null = await this.authorizationJournal.getString(
         QMPlusSession.autoFillAuthorizationKey);
-      if (!this.isLoginOwnerCurrent(owner) || !this.loginForeground || !this.autoFillEnabled || this.loginSettingsBusy ||
+      if (!this.isOfficialWebReady(owner) || !this.loginForeground || !this.autoFillEnabled || this.loginSettingsBusy ||
         foregroundRevision !== this.loginForegroundRevision || settingsRevision !== this.loginSettingsRevision) { return null; }
       if (login === null || authorization !== login.recordID) {
         this.autoFillEnabled = false;
@@ -234,14 +241,34 @@ export class QMPlusSession {
   }
 
   private enqueueLoginMutation(work: () => Promise<boolean>): Promise<boolean> {
-    const next: Promise<boolean> = this.loginMutation.catch((): boolean => false)
+    const next: Promise<boolean> = QMPlusSession.savedLoginMutationInProcess.catch((): boolean => false)
       .then((_previous: boolean): Promise<boolean> => work());
-    this.loginMutation = next;
+    QMPlusSession.savedLoginMutationInProcess = next;
     return next;
   }
 
   async saveSavedLogin(account: string, password: string): Promise<boolean> {
     if (this.loginSettingsBusy) { return false; }
+    const observedRevision: number = this.loginSettingsRevision;
+    // Saving exactly the already-authorized record is a no-op: do not rotate
+    // its marker, retire its owner or delete a still-valid official session.
+    // The secret comparison stays in native memory and is never logged.
+    await this.restoreSavedLoginStatus();
+    try {
+      const previous: QMPlusSavedLogin | null = await this.savedLoginStore.load();
+      const marker: string | null = await this.authorizationJournal.getString(QMPlusSession.autoFillAuthorizationKey);
+      if (observedRevision !== this.loginSettingsRevision || this.loginSettingsBusy) { return false; }
+      if (previous !== null && this.autoFillEnabled && marker === previous.recordID &&
+        previous.account.trim().toLowerCase() === account.trim().toLowerCase() && previous.password === password) {
+        if (this.webProfile !== null && !this.webProfile.isReady()) {
+          this.setWebClearError();
+          this.loginSettingsError = 'QMplus 网页会话需要清理，请重新启动应用。';
+        } else { this.loginSettingsError = ''; }
+        return true;
+      }
+    } catch (e) {
+      if (observedRevision !== this.loginSettingsRevision || this.loginSettingsBusy) { return false; }
+    }
     let login: QMPlusSavedLogin;
     let recordID: string;
     try {
@@ -265,13 +292,21 @@ export class QMPlusSession {
       try {
         // A newly saved identity must not reuse the previous identity's cookie
         // or course snapshot, even when its official session is still valid.
-        const webCleared: boolean = this.clearConnection();
+        const clearAccepted: boolean = this.clearConnection();
         if (!await this.revokeBeforeRecordChange()) { return false; }
-        if (!webCleared) { this.loginSettingsError = this.error; return false; }
+        const webCleared: boolean = clearAccepted && await this.finishOwnedWebClear();
+        const fencedForRestart: boolean = clearAccepted && this.webProfile !== null && this.webProfile.hasDurableClearPending();
+        if (!webCleared && !fencedForRestart) { this.loginSettingsError = this.error; return false; }
         await this.savedLoginStore.save(login);
         if (revision !== this.loginSettingsRevision) { return false; }
         this.savedLoginAvailable = true;
         this.restoredLoginSettings = true;
+        if (!webCleared) {
+          // Saving the new ASSET record is not enabling the old Web session.
+          // The persistent fence remains until cold blank-page cleanup succeeds.
+          this.setWebClearError();
+          this.loginSettingsError = 'QMplus 网页会话需要清理，请重新启动应用。';
+        }
         return true;
       } catch (e) {
         if (revision === this.loginSettingsRevision) {
@@ -328,7 +363,8 @@ export class QMPlusSession {
           throw new Error('QMplus authorization not confirmed');
         }
         this.autoFillEnabled = true;
-        this.loginSettingsError = '';
+        this.loginSettingsError = this.webProfile !== null && !this.webProfile.isReady() ?
+          'QMplus 网页会话需要清理，请重新启动应用。' : '';
         this.restoredLoginSettings = true;
         return true;
       } catch (e) {
@@ -378,7 +414,8 @@ export class QMPlusSession {
   }
 
   async disconnectAndDeleteSavedLogin(): Promise<boolean> {
-    const webCleared: boolean = this.logout();
+    const clearAccepted: boolean = this.logout();
+    const webCleared: boolean = clearAccepted && await this.finishOwnedWebClear();
     const secretCleared: boolean = await this.deleteSavedLogin();
     return webCleared && secretCleared;
   }
@@ -391,18 +428,52 @@ export class QMPlusSession {
 
   noteWebLoaded(): void {
     QMPlusSession.ownedWebLoadedInProcess = true;
+    this.webProfile?.noteWebLoaded();
+  }
+
+  isOfficialWebReady(owner: QMPlusLoginOwner): boolean {
+    return this.isLoginOwnerCurrent(owner) && this.officialWebProfileReady &&
+      (this.webProfile === null || this.webProfile.isReady());
+  }
+
+  beginOfficialWebMount(owner: QMPlusLoginOwner): void {
+    if (this.isLoginOwnerCurrent(owner)) { this.officialWebProfileReady = this.webProfile === null; }
+  }
+
+  async prepareOfficialWeb(owner: QMPlusLoginOwner): Promise<boolean> {
+    if (!this.isLoginOwnerCurrent(owner)) { return false; }
+    const prepared: boolean = this.webProfile === null || await this.webProfile.prepare();
+    if (!this.isLoginOwnerCurrent(owner)) { return false; }
+    this.officialWebProfileReady = prepared;
+    if (!prepared) {
+      this.setWebClearError();
+      this.presentLogin();
+    }
+    return prepared;
+  }
+
+  async flushOfficialWeb(owner: QMPlusLoginOwner): Promise<boolean> {
+    if (!this.isOfficialWebReady(owner)) { return false; }
+    const flushed: boolean = this.webProfile === null || await this.webProfile.flush();
+    return flushed && this.isOfficialWebReady(owner);
   }
 
   openLogin(url: string = QMPlusURLPolicy.home): void {
-    if (!this.isFeatureEnabled || this.loginSettingsBusy || (QMPlusSession.ownedWebClearPendingInProcess && !this.clearOwnedWebSession())) { return; }
+    if (!this.isFeatureEnabled || this.loginSettingsBusy || (this.webProfile === null &&
+      QMPlusSession.ownedWebClearPendingInProcess && !this.clearOwnedWebSession())) { return; }
     if (this.loginVisible) {
-      if (this.errorCode !== 'QM_ERROR_PAGE' || this.officialPageLoading) { this.presentLogin(); return; }
+      if ((this.errorCode !== 'QM_ERROR_PAGE' && this.errorCode !== 'QM_WEB_CLEAR_PENDING') || this.officialPageLoading) { this.presentLogin(); return; }
       const restart: (() => void) | null = this.restartOwnedWeb;
       this.closeLogin();
       this.openLogin(QMPlusURLPolicy.home);
       if (restart !== null && this.loginVisible) { restart(); }
       return;
     }
+    if (this.webProfile !== null && !this.webProfile.reserveWebMount()) {
+      this.setWebClearError();
+      return;
+    }
+    this.officialWebProfileReady = this.webProfile === null;
     this.loginPresentationRevision++;
     this.targetURL = QMPlusURLPolicy.isBusinessPage(url) ? url : QMPlusURLPolicy.home;
     this.explicitDetailRequest = this.targetURL !== QMPlusURLPolicy.home &&
@@ -435,17 +506,19 @@ export class QMPlusSession {
   }
 
   closeLogin(): void {
+    if (this.webProfile !== null && this.officialWebProfileReady) { void this.webProfile.flush(); }
     this.stopOwnedLoginWeb();
     this.cancelQuietDeadline();
     this.loginPresentationRevision++;
     this.cancelSync();
     this.loginVisible = false;
     this.loginPresented = false;
+    this.officialWebProfileReady = this.webProfile === null;
     this.targetURL = QMPlusURLPolicy.home;
   }
 
   beginSync(): number {
-    if (!this.isFeatureEnabled || this.syncing) { return -1; }
+    if (!this.isFeatureEnabled || this.syncing || (this.webProfile !== null && !this.isOfficialWebReady(this.loginOwner()))) { return -1; }
     const generation: number = ++this.generation;
     this.syncing = true;
     if (!this.explicitDetailRequest) { this.loginPresented = false; }
@@ -456,7 +529,8 @@ export class QMPlusSession {
   }
 
   isCurrent(generation: number): boolean {
-    return this.isFeatureEnabled && generation === this.generation && this.syncing && this.loginVisible;
+    return this.isFeatureEnabled && generation === this.generation && this.syncing && this.loginVisible &&
+      (this.webProfile === null || this.isOfficialWebReady(this.loginOwner()));
   }
 
   completeSync(generation: number, raw: string): void {
@@ -503,33 +577,54 @@ export class QMPlusSession {
     if (enabled === this.isFeatureEnabled) { return; }
     this.isFeatureEnabled = enabled;
     // Feature Off retires in-flight owners without deleting the independently
-    // saved record, incognito cookies, or the last verified business snapshot.
+    // saved record, persistent cookies, or the last verified business snapshot.
     if (!enabled) { this.closeLogin(); }
   }
 
   logout(): boolean {
+    // Synchronous result acknowledges the durable fence/owner retirement,
+    // not completion of SDK deletion. UI callers await the combined method.
     this.loginSettingsRevision++;
     this.autoFillEnabled = false;
     return this.clearConnection();
   }
 
   private clearConnection(): boolean {
+    // Persist the fence before changing identity or touching engine storage.
+    const pendingSaved: boolean = this.webProfile === null || this.webProfile.markClearPending();
     const webStopped: boolean = this.stopOwnedLoginWeb();
     this.cancelQuietDeadline();
     this.cancelSync();
     this.loginPresentationRevision++;
     this.loginVisible = false;
     this.loginPresented = false;
+    this.officialWebProfileReady = this.webProfile === null;
     this.targetURL = QMPlusURLPolicy.home;
     this.snapshot = null;
     this.showingStalePartial = false;
     this.error = '';
     this.errorCode = '';
-    if (!webStopped) {
-      this.error = 'QMplus 浏览器会话未能清除，请稍后重试。';
+    if (!pendingSaved || !webStopped) {
+      this.setWebClearError();
       return false;
     }
-    return this.clearOwnedWebSession();
+    return this.webProfile !== null || this.clearOwnedWebSession();
+  }
+
+  private async finishOwnedWebClear(): Promise<boolean> {
+    if (this.webProfile === null) { return true; }
+    const cleared: boolean = await this.webProfile.clear();
+    if (!cleared) {
+      this.setWebClearError();
+    }
+    return cleared;
+  }
+
+  private setWebClearError(): void {
+    const restart: boolean = this.webProfile !== null && this.webProfile.requiresRestart();
+    this.errorCode = restart ? 'QM_WEB_RESTART_REQUIRED' : 'QM_WEB_CLEAR_PENDING';
+    this.error = restart ? 'QMplus 网页会话需要清理，请重新启动应用。' :
+      'QMplus 浏览器会话未能清除，请稍后重试。';
   }
 
   private clearOwnedWebSession(): boolean {
@@ -552,6 +647,10 @@ export class QMPlusSession {
   }
 
   dispose(): void {
+    if (this.webProfile !== null && this.officialWebProfileReady) { void this.webProfile.flush(); }
+    this.loginSettingsRevision++;
+    this.loginSettingsBusy = false;
+    this.autoFillEnabled = false;
     this.stopOwnedLoginWeb();
     this.cancelQuietDeadline();
     this.cancelSync();

@@ -12,6 +12,18 @@ export class SettingsSession {
   @Trace preClassLeadDrafts: string[] = ['10'];
   @Trace preClassInputError: string = '';
   @Trace previewDimension: number = 3;
+  @Trace qmplusDetailsExpanded: boolean = false;
+  @Trace qmPlusAccountDraft: string = '';
+  @Trace qmPlusPasswordDraft: string = '';
+  private qmplusDisclosureEnabled: boolean | null = null;
+
+  updateQMplusDisclosure(enabled: boolean): void {
+    if (this.qmplusDisclosureEnabled === enabled) { return; }
+    this.qmplusDisclosureEnabled = enabled;
+    this.qmplusDetailsExpanded = enabled;
+  }
+
+  clearTransientPasswords(): void { this.qmPlusPasswordDraft = ''; }
   // 仅 DEBUG review-demo 的显式 UI 生命周期测试使用；普通/真实输入场景始终为 false。
   @Trace seedOnlyScene: boolean = false;
 
@@ -62,6 +74,10 @@ export class SettingsSession {
   }
 
   clearDrafts(): void {
+    this.qmPlusAccountDraft = '';
+    this.qmPlusPasswordDraft = '';
+    this.qmplusDetailsExpanded = false;
+    this.qmplusDisclosureEnabled = null;
     this.showingLanguagePicker = false;
     this.requestedLanguageRawValue = '';
     this.customDeadlineURLDraft = '';

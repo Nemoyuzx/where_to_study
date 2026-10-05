@@ -96,6 +96,7 @@ fn status(app: &tauri::AppHandle, blocked: bool) -> Result<LoginStatus, String> 
     Ok(LoginStatus {
         saved: record.is_some(),
         enabled: !blocked
+            && crate::qmplus_profile::authorization_ready(app)
             && record.as_ref().is_some_and(|r| {
                 marker(app).ok().flatten().as_deref() == Some(r.account_scope.as_str())
             }),
@@ -104,7 +105,7 @@ fn status(app: &tauri::AppHandle, blocked: bool) -> Result<LoginStatus, String> 
 
 pub fn authorized(app: &tauri::AppHandle) -> Option<Credentials> {
     let gate = GATE.lock().ok()?;
-    if gate.blocked {
+    if gate.blocked || !crate::qmplus_profile::authorization_ready(app) {
         return None;
     }
     let record = load().ok()??;
@@ -148,8 +149,44 @@ pub async fn save_qmplus_login(
 ) -> Result<LoginStatus, String> {
     // Own the request secrets only until this background transaction finishes.
     let revision = REVISION.fetch_add(1, Ordering::SeqCst) + 1;
-    crate::qmplus::disconnect_qmplus(app.clone(), app.state::<crate::qmplus::QmState>());
-    tauri::async_runtime::spawn_blocking(move || {
+    let noop_app = app.clone();
+    let account = zeroize::Zeroizing::new(payload.account.trim().to_owned());
+    let password = zeroize::Zeroizing::new(payload.password.clone());
+    let no_change = tauri::async_runtime::spawn_blocking(move || -> Result<bool, String> {
+        let gate = GATE.lock().map_err(|_| "QMplus 安全存储正忙。")?;
+        if REVISION.load(Ordering::SeqCst) != revision
+            || gate.blocked
+            || !crate::qmplus_profile::active_profile_ready(&noop_app)
+        {
+            return Ok(false);
+        }
+        let previous = load()?;
+        let unchanged = previous.as_ref().is_some_and(|record| {
+            record.account == *account
+                && record.password == *password
+                && marker(&noop_app).ok().flatten().as_deref()
+                    == Some(record.account_scope.as_str())
+        });
+        Ok(unchanged
+            && REVISION.load(Ordering::SeqCst) == revision
+            && crate::qmplus_profile::active_profile_ready(&noop_app))
+    })
+    .await
+    .map_err(|_| "QMplus 安全存储不可用。".to_string())??;
+    if no_change {
+        crate::qmplus::pause_qmplus_connection(&app)?;
+        return Ok(LoginStatus {
+            saved: true,
+            enabled: true,
+        });
+    }
+    let clearing = crate::qmplus::disconnect_qmplus(app.clone()).await;
+    if let Err(error) = clearing.as_ref() {
+        if error != crate::qmplus_profile::RESTART_REQUIRED {
+            return Err(error.clone());
+        }
+    }
+    let saved = tauri::async_runtime::spawn_blocking(move || -> Result<LoginStatus, String> {
         let mut gate = GATE.lock().map_err(|_| "QMplus 安全存储正忙。")?;
         if REVISION.load(Ordering::SeqCst) != revision {
             return Err("QMplus 保存请求已失效。".into());
@@ -177,7 +214,9 @@ pub async fn save_qmplus_login(
         })
     })
     .await
-    .map_err(|_| "QMplus 安全存储不可用。".to_string())?
+    .map_err(|_| "QMplus 安全存储不可用。".to_string())??;
+    clearing?;
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -186,7 +225,7 @@ pub async fn set_qmplus_autofill(
     payload: AutofillRequest,
 ) -> Result<LoginStatus, String> {
     let revision = REVISION.fetch_add(1, Ordering::SeqCst) + 1;
-    crate::qmplus::disconnect_qmplus(app.clone(), app.state::<crate::qmplus::QmState>());
+    crate::qmplus::pause_qmplus_connection(&app)?;
     tauri::async_runtime::spawn_blocking(move || {
         let mut gate = GATE.lock().map_err(|_| "QMplus 安全存储正忙。")?;
         if REVISION.load(Ordering::SeqCst) != revision {
@@ -194,6 +233,9 @@ pub async fn set_qmplus_autofill(
         }
         gate.blocked = true;
         if payload.enabled {
+            if !crate::qmplus_profile::authorization_ready(&app) {
+                return Err(crate::qmplus_profile::RESTART_REQUIRED.into());
+            }
             let record = load()?.ok_or("请先保存 QMplus 账号和密码。")?;
             authorize(&app, &record.account_scope)?;
             gate.blocked = false;
@@ -210,13 +252,20 @@ pub async fn set_qmplus_autofill(
 #[tauri::command]
 pub async fn clear_qmplus_login(app: tauri::AppHandle) -> Result<LoginStatus, String> {
     REVISION.fetch_add(1, Ordering::SeqCst);
-    crate::qmplus::disconnect_qmplus(app.clone(), app.state::<crate::qmplus::QmState>());
-    tauri::async_runtime::spawn_blocking(move || {
+    let clearing = crate::qmplus::disconnect_qmplus(app.clone()).await;
+    if let Err(error) = clearing.as_ref() {
+        if error != crate::qmplus_profile::RESTART_REQUIRED {
+            return Err(error.clone());
+        }
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<LoginStatus, String> {
         clear(&app)?;
         Ok(LoginStatus::default())
     })
     .await
-    .map_err(|_| "QMplus 安全存储不可用。".to_string())?
+    .map_err(|_| "QMplus 安全存储不可用。".to_string())??;
+    clearing?;
+    Ok(result)
 }
 
 #[cfg(test)]

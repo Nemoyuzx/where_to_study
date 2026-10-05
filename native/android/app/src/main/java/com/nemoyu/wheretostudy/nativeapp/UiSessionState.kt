@@ -15,6 +15,7 @@ internal data class SettingsPageDraft(
     val automaticTerm: Boolean?,
     val customEnabled: Boolean?,
     val reminderOffsets: List<String>?,
+    val qmplusDetailsExpanded: Boolean? = null,
 )
 internal data class ScrollAnchor(val key: String?, val offsetDp: Float, val fallbackY: Int)
 

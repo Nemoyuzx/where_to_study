@@ -1,5 +1,6 @@
 // 全平台“查询”入口的 HarmonyOS 原生页面：班车查询 + 重要事件。
-import { deviceInfo } from '@kit.BasicServicesKit';
+import { deviceInfo, settings } from '@kit.BasicServicesKit';
+import { accessibility } from '@kit.AccessibilityKit';
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 import { ControlMetrics } from '../common/ControlMetrics';
@@ -31,6 +32,7 @@ export struct QueryView {
   @Local contentWidth: number = 390;
   @Local contentFontScale: number = 1;
   @Local tabPickerWidth: number = 358;
+  @Local fullTimetableMotionDuration: number = 160;
   private readonly shuttleClient: ShuttleBusFetching = new ShuttleBusClient();
   private readonly eventScroller: Scroller = new Scroller();
   private readonly regularScroller: Scroller = new Scroller();
@@ -184,6 +186,27 @@ export struct QueryView {
       state === ShuttleBusPeriodState.upcoming ? '即将生效' :
         state === ShuttleBusPeriodState.ended ? '已结束时段' : '时段待确认';
     return dates + ' · ' + this.model.text(stateLabel);
+  }
+
+  private reduceFullTimetableMotion(): boolean {
+    // Fresh read per user action: no lifecycle listener/timer or preference write.
+    try { if (accessibility.isAnimationReduceEnabledSync()) { return true; } } catch (e) {}
+    try {
+      const context = this.getUIContext().getHostContext();
+      if (context === undefined) { return false; }
+      const animator: string = settings.getValueSync(context, settings.display.ANIMATOR_DURATION_SCALE, '1');
+      const transition: string = settings.getValueSync(context, settings.display.TRANSITION_ANIMATION_SCALE, '1');
+      return (animator.length > 0 && Number(animator) === 0) ||
+        (transition.length > 0 && Number(transition) === 0);
+    } catch (e) { return false; }
+  }
+
+  private toggleFullTimetable(): void {
+    this.fullTimetableMotionDuration = this.reduceFullTimetableMotion() ? 0 : 160;
+    // Only presentation changes; never reload or replace the cached snapshot.
+    this.getUIContext().animateTo({ duration: this.fullTimetableMotionDuration, curve: Curve.EaseOut }, (): void => {
+      this.session.toggleFullTimetable();
+    });
   }
 
   private selectedTab(): QueryPageTab {
@@ -676,72 +699,100 @@ export struct QueryView {
   shuttleFullTimetable(daily: ShuttleBusDailyView) {
     if (daily.scheduleNotice !== null && daily.scheduleNotice.schedules.length > 0) {
       Column({ space: 12 }) {
-        Text(this.model.text('完整班车时刻表'))
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(AppTheme.text())
+        Button() {
+          Row({ space: 8 }) {
+            Text(this.model.text('完整班车时刻表'))
+              .fontSize(17)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(AppTheme.text())
+              .layoutWeight(1)
+              .textAlign(TextAlign.Start)
+            SymbolGlyph($r('sys.symbol.chevron_down'))
+              .fontSize(22)
+              .fontColor([AppTheme.secondaryText()])
+              .rotate({ angle: this.session.fullTimetableExpanded ? 180 : 0 })
+              .accessibilityLevel('no')
+          }
           .width('100%')
+        }
+          .type(ButtonType.Normal)
+          .constraintSize({ minHeight: ControlMetrics.height })
+          .padding(0)
+          .backgroundColor(Color.Transparent)
+          .width('100%')
+          .accessibilityText(this.model.text('完整班车时刻表'))
+          .accessibilityStateDescription(this.model.text(this.session.fullTimetableExpanded ? '已展开' : '已折叠'))
+          .id('query.shuttle.full-timetable.toggle')
+          .onClick(() => this.toggleFullTimetable())
         Text(daily.scheduleNotice.title)
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
-        ForEach(daily.scheduleNotice.schedules, (schedule: ShuttleBusSchedule) => {
-          Column({ space: 5 }) {
-            Text(schedule.period.label + ' · ' + schedule.from + ' → ' + schedule.to)
-              .fontSize(14)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(AppTheme.primary())
-              .width('100%')
-            Text(this.fullTimetablePeriodMetadata(schedule))
-              .fontSize(12)
-              .fontColor(AppTheme.secondaryText())
-              .width('100%')
-            if (this.isWide()) {
-              Row({ space: 6 }) {
-                ForEach(this.shuttleWeekdays(), (weekday: string) => {
-                  Column({ space: 5 }) {
-                    Text(this.model.text(this.shuttleWeekdayLabel(weekday)))
-                      .fontSize(12)
-                      .fontWeight(FontWeight.Bold)
-                      .fontColor(AppTheme.primary())
-                    Text(this.shuttleWeekdayDepartures(schedule, weekday, '\n'))
-                      .fontSize(11)
-                      .fontColor(AppTheme.text())
-                      .width('100%')
+        if (this.session.fullTimetableExpanded) {
+          Column({ space: 12 }) {
+            ForEach(daily.scheduleNotice.schedules, (schedule: ShuttleBusSchedule) => {
+              Column({ space: 5 }) {
+                Text(schedule.period.label + ' · ' + schedule.from + ' → ' + schedule.to)
+                  .fontSize(14)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(AppTheme.primary())
+                  .width('100%')
+                Text(this.fullTimetablePeriodMetadata(schedule))
+                  .fontSize(12)
+                  .fontColor(AppTheme.secondaryText())
+                  .width('100%')
+                if (this.isWide()) {
+                  Row({ space: 6 }) {
+                    ForEach(this.shuttleWeekdays(), (weekday: string) => {
+                      Column({ space: 5 }) {
+                        Text(this.model.text(this.shuttleWeekdayLabel(weekday)))
+                          .fontSize(12)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor(AppTheme.primary())
+                        Text(this.shuttleWeekdayDepartures(schedule, weekday, '\n'))
+                          .fontSize(11)
+                          .fontColor(AppTheme.text())
+                          .width('100%')
+                      }
+                      .layoutWeight(1)
+                      .padding(6)
+                      .borderRadius(6)
+                      .backgroundColor(AppTheme.background())
+                      .alignItems(HorizontalAlign.Start)
+                    }, (weekday: string) => schedule.period.key() + schedule.from + schedule.to + weekday)
                   }
-                  .layoutWeight(1)
-                  .padding(6)
-                  .borderRadius(6)
-                  .backgroundColor(AppTheme.background())
-                  .alignItems(HorizontalAlign.Start)
-                }, (weekday: string) => schedule.period.key() + schedule.from + schedule.to + weekday)
+                  .width('100%')
+                  .alignItems(VerticalAlign.Top)
+                } else {
+                  ForEach(this.shuttleWeekdays(), (weekday: string) => {
+                    Row({ space: 10 }) {
+                      Text(this.model.text(this.shuttleWeekdayLabel(weekday)))
+                        .fontSize(12)
+                        .fontColor(AppTheme.secondaryText())
+                        .width(34)
+                      Text(this.shuttleWeekdayDepartures(schedule, weekday))
+                        .fontSize(12)
+                        .fontColor(AppTheme.text())
+                        .layoutWeight(1)
+                    }
+                    .width('100%')
+                    .alignItems(VerticalAlign.Top)
+                  }, (weekday: string) => schedule.period.key() + schedule.from + schedule.to + weekday)
+                }
               }
               .width('100%')
-              .alignItems(VerticalAlign.Top)
-            } else {
-              ForEach(this.shuttleWeekdays(), (weekday: string) => {
-                Row({ space: 10 }) {
-                  Text(this.model.text(this.shuttleWeekdayLabel(weekday)))
-                    .fontSize(12)
-                    .fontColor(AppTheme.secondaryText())
-                    .width(34)
-                  Text(this.shuttleWeekdayDepartures(schedule, weekday))
-                    .fontSize(12)
-                    .fontColor(AppTheme.text())
-                    .layoutWeight(1)
-                }
-                .width('100%')
-                .alignItems(VerticalAlign.Top)
-              }, (weekday: string) => schedule.period.key() + schedule.from + schedule.to + weekday)
-            }
+              .padding(12)
+              .borderRadius(8)
+              .backgroundColor(AppTheme.surfaceVariant())
+              .alignItems(HorizontalAlign.Start)
+            }, (schedule: ShuttleBusSchedule) =>
+              schedule.period.key() + schedule.from + schedule.to)
           }
           .width('100%')
-          .padding(12)
-          .borderRadius(8)
-          .backgroundColor(AppTheme.surfaceVariant())
           .alignItems(HorizontalAlign.Start)
-        }, (schedule: ShuttleBusSchedule) =>
-          schedule.period.key() + schedule.from + schedule.to)
+          .transition(TransitionEffect.OPACITY.animation({ duration: this.fullTimetableMotionDuration, curve: Curve.EaseOut }))
+          .id('query.shuttle.full-timetable.content')
+        }
       }
       .padding(16)
       .width('100%')

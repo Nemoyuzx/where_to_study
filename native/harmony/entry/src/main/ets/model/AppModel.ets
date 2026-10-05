@@ -332,6 +332,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private committedCellularAssistEnabled: boolean = false;
   private cellularAssistOffSafetyLatch: boolean = false;
   private languageSettingRevision: number = 0;
+  private committedLanguageRevision: number = 0;
+  private languageWidgetRevision: number = 0;
+  private languageWidgetAcknowledgedRevision: number = 0;
+  private languageNotificationAcknowledgedRevision: number = 0;
   private languageClearGeneration: number = 0;
   private committedLanguageSetting: AppLanguage = AppLanguage.system;
   private statusMessageRevision: number = 0;
@@ -1096,6 +1100,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       const current: boolean = await write;
       if (!current) { return; }
       this.committedLanguageSetting = next;
+      this.committedLanguageRevision = revision;
       if (revision !== this.languageSettingRevision || resolved === previousResolved) { return; }
       this.synchronizeWidgetSchedule();
       this.dailyCourseNotificationDirty = true;
@@ -1113,6 +1118,13 @@ export class AppModel implements CalendarViewportPreloadTarget {
         this.statusMessage = '无法保存语言设置';
       }
     }
+  }
+
+  languageChangeReady(target: AppLanguage): boolean {
+    return this.languageSetting() === target && (this.isSampleMode() ||
+      (this.committedLanguageSetting === target && this.committedLanguageRevision === this.languageSettingRevision &&
+        this.languageWidgetAcknowledgedRevision === this.languageWidgetRevision &&
+        this.languageNotificationAcknowledgedRevision === this.dailyCourseNotificationRevision));
   }
 
   async setWidgetShowsTeacher(value: boolean): Promise<void> {
@@ -1646,11 +1658,15 @@ export class AppModel implements CalendarViewportPreloadTarget {
     const revision: number = this.dailyCourseNotificationRevision;
     this.courseReminderNextFireEpochMs = null;
     // 在权限或存储操作前使旧系统队列失效，覆盖改时、删课和刷新期间的迟到授权/发布。
-    this.dailyCourseNotificationScheduler.cancelPending(revision).catch(() => {
+    const cancelled: Promise<boolean> = this.dailyCourseNotificationScheduler.cancelPending(revision).then((): boolean => true).catch((): boolean => {
       if (revision === this.dailyCourseNotificationRevision) { this.dailyCourseNotificationDirty = true; }
+      return false;
     });
     if (!this.dailyCourseNotificationsEnabled && !this.preClassNotificationsEnabled) {
       this.dailyCourseNotificationStatusMessage = '课程提醒已关闭';
+      void cancelled.then((success: boolean): void => {
+        if (success && revision === this.dailyCourseNotificationRevision) { this.languageNotificationAcknowledgedRevision = revision; }
+      });
       return;
     }
     this.dailyCourseNotificationStatusMessage = '正在确认通知权限…';
@@ -1658,6 +1674,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.dailyCourseNotificationScheduler, this.dailyCourseNotificationAuthorizationTimeoutMs,
       this.resolvedLanguage());
     const work: Promise<void> = (async (): Promise<void> => {
+      let complete: boolean = false;
       try {
         const result = await coordinator.reconcile(
           this.dailyCourseNotificationsEnabled, requestPermissionIfNeeded, this.hasSavedPassword, this.schedule, revision,
@@ -1686,6 +1703,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
             '课程提醒已开启，当前课表没有待通知课程' :
             '已安排 ' + result.scheduledCount.toString() + ' 条课程提醒';
         }
+        complete = !result.partiallyScheduled;
       } catch (e) {
         if (revision !== this.dailyCourseNotificationRevision) {
           return;
@@ -1706,6 +1724,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
         } else {
           // 自动恢复最多三次；再次进入前台需冷却，用户改设置/课表会创建新一轮。
           this.courseReminderRetryNotBefore = Date.now() + 30000;
+        }
+      } finally {
+        if (complete && await cancelled && revision === this.dailyCourseNotificationRevision) {
+          this.languageNotificationAcknowledgedRevision = revision;
         }
       }
     })();
@@ -3213,9 +3235,12 @@ export class AppModel implements CalendarViewportPreloadTarget {
     if (this.isSampleMode()) {
       return;
     }
-    WidgetSync.refresh(this.schedule, new WidgetCoursePreferences(
-    this.widgetShowsLocation, this.widgetShowsTeacher, this.widgetCourseLimit,
-    this.resolvedLanguage()));
+    const revision: number = ++this.languageWidgetRevision;
+    void WidgetSync.refreshTracked(this.schedule, new WidgetCoursePreferences(
+      this.widgetShowsLocation, this.widgetShowsTeacher, this.widgetCourseLimit,
+      this.resolvedLanguage())).then((success: boolean): void => {
+        if (success && revision === this.languageWidgetRevision) { this.languageWidgetAcknowledgedRevision = revision; }
+      });
   }
 
   private static todayString(): string {

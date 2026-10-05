@@ -2190,7 +2190,9 @@ button:disabled {
 }
 
 .time-all-day-cell > .time-all-day-item.assignment {
-  background: var(--busy-surface);
+  background: color-mix(in srgb, #ef8b36 20%, var(--surface));
+  border: 1px solid color-mix(in srgb, #dc7b23 80%, var(--border));
+  border-radius: 7px;
   color: var(--busy-text);
 }
 
@@ -5601,6 +5603,16 @@ input:disabled {
 
 .shuttle-full-heading,
 .shuttle-full-period > header { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+.shuttle-full-toggle {
+  border-radius: 8px;
+  flex: 1;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: start;
+  width: auto;
+}
+.shuttle-full-timetable-content { display: grid; gap: 14px; min-width: 0; }
 .shuttle-full-heading h3,
 .shuttle-full-period h4 { margin: 0; }
 .shuttle-full-heading p,
@@ -6187,6 +6199,37 @@ input:disabled {
 .course-detail-body .course-activity { display: grid; gap: 8px; }
 .course-detail-body .course-activity:first-child { border-top: 0; }
 
+/* A course disclosure is presentation only; the same activity body also backs
+   the info dialog. Sibling buttons keep nested interactive controls out. */
+.course-list-item { border-bottom: 1px solid var(--border); min-width: 0; }
+.course-list-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.course-list-heading > .course-list-row { flex: 1; min-width: 0; width: auto; border-bottom: 0; }
+.course-info-button, .qmplus-settings-disclosure { display: grid; place-items: center; flex: 0 0 40px; width: 40px; min-height: 40px; border: 0; border-radius: 10px; background: transparent; color: var(--text-secondary); }
+.course-info-button:hover, .qmplus-settings-disclosure:hover { background: var(--primary-surface-soft); color: var(--primary-text); }
+.course-info-button:focus-visible, .course-list-row:focus-visible, .qmplus-settings-disclosure:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.course-disclosure-chevron, .qmplus-settings-disclosure > svg { flex: 0 0 auto; transition: transform 180ms ease; }
+.course-list-row[aria-expanded='true'] .course-disclosure-chevron, .qmplus-settings-disclosure[aria-expanded='true'] > svg { transform: rotate(180deg); }
+.course-inline-body { display: grid; gap: 10px; padding: 0 0 16px; padding-inline-start: 54px; min-width: 0; }
+.course-inline-body > p, .course-detail-body > p { margin: 0; }
+.course-inline-body .course-activity, .course-detail-body .course-activity { display: grid; gap: 7px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-subtle); padding: 12px; margin: 0; }
+.course-detail-body .course-activity:first-child { border-top: 1px solid var(--border-subtle); }
+.course-activity-metadata { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.course-activity-status { color: var(--primary-text); font-size: inherit; }
+.course-activity > a { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.qmplus-settings-disclosure { margin-inline-start: auto; }
+.qmplus-settings-body { display: grid; gap: 12px; padding-top: 12px; min-width: 0; }
+.qmplus-settings-body p { margin: 0; }
+.query-grades > .query-section-header { flex-wrap: wrap; }
+.query-section-header > .query-grade-header-actions { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.query-grade-term-picker { display: grid; gap: 4px; min-width: 0; flex: 1 1 180px; }
+.query-grade-term-picker > span { color: var(--text-secondary); font-size: 12px; font-weight: 500; letter-spacing: normal; text-transform: none; }
+.query-grade-term-picker select { width: 100%; min-width: 0; max-width: 260px; min-height: 36px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); color: var(--text-primary); }
+.query-grade-header-actions > button { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-muted); color: var(--primary-text); }
+.query-grade-term-groups, .query-grade-term-group { display: grid; gap: 12px; min-width: 0; }
+.query-grade-term-group h3 { margin: 8px 0 0; color: var(--text-secondary); font-size: 14px; }
+@media (max-width: 720px) { .course-inline-body { padding-inline-start: 0; } }
+@media (prefers-reduced-motion: reduce) { .course-disclosure-chevron, .qmplus-settings-disclosure > svg { transition: none; } }
+
 /* Mirror navigation/forms, never the chronological calendar columns, time
    axis or machine identifiers. Raw course/activity text retains bidi isolation. */
 .app-shell[dir="rtl"] .side-nav { border-right: 0; border-left: 1px solid var(--border); }
@@ -6195,7 +6238,9 @@ input:disabled {
 .app-shell input[type="url"], .app-shell input[inputmode="numeric"] { direction: ltr; }
 .course-list-content > strong, .course-activity > strong, .month-entry-title,
 .app-shell time, .app-shell code { unicode-bidi: isolate; }
-.settings-language select { max-width: 100%; min-height: 36px; }
+.settings-language { width: 100%; max-width: none; justify-self: stretch; box-sizing: border-box; }
+.settings-language label { display: grid; gap: 6px; min-width: 0; }
+.settings-language select { width: 100%; max-width: 100%; min-width: 0; min-height: 36px; }
 .language-blur-overlay {
   position: fixed; inset: 0; z-index: 2147483000; pointer-events: none;
   opacity: 0; visibility: hidden; background: transparent;
@@ -6203,13 +6248,16 @@ input:disabled {
   transition: opacity 120ms ease-out, backdrop-filter 120ms ease-out,
     -webkit-backdrop-filter 120ms ease-out, background-color 120ms ease-out;
 }
-.language-blur-overlay.covering, .language-blur-overlay.waiting {
+.language-blur-overlay.covering, .language-blur-overlay.waiting, .language-blur-overlay.completed {
   visibility: visible; opacity: 1;
   background: color-mix(in srgb, var(--app-background) 12%, transparent);
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
 }
 .language-blur-overlay.revealing {visibility: visible; transition-duration: 220ms}
+.language-transition-status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-primary); }
+.language-transition-status > strong { padding: 8px 14px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-soft); font-size: 16px; }
+.language-transition-status > svg { color: var(--primary-text); }
 @media (prefers-reduced-motion: reduce) {.language-blur-overlay {transition: none}}
 @media (prefers-reduced-transparency: reduce) {
-  .language-blur-overlay.covering, .language-blur-overlay.waiting {background: var(--app-background)}
+  .language-blur-overlay.covering, .language-blur-overlay.waiting, .language-blur-overlay.completed {background: var(--app-background)}
 }

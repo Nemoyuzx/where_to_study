@@ -1,4 +1,5 @@
 import { deviceInfo } from '@kit.BasicServicesKit';
+import { accessibility } from '@kit.AccessibilityKit';
 import { AppTheme } from '../common/AppTheme';
 import { ControlMetrics } from '../common/ControlMetrics';
 import { CoursePageContract, CoursePageTab, CourseQMPlusScope,
@@ -34,7 +35,8 @@ export struct CourseView {
   @Monitor('model.account', 'model.hasSavedPassword')
   onSavedAcademicAccountChanged(monitor: IMonitor): void {
     if (this.selectedTab() === CoursePageTab.current && this.model.canPreserveSavedPassword()) {
-      void this.model.loadCloudCourseDirectory(false);
+      if (this.session.skipNextAutomaticCourseLoad) { this.session.skipNextAutomaticCourseLoad = false; }
+      else { void this.model.loadCloudCourseDirectory(false); }
     }
   }
 
@@ -51,7 +53,8 @@ export struct CourseView {
   aboutToAppear(): void {
     if (!this.model.qmplusEnabled && this.session.selectedCourseSource === 'qmplus') { this.closeCourse(); }
     if (this.selectedTab() === CoursePageTab.current) {
-      void this.model.loadCloudCourseDirectory(false);
+      if (this.session.skipNextAutomaticCourseLoad) { this.session.skipNextAutomaticCourseLoad = false; }
+      else { void this.model.loadCloudCourseDirectory(false); }
     }
     this.tabRestoreTimer = setTimeout((): void => {
       this.tabRestoreTimer = -1;
@@ -205,6 +208,74 @@ export struct CourseView {
         this.localized(' 门', ' courses'));
     }
     return parts.join(' · ');
+  }
+
+  private toggleCourseInline(source: string, id: string): void {
+    let reduced: boolean = false;
+    try { reduced = accessibility.isAnimationReduceEnabledSync(); } catch (e) {}
+    this.getUIContext().animateTo({ duration: reduced ? 0 : 160, curve: Curve.EaseOut }, (): void => {
+      this.session.toggleExpanded(source, id);
+    });
+  }
+
+  private inlineActivityMetadata(item: QMPlusActivity): string {
+    const parts: string[] = [this.model.text(item.kind === 'quiz' ? '测验' : '作业')];
+    if (item.kind === 'assignment') {
+      if (item.dueAt !== null) { parts.push(this.model.text('截止时间：') + this.qmTime(item.dueAt)); }
+      if (item.cutoffAt !== null) { parts.push(this.model.text('最终截止：') + this.qmTime(item.cutoffAt)); }
+      if (item.dueAt === null && item.cutoffAt === null) { parts.push(this.model.text('截止时间未公布')); }
+    } else {
+      if (item.opensAt !== null) { parts.push(this.model.text('开放时间：') + this.qmTime(item.opensAt)); }
+      if (item.closesAt !== null) { parts.push(this.model.text('关闭时间：') + this.qmTime(item.closesAt)); }
+      if (item.timeLimitSeconds !== null) { parts.push(this.model.text('限时：') + item.timeLimitSeconds.toString() + this.model.text(' 秒')); }
+    }
+    if (item.status.length > 0 && item.status !== 'unknown') { parts.push(this.model.text('状态：') + item.status); }
+    if (item.rawTimeText.length > 0) { parts.push(item.rawTimeText); }
+    return parts.join(' · ');
+  }
+
+  @Builder
+  inlineCloudAssignments(course: UCloudCourse) {
+    if (this.model.assignmentCatalogFetchedAt.length === 0) {
+      Text(this.localized('该课作业尚未在本机同步；可到“作业”栏目手动刷新。',
+        'Assignments for this course have not been synced here. Refresh manually in Assignments.'))
+        .fontSize(13).fontColor(AppTheme.secondaryText()).width('100%')
+    } else if (this.cloudAssignments(course).length === 0) {
+      Text(this.localized('当前缓存没有可确认归属该课的作业条目。',
+        'No assignment in the current cache can be reliably attributed to this course.'))
+        .fontSize(13).fontColor(AppTheme.secondaryText()).width('100%')
+    }
+    ForEach(this.cloudAssignments(course).slice(0, this.session.visibleCloudAssignments), (item: AssignmentDeadlineItem) => {
+      Column({ space: 5 }) {
+        Text(item.title).fontSize(15).fontWeight(FontWeight.Medium).fontColor(AppTheme.text()).width('100%')
+        Text([this.model.text('截止时间：') + item.deadline, item.status ?? ''].filter(
+          (value: string): boolean => value.length > 0).join(' · '))
+          .fontSize(12).fontColor(AppTheme.secondaryText()).width('100%')
+      }.padding(10).width('100%').borderRadius(8).backgroundColor(AppTheme.surfaceVariant())
+    }, (item: AssignmentDeadlineItem) => 'inline.cloud.' + course.id + '.' + item.id)
+    if (this.cloudAssignments(course).length > this.session.visibleCloudAssignments) {
+      Button(this.model.text('加载更多')).height(ControlMetrics.height)
+        .onClick(() => { this.session.visibleCloudAssignments += 40; })
+    }
+  }
+
+  @Builder
+  inlineQMActivities(course: QMPlusCourse) {
+    if (this.visibleQMActivitiesFor(course.id).length === 0) {
+      Text(this.model.text('当前缓存没有可确认归属该课的作业条目。'))
+        .fontSize(13).fontColor(AppTheme.secondaryText()).width('100%')
+    }
+    ForEach(this.visibleQMActivitiesFor(course.id).slice(0, this.session.visibleQMActivities), (item: QMPlusActivity) => {
+      Column({ space: 5 }) {
+        Text(item.title.length > 0 ? item.title : item.id).fontSize(15).fontWeight(FontWeight.Medium)
+          .fontColor(AppTheme.text()).width('100%')
+        Text(this.inlineActivityMetadata(item)).fontSize(12).fontColor(AppTheme.secondaryText()).width('100%')
+      }.padding(10).width('100%').borderRadius(8).backgroundColor(AppTheme.surfaceVariant())
+    }, (item: QMPlusActivity) => 'inline.qm.' + course.id + '.' + item.kind + '.' + item.id)
+    if (this.visibleQMActivitiesFor(course.id).length > this.session.visibleQMActivities) {
+      Button(this.model.text('加载更多')).height(ControlMetrics.height)
+        .onClick(() => { this.session.visibleQMActivities += 40; })
+    }
   }
 
   build() {
@@ -584,8 +655,6 @@ export struct CourseView {
       Text(label)
         .fontSize(12)
         .fontColor(AppTheme.primary())
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
     }
     .padding({ left: 8, right: 8, top: 3, bottom: 3 })
     .borderRadius(12)
@@ -595,14 +664,15 @@ export struct CourseView {
 
   @Builder
   cloudCourseRow(course: UCloudCourse) {
+    Column({ space: 8 }) {
     Row({ space: 12 }) {
+      Row({ space: 12 }) {
       this.courseBookIcon()
       Column({ space: 5 }) {
         Text(course.name ?? course.id)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.text())
-          .maxLines(2)
           .width('100%')
         Flex({ wrap: FlexWrap.Wrap,
           space: { main: LengthMetrics.vp(6), cross: LengthMetrics.vp(5) } }) {
@@ -626,17 +696,35 @@ export struct CourseView {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      SymbolGlyph($r('sys.symbol.chevron_right'))
+      SymbolGlyph($r('sys.symbol.chevron_down'))
         .fontSize(15)
         .fontColor([AppTheme.secondaryText()])
+        .rotate({ angle: this.session.isExpanded('ucloud', course.id) ? 180 : 0 })
+        .accessibilityLevel('no')
+      }
+      .layoutWeight(1)
+      .alignItems(VerticalAlign.Center)
+      .id('courses.cloud.disclosure.' + course.id)
+      .accessibilityText(course.name ?? course.id)
+      .accessibilityStateDescription(this.model.text(this.session.isExpanded('ucloud', course.id) ? '已展开' : '已折叠'))
+      .onClick(() => this.toggleCourseInline('ucloud', course.id))
+      Button() { SymbolGlyph($r('sys.symbol.info_circle')).fontSize(18).fontColor([AppTheme.secondaryText()]) }
+        .type(ButtonType.Normal).width(ControlMetrics.height).height(ControlMetrics.height).padding(4)
+        .backgroundColor(Color.Transparent).accessibilityText(this.model.text('课程详情'))
+        .id('courses.cloud.info.' + course.id)
+        .onClick(() => this.openCourse('ucloud', course.id))
     }
     .width('100%')
     .constraintSize({ minHeight: 64 })
     .padding({ top: 8, bottom: 8 })
     .alignItems(VerticalAlign.Center)
     .id('courses.cloud.row.' + course.id)
-    .accessibilityText(course.name ?? course.id)
-    .onClick(() => this.openCourse('ucloud', course.id))
+      if (this.session.isExpanded('ucloud', course.id)) {
+        Column({ space: 8 }) { this.inlineCloudAssignments(course) }
+          .width('100%').padding({ left: 52, bottom: 8 }).alignItems(HorizontalAlign.Start)
+          .transition(TransitionEffect.OPACITY)
+      }
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   private currentQMPlusCourses(): QMPlusCourse[] {
@@ -655,8 +743,7 @@ export struct CourseView {
 
   private visibleQMActivitiesFor(courseID: string): QMPlusActivity[] {
     return CourseQMPlusScope.currentActivities(this.qmPlusSession.snapshot)
-      .filter((item: QMPlusActivity): boolean => item.courseID === courseID)
-      .slice(0, this.session.visibleQMActivities);
+      .filter((item: QMPlusActivity): boolean => item.courseID === courseID);
   }
 
   private qmTime(utc: string): string {
@@ -744,14 +831,15 @@ export struct CourseView {
 
   @Builder
   qmPlusCourseRow(course: QMPlusCourse) {
+    Column({ space: 8 }) {
     Row({ space: 12 }) {
+      Row({ space: 12 }) {
       this.courseBookIcon()
       Column({ space: 5 }) {
         Text(course.name.length > 0 ? course.name : course.id)
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
           .fontColor(AppTheme.text())
-          .maxLines(2)
           .width('100%')
         Flex({ wrap: FlexWrap.Wrap,
           space: { main: LengthMetrics.vp(6), cross: LengthMetrics.vp(5) } }) {
@@ -769,17 +857,35 @@ export struct CourseView {
       }
       .layoutWeight(1)
       .alignItems(HorizontalAlign.Start)
-      SymbolGlyph($r('sys.symbol.chevron_right'))
+      SymbolGlyph($r('sys.symbol.chevron_down'))
         .fontSize(15)
         .fontColor([AppTheme.secondaryText()])
+        .rotate({ angle: this.session.isExpanded('qmplus', course.id) ? 180 : 0 })
+        .accessibilityLevel('no')
+      }
+      .layoutWeight(1)
+      .alignItems(VerticalAlign.Center)
+      .id('courses.qmplus.disclosure.' + course.id)
+      .accessibilityText(course.name.length > 0 ? course.name : course.id)
+      .accessibilityStateDescription(this.model.text(this.session.isExpanded('qmplus', course.id) ? '已展开' : '已折叠'))
+      .onClick(() => this.toggleCourseInline('qmplus', course.id))
+      Button() { SymbolGlyph($r('sys.symbol.info_circle')).fontSize(18).fontColor([AppTheme.secondaryText()]) }
+        .type(ButtonType.Normal).width(ControlMetrics.height).height(ControlMetrics.height).padding(4)
+        .backgroundColor(Color.Transparent).accessibilityText(this.model.text('课程详情'))
+        .id('courses.qmplus.info.' + course.id)
+        .onClick(() => this.openCourse('qmplus', course.id))
     }
     .width('100%')
     .constraintSize({ minHeight: 64 })
     .padding({ top: 8, bottom: 8 })
     .alignItems(VerticalAlign.Center)
     .id('courses.qmplus.row.' + course.id)
-    .accessibilityText(course.name.length > 0 ? course.name : course.id)
-    .onClick(() => this.openCourse('qmplus', course.id))
+      if (this.session.isExpanded('qmplus', course.id)) {
+        Column({ space: 8 }) { this.inlineQMActivities(course) }
+          .width('100%').padding({ left: 52, bottom: 8 }).alignItems(HorizontalAlign.Start)
+          .transition(TransitionEffect.OPACITY)
+      }
+    }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
   @Builder
@@ -797,7 +903,7 @@ export struct CourseView {
       Text(this.model.text('已核实活动数量：') + this.courseActivityCount(course.id).toString())
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
-      ForEach(this.visibleQMActivitiesFor(course.id), (item: QMPlusActivity) => {
+      ForEach(this.visibleQMActivitiesFor(course.id).slice(0, this.session.visibleQMActivities), (item: QMPlusActivity) => {
         Column({ space: 3 }) {
           Text(item.title.length > 0 ? item.title : item.id)
             .fontSize(14)

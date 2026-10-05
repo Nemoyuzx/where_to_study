@@ -5141,6 +5141,7 @@ dependencies = [
  "tokio",
  "windows",
  "windows-sys 0.61.2",
+ "wry",
  "zbus 5.19.0",
  "zeroize",
 ]

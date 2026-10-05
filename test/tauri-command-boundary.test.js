@@ -19,7 +19,7 @@ test('every registered desktop command has a generated permission and an explici
   }
   assert.deepEqual(remote.sort(),['allow-accept-qmplus-auth','allow-accept-qmplus-snapshot','allow-begin-qmplus-sync'])
   const qm=read('src-tauri/src/qmplus.rs')
-  const sync=qm.slice(qm.indexOf('pub fn begin_qmplus_sync('),qm.indexOf('pub fn connect_qmplus('))
+  const sync=qm.slice(qm.indexOf('pub fn begin_qmplus_sync('),qm.indexOf('pub async fn connect_qmplus('))
   assert.match(sync,/feature_blocked/)
   assert.match(sync,/owner_active/)
   assert.match(sync,/revision != state\.revision/)

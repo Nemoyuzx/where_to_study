@@ -123,7 +123,7 @@ import {
   yearCourseOpacity,
 } from './planner-domain.js'
 import QueryHub from './QueryHub.jsx'
-import CourseHub from './CourseHub.jsx'
+import CourseHub, { CalendarAssignmentCourseDetail } from './CourseHub.jsx'
 import ColorThemeSettings, { useColorTheme } from './ColorThemeSettings.jsx'
 import { colorThemeHeatmap, resolvedColorTheme } from './color-themes.js'
 import './App.css'
@@ -521,7 +521,7 @@ const PRIVACY_SECTIONS = [
   },
   {
     title: 'QMplus 独立连接 / Independent QMplus connection',
-    body: 'QMplus 与教务账号独立，使用应用自己的隔离官方网页登录会话，不读取系统浏览器 Cookie。默认不保存密码；可在独立 QMplus 设置中明确选择系统安全保存和自动填写，Windows 使用 Credential Manager、Linux 使用 Secret Service，无安全存储时不退回明文。授权后仅在已核验的官方 Microsoft 主文档表单尝试普通 Next／Sign in 各一次；MFA、验证码、账号选择、风险或协议仍须手动处理。密码不进入普通设置、业务快照、日志、截图、剪贴板、通知或小组件。关闭自动填写撤销授权；断开并清除或清除本地数据删除独立安全记录，删除失败会提示重试。只读同步仅获取 EBU 课程及已发布 Assignment／Quiz，不请求日历、开始测验、提交作业或访问答案；不使用第三方 Worker，不向本项目服务器上传身份或课程。课程快照在本次进程内保留，真实部分失败保留明确标注的上次资料。官方服务按其政策处理登录信息与网络元数据。\n\nQMplus uses its own isolated official sign-in session, separate from academic credentials, without system-browser cookies. Password saving is off by default. Separate QMplus settings let you explicitly save securely and authorize autofill: Windows Credential Manager or Linux Secret Service, never plaintext fallback. Only verified official Microsoft main-document forms may receive one ordinary Next and Sign in submission each. MFA, CAPTCHA, account selection, risk and terms still require you. Passwords never enter ordinary settings, business snapshots, logs, screenshots, clipboard, notifications or widgets. Turning autofill off revokes authorization; disconnect-and-clear or clearing local data deletes the separate secure record, with failures reported for retry. Read-only synchronization retrieves EBU courses and published Assignment/Quiz information, never calendar, quiz attempts, assignment submissions or answers. No third-party Worker or project server receives identity or course data. Snapshots stay in process memory and genuine partial failures retain clearly labelled prior results. Official services process sign-in and network metadata under their policies.',
+    body: 'QMplus 与北邮账号独立，只在你主动连接时使用应用自己的隔离官方网页会话，不读取系统浏览器 Cookie，也不复用北邮密码。默认不保存 QMplus 密码；可明确选择独立安全保存和授权自动填写，Windows 使用 Credential Manager、Linux 使用 Secret Service、macOS 使用 Keychain，无安全存储时不退回明文。授权后，仅在已核验的官方 Microsoft 主文档自动选择精确匹配的已保存账号，并在已确认的账号／密码表单各尝试一次普通 Next／Sign in；未匹配的账号选择、验证码、MFA、保持登录、风险、协议及其它确认仍须本人处理。密码不进入普通设置、业务快照、日志、剪贴板、通知或小组件。Windows／Linux 使用应用私有的专用持久 WebEngine 目录，macOS 14 及以上使用独立命名的持久 WebKit 区，更旧 macOS 使用 incognito。Cookie 和网页存储由系统引擎在本机管理，不导出到普通设置、业务快照、日志或本项目服务器；不改变官方 Cookie 有效期或 MFA 策略，不保证永久登录或免 MFA。旧 incognito 会话不导出或迁移，新持久区首次使用需重新完成官方登录。重新核验同一已授权安全记录和相同密码后，重复保存可保留会话，但不能解除待清理屏障。更换资料、退出或清除时先持久记录清理意图并撤销旧连接；待清理区不能用于新连接。Windows／Linux 已用目录须真正重启进程后确认删除，macOS 命名区须确认引擎删除完成或标识已不存在，才可使用新网页区；安全保存新资料不代表旧 Cookie 已删除。清理或状态保存失败会提示，不声称删除成功。关闭“启用 QMplus”只暂停连接和同步，保留 Cookie、已保存资料及课程缓存；关闭自动填写撤销授权，删除资料或退出并清除会移除相应独立安全记录，失败须重试。只读同步仅获取 EBU 课程及已发布 Assignment／Quiz，不请求 QMplus 日历或 Timeline，不开始测验、提交作业或访问答案；业务快照不含 Cookie、sesskey、令牌或完整 HTML，只在进程内存中保留，真实部分失败保留明确标注的已核实或此前资料。不使用第三方 Worker，不向本项目服务器上传身份或课程；官方服务按其政策处理你提交的登录信息和网络元数据。\n\nQMplus is independent of BUPT credentials and uses an app-owned isolated official web session only when you connect, never system-browser cookies or BUPT passwords. QMplus password saving is off by default. Explicit secure saving and autofill authorization use Windows Credential Manager, Linux Secret Service or macOS Keychain, with no plaintext fallback. Verified official Microsoft main documents may select the exact saved account and fill verified username/password forms with one ordinary Next/Sign in submission per step. Unmatched account choices, CAPTCHA, MFA, staying signed in, risk, terms and other confirmations remain yours. Passwords do not enter ordinary settings, business snapshots, logs, clipboard, notifications or widgets. Windows/Linux use dedicated app-private persistent WebEngine directories; macOS 14+ uses a separate named persistent WebKit store, and older macOS uses incognito. The engine manages cookies and web storage locally, never exported into ordinary settings, business snapshots, logs or the project server. Official cookie lifetimes and MFA rules are unchanged; permanent sign-in or exemption from MFA is not guaranteed. Old incognito sessions are not exported or migrated; the new store requires a fresh official sign-in. Revalidating the same authorized secure record and password may preserve the session on resave, never remove a pending cleanup barrier. Credential replacement, logout or clearing first persists cleanup intent and retires the old connection; a pending store cannot be connected. Used Windows/Linux directories require a genuine process restart and confirmed deletion; macOS named stores require confirmed engine removal or an absent identifier before a new store is used. Saving new credentials is not proof that old cookies were deleted. Cleanup or metadata-write failures are reported, not treated as successful deletion. Turning off “Enable QMplus” pauses connection and sync while retaining cookies, saved credentials and course cache. Turning autofill off revokes authorization; deleting credentials or disconnecting and clearing removes the separate secure record, with failures reported for retry. Read-only sync retrieves EBU courses and published Assignment/Quiz information, never QMplus calendar/Timeline, quiz attempts, submissions or answers. Business snapshots exclude cookies, session keys, tokens and full HTML, stay in process memory, and retain clearly labelled verified or prior data on genuine partial failures. No third-party Worker or project server receives identity or course data. Official services process submitted sign-in information and network metadata under their policies.',
   },
   {
     title: '系统日历、通知与小组件 / Calendar, notifications, and widgets',
@@ -596,7 +596,7 @@ function PrivacyPolicyDialog({ onClose }) {
           <div>
             <p className="eyebrow">Where To Study</p>
             <h2 id="privacy-dialog-title">隐私声明 / Privacy Policy</h2>
-            <span>生效日期 / Effective date: 2026-10-03</span>
+            <span>生效日期 / Effective date: 2026-10-05</span>
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} aria-label="关闭隐私声明" title="关闭">
             <X size={20} />
@@ -1591,9 +1591,11 @@ function App() {
   })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
   const appShellRef = useRef(null)
+  const languageReadinessRef = useRef({target:null,ready:false})
   const uiLanguage = resolvedUiLanguage(settings.uiLanguage, navigator.languages || [navigator.language])
   const languageTransition = useLanguageTransition({rootRef:appShellRef,
     apply:value=>updateSettingImmediately('uiLanguage',value),currentLanguage:uiLanguage,activePage,
+    ready:target=>languageReadinessRef.current.target===target && languageReadinessRef.current.ready,
     resolve:value=>resolvedUiLanguage(value,navigator.languages || [navigator.language])})
   const t = useMemo(() => translator(uiLanguage), [uiLanguage])
   const uiWeekdayLabels = useMemo(() => Array.from({length:7}, (_, index) =>
@@ -1606,6 +1608,7 @@ function App() {
   const [monthExpanded, setMonthExpanded] = useState(true)
   const [desktopMonthEventRows, setDesktopMonthEventRows] = useState(4)
   const [calendarAgendaDialog, setCalendarAgendaDialog] = useState(null)
+  const [calendarAssignmentDetail, setCalendarAssignmentDetail] = useState(null)
   const [compactCalendarLayout, setCompactCalendarLayout] = useState(
     () => window.matchMedia('(max-width: 720px)').matches,
   )
@@ -1765,9 +1768,16 @@ function App() {
   const calendarScrollSurfaceKey = calendarSurfaceKey(calendarView, calendarDate)
 
   useEffect(() => {
+    let live=true
+    const marker={target:uiLanguage,ready:false,revision:languageTransition.currentRevision()}
+    languageReadinessRef.current=marker
     document.documentElement.lang = uiLanguage
     document.documentElement.dir = uiDirection(uiLanguage)
-    void command('set_interface_language', uiLanguage).catch(() => {})
+    // The native ACK includes local tray-menu submission, not OS rendering.
+    Promise.all([command('set_interface_language',uiLanguage),document.fonts?.ready||Promise.resolve()])
+      .then(()=>{if(live && languageReadinessRef.current===marker)marker.ready=true})
+      .catch(()=>{if(live && languageReadinessRef.current===marker)languageTransition.cancel(marker.revision)})
+    return()=>{live=false}
   }, [uiLanguage])
 
   useEffect(() => {
@@ -2360,6 +2370,7 @@ function App() {
       label: item.title,
       subtitle: item.course_name || '',
       time: deadlineClock(item.deadline, t('时间待定')),
+      assignmentItem: item,
     })),
     ...enabledDeadlineItemsFor(dateString)
       .filter((item) => item.source_type === 'school_notice')
@@ -3858,6 +3869,7 @@ function App() {
     setSchedule(null)
     setClassroomsCache(null)
     setAssignmentsByDate({})
+    setCalendarAssignmentDetail(null)
     setAssignmentsErrorByDate({})
     setAssignmentsLoadingDate('')
     setSelectedSlots([])
@@ -3872,6 +3884,7 @@ function App() {
     assignmentCredentialRevisionRef.current += 1
     requestedCalendarSupplementRanges.current.clear()
     setAssignmentsByDate({})
+    setCalendarAssignmentDetail(null)
     setAssignmentsErrorByDate({})
     setAssignmentsLoadingDate('')
     setCalendarSupplementRevision((value) => value + 1)
@@ -4385,6 +4398,7 @@ function App() {
                               aria-label={formatUiCourseDate(dateString, uiLanguage)}
                               onClick={() => chooseCalendarDate(dateString)}
                               onKeyDown={(event) => {
+                                if (event.target !== event.currentTarget) return
                                 if (event.key === 'Enter' || event.key === ' ') {
                                   event.preventDefault()
                                   chooseCalendarDate(dateString)
@@ -4417,10 +4431,11 @@ function App() {
                                     type="button"
                                     className={`time-all-day-item ${item.type}`}
                                     title={`${item.label} · ${item.time || t('时间待定')}`}
-                                    aria-label={`${item.label} · ${t('打开全天日程详情')}`}
+                                    aria-label={`${item.label} · ${t(item.assignmentItem ? '课程详情' : '打开全天日程详情')}`}
                                     onClick={(event) => {
                                       event.stopPropagation()
-                                      setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })
+                                      if (item.assignmentItem) setCalendarAssignmentDetail(item.assignmentItem)
+                                      else setCalendarAgendaDialog({ date: dateString, sourceView: calendarView })
                                     }}
                                   >{content}</button>
                                 )
@@ -5322,6 +5337,8 @@ function App() {
                     </article>
                   )
                 }
+                if (item.assignmentItem) return <button key={item.key} type="button" className={`${item.type} agenda-event-main`}
+                  onClick={()=>{setCalendarAgendaDialog(null);setCalendarAssignmentDetail(item.assignmentItem)}}>{content}</button>
                 return item.url ? (
                   <a key={item.key} href={item.url} target="_blank" rel="noreferrer" className={item.type}>{content}</a>
                 ) : <article key={item.key} className={item.type}>{content}</article>
@@ -5330,6 +5347,11 @@ function App() {
           </section>
         </div>
       ) : null}
+      {calendarAssignmentDetail ? <CalendarAssignmentCourseDetail
+        key={`assignment:${calendarAssignmentDetail.id}:${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`}
+        item={calendarAssignmentDetail} command={command} language={uiLanguage}
+        hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
+        onClose={()=>setCalendarAssignmentDetail(null)}/> : null}
       {privacyPolicyOpen ? (
         <PrivacyPolicyDialog onClose={() => {
           setPrivacyPolicyOpen(false)
@@ -5363,7 +5385,12 @@ function App() {
       ) : null}
       <div className={`language-blur-overlay ${languageTransition.overlay.phase}`}
         data-phase={languageTransition.overlay.phase} data-target-locale={languageTransition.overlay.target || ''}
-        aria-hidden="true"/>
+        aria-hidden={languageTransition.overlay.phase==='idle'}>
+        {languageTransition.overlay.phase!=='idle'&&<div className="language-transition-status" role="status" aria-live="polite">
+          {languageTransition.overlay.completed ? <CheckCircle2 size={30} aria-hidden="true"/> : <Loader2 size={30} className="spin" aria-hidden="true"/>}
+          <strong>{languageTransition.overlay.completed ? t('完成') : 'Switching…'}</strong>
+        </div>}
+      </div>
     </main>
   )
 }

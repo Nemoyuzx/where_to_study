@@ -51,6 +51,9 @@ export class QuerySession {
   @Trace shuttleLoading: boolean = false;
   @Trace shuttleError: string = '';
   @Trace shuttleFetchedAtMillis: number = 0;
+  @Trace fullTimetableExpanded: boolean = false;
+
+  toggleFullTimetable(): void { this.fullTimetableExpanded = !this.fullTimetableExpanded; }
 
   eventFirstVisibleIndex: number = 0;
   readonly regularScrollOffsets: Map<string, number> = new Map<string, number>();

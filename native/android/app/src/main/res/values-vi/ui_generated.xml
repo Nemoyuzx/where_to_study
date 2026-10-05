@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"Hỗ trợ mạng của hệ thống"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"Chỉ trên trang đăng nhập chính thức đã được xác minh, ứng dụng mới tự chọn tài khoản khớp chính xác với tài khoản đã lưu và điền tên đăng nhập cùng mật khẩu, mỗi bước tối đa một lần. Việc chọn tài khoản không khớp, MFA, CAPTCHA, duy trì đăng nhập và xác nhận rủi ro hoặc điều khoản vẫn do bạn thực hiện."</string>
     <string name="ui_generated_fd4480c6c08ea3">"Tắt “Bật QMplus” chỉ tạm dừng kết nối và đồng bộ; thông tin đăng nhập đã lưu, phiên và bộ nhớ đệm khóa học vẫn được giữ lại. Hãy dùng các thao tác riêng để tắt tự điền, xóa thông tin đăng nhập hoặc ngắt kết nối và xóa dữ liệu."</string>
+    <string name="ui_generated_b5e960a8c37808">"Cần xóa phiên web QMplus. Vui lòng khởi động lại ứng dụng."</string>
+    <string name="ui_generated_127d5412a91688">"Không thể xóa hoặc lưu phiên web QMplus. Vui lòng thử lại."</string>
 </resources>

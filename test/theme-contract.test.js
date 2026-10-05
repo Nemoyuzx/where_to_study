@@ -628,7 +628,7 @@ test('Android and Harmony mobile day-week chrome follows the iOS presentation co
   assert.match(androidAllDaySection, /val compactWeek = compact && days\.size > 1/)
   assert.match(
     androidCalendarSource,
-    /fun agendaVisibleItemCount\([\s\S]*if \(compactWeek\) 1 else 3/,
+    /fun agendaVisibleItemCount\([^)]*\): Int =\s*if \(compactWeek && itemCount > 3\) 2 else itemCount\.coerceIn\(0, 3\)/,
   )
   assert.match(androidTimelineSource, /if \(compact\) return 56/)
   assert.match(androidCalendarSource, /const val bottomNavigationContentInsetDp = 78/)

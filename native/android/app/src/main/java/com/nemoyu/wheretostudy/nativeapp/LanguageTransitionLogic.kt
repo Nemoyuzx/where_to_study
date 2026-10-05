@@ -62,10 +62,10 @@ internal class LanguageLayoutReadiness {
     fun reset() { previous = null; stableFrames = 0 }
     fun observe(targetLocale: Boolean, attached: Boolean, restoring: Boolean, layoutRequested: Boolean,
         bounds: List<Int>): Boolean {
-        if (!targetLocale || !attached || restoring || layoutRequested || bounds.size != 4 ||
+        if (!targetLocale || !attached || restoring || layoutRequested || bounds.size < 4 ||
             bounds[2] <= 0 || bounds[3] <= 0) { reset(); return false }
         stableFrames = if (previous == bounds) stableFrames + 1 else 1
         previous = bounds.toList()
-        return stableFrames >= 2
+        return stableFrames >= 3
     }
 }

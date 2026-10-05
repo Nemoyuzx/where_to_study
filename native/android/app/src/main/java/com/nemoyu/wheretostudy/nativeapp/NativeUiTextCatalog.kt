@@ -1414,6 +1414,8 @@ internal object NativeUiTextCatalog {
         "系统网络辅助" to R.string.ui_generated_a16987f886401d,
         "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。" to R.string.ui_generated_cf1c3b50baf4c5,
         "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。" to R.string.ui_generated_fd4480c6c08ea3,
+        "QMplus 网页会话需要清理，请重新启动应用。" to R.string.ui_generated_b5e960a8c37808,
+        "QMplus 网页会话尚未清除或保存失败，请重试。" to R.string.ui_generated_127d5412a91688,
     )
     fun resolve(context: Context, source: String): String? = resources[source]?.let(context::getString)
 }

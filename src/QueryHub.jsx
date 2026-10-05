@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   BusFront,
   CalendarClock,
+  ChevronDown,
   ExternalLink,
   Loader2,
   MapPin,
@@ -85,6 +86,31 @@ function QueryError({ fallback, language, message, onRetry, t }) {
       <div><strong>{t('数据暂时无法读取')}</strong><span>{language === 'en' ? t(fallback) : t(message)}</span></div>
       <button type="button" onClick={onRetry}><RefreshCw size={15} />{t('重新加载')}</button>
     </div>
+  )
+}
+
+export function ShuttleFullTimetableCard({ title, description, sourceURL, sourceLabel, children }) {
+  const [expanded, setExpanded] = useState(false)
+  const detailsID = useId()
+
+  return (
+    <section className="shuttle-full-timetable" aria-label={title}>
+      <header className="shuttle-full-heading">
+        <button type="button" className="weather-strip-toggle shuttle-full-toggle"
+          aria-label={title} aria-expanded={expanded} aria-controls={detailsID}
+          onClick={() => setExpanded((value) => !value)}>
+          <BusFront size={20} aria-hidden="true" />
+          <span className="weather-strip-heading"><strong>{title}</strong><span>{description}</span></span>
+          <ChevronDown className="weather-strip-chevron" size={18} aria-hidden="true" />
+        </button>
+        {sourceURL ? <a href={sourceURL} target="_blank" rel="noreferrer">{sourceLabel}<ExternalLink size={14} /></a> : null}
+      </header>
+      <div className={`weather-strip-reveal ${expanded ? 'expanded' : ''}`} aria-hidden={!expanded} inert={!expanded}>
+        <div className="weather-strip-reveal-clip">
+          <div className="shuttle-full-timetable-content" id={detailsID}>{children}</div>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -343,19 +369,11 @@ export default function QueryHub({
                 )}</p>}
               </div>
 
-              <section className="shuttle-full-timetable" aria-label={text('完整班车时刻表', 'Full shuttle timetable')}>
-                <header className="shuttle-full-heading">
-                  <div>
-                    <h3>{text('完整班车时刻表', 'Full shuttle timetable')}</h3>
-                    <p>{text('按运行时段、方向和星期查看计划班次；节假日及临时调整以官方通知为准。',
-                      'Scheduled departures by service period, direction, and weekday. Holiday and temporary changes follow the official notice.')}</p>
-                  </div>
-                  {shuttleTimetable.notice?.source_url ? (
-                    <a href={shuttleTimetable.notice.source_url} target="_blank" rel="noreferrer">
-                      {t('后勤部原文')}<ExternalLink size={14} />
-                    </a>
-                  ) : null}
-                </header>
+              <ShuttleFullTimetableCard
+                title={text('完整班车时刻表', 'Full shuttle timetable')}
+                description={text('按运行时段、方向和星期查看计划班次；节假日及临时调整以官方通知为准。',
+                  'Scheduled departures by service period, direction, and weekday. Holiday and temporary changes follow the official notice.')}
+                sourceURL={shuttleTimetable.notice?.source_url} sourceLabel={t('后勤部原文')}>
                 {shuttleTimetable.usingFallback ? (
                   <p className="shuttle-full-fallback">{text('最新通知暂无已核实的结构化时刻表，以下为上一份已解析通知的班次，仅供对照。',
                     'The newest notice has no verified timetable; the tables below come from the previous parsed notice for reference.')}</p>
@@ -402,7 +420,7 @@ export default function QueryHub({
                   <p className="query-empty">{text('暂无可安全展示的完整时刻表，请查看通知原文。',
                     'No verified full timetable is available. Please check the source notice.')}</p>
                 )}
-              </section>
+              </ShuttleFullTimetableCard>
 
               <p className="query-source-note">
                 {t('第三方来源：北京邮电大学后勤部，经 Where To Study 服务端结构化整理；法定节假日及临时调整请以原文为准。')}

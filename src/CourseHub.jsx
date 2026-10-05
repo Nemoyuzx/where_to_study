@@ -1,8 +1,8 @@
 import { uiText } from './ui-text.js'
 import { uiDateLocale } from './ui-languages.js'
-import {useEffect,useState,useRef} from 'react'
+import {useEffect,useState,useRef,useId} from 'react'
 import {listen} from '@tauri-apps/api/event'
-import {BookOpen,CheckCircle2,CalendarClock,Clock3,RefreshCw,ExternalLink,ChevronRight,X} from 'lucide-react'
+import {BookOpen,CheckCircle2,CalendarClock,Clock3,RefreshCw,ExternalLink,ChevronDown,Info,X} from 'lucide-react'
 import GradesPanel from './GradesPanel.jsx'
 import PrivateQueriesPanel from './PrivateQueriesPanel.jsx'
 import {assignmentsForCourse,isEbuCourse,qmplusActivitiesForCourse,submissionCounts,courseTimestamp,courseActivityKey,CourseRequestOwner} from './course-domain.js'
@@ -12,10 +12,14 @@ function time(value,language) {
   return value&&Number.isFinite(date.getTime())?new Intl.DateTimeFormat(uiDateLocale(language),{timeZone:'Asia/Shanghai',dateStyle:'medium',timeStyle:'short'}).format(date):uiText(language, '未公布', 'Not announced')
 }
 
-function CourseRow({course,items,en,language,source,onOpen}) {
+function CourseRow({course,items,language,source,onOpen,busy,error,onRefresh}) {
   const text=(zh,english,values)=>uiText(language,zh,english,values)
   const counts=submissionCounts(items)
-  return <button type="button" className="course-list-row" onClick={onOpen}>
+  const [expanded,setExpanded]=useState(false)
+  const bodyID=useId()
+  return <article className="course-list-item">
+    <div className="course-list-heading">
+    <button type="button" className="course-list-row" aria-expanded={expanded} aria-controls={bodyID} onClick={()=>setExpanded(value=>!value)}>
     <span className="course-list-icon" aria-hidden="true"><BookOpen size={23}/></span>
     <span className="course-list-content"><strong>{course.name||course.id}</strong><span className="course-list-chips">
       {(course.teacher_names||[]).map(name=><span className="course-chip" key={name}><BookOpen size={13}/>{name}</span>)}
@@ -24,14 +28,53 @@ function CourseRow({course,items,en,language,source,onOpen}) {
       {source==='qmplus'&&course.current_term_status==='other'&&<span className="course-chip">{text('其他学期', 'Other term')}</span>}
       {counts.pending>0&&<span className="course-chip"><Clock3 size={13}/>{text('待交', 'Pending')} {counts.pending}</span>}
       {counts.submitted>0&&<span className="course-chip"><CheckCircle2 size={13}/>{text('已交', 'Submitted')} {counts.submitted}</span>}
-    </span></span><ChevronRight className="course-list-chevron" size={18} aria-hidden="true"/>
-  </button>
+    </span></span><ChevronDown className="course-disclosure-chevron" size={18} aria-hidden="true"/>
+    </button>
+    <button type="button" className="course-info-button" onClick={onOpen} aria-label={`${text('课程详情','Course details')} · ${course.name||course.id}`}><Info size={19} aria-hidden="true"/></button>
+    </div>
+    <div id={bodyID} className={`weather-strip-reveal course-inline-reveal ${expanded?'expanded':''}`} aria-hidden={!expanded} inert={!expanded}>
+      <div className="weather-strip-reveal-clip"><div className="course-inline-body">
+        <CourseActivityBody course={course} source={source} items={items} language={language} busy={busy} error={error} onRefresh={onRefresh}/>
+      </div></div>
+    </div>
+  </article>
 }
 
-function CourseDetail({course,source,items,en,language,busy,error,onRefresh,onClose}) {
+function CourseActivityBody({course,source,items,language,busy,error,onRefresh}) {
+  const text=(zh,english,values)=>uiText(language,zh,english,values)
+  const [limit,setLimit]=useState(30)
+  return <>
+    {(course.teacher_names||[]).length>0&&<p>{course.teacher_names.join(' · ')}</p>}
+    {source==='ucloud'&&<button type="button" className="query-action-button" disabled={busy} onClick={onRefresh}><RefreshCw size={16}/>{text('获取／刷新课程作业', 'Fetch / refresh assignments')}</button>}
+    {busy&&<p role="status">{text('正在读取…', 'Loading…')}</p>}{error&&<p role="alert">{text(error,error)}</p>}
+    {items===null&&<p>{text('尚未获取课程作业，不推测待交或已交数量。', 'Assignments have not been retrieved. No submission counts are inferred.')}</p>}
+    {source==='qmplus'&&course.current_term_status!=='current'?<p>{text('此课尚未确认属于本学期，未读取其活动，请在官方课程页核对。', 'This course is not confirmed as current. Its activities were not retrieved; consult the official course page.')}</p>:items?.length===0&&<p>{text('同步结果中没有本课已发布活动，不代表所有作业已完成。', 'No published activities in the synchronized result. This does not mean all work is complete.')}</p>}
+    {(items||[]).slice(0,limit).map(item=><article className="course-activity" key={courseActivityKey(item)}>
+      <strong>{item.kind==='quiz'?'Quiz':(item.kind==='assignment'?'Assignment':(text('课程作业', 'Assignment')))} · {item.title}</strong>
+      <div className="course-activity-metadata">
+        {item.kind==='quiz'?<>
+          <span>{text('开放时间', 'Opens')}：{time(item.opens_at,language)}</span>
+          <span>{text('关闭时间', 'Closes')}：{time(item.closes_at,language)}</span>
+          {item.time_limit_seconds!=null&&<span>{text('时间限制（秒）', 'Time limit (seconds)')}：{item.time_limit_seconds}</span>}
+        </>:<>
+          <span>{text('截止', 'Deadline')}：{time(item.due_at||item.deadline,language)}</span>
+          {item.cutoff_at&&<span>{text('最终截止', 'Cutoff')}：{time(item.cutoff_at,language)}</span>}
+        </>}
+        {item.status&&item.status!=='unknown'&&<small className="course-activity-status">{item.status}</small>}
+        {item.detail_status&&item.detail_status!=='available'&&<span>{text('详情受限或暂不可用，请以官方平台为准。', 'Details are restricted or unavailable. Confirm on the official platform.')}</span>}
+        {item.raw_time_text&&<span>{item.raw_time_text}</span>}
+      </div>
+      {item.url&&<a href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{source==='qmplus' ? text('打开 QMplus 官方活动页', 'Open official QMplus activity') : text('打开教学云平台', 'Open Teaching Cloud Platform')}</a>}
+    </article>)}
+    {items?.length>limit&&<button type="button" onClick={()=>setLimit(value=>value+30)}>{text('加载更多', 'Show more')}</button>}
+    <p className="query-source">{text('数量仅统计已同步且明确提交状态的作业。时间按北京时间展示，伦敦时间遵守夏令时。', 'Counts refer only to synchronized assignments with explicit submission states. Dates use Beijing time; London daylight saving is respected.')}</p>
+    {course.url&&<a className="external-action-button" href={course.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>{source==='qmplus'?(text('QMplus 课程页', 'QMplus course page')):(text('打开教学云平台', 'Open Teaching Cloud Platform'))}</a>}
+  </>
+}
+
+export function CourseDetail({course,source,items,language,busy,error,onRefresh,onClose}) {
   const text=(zh,english,values)=>uiText(language,zh,english,values)
   const dialog=useRef(null),close=useRef(null)
-  const [limit,setLimit]=useState(30)
   useEffect(()=>{
     const previous=document.activeElement
     close.current?.focus()
@@ -50,26 +93,57 @@ function CourseDetail({course,source,items,en,language,busy,error,onRefresh,onCl
     <section ref={dialog} className="calendar-agenda-dialog course-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="course-detail-title">
       <header><div><small>{source==='qmplus'?'QMplus':(text('教学云平台', 'Teaching Cloud Platform'))}</small><h2 id="course-detail-title">{course.name||course.id}</h2></div><button ref={close} type="button" onClick={onClose} aria-label={text('关闭课程详情', 'Close course details')}><X size={18}/></button></header>
       <div className="course-detail-body">
-        {(course.teacher_names||[]).length>0&&<p>{course.teacher_names.join(' · ')}</p>}
-        {source==='ucloud'&&<button type="button" className="query-action-button" disabled={busy} onClick={onRefresh}><RefreshCw size={16}/>{text('获取／刷新课程作业', 'Fetch / refresh assignments')}</button>}
-        {busy&&<p role="status">{text('正在读取…', 'Loading…')}</p>}{error&&<p role="alert">{error}</p>}
-        {items===null&&<p>{text('尚未获取课程作业，不推测待交或已交数量。', 'Assignments have not been retrieved. No submission counts are inferred.')}</p>}
-        {source==='qmplus'&&course.current_term_status!=='current'?<p>{text('此课尚未确认属于本学期，未读取其活动，请在官方课程页核对。', 'This course is not confirmed as current. Its activities were not retrieved; consult the official course page.')}</p>:items?.length===0&&<p>{text('同步结果中没有本课已发布活动，不代表所有作业已完成。', 'No published activities in the synchronized result. This does not mean all work is complete.')}</p>}
-        {(items||[]).slice(0,limit).map(item=><article className="course-activity" key={courseActivityKey(item)}>
-          <strong>{item.kind==='quiz'?'Quiz':(item.kind==='assignment'?'Assignment':(text('课程作业', 'Assignment')))} · {item.title}</strong>
-          {item.kind==='quiz'?<p>{text('开放时间', 'Opens')}：{time(item.opens_at,language)}<br/>{text('关闭时间', 'Closes')}：{time(item.closes_at,language)}{item.time_limit_seconds!=null&&<><br/>{text('时间限制（秒）', 'Time limit (seconds)')}：{item.time_limit_seconds}</>}</p>
-            :<p>{text('截止', 'Deadline')}：{time(item.due_at||item.deadline,language)}{item.cutoff_at&&<><br/>{text('最终截止', 'Cutoff')}：{time(item.cutoff_at,language)}</>}</p>}
-          {item.status&&item.status!=='unknown'&&<small>{item.status}</small>}
-          {item.detail_status&&item.detail_status!=='available'&&<p>{text('详情受限或暂不可用，请以官方平台为准。', 'Details are restricted or unavailable. Confirm on the official platform.')}</p>}
-          {item.raw_time_text&&<p>{item.raw_time_text}</p>}
-          {item.url&&<a href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{source==='qmplus' ? text('打开 QMplus 官方活动页', 'Open official QMplus activity') : text('打开教学云平台', 'Open Teaching Cloud Platform')}</a>}
-        </article>)}
-        {items?.length>limit&&<button type="button" onClick={()=>setLimit(value=>value+30)}>{text('加载更多', 'Show more')}</button>}
-        <p className="query-source">{text('数量仅统计已同步且明确提交状态的作业。时间按北京时间展示，伦敦时间遵守夏令时。', 'Counts refer only to synchronized assignments with explicit submission states. Dates use Beijing time; London daylight saving is respected.')}</p>
-        {course.url&&<a className="external-action-button" href={course.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>{source==='qmplus'?(text('QMplus 课程页', 'QMplus course page')):(text('打开教学云平台', 'Open Teaching Cloud Platform'))}</a>}
+        <CourseActivityBody course={course} source={source} items={items} language={language} busy={busy} error={error} onRefresh={onRefresh}/>
       </div>
     </section>
   </div>
+}
+
+// Calendar deadlines carry the same Teaching Cloud DTO. A name is joined only
+// when unique in that platform's directory; a mismatched ID never falls back.
+export function calendarCourseForAssignment(item,directory) {
+  if(item.course_id!=null) {
+    const matches=directory.filter(course=>String(course.id)===String(item.course_id))
+    return matches.length===1?matches[0]:null
+  }
+  const name=item.course_name?.trim()
+  const matches=name?directory.filter(course=>course.name?.trim()===name):[]
+  return matches.length===1?matches[0]:null
+}
+
+export function CalendarAssignmentCourseDetail({item,language,command,hasAcademicAccount,onClose}) {
+  const text=(zh,english)=>uiText(language,zh,english)
+  const [course,setCourse]=useState(null),[items,setItems]=useState([item])
+  const [busy,setBusy]=useState(false),[error,setError]=useState('')
+  const request=useRef(0)
+  useEffect(()=>{
+    const revision=++request.current
+    if(hasAcademicAccount)command('fetch_course_list',{force:false}).then(value=>{
+      if(request.current!==revision)return
+      setCourse(calendarCourseForAssignment(item,value))
+    }).catch(()=>{})
+    return()=>{request.current++}
+  },[command,hasAcademicAccount,item])
+  async function refresh() {
+    if(busy||!hasAcademicAccount)return
+    const revision=++request.current
+    setBusy(true);setError('')
+    try {
+      const [courses,assignments]=await Promise.all([
+        command('fetch_course_list',{force:false}),command('fetch_assignment_list',{force:true}),
+      ])
+      if(request.current!==revision)return
+      const matched=calendarCourseForAssignment(item,courses)
+      setCourse(matched)
+      // An unmatched course is not a proof that its assignments are empty.
+      if(matched)setItems(assignmentsForCourse(assignments,matched,courses))
+      else setError('详情受限或暂不可用，请以官方平台为准。')
+    }catch {
+      if(request.current===revision)setError('课程作业获取失败，请检查设置中的教学云平台密码。')
+    }finally {if(request.current===revision)setBusy(false)}
+  }
+  return <CourseDetail course={course||{id:item.course_id,name:item.course_name||text('课程作业','Assignments')}} source="ucloud" items={items} language={language}
+    busy={busy||!hasAcademicAccount} error={error} onRefresh={refresh} onClose={onClose}/>
 }
 
 export default function CourseHub({command,language,hasAcademicAccount,onOpenAccount,examSnapshot,qmplusEnabled = false}) {
@@ -120,7 +194,7 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
     try {
       const items=await command('fetch_assignment_list',{force:true})
       if(owner.current.accepts('assignments',revision))setAssignmentItems(items)
-    } catch {if(owner.current.accepts('detail',detailRevision))setDetailError(text('课程作业获取失败，请检查设置中的教学云平台密码。', 'Unable to retrieve assignments. Check your Teaching Cloud password in Settings.'))}
+    } catch {if(owner.current.accepts('detail',detailRevision))setDetailError('课程作业获取失败，请检查设置中的教学云平台密码。')}
     finally {if(owner.current.accepts('detail',detailRevision))setDetailBusy(false)}
   }
   function open(source,course) {owner.current.next('detail');setSelection({source,id:course.id});setDetailError('');setDetailBusy(false)}
@@ -140,17 +214,17 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
     {tab==='courses'&&<>
       <header className="query-section-header"><div><h2>{text('教学云平台课程', 'Teaching Cloud courses')}</h2>{courses!==null&&<small>{courses.length} {text('门', 'courses')}</small>}</div><button disabled={busy} onClick={()=>reload(true)}><RefreshCw size={16}/>{text('刷新', 'Refresh')}</button></header>
       {error&&<p role="alert">{error}</p>}{!hasAcademicAccount&&<button onClick={onOpenAccount}>{text('前往个人账户', 'Configure academic account')}</button>}
-      <div className="course-list">{(courses||[]).map(course=><CourseRow key={course.id} course={course} items={cloudActivities(course)} en={en} language={language} source="ucloud" onOpen={()=>open('ucloud',course)}/>)}</div>
+      <div className="course-list">{(courses||[]).map(course=><CourseRow key={course.id} course={course} items={cloudActivities(course)} language={language} source="ucloud" busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onOpen={()=>open('ucloud',course)}/>)}</div>
       {courses?.length===0&&<p>{text('当前接口没有返回课程。', 'No current courses returned.')}</p>}
       {qmplusEnabled&&<>
       <header className="query-section-header"><div><div className="qmplus-title"><h2>QMplus · {text('EBU 课程', 'EBU courses')}</h2><small>{text('仅适用国院','For the International School only')}</small></div>{qm&&<small>{qmCourses.length} {text('门', 'courses')}</small>}</div><div className="course-actions"><button onClick={()=>command('connect_qmplus').catch(e=>setError(String(e)))}><ExternalLink size={16}/>{text('连接／同步', 'Connect / sync')}</button><button onClick={()=>reload()}><RefreshCw size={16}/>{text('读取同步结果', 'Load synchronized data')}</button></div></header>
       {qm?.partial&&<p role="status">{text('同步不完整，可能保留上次成功数据及其原同步时间。', 'Partial synchronization; previous data and its original timestamp may be retained.')}</p>}
       {!qm&&<p>{text('请在设置连接 QMplus，并在官方网页完成 SSO／MFA。', 'Connect QMplus in Settings and complete official SSO/MFA.')}</p>}
-      <div className="course-list">{qmCourses.map(course=><CourseRow key={course.id} course={course} items={qmActivities(course)} en={en} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div>
-      {otherQmCourses.length>0&&<details className="course-other-terms"><summary>{text('其他／学期未确认的 EBU 课程', 'Other / unconfirmed EBU courses')} ({otherQmCourses.length})</summary><div className="course-list">{otherQmCourses.map(course=><CourseRow key={course.id} course={course} items={[]} en={en} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div></details>}
+      <div className="course-list">{qmCourses.map(course=><CourseRow key={course.id} course={course} items={qmActivities(course)} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div>
+      {otherQmCourses.length>0&&<details className="course-other-terms"><summary>{text('其他／学期未确认的 EBU 课程', 'Other / unconfirmed EBU courses')} ({otherQmCourses.length})</summary><div className="course-list">{otherQmCourses.map(course=><CourseRow key={course.id} course={course} items={[]} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div></details>}
       {qm&&<small>{text('最近同步', 'Last synchronized')}：{time(qm.fetched_at,language)} · QMplus</small>}
       </>}
     </>}
-    {selectedCourse&&<CourseDetail key={`${selection.source}:${selection.id}`} course={selectedCourse} source={selection.source} items={selection.source==='qmplus'?qmActivities(selectedCourse):cloudActivities(selectedCourse)} en={en} language={language} busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onClose={closeDetail}/>}
+    {selectedCourse&&<CourseDetail key={`${selection.source}:${selection.id}`} course={selectedCourse} source={selection.source} items={selection.source==='qmplus'?qmActivities(selectedCourse):cloudActivities(selectedCourse)} language={language} busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onClose={closeDetail}/>}
   </section>
 }

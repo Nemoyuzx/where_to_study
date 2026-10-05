@@ -660,6 +660,8 @@ fn clear_directory_preserving_revocation(directory: &Path) -> ServiceResult<()> 
             entry.map_err(|error| ServiceError::new(format!("无法读取本地数据项目：{error}")))?;
         if entry.file_name() == ACCOUNT_ACCESS_REVOKED_FILE_NAME
             || entry.file_name() == crate::qmplus_feature::FILE_NAME
+            || entry.file_name() == crate::qmplus_profile::JOURNAL_DIRECTORY
+            || entry.file_name() == crate::qmplus_profile::PROFILE_DIRECTORY
         {
             continue;
         }

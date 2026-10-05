@@ -48,6 +48,8 @@ data class LocalDataClearResult(val failedItems: List<String>, val pendingItems:
 class MainActivity : Activity() {
     private var languageResources: Resources? = null
     private val languageTransition = LanguageChangeTransition()
+    private val languageResourceRevision = java.util.concurrent.atomic.AtomicLong()
+    private var languageResourcesAcknowledged = false
     override fun getResources(): Resources = languageResources ?: super.getResources()
     private enum class Destination(
         val label: String,
@@ -310,6 +312,7 @@ class MainActivity : Activity() {
     }
 
     override fun onStop() {
+        languageResourceRevision.incrementAndGet()
         languageTransition.finishImmediately()
         if (windowLayoutListenerRegistered) {
             windowInfoTracker.removeWindowLayoutInfoListener(windowLayoutInfoListener)
@@ -1061,13 +1064,16 @@ class MainActivity : Activity() {
             weakOwner.get()?.takeIf(MainActivity::isCurrentUiOwner)?.applyLanguageInPlace(language)
         },ready={
             weakOwner.get()?.let {owner -> owner.isCurrentUiOwner() && !owner.restoringUiState &&
-                AppLocale.resolvedLanguage(owner)==target && owner.content.childCount>0 &&
+                owner.languageResourcesAcknowledged && AppLocale.resolvedLanguage(owner)==target &&
+                AppLanguage.fromLocale(owner.resources.configuration.locales[0])==target && owner.content.childCount>0 &&
                 owner.content.getChildAt(0).isLaidOut && !owner.content.getChildAt(0).isLayoutRequested}==true
         })
     }
 
     private fun applyLanguageInPlace(language: AppLanguage) {
         if (!isCurrentUiOwner()) return
+        languageResourcesAcknowledged = false
+        val languageOwner = languageResourceRevision.incrementAndGet()
         captureUiSession()
         try{preferences.languageCode=language.code}catch(_:Exception){
             Toast.makeText(this,uiText("无法保存语言设置。"),Toast.LENGTH_LONG).show();return
@@ -1076,10 +1082,42 @@ class MainActivity : Activity() {
         activitySession.detachObservers()
         restoringUiState=true
         updateAdaptiveLayout(force=true)
+        val weakOwner = java.lang.ref.WeakReference(this)
+        val app = applicationContext
+        languageTransition.runLocalLanguageWork {
+            val current = { weakOwner.get()?.let { it.isCurrentUiOwner() && it.languageResourceRevision.get() == languageOwner &&
+                it.preferences.languageCode == language.code } == true && !Thread.currentThread().isInterrupted }
+            val complete = runCatching {
+                if (!current()) return@runCatching false
+                val widget = TodayCourseWidgetProvider.refreshTracked(app, current)
+                val summary = DailyCourseSummaryScheduler.reconcileAt(app, forceReschedule = true, isActive = current)
+                val reminders = CourseReminderScheduler.reconcile(app, force = true, isActive = current)
+                widget && summary && reminders && current()
+            }.getOrDefault(false)
+            weakOwner.get()?.runOnUiThread {
+                weakOwner.get()?.takeIf { it.isCurrentUiOwner() && it.languageResourceRevision.get() == languageOwner &&
+                    it.preferences.languageCode == language.code }?.languageResourcesAcknowledged = complete
+            }
+        }
     }
 
     internal fun languageTransitionPhase(): String = languageTransition.phase
     internal fun languageTransitionReadyFrames(): Int = languageTransition.readyFrameCount
+
+    internal fun showCachedCourseDetails(key: String): Boolean {
+        if (!isCurrentUiOwner()) return false
+        val cloud = calendarDailyInfoRepository.currentTeachingCloudCourses()?.any { "teaching-cloud.course.${it.id}" == key } == true
+        val qm = qmplusState().takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+            ?.courses?.any { "qmplus.course.${it.id}" == key } == true
+        if (!cloud && !qm) return false
+        courseSessionState.selectedMode = InformationQueryMode.COURSES
+        courseSessionState.automaticCourseLoadAttempted = true
+        courseSessionState.courseDetailKey = key
+        navigate(Destination.COURSES)
+        return true
+    }
+
+    internal fun calendarShowsOtherQMplusCourses(): Boolean = courseSessionState.showsOtherQmCourses
 
     internal fun isCurrentUiOwner(): Boolean = !isFinishing && !isDestroyed && activitySession.uiOwner.current() === this
     internal fun allowsAutomaticPageLoads(): Boolean = !restoringUiState

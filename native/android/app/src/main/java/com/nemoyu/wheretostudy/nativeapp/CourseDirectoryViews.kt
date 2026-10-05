@@ -16,16 +16,19 @@ private fun courseTintSurface(): Int = ColorUtils.blendARGB(Palette.primaryFill,
 private fun courseTintText(): Int = ColorThemeLogic.readableText(Palette.primaryText, courseTintSurface())
 
 internal fun courseDirectoryRow(context: MainActivity, key: String, name: String, teachers: List<String>,
-    counts: CourseSubmissionCounts, termLabel: String? = null, onOpen: () -> Unit): View = LinearLayout(context).apply {
+    counts: CourseSubmissionCounts, termLabel: String? = null, onDetails: (() -> Unit)? = null,
+    onOpen: () -> Unit): View = LinearLayout(context).apply {
     tag = key
     UiText.preserveRawText(this)
     orientation = LinearLayout.VERTICAL
-    isClickable = true; isFocusable = true
     contentDescription = (listOf(name) + teachers + listOfNotNull(termLabel,
         counts.pending?.let { context.getString(R.string.course_pending_count, it) },
         counts.submitted?.let { context.getString(R.string.course_submitted_count, it) })).joinToString(" · ")
-    setOnClickListener { if (isAttachedToWindow) { context.performControlHaptic(it); onOpen() } }
     addView(LinearLayout(context).apply {
+        tag = "$key.disclosure.header"
+        isClickable = true; isFocusable = true
+        contentDescription = name
+        setOnClickListener { if (isAttachedToWindow) { context.performControlHaptic(it); onOpen() } }
         orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
         minimumHeight = context.dp(72); setPadding(0, context.dp(12), 0, context.dp(12))
         addView(ImageView(context).apply {
@@ -40,7 +43,6 @@ internal fun courseDirectoryRow(context: MainActivity, key: String, name: String
             addView(TextView(context).apply {
                 text = name; UiText.preserveRawText(this); textSize = 17f
                 includeFontPadding = false; setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
-                maxLines = 2; ellipsize = TextUtils.TruncateAt.END
             })
             val labels = teachers + listOfNotNull(
                 counts.pending?.let { context.getString(R.string.course_pending_count, it) },
@@ -50,16 +52,25 @@ internal fun courseDirectoryRow(context: MainActivity, key: String, name: String
                     text = label; UiText.preserveRawText(this); textSize = 12f; includeFontPadding = false
                     setThemeTextColor(::courseTintText); background = themedRoundedBackground(context, ::courseTintSurface, radius = 6)
                     setPadding(context.dp(6), context.dp(3), context.dp(6), context.dp(3))
-                    maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 }) }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { topMargin = context.dp(6) })
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(ImageView(context).apply {
-            setImageResource(R.drawable.ic_chevron_down); rotation = -90f
+            tag = "$key.disclosure.indicator"
+            setImageResource(R.drawable.ic_chevron_down)
             bindTheme("courseChevronTint") { imageTintList = ColorStateList.valueOf(Palette.muted) }
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LinearLayout.LayoutParams(context.dp(18), context.dp(18)).apply { marginStart = context.dp(12) })
+        if (onDetails != null) addView(ImageView(context).apply {
+            tag = "$key.details"
+            setImageResource(R.drawable.ic_settings_info); scaleType = ImageView.ScaleType.CENTER_INSIDE
+            setPadding(context.dp(7), context.dp(7), context.dp(7), context.dp(7))
+            bindTheme("courseInfoTint") { imageTintList = ColorStateList.valueOf(Palette.muted) }
+            contentDescription = context.uiText("课程详情")
+            isClickable = true; isFocusable = true
+            setOnClickListener { if (isAttachedToWindow) onDetails() }
+        }, LinearLayout.LayoutParams(context.dp(UiMetrics.controlHeightDp), context.dp(UiMetrics.controlHeightDp)))
     }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     addView(View(context).apply { setThemeBackgroundColor { Palette.border } },
         LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1).apply { marginStart = context.dp(52) })

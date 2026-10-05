@@ -15,6 +15,7 @@ import {
 export class WidgetSync {
   private static archiveWrites: Map<string, WidgetFileQueue> = new Map<string, WidgetFileQueue>();
   private static themeWrites: Map<string, WidgetFileQueue> = new Map<string, WidgetFileQueue>();
+  private static preferenceWrites: Map<string, WidgetFileQueue> = new Map<string, WidgetFileQueue>();
 
   private static queue(queues: Map<string, WidgetFileQueue>, filesDir: string): WidgetFileQueue {
     let queue: WidgetFileQueue | undefined = queues.get(filesDir);
@@ -69,18 +70,30 @@ export class WidgetSync {
   // AppModel 在课表保存/清除/加载后调用；失败不影响主流程。
   static refresh(schedule: ScheduleSnapshot | null,
     preferences: WidgetCoursePreferences = new WidgetCoursePreferences()): void {
-    const work: Promise<void> = (async (): Promise<void> => {
-      try {
-        if (await WidgetSync.writeArchive(AppContext.get().filesDir, schedule, preferences)) {
-          await WidgetSync.reloadAllForms();
-        }
-      } catch (e) {
-        // 卡片刷新失败不影响应用主流程。
-      }
-    })();
-    work.catch(() => {
-      // 已在内部处理。
-    });
+    void WidgetSync.refreshTracked(schedule, preferences);
+  }
+
+  static async refreshTracked(schedule: ScheduleSnapshot | null,
+    preferences: WidgetCoursePreferences = new WidgetCoursePreferences()): Promise<boolean> {
+    try {
+      if (!await WidgetSync.queue(WidgetSync.preferenceWrites, AppContext.get().filesDir).replace(
+        AppContext.get().filesDir + '/WhereToStudyNative/widget-preferences.json',
+        AppContext.get().filesDir + '/WhereToStudyNative/WhereToStudyNative/widget-preferences.json', JSON.stringify(preferences.toJson()))) { return false; }
+      if (!await WidgetSync.writeArchive(AppContext.get().filesDir, schedule, preferences)) { return false; }
+      await formProvider.reloadForms(AppContext.get(), 'entry', 'TodayCourseWidgetAbility', 'TodayCourseCard');
+      // SDK submission ACK, not evidence that an external home screen rendered.
+      return true;
+    } catch (e) { return false; }
+  }
+
+  static loadPreferencesSync(filesDir: string): WidgetCoursePreferences | null {
+    try {
+      const path: string = filesDir + '/WhereToStudyNative/widget-preferences.json';
+      if (fs.statSync(path).size > 2048) { return null; }
+      const value: Object = JSON.parse(fs.readTextSync(path)) as Object;
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) { return null; }
+      return WidgetCoursePreferences.fromJson(value as Record<string, Object>);
+    } catch (e) { return null; }
   }
 
   // filesDir 始终是平台 Context.filesDir，主应用与 FormExtensionAbility 使用同一语义。
@@ -94,6 +107,10 @@ export class WidgetSync {
   }
 
   static async clear(): Promise<void> {
+    const preferencesCleared: boolean = await WidgetSync.queue(WidgetSync.preferenceWrites, AppContext.get().filesDir).replace(
+      AppContext.get().filesDir + '/WhereToStudyNative/widget-preferences.json',
+      AppContext.get().filesDir + '/WhereToStudyNative/WhereToStudyNative/widget-preferences.json', null);
+    if (!preferencesCleared) { throw new Error('Widget preferences could not be cleared.'); }
     if (await WidgetSync.writeArchive(AppContext.get().filesDir, null)) {
       await WidgetSync.reloadAllForms();
     }

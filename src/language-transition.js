@@ -67,7 +67,8 @@ export class LanguageTransition {
       }
       this.nextFrame(revision, check)
       // Hidden/detached rendering must never leave an indefinite blur curtain.
-      this.after(600, revision, () => this.reveal(revision))
+      // A timeout is cancellation, never evidence of target-language readiness.
+      this.after(5000, revision, () => this.finish(false))
     })
   }
 
@@ -76,13 +77,15 @@ export class LanguageTransition {
     const target = this.target
     this.target = null
     this.clearWork()
-    this.after(60, revision, () => {
-      this.publish({phase:'revealing', target, revision})
+    this.publish({phase:'completed',target,revision,completed:true})
+    this.after(300, revision, () => {
+      this.publish({phase:'revealing', target, revision,completed:true})
       this.after(220, revision, () => this.publish({phase:'idle', revision}))
     })
   }
 
-  finish(commitPending = true) {
+  finish(commitPending = true, expectedRevision = this.revision) {
+    if (expectedRevision !== this.revision) return
     this.revision += 1
     this.clearWork()
     const value = this.pending

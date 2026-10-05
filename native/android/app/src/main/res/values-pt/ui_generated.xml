@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"Assistência de rede do sistema"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"Somente páginas oficiais de login verificadas podem selecionar automaticamente uma conta que corresponda exatamente à conta salva e preencher usuário e senha, com no máximo uma tentativa por etapa. Contas sem correspondência, MFA, CAPTCHA, manter a sessão e confirmações de riscos ou termos exigem sua intervenção."</string>
     <string name="ui_generated_fd4480c6c08ea3">"Desativar “Ativar QMplus” apenas pausa a conexão e a sincronização; os dados de login salvos, a sessão e o cache de cursos são mantidos. Use os controles correspondentes para desativar o preenchimento automático, excluir dados de login ou desconectar e limpar dados."</string>
+    <string name="ui_generated_b5e960a8c37808">"É necessário limpar a sessão web do QMplus. Reinicie o aplicativo."</string>
+    <string name="ui_generated_127d5412a91688">"Não foi possível limpar ou salvar a sessão web do QMplus. Tente novamente."</string>
 </resources>

@@ -117,6 +117,53 @@ class QmplusSavedLoginStoreUiTest {
         }
     }
 
+    // Regression specification added after local automated testing was stopped.
+    // Not executed for this change; uses only a synthetic, isolated credential domain.
+    @Test fun identicalAuthorizedResavePreservesCredentialBytesAndDoesNotRequestCookieClearing() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val domain = "test_qm_identical_resave"
+        val store = QmplusCredentialStore(context, domain)
+        store.clear()
+        val prefs = context.getSharedPreferences("qm_identical_resave_test_only", android.content.Context.MODE_PRIVATE)
+        assertTrue(prefs.edit().clear().commit())
+        val password = "synthetic-identical-only".toCharArray()
+        val loaded = CountDownLatch(1); val completed = CountDownLatch(1)
+        val result = AtomicReference<Result<Unit>>()
+        var repository: QmplusRepository? = null
+        try {
+            val saved = store.save("synthetic@example.invalid", password, true, store.status().revision)
+            val bytes = File(context.noBackupFilesDir, "$domain.bin").readBytes()
+            instrumentation.runOnMainSync {
+                val current = QmplusRepository(context, prefs, credentialStoreOverride = store)
+                repository = current
+                current.addObserver(loaded) { if (!current.isLoading) loaded.countDown() }
+                if (!current.isLoading) loaded.countDown()
+            }
+            assertTrue(loaded.await(5, TimeUnit.SECONDS))
+            instrumentation.runOnMainSync {
+                assertEquals(saved, checkNotNull(repository).savedLoginStatus)
+                checkNotNull(repository).saveLogin(" synthetic@example.invalid ", password, true) {
+                    result.set(it); completed.countDown()
+                }
+            }
+            assertTrue(completed.await(5, TimeUnit.SECONDS))
+            assertTrue(checkNotNull(result.get()).isSuccess)
+            instrumentation.runOnMainSync {
+                assertEquals(saved, checkNotNull(repository).savedLoginStatus)
+                assertFalse(checkNotNull(repository).cookiesNeedClearing)
+                assertFalse(checkNotNull(repository).isClearingSession)
+                assertNull(checkNotNull(repository).pendingCookieClearAttempt)
+            }
+            assertEquals(saved, store.status())
+            assertArrayEquals(bytes, File(context.noBackupFilesDir, "$domain.bin").readBytes())
+            assertTrue(prefs.all.isEmpty())
+        } finally {
+            password.fill('\u0000')
+            instrumentation.runOnMainSync { repository?.close() }
+            store.clear(); assertTrue(prefs.edit().clear().commit())
+        }
+    }
+
     @Test fun actualCredentialWorkerReturnsOnlyAccountAndErasesPasswordAtCallbackEnd() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val store = QmplusCredentialStore(context, "test_qm_auth_worker_delivery")

@@ -54,10 +54,12 @@ class SettingsPage internal constructor(
     private var pendingLanguageSource: WeakReference<View>? = null
     private var languagePickerDialog: AlertDialog? = null
     private var languageRevision = 0
+    private var qmplusDetailsExpanded: Boolean? = restoredDraft?.qmplusDetailsExpanded
 
     internal fun captureDraft(): SettingsPageDraft = SettingsPageDraft(
         if (::pageRoot.isInitialized) captureInputDrafts(pageRoot) else emptyMap(),
         captureCampus(), captureAcademicPassword(), captureAutomaticTerm(), captureCustomEnabled(), captureReminderOffsets(),
+        qmplusDetailsExpanded,
     )
 
     internal fun scheduleDidRefresh() {
@@ -304,20 +306,29 @@ class SettingsPage internal constructor(
     private fun qmplusSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         id = R.id.settings_qmplus_section
         applyCompactSurfacePadding()
-        addView(LinearLayout(activity).apply {
+        val qmHeader = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             addView(sectionTitle(activity, "QMplus", R.drawable.ic_section_check))
             addView(TextView(activity).apply {
                 text = activity.uiText("仅适用国院"); textSize = 12f; setThemeTextColor { Palette.muted }
                 setPadding(activity.dp(8), 0, 0, activity.dp(12))
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        })
-        addView(TextView(activity).apply {
+        }
+        addView(qmHeader)
+        val notice = TextView(activity).apply {
             text = activity.getString(R.string.qmplus_connection_notice); textSize = 12f
             setThemeTextColor { Palette.muted }; setLineSpacing(0f, 1.1f)
             setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
-        })
+        }
         val repository = activity.qmplusState()
+        if (qmplusDetailsExpanded == null) qmplusDetailsExpanded = repository.isFeatureEnabled
+        var previousEnabled = repository.isFeatureEnabled
+        val indicator = android.widget.ImageView(activity).apply {
+            setImageResource(R.drawable.ic_chevron_down)
+            imageTintList = android.content.res.ColorStateList.valueOf(Palette.muted)
+            isClickable = true; isFocusable = true
+        }
+        qmHeader.addView(indicator, LinearLayout.LayoutParams(activity.dp(UiMetrics.controlHeightDp), activity.dp(UiMetrics.controlHeightDp)))
         var restoringFeatureSwitch = false
         val enabledSwitch = featureSwitch(activity.uiText("启用 QMplus"), repository.isFeatureEnabled) {}
         enabledSwitch.id = R.id.settings_qmplus_enabled
@@ -339,11 +350,25 @@ class SettingsPage internal constructor(
         val savedLogin = settingsActionButton(activity.getString(R.string.qmplus_saved_login_title), false) {
             QmplusSavedLoginDialog.show(activity, this)
         }.apply { id = R.id.settings_qmplus_saved_login }
+        val details = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(notice); addView(stateText); addView(spacer(activity, 8)); addView(connect)
+            addView(spacer(activity, 8)); addView(disconnect)
+            addView(spacer(activity, 8)); addView(savedLogin)
+        }
         fun update() {
             restoringFeatureSwitch = true
             enabledSwitch.isChecked = repository.isFeatureEnabled
             restoringFeatureSwitch = false
-            enabledSwitch.isEnabled = !repository.isLoading
+            // Feature Off must remain available to cancel an in-flight sync.
+            enabledSwitch.isEnabled = !repository.isClearingSession
+            if (repository.isFeatureEnabled != previousEnabled) {
+                previousEnabled = repository.isFeatureEnabled
+                qmplusDetailsExpanded = repository.isFeatureEnabled
+            }
+            details.visibility = if (qmplusDetailsExpanded == true) View.VISIBLE else View.GONE
+            indicator.rotation = if (qmplusDetailsExpanded == true) 180f else 0f
+            indicator.contentDescription = activity.uiText(if (qmplusDetailsExpanded == true) "已展开" else "已折叠")
             stateText.text = activity.getString(when {
                 repository.isClearingSession -> R.string.qmplus_clearing_session
                 repository.isLoading -> R.string.qmplus_loading
@@ -354,10 +379,12 @@ class SettingsPage internal constructor(
             disconnect.isEnabled = !repository.isClearingSession
             savedLogin.isEnabled = !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession && repository.connection == null
         }
+        indicator.setOnClickListener {
+            qmplusDetailsExpanded = qmplusDetailsExpanded != true
+            update()
+        }
         update()
-        addView(enabledSwitch); addView(stateText); addView(spacer(activity, 8)); addView(connect)
-        addView(spacer(activity, 8)); addView(disconnect)
-        addView(spacer(activity, 8)); addView(savedLogin)
+        addView(enabledSwitch); addView(details)
         addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) {
                 repository.addObserver(view) { if (view.isAttachedToWindow) update() }
@@ -1923,7 +1950,7 @@ class SettingsPage internal constructor(
                 setTypeface(typeface, Typeface.BOLD)
             })
             addView(TextView(activity).apply {
-                text = "生效日期 / Effective date: 2026-10-03"
+                text = "生效日期 / Effective date: 2026-10-05"
                 textSize = 13f
                 setThemeTextColor { Palette.muted }
                 setPadding(0, activity.dp(4), 0, activity.dp(14))
@@ -1996,7 +2023,10 @@ class SettingsPage internal constructor(
         text = when (AppLocale.resolvedLanguage(activity)) {
             AppLanguage.ENGLISH -> body.substringAfter("\n\n", body)
             AppLanguage.SIMPLIFIED_CHINESE -> body
-            else -> activity.uiText(body.substringBefore("\n\n"))
+            // Keep the revised QMplus disclosure current without replacing it
+            // with an older catalog paragraph. Its bilingual text is the fallback.
+            else -> if (body.startsWith("QMplus 与北邮教务账号独立。")) body
+                else activity.uiText(body.substringBefore("\n\n"))
         }
         // This disclosure already carries its current translation. Generic
         // prefix fallbacks must not replace it with an older policy paragraph.
@@ -2023,8 +2053,8 @@ class SettingsPage internal constructor(
             ("密码仅通过 HTTPS 提交给 auth.bupt.edu.cn，一次性票据换取内存令牌后从 apiucloud.bupt.edu.cn 读取作业。可单独设置教学云平台密码，并保存在同一受保护凭据存储中；未设置时使用教务密码。应用不读取浏览器 Cookie，不向 UCloud API 发送密码，也不把票据、Cookie、令牌或作业写入磁盘；结果最多在内存复用 10 分钟。\n\n" +
                 "The password is submitted only to auth.bupt.edu.cn over HTTPS. An optional separate Teaching Cloud Platform password uses the same protected credential storage; otherwise the academic password is used. An in-memory token is used with apiucloud.bupt.edu.cn. No browser cookie, ticket, token, or assignment is persisted, and results are reused in memory for at most ten minutes."),
         "QMplus 独立连接 / Independent QMplus connection" to
-            ("QMplus 与北邮教务账号独立。只有用户主动连接时，应用才在独立的应用内 WebView 进程和 profile 打开 QMplus 官方网页。有效会话可不显示登录窗口直接同步；登录信息默认不保存，只有用户明确选择并保存，才在本机独立的 Keystore 域加密保存 QMplus 账号和密码，用于已验证官方登录表单的用户名／密码各一次填写与普通登录提交。验证码、MFA、账号选择、风险确认、新条款或未知页面会显示官方窗口，由用户本人完成；应用不绕过验证，不复用北邮密码，也不读取外部浏览器 Cookie。只读脚本返回有界的课程与 Assignment／Quiz 业务快照，不返回密码、Cookie、sesskey、令牌或完整 HTML，不提交作业、开始测验或经过第三方 Worker／本项目服务器。业务快照保存在应用私有存储中；真正部分失败时保留并标注此前已知资料。断开连接或清除本地数据会清除应用管理的网页会话、快照及已保存登录信息；更换北邮账号不会自动更换 QMplus 身份。官方 QMplus／Microsoft 可按自身政策处理登录信息及网络元数据。\n\n" +
-                "QMplus is independent of BUPT academic credentials. Only when you connect does the app open the official QMplus page in a separate app-owned WebView process/profile. A valid session can sync without showing a sign-in window. Sign-in details are off by default; only an explicit choice and save encrypts the QMplus account and password locally in a separate Keystore domain, for one username/password fill and ordinary sign-in submission per verified official form. CAPTCHA, MFA, account selection, risk confirmation, new terms, or unknown pages show the official window for you to complete. The app never bypasses verification, reuses BUPT passwords, or reads external-browser cookies. Its read-only script returns a bounded course and Assignment/Quiz business snapshot, not passwords, cookies, session keys, tokens, or full HTML; it never submits work, starts quizzes, or uses a third-party Worker or this project’s server. The snapshot is stored in app-private storage; genuine partial failures retain labelled known information. Disconnecting or clearing local data removes the app-managed web session, snapshot, and saved sign-in details; changing BUPT credentials does not switch the QMplus identity. Official QMplus/Microsoft services may process sign-in information and network metadata under their own policies."),
+            ("QMplus 与北邮教务账号独立。只有你主动连接时，应用才在独立的 :qmplus 进程及应用管理的 WebView profile 打开官方网页；旧系统的应用默认网页区只供 QMplus 使用，不读取系统浏览器 Cookie，也不复用北邮密码。默认不保存登录资料；明确选择保存及授权后，独立 Android Keystore 域在本机加密保存 QMplus 账号和密码，仅在已核验的官方 Microsoft 页面自动选择精确匹配的已保存账号，并在已确认的账号／密码表单各尝试一次普通 Next／Sign in。未匹配的账号选择、验证码、MFA、保持登录、风险、协议及其它确认仍须本人完成。有效会话可直接只读同步；过期或需要验证时显示官方窗口。系统 WebView 引擎管理本机持久 Cookie 和网页存储，成功同步时请求引擎刷新 Cookie 保存；不导出到普通设置、业务快照、日志或本项目服务器，不改变官方有效期或验证策略，不保证永久登录或免 MFA。重新核验同一已授权安全记录和相同密码后，重复保存可保留会话，但不解除已有待清理标记。更换资料、退出或清除会撤销旧连接，并以待清理状态阻止旧会话用于新身份；Cookie 清理等待私有进程的删除完成回调及当前请求匹配的回执，网页存储删除请求交由引擎处理。清理或状态保存失败会提示重试，不能把发出请求、暂停同步或保存新资料当作成功删除旧 Cookie。关闭“启用 QMplus”只暂停连接和同步，保留 Cookie、已保存资料及课程缓存；关闭自动填写撤销授权，删除资料、退出并清除或清除本地数据会移除相应独立安全记录，失败不声称已删除。只读脚本仅获取 EBU 课程及已发布 Assignment／Quiz 业务资料，不请求 QMplus 日历或 Timeline、不提交作业、开始测验或访问答案，不返回密码、Cookie、sesskey、令牌或完整 HTML，不使用第三方 Worker。业务快照保存在应用私有的有界缓存中；真实部分失败保留并标注已核实或此前资料。本项目服务器不接收身份或课程数据；更换北邮账号不会自动更换 QMplus 身份。官方服务按其政策处理你提交的登录信息和网络元数据。\n\n" +
+                "QMplus is independent of BUPT credentials. Only your explicit connection opens the official site in the separate :qmplus process and app-managed WebView profile. On older systems, the application default web area is reserved for QMplus. System-browser cookies and BUPT passwords are never reused. Sign-in saving is off by default; explicit saving and authorization encrypt separate QMplus credentials locally in an Android Keystore domain. Verified official Microsoft pages may select the exact saved account and fill verified username/password forms with one ordinary Next/Sign in submission per step. Unmatched account choices, CAPTCHA, MFA, staying signed in, risk, terms and other confirmations require you. A valid session can sync read-only; expiry or verification shows the official window. The WebView engine manages persistent cookies and web storage locally, with a cookie flush requested after successful sync. They are never exported into ordinary settings, business snapshots, logs or the project server. Official expiry and verification rules are unchanged; permanent sign-in or exemption from MFA is not guaranteed. Revalidating the same authorized secure record and password may preserve the session on resave without removing a pending cleanup marker. Credential replacement, logout or clearing retires the old connection and uses pending cleanup state to block the old session for a new identity. Cookie cleanup waits for the private-process removal callback and a matching acknowledgment for the current request; web-storage deletion requests are handled by the engine. Cleanup or metadata-write failures require retry. Sending a request, pausing sync or saving new credentials is not proof that old cookies were deleted. Turning off “Enable QMplus” pauses connection and sync while retaining cookies, saved credentials and course cache. Turning autofill off revokes authorization; deleting credentials, disconnecting and clearing, or clearing local data removes the separate secure record, with failures not claimed as successful deletion. The read-only script retrieves EBU courses and published Assignment/Quiz business data, never QMplus calendar/Timeline, submissions, quiz attempts or answers, and never returns passwords, cookies, session keys, tokens or full HTML or uses a third-party Worker. Business snapshots use a bounded app-private cache; genuine partial failures retain clearly labelled verified or prior information. The project server receives no identity or course data; changing BUPT credentials does not switch QMplus identity. Official services process submitted sign-in information and network metadata under their policies."),
         "系统日历、通知与小组件 / Calendar, notifications, and widgets" to
             ("日历写入和本地课程通知需要你的操作与权限；应用只管理带 Where To Study 标记的事件。课程小组件只在支持的平台提供，相关数据不上传。\n\n" +
                 "Calendar writes and local course notifications require your action and permission, and only marked events are managed. Widgets exist only on supported platforms. This data is not uploaded."),

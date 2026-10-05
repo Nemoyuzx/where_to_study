@@ -873,8 +873,11 @@ class ScheduleLogicTest {
 
     @Test
     fun compactAgendaUsesBoundedItemsAndReportsOverflow() {
-        assertEquals(1, TeachingCalendarLogic.agendaVisibleItemCount(5, compactWeek = true))
-        assertEquals(4, TeachingCalendarLogic.agendaHiddenItemCount(5, compactWeek = true))
+        assertEquals(2, TeachingCalendarLogic.agendaVisibleItemCount(5, compactWeek = true))
+        assertEquals(3, TeachingCalendarLogic.agendaHiddenItemCount(5, compactWeek = true))
+        assertEquals(3, TeachingCalendarLogic.agendaVisibleItemCount(3, compactWeek = true))
+        assertEquals(0, TeachingCalendarLogic.agendaHiddenItemCount(3, compactWeek = true))
+        assertEquals(0, TeachingCalendarLogic.agendaVisibleItemCount(-1, compactWeek = true))
         assertEquals(3, TeachingCalendarLogic.agendaVisibleItemCount(5, compactWeek = false))
         assertEquals(2, TeachingCalendarLogic.agendaHiddenItemCount(5, compactWeek = false))
         assertEquals(8, TeachingCalendarLogic.dayWeekVisibleCourseCount(8))

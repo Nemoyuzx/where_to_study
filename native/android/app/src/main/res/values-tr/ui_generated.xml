@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"Sistem ağ yardımı"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"Yalnızca doğrulanmış resmi giriş sayfalarında kayıtlı hesapla tam eşleşen hesap otomatik seçilir, kullanıcı adı ve parola doldurulur; her adım en fazla bir kez denenir. Eşleşmeyen hesap seçimi, MFA, CAPTCHA, oturumu açık tutma, risk ve koşul onayları sizin işleminizi gerektirir."</string>
     <string name="ui_generated_fd4480c6c08ea3">"“QMplus’ı etkinleştir” seçeneğini kapatmak yalnızca bağlantı ve eşitlemeyi duraklatır; kayıtlı giriş bilgileri, oturum ve ders önbelleği korunur. Otomatik doldurmayı kapatmak, giriş bilgilerini silmek veya bağlantıyı kesip verileri temizlemek için ilgili kontrolleri kullanın."</string>
+    <string name="ui_generated_b5e960a8c37808">"QMplus web oturumunun temizlenmesi gerekiyor. Lütfen uygulamayı yeniden başlatın."</string>
+    <string name="ui_generated_127d5412a91688">"QMplus web oturumu temizlenemedi veya kaydedilemedi. Lütfen tekrar deneyin."</string>
 </resources>

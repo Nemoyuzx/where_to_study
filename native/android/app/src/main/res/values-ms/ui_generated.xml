@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"Bantuan rangkaian sistem"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"Hanya laman log masuk rasmi yang disahkan boleh memilih akaun yang sepadan tepat dengan akaun tersimpan dan mengisi nama pengguna serta kata laluan, dengan setiap langkah dicuba paling banyak sekali. Pemilihan akaun yang tidak sepadan, MFA, CAPTCHA, kekal log masuk serta pengesahan risiko dan terma masih perlu anda lakukan sendiri."</string>
     <string name="ui_generated_fd4480c6c08ea3">"Mematikan “Dayakan QMplus” hanya menjeda sambungan dan penyegerakan; maklumat log masuk tersimpan, sesi dan cache kursus dikekalkan. Gunakan kawalan berasingan untuk mematikan autofill, memadam maklumat log masuk atau memutuskan sambungan dan mengosongkan data."</string>
+    <string name="ui_generated_b5e960a8c37808">"Sesi web QMplus perlu dipadam. Sila mulakan semula aplikasi."</string>
+    <string name="ui_generated_127d5412a91688">"Sesi web QMplus tidak dapat dipadam atau disimpan. Sila cuba lagi."</string>
 </resources>

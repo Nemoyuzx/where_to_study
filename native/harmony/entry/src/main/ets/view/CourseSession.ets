@@ -8,6 +8,15 @@ export class CourseSession {
   @Trace visibleCloudAssignments: number = 40;
   @Trace selectedCourseSource: string = '';
   @Trace selectedCourseID: string = '';
+  @Trace expandedCourseKeys: string[] = [];
+  skipNextAutomaticCourseLoad: boolean = false;
+
+  isExpanded(source: string, id: string): boolean { return this.expandedCourseKeys.includes(source + '.' + id); }
+  toggleExpanded(source: string, id: string): void {
+    const key: string = source + '.' + id;
+    this.expandedCourseKeys = this.expandedCourseKeys.includes(key) ?
+      this.expandedCourseKeys.filter((value: string): boolean => value !== key) : [...this.expandedCourseKeys, key];
+  }
   detailScrollOffset: number = 0;
   readonly scrollOffsets: Map<string, number> = new Map<string, number>();
 

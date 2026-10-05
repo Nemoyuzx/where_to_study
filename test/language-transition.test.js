@@ -45,7 +45,8 @@ test('cover precedes commit and target layout plus a paint precede reveal',()=>{
   assert.deepEqual(f.applied,['en']);assert.equal(f.phase(),'waiting')
   f.advance(100);assert.equal(f.phase(),'waiting')
   f.state.ready=true
-  f.advance(100);assert.equal(f.phase(),'revealing')
+  f.advance(100);assert.equal(f.phase(),'completed');assert.equal(f.published.at(-1).completed,true)
+  f.advance(300);assert.equal(f.phase(),'revealing')
   f.advance(220);assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
 })
 
@@ -60,7 +61,8 @@ test('a layout that changes again before paint is not acknowledged early',()=>{
   f.state.ready=false;f.advance(80)
   assert.equal(f.phase(),'waiting')
   f.state.ready=true;f.advance(100)
-  assert.equal(f.phase(),'revealing')
+  assert.equal(f.phase(),'completed')
+  f.advance(300);assert.equal(f.phase(),'revealing')
   f.advance(220);assert.equal(f.phase(),'idle')
 })
 
@@ -92,6 +94,41 @@ test('reduced motion and unchanged resolved locale are immediate',()=>{
 })
 
 test('a detached renderer cannot retain an unbounded overlay or animation loop',()=>{
-  const f=fixture();f.state.ready=false;f.owner.request('en','en','zh-Hans');f.advance(1100)
+  const f=fixture();f.state.ready=false;f.owner.request('en','en','zh-Hans');f.advance(5300)
   assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+  assert.equal(f.published.some(value=>value.completed),false)
+})
+
+test('cancellation during target readiness never publishes a completion check',()=>{
+  const f=fixture();f.state.ready=false;f.owner.request('en','en','zh-Hans');f.advance(180)
+  f.owner.finish(false);f.advance(6000)
+  assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+  assert.equal(f.published.some(value=>value.completed),false)
+})
+
+test('a newer language cancels the old completion dwell and its fade',()=>{
+  const f=fixture();f.owner.request('en','en','zh-Hans');f.advance(160)
+  assert.equal(f.phase(),'completed')
+  f.owner.request('zh-Hans','zh-Hans','en')
+  assert.equal(f.phase(),'covering')
+  f.advance(150);assert.equal(f.phase(),'waiting')
+  f.advance(20);assert.equal(f.phase(),'completed')
+  assert.equal(f.published.at(-1).target,'zh-Hans')
+  f.advance(600);assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+})
+
+test('a late native rejection cannot cancel a new choice before its language commit',()=>{
+  const f=fixture();f.state.ready=false
+  f.owner.request('en','en','zh-Hans');f.advance(120)
+  const oldNativeRevision=f.owner.revision
+  f.owner.request('zh-Hant','zh-Hant','en')
+  const currentRevision=f.owner.revision
+  f.owner.finish(false,oldNativeRevision)
+  assert.equal(f.phase(),'covering');assert.equal(f.owner.revision,currentRevision)
+  assert.equal(f.owner.pending,'zh-Hant')
+  f.advance(120)
+  assert.deepEqual(f.applied,['en','zh-Hant']);assert.equal(f.phase(),'waiting')
+  f.owner.finish(false,currentRevision)
+  assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+  assert.equal(f.published.some(value=>value.completed),false)
 })

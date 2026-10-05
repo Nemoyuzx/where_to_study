@@ -31,6 +31,10 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
     private var host = WeakReference<ViewGroup>(null)
     private var content = WeakReference<View>(null)
     private var cover: FrameLayout? = null
+    private var completionIcon: ImageView? = null
+    private var progressLabel: TextView? = null
+    private var completionDelay: Runnable? = null
+    private var reducedMotion = false
     private var bitmap: Bitmap? = null
     private var animator: ValueAnimator? = null
     private var observer: ViewTreeObserver.OnPreDrawListener? = null
@@ -54,26 +58,32 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
         val token = revision.incrementAndGet()
         this.host = WeakReference(host); this.content = WeakReference(content)
         pendingApply = change; targetReady = ready; stableLayout.reset(); readyFrameCount = 0
-        if (reducesMotion(host)) { applyPending(); cleanup(); return }
-        nativeBlur = !(forceLegacyBlur && BuildConfig.DEBUG && DailyCourseNotificationRuntimeMode.isUiTesting) && Build.VERSION.SDK_INT >= 31 && content.isHardwareAccelerated
+        reducedMotion = reducesMotion(host)
+        nativeBlur = !reducedMotion && !(forceLegacyBlur && BuildConfig.DEBUG && DailyCourseNotificationRuntimeMode.isUiTesting) && Build.VERSION.SDK_INT >= 31 && content.isHardwareAccelerated
         val layer = FrameLayout(host.context).apply {
             tag = "overlay.language-transition"; isClickable = true; isFocusable = true
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
             contentDescription = label
             setBackgroundColor(android.graphics.Color.TRANSPARENT)
             addView(TextView(context).apply {
-                text = label; textSize = 15f; gravity = Gravity.CENTER
+                text = "Switching…"; progressLabel = this; textSize = 15f; gravity = Gravity.CENTER
                 setTextColor(Palette.text); setPadding(24, 12, 24, 12)
                 background = themedRoundedBackground(context, { Palette.surface }, radius = 8)
             }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         }
+        layer.addView(ImageView(host.context).apply {
+            completionIcon = this; setImageResource(R.drawable.ic_section_check)
+            imageTintList = android.content.res.ColorStateList.valueOf(Palette.primaryText)
+            visibility = View.GONE
+        }, FrameLayout.LayoutParams(host.context.dp(30), host.context.dp(30), Gravity.CENTER))
         cover = layer
         host.addView(layer, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         phase = "covering"
         deadline = Runnable { if (revision.get() == token) { applyPending(); cancel() } }
             .also { handler.postDelayed(it, 4_000) }
-        if (nativeBlur) coverThenApply(token)
+        if (reducedMotion) { phase = "waiting-layout"; applyPending(); awaitLayout(token) }
+        else if (nativeBlur) coverThenApply(token)
         else startLegacyBlur(token)
     }
 
@@ -144,15 +154,22 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
         observer = ViewTreeObserver.OnPreDrawListener {
             if (revision.get() != token) return@OnPreDrawListener true
             val body = content.get()
-            val bounds = listOf(root.width, root.height, body?.width ?: 0, body?.height ?: 0)
+            val geometry = body?.let(::layoutGeometry)
+            val bounds = listOf(root.width, root.height, body?.width ?: 0, body?.height ?: 0) + geometry.orEmpty()
             val ready = targetReady?.invoke() == true
             if (stableLayout.observe(ready, root.isAttachedToWindow, !ready,
-                    root.isLayoutRequested || body?.isLayoutRequested != false, bounds)) {
-                readyFrameCount = 2
-                removeObserver(); phase = "revealing"
-                animate(token, 1f, 0f, 220, { progress ->
+                    root.isLayoutRequested || body?.isLayoutRequested != false || geometry == null, bounds)) {
+                readyFrameCount = 3
+                removeObserver(); phase = "complete"
+                deadline?.let(handler::removeCallbacks); deadline = null
+                progressLabel?.visibility = View.GONE; completionIcon?.visibility = View.VISIBLE
+                completionDelay = Runnable {
+                  if (revision.get() != token) return@Runnable
+                  completionDelay = null; phase = "revealing"
+                  animate(token, 1f, 0f, if (reducedMotion) 0 else 220, { progress ->
                     if (nativeBlur) setNativeBlur(progress) else cover?.alpha = progress
-                }) { if (revision.get() == token) cleanup() }
+                  }) { if (revision.get() == token) cleanup() }
+                }.also { handler.postDelayed(it, 140) }
             } else root.postInvalidateOnAnimation()
             true
         }.also(root.viewTreeObserver::addOnPreDrawListener)
@@ -160,6 +177,34 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
     }
 
     private fun applyPending() { val change = pendingApply; pendingApply = null; change?.invoke() }
+
+    private fun layoutGeometry(root: View): List<Int>? {
+        if (root.visibility != View.VISIBLE) return null
+        val result = mutableListOf<Int>()
+        val queue = java.util.ArrayDeque<View>(); queue.add(root)
+        var count = 0
+        while (queue.isNotEmpty()) {
+            val view = queue.removeFirst()
+            // GONE children are not measured by their parent and can retain
+            // FORCE_LAYOUT. They are not part of the current visible locale.
+            if (view.visibility != View.VISIBLE) continue
+            if (++count > 2048 || view.isLayoutRequested) return null
+            result.addAll(listOf(view.left, view.top, view.width, view.height, view.scrollX, view.scrollY,
+                view.layoutDirection, view.visibility, (view.translationX * 1000).toInt(),
+                (view.translationY * 1000).toInt(), (view.alpha * 1000).toInt()))
+            if (view is ViewGroup) for (index in 0 until view.childCount) {
+                val child = view.getChildAt(index)
+                if (child.visibility == View.VISIBLE) queue.add(child)
+            }
+        }
+        return result
+    }
+
+    fun runLocalLanguageWork(work: () -> Unit) {
+        if (closed) return
+        val executor = worker ?: Executors.newSingleThreadExecutor().also { worker = it }
+        executor.execute(work)
+    }
 
     fun finishImmediately() { applyPending(); cancel() }
 
@@ -170,11 +215,13 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
     private fun cleanup() {
         animator?.removeAllListeners(); animator?.cancel(); animator = null
         deadline?.let(handler::removeCallbacks); deadline = null
+        completionDelay?.let(handler::removeCallbacks); completionDelay = null
         leaseWait?.let(handler::removeCallbacks); leaseWait = null
         removeObserver(); targetReady = null; stableLayout.reset()
         if (nativeBlur && Build.VERSION.SDK_INT >= 31) content.get()?.setRenderEffect(null)
         cover?.let { (it.parent as? ViewGroup)?.removeView(it); it.removeAllViews() }; cover = null
         bitmap?.takeUnless(Bitmap::isRecycled)?.recycle(); bitmap = null
+        progressLabel = null; completionIcon = null
         content.clear(); host.clear(); phase = "idle"
     }
 

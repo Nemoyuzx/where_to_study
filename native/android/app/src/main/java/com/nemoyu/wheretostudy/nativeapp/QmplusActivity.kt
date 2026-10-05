@@ -335,6 +335,10 @@ class QmplusActivity : Activity() {
             if (bytes == null || raw == "error" || bytes.size > QmplusPolicy.MAXIMUM_SNAPSHOT_BYTES) {
                 owner.failSync(); return@evaluateJavascript
             }
+            // WebView owns its isolated cookies. Persist the current official
+            // session before this private Activity/process may be released;
+            // never export cookie values or turn a disk failure into a logout.
+            if (owner.authenticatedDocument) runCatching { CookieManager.getInstance().flush() }
             owner.closing = true
             owner.setResult(RESULT_OK, owner.resultIntent().putExtra(EXTRA_SNAPSHOT, bytes))
             owner.finish()

@@ -19,6 +19,7 @@ pub mod models;
 pub mod qmplus;
 pub mod qmplus_feature;
 pub mod qmplus_login;
+pub mod qmplus_profile;
 #[cfg(not(mobile))]
 mod recommender;
 pub mod schedule;
@@ -1158,10 +1159,15 @@ fn clear_account_scoped_caches(app: &tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 async fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
     qmplus_feature::set(&app, false)?;
-    qmplus::disconnect_qmplus(app.clone(), app.state::<qmplus::QmState>());
-    tauri::async_runtime::spawn_blocking(move || clear_local_data_sync(app))
+    let clearing = qmplus::disconnect_qmplus(app.clone()).await;
+    if let Err(error) = clearing.as_ref() {
+        if error != qmplus_profile::RESTART_REQUIRED { return Err(error.clone()); }
+    }
+    let result = tauri::async_runtime::spawn_blocking(move || clear_local_data_sync(app))
         .await
-        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())??;
+    clearing?;
+    Ok(result)
 }
 
 fn clear_local_data_sync(app: tauri::AppHandle) -> Result<bool, String> {
@@ -1873,7 +1879,7 @@ async fn fetch_assignment_calendar(
 }
 
 #[tauri::command]
-fn set_interface_language(app: tauri::AppHandle, payload: String) -> Result<(), String> {
+async fn set_interface_language(app: tauri::AppHandle, payload: String) -> Result<(), String> {
     if !models::UI_LANGUAGES.contains(&payload.as_str()) {
         return Err("界面语言参数无效。".to_string());
     }
@@ -1883,9 +1889,10 @@ fn set_interface_language(app: tauri::AppHandle, payload: String) -> Result<(), 
             .iter()
             .position(|value| *value == payload)
             .unwrap_or(0);
-        if DESKTOP_INTERFACE_LANGUAGE.swap(locale, Ordering::SeqCst) != locale {
-            refresh_tray_courses(app, true);
-        }
+        DESKTOP_INTERFACE_LANGUAGE.store(locale, Ordering::SeqCst);
+        // A same-locale retry must also acknowledge its actual local menu
+        // work, not bypass a previous pending or failed submission.
+        refresh_tray_courses_tracked(app, true).await?;
     }
     #[cfg(mobile)]
     let _ = app;
@@ -2680,6 +2687,13 @@ fn set_tray_menu(app: &tauri::AppHandle, content: TrayCourseContent) -> tauri::R
 
 #[cfg(not(mobile))]
 fn refresh_tray_courses(app: tauri::AppHandle, local_only: bool) {
+    tauri::async_runtime::spawn(async move {
+        let _ = refresh_tray_courses_tracked(app, local_only).await;
+    });
+}
+
+#[cfg(not(mobile))]
+async fn refresh_tray_courses_tracked(app: tauri::AppHandle, local_only: bool) -> Result<(), String> {
     let generation = LOCAL_DATA.begin();
     let refresh_revision = TRAY_REFRESH_REVISION.fetch_add(1, Ordering::SeqCst) + 1;
     let course_revision = COURSE_EDITS_REVISION.load(Ordering::SeqCst);
@@ -2687,7 +2701,7 @@ fn refresh_tray_courses(app: tauri::AppHandle, local_only: bool) {
         set_tray_menu(&app, TrayCourseContent::Loading).map_err(|error| error.to_string())
     }) {
         if error == LocalDataAccessError::AccountAccessRevoked {
-            let _ = LOCAL_DATA.with_current(generation, || {
+            return LOCAL_DATA.with_current(generation, || {
                 set_tray_menu(
                     &app,
                     TrayCourseContent::Message(
@@ -2695,17 +2709,16 @@ fn refresh_tray_courses(app: tauri::AppHandle, local_only: bool) {
                     ),
                 )
                 .map_err(|error| error.to_string())
-            });
+            }).map_err(LocalDataAccessError::message);
         }
-        return;
+        return Err(error.message());
     }
-    tauri::async_runtime::spawn(async move {
-        let content =
-            load_today_course_content(app.clone(), generation, local_only, refresh_revision).await;
-        let _ = LOCAL_DATA.with_current_account(generation, || {
+    let content =
+        load_today_course_content(app.clone(), generation, local_only, refresh_revision).await;
+    LOCAL_DATA.with_current_account(generation, || {
             // A delayed refresh must not replace the newer locale/date menu.
             if TRAY_REFRESH_REVISION.load(Ordering::SeqCst) != refresh_revision {
-                return Ok(());
+                return Err(STALE_LOCAL_DATA_MESSAGE.to_owned());
             }
             let content = if COURSE_EDITS_REVISION.load(Ordering::SeqCst) != course_revision {
                 match load_current_schedule(&app)? {
@@ -2716,8 +2729,7 @@ fn refresh_tray_courses(app: tauri::AppHandle, local_only: bool) {
                 content
             };
             set_tray_menu(&app, content).map_err(|error| error.to_string())
-        });
-    });
+    }).map_err(LocalDataAccessError::message)
 }
 
 #[cfg(not(mobile))]

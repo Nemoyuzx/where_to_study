@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"Bantuan jaringan sistem"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"Hanya pada laman masuk resmi yang telah diverifikasi, aplikasi dapat memilih akun yang cocok persis dengan akun tersimpan dan mengisi nama pengguna serta kata sandi, dengan paling banyak satu upaya per langkah. Pemilihan akun yang tidak cocok, MFA, CAPTCHA, tetap masuk, serta konfirmasi risiko dan ketentuan tetap memerlukan tindakan Anda."</string>
     <string name="ui_generated_fd4480c6c08ea3">"Menonaktifkan “Aktifkan QMplus” hanya menjeda koneksi dan sinkronisasi; informasi masuk tersimpan, sesi, dan cache mata kuliah tetap disimpan. Gunakan kontrol terpisah untuk mematikan isi otomatis, menghapus informasi masuk, atau memutus koneksi dan menghapus data."</string>
+    <string name="ui_generated_b5e960a8c37808">"Sesi web QMplus perlu dihapus. Silakan mulai ulang aplikasi."</string>
+    <string name="ui_generated_127d5412a91688">"Sesi web QMplus tidak dapat dihapus atau disimpan. Silakan coba lagi."</string>
 </resources>

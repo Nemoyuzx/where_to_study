@@ -26,6 +26,9 @@ import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.AccessibilityDelegateCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
@@ -80,6 +83,11 @@ internal class InformationQuerySessionState(
     var courseDetailKey: String? = null
     var courseDetailScrollY = 0
     var courseDetailVisibleCount = 20
+    var fullTimetableExpanded = false
+    val expandedCourseKeys = mutableSetOf<String>()
+    val inlineCourseCounts = mutableMapOf<String, Int>()
+
+    fun toggleFullTimetable() { fullTimetableExpanded = !fullTimetableExpanded }
 
     companion object {
         const val INITIAL_EVENT_COUNT = 20
@@ -788,13 +796,22 @@ internal class InformationQueryPage(
                 val termID = gradesRepository.selectedTermID
                 val title = if (termID == "") activity.uiText("全部学期") else gradesRepository.terms?.terms
                     ?.firstOrNull { it.id == termID }?.let(::gradeTermLabel) ?: activity.uiText("当前学期")
-                addView(gradeAction("学期：$title") {
+                addView(LinearLayout(activity).apply {
+                  orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                  addView(gradeAction("学期：$title") {
                     val terms = listOf(AcademicTerm("", "全部学期")) + gradesRepository.terms?.terms.orEmpty()
                     AlertDialog.Builder(activity).setTitle(activity.uiText("选择学期"))
                         .setItems(terms.map(::gradeTermLabel).toTypedArray()) { _, index ->
                             gradesRepository.select(terms[index].id)
                         }.show().also(UiText::localizeDialog)
-                }.apply { id = R.id.information_query_grades_term; isEnabled = gradesRepository.terms != null })
+                  }.apply { id = R.id.information_query_grades_term; isEnabled = gradesRepository.terms != null },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                  addView(gradeAction(if (gradesRepository.isLoading) "正在获取…" else "刷新成绩") {
+                      gradesRepository.load(force = true)
+                  }.apply { id = R.id.information_query_grades_refresh; isEnabled = !gradesRepository.isLoading },
+                    LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                      .apply { marginStart = activity.dp(8) })
+                })
                 val types = listOf("1" to "最好成绩", "0" to "首次成绩", "" to "全部记录")
                 addView(gradeAction(types.first { it.first == gradesRepository.recordType }.second) {
                     AlertDialog.Builder(activity).setTitle(activity.uiText("成绩记录"))
@@ -802,9 +819,6 @@ internal class InformationQueryPage(
                             gradesRepository.selectedTermID?.let { gradesRepository.select(it, types[index].first) }
                         }.show().also(UiText::localizeDialog)
                 }.apply { isEnabled = gradesRepository.selectedTermID != null })
-                addView(gradeAction(if (gradesRepository.isLoading) "正在获取…" else "刷新成绩") {
-                    gradesRepository.load(force = true)
-                }.apply { id = R.id.information_query_grades_refresh; isEnabled = !gradesRepository.isLoading })
             })
             addView(spacer(activity, 12))
             gradesRepository.error?.let { addView(statusCard(if (snapshot == null) it else
@@ -830,7 +844,19 @@ internal class InformationQueryPage(
                             ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                             if (snapshot.averageGradePoint != null) topMargin = activity.dp(InformationQueryLayoutLogic.GRADE_RESULT_SPACING_DP)
                         })
-                    snapshot.items.forEach { grade ->
+                    val gradeItems = if (snapshot.termID.isBlank()) snapshot.items.groupBy { it.semesterName.orEmpty() }
+                        .toSortedMap(compareByDescending<String> { it }).values.flatten() else snapshot.items
+                    var lastTerm: String? = null
+                    gradeItems.forEach { grade ->
+                        val semester = grade.semesterName.orEmpty()
+                        if (snapshot.termID.isBlank() && semester != lastTerm) {
+                            lastTerm = semester
+                            addView(TextView(activity).apply {
+                                text = semester.ifBlank { activity.uiText("学期") }; UiText.preserveRawText(this)
+                                textSize = 15f; setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.muted }
+                                setPadding(0, activity.dp(16), 0, activity.dp(4))
+                            })
+                        }
                         addView(compactGradeSurface().apply {
                             tag = "academic.grade.row"
                             addView(TextView(activity).apply {
@@ -1021,10 +1047,8 @@ internal class InformationQueryPage(
         for (index in list.childCount until target) {
             val course = courses[index]
             val key = "teaching-cloud.course.${course.id}"
-            list.addView(courseDirectoryRow(activity, key, course.name ?: activity.uiText("课程未标注"),
-                course.teacherNames, CourseDirectoryLogic.teachingCloudCounts(course.id, assignments)) {
-                showCourseDetails(key)
-            })
+            list.addView(inlineCourseRow(key, course.name ?: activity.uiText("课程未标注"),
+                course.teacherNames, CourseDirectoryLogic.teachingCloudCounts(course.id, assignments)))
         }
         sessionState.visibleCourseCount = maxOf(20, target)
     }
@@ -1039,10 +1063,63 @@ internal class InformationQueryPage(
             val key = "qmplus.course.${course.id}"
             val term = if (course.currentTermStatus == "current") null else activity.getString(
                 if (course.currentTermStatus == "other") R.string.qmplus_term_other else R.string.qmplus_term_unknown)
-            list.addView(courseDirectoryRow(activity, key, course.name, emptyList(),
-                CourseDirectoryLogic.qmplusCounts(course.id, snapshot.activities), term) { showCourseDetails(key) })
+            list.addView(inlineCourseRow(key, course.name, emptyList(),
+                CourseDirectoryLogic.qmplusCounts(course.id, snapshot.activities), term))
         }
         sessionState.visibleQmplusRowCount = maxOf(20, target)
+    }
+
+    private fun inlineCourseRow(key: String, name: String, teachers: List<String>,
+        counts: CourseSubmissionCounts, term: String? = null): LinearLayout {
+        val body = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL; tag = "$key.assignments"
+            visibility = if (key in sessionState.expandedCourseKeys) View.VISIBLE else View.GONE
+            setPadding(activity.dp(52), 0, 0, activity.dp(12))
+        }
+        lateinit var row: LinearLayout
+        lateinit var motion: DisclosureMotionController
+        row = courseDirectoryRow(activity, key, name, teachers, counts, term,
+            onDetails = { showCourseDetails(key) }) {
+            val expanded = if (key in sessionState.expandedCourseKeys) {
+                sessionState.expandedCourseKeys.remove(key); false
+            } else { sessionState.expandedCourseKeys.add(key); true }
+            if (expanded && body.childCount == 0) populateInlineAssignments(key, body)
+            ViewCompat.setStateDescription(row.findViewWithTag("$key.disclosure.header"),
+                activity.uiText(if (expanded) "已展开" else "已折叠"))
+            motion.animateTo(expanded)
+        } as LinearLayout
+        val indicator = row.findViewWithTag<View>("$key.disclosure.indicator")
+        indicator.rotation = if (key in sessionState.expandedCourseKeys) 180f else 0f
+        ViewCompat.setStateDescription(row.findViewWithTag("$key.disclosure.header"),
+            activity.uiText(if (key in sessionState.expandedCourseKeys) "已展开" else "已折叠"))
+        row.addView(body, 1)
+        if (key in sessionState.expandedCourseKeys) populateInlineAssignments(key, body)
+        motion = DisclosureMotionController(row, body, indicator, onDetached = {
+            body.visibility = if (key in sessionState.expandedCourseKeys) View.VISIBLE else View.GONE
+            body.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT; body.alpha = 1f
+            indicator.rotation = if (key in sessionState.expandedCourseKeys) 180f else 0f
+        })
+        return row
+    }
+
+    private fun populateInlineAssignments(key: String, body: LinearLayout) {
+        body.removeAllViews()
+        val cloud = dailyInfoRepository.currentTeachingCloudCourses()?.firstOrNull { "teaching-cloud.course.${it.id}" == key }
+        val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val qm = snapshot?.courses?.firstOrNull { "qmplus.course.${it.id}" == key }
+        val cloudItems = cloud?.let { CourseDirectoryLogic.teachingCloudAssignments(it.id, dailyInfoRepository.allAssignments()) }
+        val qmItems = qm?.let { course -> snapshot?.activities.orEmpty().filter { it.courseID == course.id } }.orEmpty()
+        val visible = sessionState.inlineCourseCounts[key] ?: 20
+        if (cloud != null && cloudItems == null) body.addView(statusCard(activity.getString(R.string.course_assignments_not_loaded)))
+        else if (cloudItems.orEmpty().isEmpty() && qmItems.isEmpty()) body.addView(statusCard(activity.getString(R.string.course_no_cached_assignments)))
+        cloudItems.orEmpty().take(visible).forEach { body.addView(cloudAssignmentCard(it)) }
+        qmItems.take(visible).forEach { body.addView(qmplusActivityCard(it)) }
+        if (cloudItems.orEmpty().size + qmItems.size > visible) body.addView(gradeAction("加载更多") {
+            if (body.isAttachedToWindow && key in sessionState.expandedCourseKeys) {
+                sessionState.inlineCourseCounts[key] = visible + 20
+                populateInlineAssignments(key, body)
+            }
+        })
     }
 
     private fun showCourseDetails(key: String) {
@@ -1169,8 +1246,8 @@ internal class InformationQueryPage(
             text = item.title; UiText.preserveRawText(this); textSize = 17f
             setThemeTextColor { Palette.text }; setTypeface(typeface, Typeface.BOLD)
         })
-        addView(eventDetailText(item.deadline.replace('T', ' ').take(16), 2))
-        item.status?.takeIf { it.isNotBlank() }?.let { addView(eventDetailText(it, 2)) }
+        addView(eventDetailText(listOfNotNull(item.deadline.replace('T', ' ').take(16),
+            item.status?.takeIf { it.isNotBlank() }).joinToString(" · "), Int.MAX_VALUE))
     }
 
     private fun qmplusActivityCard(item: QmplusActivityItem): LinearLayout = querySurface().apply {
@@ -1179,19 +1256,22 @@ internal class InformationQueryPage(
             text = item.title; UiText.preserveRawText(this); textSize = 17f
             setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
         })
-        addView(eventDetailText(activity.getString(if (item.kind == "quiz") R.string.qmplus_quiz else R.string.qmplus_assignment), 2))
-        QmplusActivityPresentation.timeFields(item).forEach { (field, value) ->
+        val metadata = buildList {
+          add(activity.getString(if (item.kind == "quiz") R.string.qmplus_quiz else R.string.qmplus_assignment))
+          QmplusActivityPresentation.timeFields(item).forEach { (field, value) ->
             val label = when (field) {
                 "due_at" -> R.string.qmplus_due; "cutoff_at" -> R.string.qmplus_cutoff
                 "opens_at" -> R.string.qmplus_opens; else -> R.string.qmplus_closes
             }
-            addView(eventDetailText(activity.getString(label) + ": " + value.replace('T', ' ').removeSuffix("Z") + " UTC", 3))
+            add(activity.getString(label) + ": " + value.replace('T', ' ').removeSuffix("Z") + " UTC")
         }
         if (item.kind == "quiz") item.timeLimitSeconds?.let {
-            addView(eventDetailText(activity.getString(R.string.qmplus_time_limit, it), 2))
+            add(activity.getString(R.string.qmplus_time_limit, it))
         }
-        item.status?.takeIf { it.isNotBlank() && it != "unknown" }?.let { addView(eventDetailText(it, 2)) }
-        item.rawTimeText?.takeIf { it.isNotBlank() }?.let { addView(eventDetailText(it, 6)) }
+          item.status?.takeIf { it.isNotBlank() && it != "unknown" }?.let(::add)
+          item.rawTimeText?.takeIf { it.isNotBlank() }?.let(::add)
+        }
+        addView(eventDetailText(metadata.joinToString(" · "), Int.MAX_VALUE))
         addView(gradeAction(activity.getString(R.string.qmplus_open_activity), R.drawable.ic_shuttle_external) { activity.connectQmplus(item.url) })
     }
 
@@ -1474,21 +1554,89 @@ internal class InformationQueryPage(
             val schedules = notice.schedules.filter { it.parseStatus == "parsed" && it.rows.isNotEmpty() }
             addView(shuttleSurface().apply {
                 tag = "information.query.shuttle.full-timetable"
-                addView(TextView(activity).apply {
-                    text = "完整班车时刻表"
-                    textSize = 17f
-                    setTypeface(typeface, Typeface.BOLD)
-                    setThemeTextColor { Palette.text }
+                val viewport = LinearLayout(activity).apply {
+                    tag = "information.query.shuttle.full-timetable.content"
+                    orientation = LinearLayout.VERTICAL
+                    visibility = if (sessionState.fullTimetableExpanded) View.VISIBLE else View.GONE
+                }
+                val indicator = shuttleIcon(R.drawable.ic_chevron_down).apply {
+                    tag = "information.query.shuttle.full-timetable.indicator"
+                    rotation = if (sessionState.fullTimetableExpanded) 180f else 0f
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }
+                val header = LinearLayout(activity).apply {
+                    tag = "information.query.shuttle.full-timetable.toggle"
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    minimumHeight = activity.dp(filterHeightDp)
+                    isClickable = true; isFocusable = true
+                    contentDescription = activity.uiText("完整班车时刻表")
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        addView(TextView(activity).apply {
+                            text = "完整班车时刻表"
+                            textSize = 17f
+                            setTypeface(typeface, Typeface.BOLD)
+                            setThemeTextColor { Palette.text }
+                        })
+                        addView(TextView(activity).apply {
+                            text = notice.title
+                            UiText.preserveRawText(this)
+                            textSize = 12f
+                            setThemeTextColor { Palette.muted }
+                            setPadding(0, activity.dp(4), 0, activity.dp(10))
+                        })
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(indicator, LinearLayout.LayoutParams(activity.dp(22), activity.dp(22)).apply {
+                        marginStart = activity.dp(8)
+                    })
+                }
+                val motion = DisclosureMotionController(this, viewport, indicator, onDetached = {
+                    // A detached/reused card must not retain a half-height fade.
+                    viewport.visibility = if (sessionState.fullTimetableExpanded) View.VISIBLE else View.GONE
+                    viewport.layoutParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
+                    viewport.alpha = 1f
+                    indicator.rotation = if (sessionState.fullTimetableExpanded) 180f else 0f
+                    viewport.requestLayout()
                 })
-                addView(TextView(activity).apply {
-                    text = notice.title
-                    UiText.preserveRawText(this)
-                    textSize = 12f
-                    setThemeTextColor { Palette.muted }
-                    setPadding(0, activity.dp(4), 0, activity.dp(10))
+                fun updateAccessibility() {
+                    ViewCompat.setStateDescription(header, activity.uiText(
+                        if (sessionState.fullTimetableExpanded) "已展开" else "已折叠"))
+                }
+                updateAccessibility()
+                ViewCompat.setAccessibilityDelegate(header, object : AccessibilityDelegateCompat() {
+                    override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfoCompat) {
+                        super.onInitializeAccessibilityNodeInfo(host, info)
+                        info.className = "android.widget.Button"
+                        info.addAction(if (sessionState.fullTimetableExpanded)
+                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE else
+                            AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND)
+                    }
+                    override fun performAccessibilityAction(host: View, action: Int, args: android.os.Bundle?): Boolean {
+                        val expand = action == AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND.id
+                        val collapse = action == AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE.id
+                        if ((expand && !sessionState.fullTimetableExpanded) || (collapse && sessionState.fullTimetableExpanded)) {
+                            return host.performClick()
+                        }
+                        return super.performAccessibilityAction(host, action, args)
+                    }
                 })
-                addView(adaptiveShuttleGrid(schedules, activity.dp(600), activity.dp(12),
-                    maximumColumns = 2, makeCell = { fullTimetableCell(it, today) }))
+                header.setOnClickListener {
+                    activity.performControlHaptic(it)
+                    sessionState.toggleFullTimetable()
+                    updateAccessibility()
+                    if (sessionState.fullTimetableExpanded && viewport.childCount == 0) {
+                        viewport.addView(adaptiveShuttleGrid(schedules, activity.dp(600), activity.dp(12),
+                            maximumColumns = 2, makeCell = { fullTimetableCell(it, today) }))
+                    }
+                    motion.animateTo(sessionState.fullTimetableExpanded)
+                }
+                addView(header)
+                addView(viewport)
+                if (sessionState.fullTimetableExpanded) {
+                    viewport.addView(adaptiveShuttleGrid(schedules, activity.dp(600), activity.dp(12),
+                        maximumColumns = 2, makeCell = { fullTimetableCell(it, today) }))
+                }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = activity.dp(16) })
         }

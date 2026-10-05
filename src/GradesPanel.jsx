@@ -15,6 +15,17 @@ export function GradeCard({ item, words }) {
   </article>
 }
 
+export function groupGradesBySemester(items) {
+  const groups=new Map()
+  for(const item of items||[]) {
+    const name=typeof item.semester_name==='string'?item.semester_name.trim():''
+    if(!groups.has(name))groups.set(name,[])
+    groups.get(name).push(item)
+  }
+  // Keep the source's term order and every record, including unknown terms.
+  return [...groups].map(([name,items])=>({name,items}))
+}
+
 // Only session state: no grade/name/student-ID persistence or console output.
 export default function GradesPanel({ command, language, enabled, hasAccount, onOpenAccount }) {
   const text = (zh, english) => uiText(language, zh, english)
@@ -90,15 +101,17 @@ export default function GradesPanel({ command, language, enabled, hasAccount, on
   const reload = () => { request.current += 1; cache.current.clear(); setTerms(null); setReport(null); setRefresh(x => x + 1) }
   return <div className="query-grades" role="tabpanel" hidden={!enabled} aria-label={words.title}>
     <header className="query-section-header"><h2><GraduationCap size={24} /> {words.title}</h2>
+      <div className="query-grade-header-actions">
+      <label className="query-grade-term-picker"><span>{words.term}</span><select aria-label={words.term} value={term ?? ''} disabled={!terms || !hasAccount} onChange={change(setTerm)}>
+        <option value="">{words.all}</option>
+        {(terms?.terms || []).map(item => <option key={item.id} value={item.id}>{item.name || item.id}{item.id === terms.current_term_id ? ` · ${text('当前学期', 'Current semester')}` : ''}</option>)}
+      </select></label>
       <button type="button" onClick={reload} disabled={loading || !hasAccount} aria-label={words.refresh}><RefreshCw size={18} />{words.refresh}</button>
+      </div>
     </header>
     {!hasAccount ? <div className="query-grade-status"><p>{words.account}</p><button type="button" className="query-action-button" onClick={onOpenAccount}><Settings2 size={16} aria-hidden="true" />{words.settings}</button></div> : <>
       {refresh === 0 && <p className="query-grade-status">{text('点击“刷新成绩”读取本人成绩。', 'Use Refresh grades to retrieve your results.')}</p>}
       <div className="query-grade-filters">
-        <label>{words.term}<select aria-label={words.term} value={term ?? ''} disabled={!terms} onChange={change(setTerm)}>
-          <option value="">{words.all}</option>
-          {(terms?.terms || []).map(item => <option key={item.id} value={item.id}>{item.name || item.id}{item.id === terms.current_term_id ? ` · ${text('当前学期', 'Current semester')}` : ''}</option>)}
-        </select></label>
         <label>{words.records}<select aria-label={words.records} value={recordType} onChange={change(setRecordType)}>
           <option value="1">{words.best}</option><option value="0">{words.first}</option><option value="">{words.attempts}</option>
         </select></label>
@@ -111,7 +124,12 @@ export default function GradesPanel({ command, language, enabled, hasAccount, on
           {report.average_grade_point !== '' && report.average_grade_point != null ? <span>{words.average} · {report.average_grade_point}</span> : null}
           <small>{words.updated} {report.fetched_at && Number.isFinite(Date.parse(report.fetched_at)) ? new Intl.DateTimeFormat(uiDateLocale(language), { timeZone: 'Asia/Shanghai', dateStyle: 'medium', timeStyle: 'short' }).format(new Date(report.fetched_at)) : '—'}</small>
         </div>
-        {!report.items?.length ? <div className="query-grade-status"><p>{words.empty}</p>{term ? <button type="button" onClick={() => { request.current += 1; setReport(null); setTerm('') }}>{words.all}</button> : null}</div> : <div className="query-grade-list">
+        {!report.items?.length ? <div className="query-grade-status"><p>{words.empty}</p>{term ? <button type="button" onClick={() => { request.current += 1; setReport(null); setTerm('') }}>{words.all}</button> : null}</div> : term==='' ? <div className="query-grade-term-groups">
+          {groupGradesBySemester(report.items).map(group=><section className="query-grade-term-group" key={group.name}>
+            <h3>{group.name||text('学期未确认','Term unconfirmed')}</h3>
+            <div className="query-grade-list">{group.items.map(item=><GradeCard key={item.id} item={item} words={words}/>)}</div>
+          </section>)}
+        </div> : <div className="query-grade-list">
           {report.items.map(item => <GradeCard key={item.id} item={item} words={words} />)}
         </div>}
       </> : null}

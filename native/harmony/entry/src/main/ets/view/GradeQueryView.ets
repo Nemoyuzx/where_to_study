@@ -25,6 +25,15 @@ export struct GradeQueryView {
       this.model.gradeRecordType === '0' ? '首次成绩' : '全部记录');
   }
 
+  private gradeTermNames(): string[] {
+    return Array.from(new Set((this.model.gradeSnapshot?.items ?? []).map((item: GradeItem): string =>
+      item.semesterName))).sort().reverse();
+  }
+
+  private gradesInTerm(name: string): GradeItem[] {
+    return (this.model.gradeSnapshot?.items ?? []).filter((item: GradeItem): boolean => item.semesterName === name);
+  }
+
   build() {
     Column({ space: 14 }) {
       Text(this.model.text('成绩查询'))
@@ -47,25 +56,26 @@ export struct GradeQueryView {
         .id('query.grades.settings').onClick(() => this.onOpenSettings())
       } else {
         Column({ space: 10 }) {
-          Text(this.model.text('学期')).fontSize(13).fontColor(AppTheme.secondaryText())
+          Row({ space: 8 }) {
           Select(this.termOptions())
             .height(ControlMetrics.height)
-            .value(this.termName()).width('100%').font({ size: 15 })
+            .value(this.termName()).layoutWeight(1).font({ size: 15 })
             .enabled(!this.model.gradeLoading && this.model.gradeTerms.length > 0)
             .id('query.grades.term')
             .onSelect((index: number) => {
               this.model.selectGradeTerm(index === 0 ? '' : this.model.gradeTerms[index - 1].id);
             })
+          Button(this.model.text(this.model.gradeLoading ? '正在查询成绩…' : '刷新成绩'))
+            .height(ControlMetrics.height)
+            .id('query.grades.refresh').enabled(!this.model.gradeLoading)
+            .onClick(() => this.model.loadGrades(true))
+          }.width('100%').alignItems(VerticalAlign.Center)
           Select([{ value: this.model.text('最好成绩') }, { value: this.model.text('首次成绩') },
             { value: this.model.text('全部记录') }])
             .height(ControlMetrics.height)
             .value(this.recordTypeName()).width('100%').font({ size: 15 })
             .enabled(!this.model.gradeLoading).id('query.grades.type')
             .onSelect((index: number) => this.model.selectGradeRecordType(['1', '0', ''][index]))
-          Button(this.model.text(this.model.gradeLoading ? '正在查询成绩…' : '刷新成绩'))
-            .height(ControlMetrics.height)
-            .id('query.grades.refresh').enabled(!this.model.gradeLoading)
-            .onClick(() => this.model.loadGrades(true))
         }.width('100%').alignItems(HorizontalAlign.Start)
         if (this.model.gradeError.length > 0) {
           Text(this.model.text(this.model.gradeError))
@@ -91,9 +101,17 @@ export struct GradeQueryView {
                   .onClick(() => this.model.selectGradeTerm(''))
               }
             } else {
-              ForEach(this.model.gradeSnapshot?.items ?? [], (item: GradeItem) => {
-                this.gradeCard(item)
-              }, (item: GradeItem) => item.id)
+              if (this.model.gradeTermID.length === 0) {
+                ForEach(this.gradeTermNames(), (term: string) => {
+                  Text(term.length > 0 ? term : this.model.text('学期'))
+                    .fontSize(15).fontWeight(FontWeight.Bold).fontColor(AppTheme.secondaryText()).width('100%')
+                  ForEach(this.gradesInTerm(term), (item: GradeItem) => { this.gradeCard(item) }, (item: GradeItem) => item.id)
+                }, (term: string) => 'grade-term.' + term)
+              } else {
+                ForEach(this.model.gradeSnapshot?.items ?? [], (item: GradeItem) => {
+                  this.gradeCard(item)
+                }, (item: GradeItem) => item.id)
+              }
             }
           }.width('100%').alignItems(HorizontalAlign.Start)
         } else if (this.model.gradeError.length === 0) {

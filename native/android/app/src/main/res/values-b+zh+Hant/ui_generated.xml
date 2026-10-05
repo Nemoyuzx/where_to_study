@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"系統網路輔助"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"僅在已核驗的官方登入頁自動選擇與已儲存帳號精確相符的帳號，並填寫帳號與密碼，各步驟最多一次。未匹配的帳號選擇、MFA、驗證碼、保持登入、風險及協議確認仍須本人操作。"</string>
     <string name="ui_generated_fd4480c6c08ea3">"關閉「啟用 QMplus」只暫停連線與同步，保留登入資料、連線工作階段及課程快取。關閉自動填寫、刪除登入資料或登出並清除資料，請使用對應操作。"</string>
+    <string name="ui_generated_b5e960a8c37808">"QMplus 網頁工作階段需要清理，請重新啟動應用程式。"</string>
+    <string name="ui_generated_127d5412a91688">"QMplus 網頁工作階段尚未清除或儲存失敗，請重試。"</string>
 </resources>

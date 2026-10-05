@@ -8,6 +8,7 @@ import { QMPlusSnapshotParser, QMPlusURLPolicy } from '../net/QMPlusSnapshot';
 import { AppContext } from '../store/AppContext';
 import { newQMPlusRecordID } from '../store/QMPlusSavedLoginStore';
 import { QMPlusLoginAuthorization, QMPlusLoginOwner, QMPlusSession } from './QMPlusSession';
+import { QMPlusWebProfileStore } from '../store/QMPlusWebProfileStore';
 
 export class QMPlusAuthNavigationPolicy {
   static readonly qmLoginPage: string = 'https://qmplus.qmul.ac.uk/login/index.php';
@@ -215,6 +216,7 @@ export struct QMPlusConnectionView {
   private resolveAuthDelay: (() => void) | null = null;
   private autoSyncPending: boolean = true;
   private detailTargetRestored: boolean = false;
+  private profileInitializationStarted: boolean = false;
   private delayTimer: number = -1;
   private resolveDelay: (() => void) | null = null;
 
@@ -223,12 +225,14 @@ export struct QMPlusConnectionView {
     this.authPresentationRevision++;
     const owner: QMPlusLoginOwner = this.session.loginOwner();
     this.loginOwner = owner;
+    this.session.beginOfficialWebMount(owner);
     this.session.bindLoginWeb(owner, (): void => this.retireOfficialWeb(), (): void => this.restartOfficialWeb());
     this.authAuthorization = null;
     this.authLedger.begin();
     this.authSAMLStarted = false;
     this.autoSyncPending = !this.session.explicitDetailRequest;
     this.detailTargetRestored = false;
+    this.profileInitializationStarted = false;
     if (!this.model.isSampleMode()) { void this.session.restoreSavedLoginStatus(); }
     this.attachAuthWindow();
   }
@@ -273,9 +277,28 @@ export struct QMPlusConnectionView {
     this.authLedger.begin(); this.authSAMLStarted = false;
     this.autoSyncPending = true; this.detailTargetRestored = false; this.dashboardRestored = false;
     this.officialPageAuthenticated = false; this.documentReadyURL = '';
+    this.profileInitializationStarted = false;
     // Explicit recovery creates a fresh native owner and a dashboard GET,
     // never ArkWeb refresh(), SAML/MFA POST replay, or cookie removal.
-    this.controller.loadUrl(QMPlusURLPolicy.home);
+    this.controller.loadUrl('about:blank');
+  }
+
+  private async preparePersistentProfile(owner: number, page: number): Promise<void> {
+    if (this.profileInitializationStarted || !this.ownsLoginPresentation() || this.safeCurrentURL() !== 'about:blank') { return; }
+    const ticket: QMPlusLoginOwner | null = this.loginOwner;
+    if (ticket === null) { return; }
+    this.profileInitializationStarted = true;
+    try {
+      this.session.noteWebLoaded();
+      if (!await this.session.prepareOfficialWeb(ticket)) { return; }
+      if (!this.ownsLoginPresentation() || owner !== this.authPresentationRevision || page !== this.pageRevision ||
+        !this.authForeground || !this.session.loginForeground || this.safeCurrentURL() !== 'about:blank') { return; }
+      // No previous URL or form/POST is restored from persistent state.
+      this.controller.loadUrl(this.session.targetURL);
+    } finally {
+      this.profileInitializationStarted = false;
+      if (this.safeCurrentURL() === 'about:blank') { this.session.noteOfficialPageLoading(ticket, false); }
+    }
   }
 
   private async loadPageScript(): Promise<string> {
@@ -373,7 +396,8 @@ export struct QMPlusConnectionView {
   }
 
   private sameOwnedPage(owner: number, page: number, url: string): boolean {
-    return this.ownsLoginPresentation() && this.authForeground && this.session.loginForeground &&
+    return this.ownsLoginPresentation() && this.loginOwner !== null && this.session.isOfficialWebReady(this.loginOwner) &&
+      this.authForeground && this.session.loginForeground &&
       owner === this.authPresentationRevision &&
       page === this.pageRevision && url === this.safeCurrentURL();
   }
@@ -738,6 +762,7 @@ export struct QMPlusConnectionView {
     this.officialPageAuthenticated = false;
     if (this.loginOwner !== null) { this.session.noteOfficialPageLoading(this.loginOwner, true); }
     this.invalidateAuth();
+    if (url === 'about:blank') { this.pageRevision++; return; }
     if (this.session.autoFillEnabled && !QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url) &&
       !QMPlusAuthNavigationPolicy.isOfficialQMPage(url) &&
       url !== QMPlusAuthNavigationPolicy.qmSAMLStart && !QMPlusURLPolicy.isBusinessPage(url)) {
@@ -787,6 +812,10 @@ export struct QMPlusConnectionView {
     if (!this.ownsLoginPresentation() || url !== this.safeCurrentURL()) { return; }
     this.documentReadyURL = url;
     if (this.loginOwner !== null) { this.session.noteOfficialPageLoading(this.loginOwner, false); }
+    if (url === 'about:blank') {
+      void this.preparePersistentProfile(this.authPresentationRevision, this.pageRevision);
+      return;
+    }
     if (!this.authForeground || !this.session.loginForeground) { return; }
     if (QMPlusAuthNavigationPolicy.isOfficialQMPage(url)) {
       void this.handleQMPage(this.authPresentationRevision, this.pageRevision, url);
@@ -829,6 +858,10 @@ export struct QMPlusConnectionView {
       if (kind !== 'authenticated') {
         if (url !== QMPlusAuthNavigationPolicy.qmSAMLStart) { this.session.presentLogin(); }
         return;
+      }
+      if (this.loginOwner !== null) {
+        await this.session.flushOfficialWeb(this.loginOwner);
+        if (!this.sameOwnedPage(owner, page, url)) { return; }
       }
       this.authStatus = '';
       if (this.session.explicitDetailRequest) {
@@ -887,7 +920,7 @@ export struct QMPlusConnectionView {
           .fontColor(AppTheme.primary())
           .id('qmplus.login.sync')
           .onClick(() => { void this.runSync(); })
-        if (this.session.errorCode === 'QM_ERROR_PAGE') {
+        if (this.session.errorCode === 'QM_ERROR_PAGE' || this.session.errorCode === 'QM_WEB_CLEAR_PENDING') {
           Button(this.model.text('连接 QMplus'))
             .height(ControlMetrics.height)
             .onClick(() => this.session.openLogin())
@@ -917,7 +950,9 @@ export struct QMPlusConnectionView {
           .width('100%')
           .padding({ left: 16, right: 16, bottom: 8 })
       }
-      Web({ src: this.session.targetURL, controller: this.controller, incognitoMode: true })
+      // API24's app-wide normal profile is reserved for QMplus by policy.
+      // A pending durable fence is resolved on a non-network blank page first.
+      Web({ src: 'about:blank', controller: this.controller, incognitoMode: QMPlusWebProfileStore.incognitoMode })
         .width('100%')
         .layoutWeight(1)
         .javaScriptAccess(true)
@@ -926,6 +961,7 @@ export struct QMPlusConnectionView {
         .mixedMode(MixedMode.None)
         .allowWindowOpenMethod(false)
         .onOverrideUrlLoading((request) => request.isMainFrame() &&
+          !(request.getRequestUrl() === 'about:blank' && !this.session.officialWebProfileReady) &&
           !QMPlusURLPolicy.isHTTPSPage(request.getRequestUrl()))
         .onPageBegin((event) => this.pageBegan(event.url))
         .onPageEnd((event) => this.pageEnded(event.url))

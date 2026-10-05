@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"Asistencia de red del sistema"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"Solo en páginas oficiales de inicio de sesión verificadas se selecciona automáticamente la cuenta guardada que coincide exactamente y se completan el usuario y la contraseña, con un máximo de un intento por paso. Las cuentas que no coincidan, MFA, CAPTCHA, mantener la sesión y las confirmaciones de riesgos o condiciones requieren tu intervención."</string>
     <string name="ui_generated_fd4480c6c08ea3">"Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos."</string>
+    <string name="ui_generated_b5e960a8c37808">"Es necesario borrar la sesión web de QMplus. Reinicia la aplicación."</string>
+    <string name="ui_generated_127d5412a91688">"No se pudo borrar o guardar la sesión web de QMplus. Vuelve a intentarlo."</string>
 </resources>

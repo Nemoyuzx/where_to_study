@@ -1530,5 +1530,7 @@
   "默认校区": "Varsayılan kampüs",
   "默认青绿": "Klasik turkuaz",
   "仅在已核验的官方登录页自动选择精确匹配的已保存账号，并填写账号和密码，各步骤最多一次。未匹配的账号选择、MFA、验证码、保持登录、风险及协议确认仍须本人操作。": "Yalnızca doğrulanmış resmi giriş sayfalarında kayıtlı hesapla tam eşleşen hesap otomatik seçilir, kullanıcı adı ve parola doldurulur; her adım en fazla bir kez denenir. Eşleşmeyen hesap seçimi, MFA, CAPTCHA, oturumu açık tutma, risk ve koşul onayları sizin işleminizi gerektirir.",
-  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "“QMplus’ı etkinleştir” seçeneğini kapatmak yalnızca bağlantı ve eşitlemeyi duraklatır; kayıtlı giriş bilgileri, oturum ve ders önbelleği korunur. Otomatik doldurmayı kapatmak, giriş bilgilerini silmek veya bağlantıyı kesip verileri temizlemek için ilgili kontrolleri kullanın."
+  "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "“QMplus’ı etkinleştir” seçeneğini kapatmak yalnızca bağlantı ve eşitlemeyi duraklatır; kayıtlı giriş bilgileri, oturum ve ders önbelleği korunur. Otomatik doldurmayı kapatmak, giriş bilgilerini silmek veya bağlantıyı kesip verileri temizlemek için ilgili kontrolleri kullanın.",
+  "QMplus 网页会话需要清理，请重新启动应用。": "QMplus web oturumunun temizlenmesi gerekiyor. Lütfen uygulamayı yeniden başlatın.",
+  "QMplus 网页会话尚未清除或保存失败，请重试。": "QMplus web oturumu temizlenemedi veya kaydedilemedi. Lütfen tekrar deneyin."
 }

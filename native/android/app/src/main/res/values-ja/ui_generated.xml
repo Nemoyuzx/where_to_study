@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"システムのネットワーク支援"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"確認済みの公式ログインページでのみ、保存済みアカウントと完全に一致するアカウントを選択し、ユーザー名とパスワードを自動入力します。各手順は1回までです。一致しないアカウントの選択、MFA、CAPTCHA、サインイン状態の維持、リスクや利用規約の確認は本人が行ってください。"</string>
     <string name="ui_generated_fd4480c6c08ea3">"「QMplus を有効にする」をオフにすると接続と同期だけが停止し、保存済みのログイン情報、セッション、授業キャッシュは保持されます。自動入力の停止、ログイン情報の削除、切断とデータ消去には、それぞれの操作を使用してください。"</string>
+    <string name="ui_generated_b5e960a8c37808">"QMplus のウェブセッションを消去する必要があります。アプリを再起動してください。"</string>
+    <string name="ui_generated_127d5412a91688">"QMplus のウェブセッションを消去または保存できませんでした。もう一度お試しください。"</string>
 </resources>

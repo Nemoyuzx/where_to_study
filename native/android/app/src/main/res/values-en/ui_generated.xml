@@ -900,4 +900,6 @@
     <string name="ui_generated_a16987f886401d">"System network assistance"</string>
     <string name="ui_generated_cf1c3b50baf4c5">"Only verified official sign-in pages may select the exact saved account and fill the username and password, with each step attempted at most once. Unmatched account choices, MFA, CAPTCHA, staying signed in, risk and terms confirmations still require your action."</string>
     <string name="ui_generated_fd4480c6c08ea3">"Turning off “Enable QMplus” only pauses connection and sync; saved credentials, the session and course cache are retained. Use the separate controls to turn off autofill, delete credentials, or disconnect and clear data."</string>
+    <string name="ui_generated_b5e960a8c37808">"The QMplus web session needs to be cleared. Please restart the app."</string>
+    <string name="ui_generated_127d5412a91688">"The QMplus web session could not be cleared or saved. Please try again."</string>
 </resources>

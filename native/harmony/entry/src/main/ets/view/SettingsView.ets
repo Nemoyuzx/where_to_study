@@ -61,8 +61,6 @@ export struct SettingsView {
   };
   @Local contentWidth: number = 350;
   @Local requestedFavoriteCount: number = 20;
-  @Local qmPlusAccountDraft: string = '';
-  @Local qmPlusPasswordDraft: string = '';
   @Local qmplusFeatureSwitchValue: boolean = false;
   @Local qmplusFeatureSaving: boolean = false;
   private statusDismissRevision: number = 0;
@@ -76,6 +74,7 @@ export struct SettingsView {
     'https://github.com/Nemoyuzx/where_to_study';
 
   aboutToAppear(): void {
+    this.session.updateQMplusDisclosure(this.model.qmplusEnabled);
     this.qmplusFeatureSwitchValue = this.model.qmplusEnabled;
     if (!this.favoriteManagerOnly) {
       this.session.syncCustomDeadlineURL(this.model.customDeadlinesURL);
@@ -92,8 +91,8 @@ export struct SettingsView {
   @Monitor('model.runtimeMode')
   onQMPlusRuntimeScopeChanged(): void {
     if (this.model.isSampleMode()) {
-      this.qmPlusAccountDraft = '';
-      this.qmPlusPasswordDraft = '';
+      this.session.qmPlusAccountDraft = '';
+      this.session.qmPlusPasswordDraft = '';
     } else if (!this.favoriteManagerOnly) {
       void this.qmPlusSession.restoreSavedLoginStatus();
     }
@@ -102,6 +101,7 @@ export struct SettingsView {
   @Monitor('model.qmplusEnabled')
   onQMplusFeatureChanged(monitor: IMonitor): void {
     this.qmplusFeatureSwitchValue = this.model.qmplusEnabled;
+    this.session.updateQMplusDisclosure(this.model.qmplusEnabled);
   }
 
   private applyPendingLanguageRequest(): void {
@@ -110,7 +110,6 @@ export struct SettingsView {
   }
 
   aboutToDisappear(): void {
-    this.qmPlusPasswordDraft = '';
     this.languageAnchorRevision++;
     this.pendingLanguageAnchor = null;
     if (this.languageAnchorCleanupTimer >= 0) {
@@ -448,6 +447,7 @@ export struct SettingsView {
     .borderRadius(8)
     .backgroundColor(AppTheme.surface())
     .id('settings_language_surface')
+    .alignSelf(ItemAlign.Stretch)
     .onAreaChange((oldArea: Area, newArea: Area) => {
       this.preserveLanguageAnchorAfterLayout(newArea);
     })
@@ -508,6 +508,12 @@ export struct SettingsView {
           .fontSize(17).fontWeight(FontWeight.Bold).fontColor(AppTheme.text())
         Text(this.model.text('仅适用国院'))
           .fontSize(12).fontColor(AppTheme.secondaryText()).margin({ left: 8 })
+        Button() { SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(16).fontColor([AppTheme.secondaryText()])
+          .rotate({ angle: this.session.qmplusDetailsExpanded ? 180 : 0 }) }
+          .type(ButtonType.Normal).height(ControlMetrics.height).width(ControlMetrics.height).padding(4)
+          .backgroundColor(Color.Transparent)
+          .accessibilityText(this.model.text(this.session.qmplusDetailsExpanded ? '已展开' : '已折叠'))
+          .onClick(() => { this.session.qmplusDetailsExpanded = !this.session.qmplusDetailsExpanded; })
       }
       .width('100%')
       Row({ space: 10 }) {
@@ -518,15 +524,18 @@ export struct SettingsView {
           .onChange((enabled: boolean): void => {
             if (this.qmplusFeatureSaving || enabled === this.model.qmplusEnabled) { return; }
             this.qmplusFeatureSwitchValue = enabled;
+            this.session.updateQMplusDisclosure(enabled);
             this.qmplusFeatureSaving = true;
             if (!enabled) { this.qmPlusSession.setFeatureEnabled(false); }
             void this.model.setQMplusEnabled(enabled).then((): void => {
               this.qmplusFeatureSwitchValue = this.model.qmplusEnabled;
+              this.session.updateQMplusDisclosure(this.model.qmplusEnabled);
               this.qmplusFeatureSaving = false;
             });
           })
       }
       .width('100%')
+      if (this.session.qmplusDetailsExpanded) {
       Text(this.model.text('QMplus 使用独立的官方网页；仅在您主动保存时，Microsoft 登录资料才进入本机安全存储。MFA 仍须本人完成。'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
@@ -562,11 +571,11 @@ export struct SettingsView {
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
-        this.field('QMplus Microsoft 登录邮箱', this.qmPlusAccountDraft, InputType.Normal,
-          (value: string): void => { this.qmPlusAccountDraft = value; },
+        this.field('QMplus Microsoft 登录邮箱', this.session.qmPlusAccountDraft, InputType.Normal,
+          (value: string): void => { this.session.qmPlusAccountDraft = value; },
           !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.account')
-        this.field('QMplus 密码（仅在本机安全保存）', this.qmPlusPasswordDraft, InputType.Password,
-          (value: string): void => { this.qmPlusPasswordDraft = value; },
+        this.field('QMplus 密码（仅在本机安全保存）', this.session.qmPlusPasswordDraft, InputType.Password,
+          (value: string): void => { this.session.qmPlusPasswordDraft = value; },
           !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.password')
         Button(this.model.text('安全保存 QMplus 登录资料'))
           .type(ButtonType.Normal)
@@ -576,12 +585,12 @@ export struct SettingsView {
           .backgroundColor(AppTheme.surfaceVariant())
           .fontColor(AppTheme.primary())
           .enabled(!this.qmPlusSession.loginSettingsBusy &&
-            this.qmPlusAccountDraft.trim().length > 0 && this.qmPlusPasswordDraft.length > 0)
+            this.session.qmPlusAccountDraft.trim().length > 0 && this.session.qmPlusPasswordDraft.length > 0)
           .id('settings.qmplus.save-login')
           .onClick(() => {
-            const account: string = this.qmPlusAccountDraft;
-            const password: string = this.qmPlusPasswordDraft;
-            this.qmPlusPasswordDraft = '';
+            const account: string = this.session.qmPlusAccountDraft;
+            const password: string = this.session.qmPlusPasswordDraft;
+            this.session.qmPlusPasswordDraft = '';
             void this.qmPlusSession.saveSavedLogin(account, password);
           })
         Row({ space: 8 }) {
@@ -644,10 +653,11 @@ export struct SettingsView {
         .id('settings.qmplus.logout')
         .enabled(!this.model.isSampleMode())
         .onClick(() => {
-          this.qmPlusAccountDraft = '';
-          this.qmPlusPasswordDraft = '';
+          this.session.qmPlusAccountDraft = '';
+          this.session.qmPlusPasswordDraft = '';
           void this.qmPlusSession.disconnectAndDeleteSavedLogin();
         })
+      }
     }
     .padding(16)
     .width('100%')
@@ -1542,8 +1552,8 @@ export struct SettingsView {
               value: this.model.text('确认清除'),
               fontColor: AppTheme.danger(),
               action: () => {
-                this.qmPlusAccountDraft = '';
-                this.qmPlusPasswordDraft = '';
+                this.session.qmPlusAccountDraft = '';
+                this.session.qmPlusPasswordDraft = '';
                 void this.qmPlusSession.disconnectAndDeleteSavedLogin().then((qmPlusCleared: boolean) => {
                   return this.model.clearLocalData().then((): void => {
                     this.session.clearDrafts();

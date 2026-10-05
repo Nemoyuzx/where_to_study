@@ -468,36 +468,41 @@ class TodayCourseWidgetProvider : AppWidgetProvider() {
         )
 
         fun refresh(context: Context, isActive: () -> Boolean = { !Thread.currentThread().isInterrupted }) {
+            refreshTracked(context, isActive)
+        }
+
+        fun refreshTracked(context: Context, isActive: () -> Boolean = { !Thread.currentThread().isInterrupted }): Boolean = runCatching {
             val appContext = context.applicationContext
             val manager = AppWidgetManager.getInstance(appContext)
             val provider = ComponentName(appContext, TodayCourseWidgetProvider::class.java)
             refreshBatch(appContext, manager, manager.getAppWidgetIds(provider), isActive)
-        }
+        }.getOrDefault(false)
 
         private fun refreshBatch(context: Context, manager: AppWidgetManager, widgetIDs: IntArray,
-            isActive: () -> Boolean = { !Thread.currentThread().isInterrupted }) {
-            if (!isActive()) return
+            isActive: () -> Boolean = { !Thread.currentThread().isInterrupted }): Boolean {
+            if (!isActive()) return false
             val revision = updateRevision.incrementAndGet()
             if (widgetIDs.isEmpty()) {
                 context.getSystemService(AlarmManager::class.java).cancel(midnightPendingIntent(context))
-                return
+                return true
             }
             val generation = LocalDataCoordinator.snapshot()
             val preferences = AppPreferences(context)
             // One read/decode per broadcast, shared by every widget and every size variant.
             val content = runCatching { LocalDataCoordinator.withCurrent(generation) {
                 TodayCourseWidgetLogic.content(loadUsableSchedule(context), System.currentTimeMillis())
-            } }.getOrNull() ?: return
+            } }.getOrNull() ?: return false
             widgetIDs.forEach { widgetID ->
-                if (!isActive() || updateRevision.get() != revision || !LocalDataCoordinator.isCurrent(generation)) return
+                if (!isActive() || updateRevision.get() != revision || !LocalDataCoordinator.isCurrent(generation)) return false
                 val views = widgetViews(context, manager, widgetID, preferences, content)
-                if (!isActive()) return
+                if (!isActive()) return false
                 synchronized(updateRevision) {
-                    if (!isActive() || updateRevision.get() != revision) return
-                    runCatching { LocalDataCoordinator.withCurrent(generation) { manager.updateAppWidget(widgetID, views) } }
+                    if (!isActive() || updateRevision.get() != revision) return false
+                    if (runCatching { LocalDataCoordinator.withCurrent(generation) { manager.updateAppWidget(widgetID, views) } }.isFailure) return false
                 }
             }
             if (isActive() && LocalDataCoordinator.isCurrent(generation)) scheduleMidnightRefresh(context)
+            return isActive() && updateRevision.get() == revision && LocalDataCoordinator.isCurrent(generation)
         }
 
         private fun midnightPendingIntent(context: Context): PendingIntent = PendingIntent.getBroadcast(

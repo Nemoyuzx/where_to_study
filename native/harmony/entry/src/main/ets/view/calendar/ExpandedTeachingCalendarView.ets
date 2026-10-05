@@ -3,6 +3,8 @@
 // 标题 + 视图分段选择 + 日期导航与课表操作 + 日/周时间线（周视图带列）+
 // 常展开的月网格（直接显示课程与节假日条目）+ 12 个月年视图与跳转面板。
 import { AppModel } from '../../model/AppModel';
+import { QMPlusSession } from '../QMPlusSession';
+import { CalendarCourseworkItem, CalendarCourseworkProjection } from './CalendarCourseworkProjection';
 import { Course, HolidayItem } from '../../common/Models';
 import { CourseRemovalButton } from '../CourseRemovalButton';
 import { ScheduleLogic } from '../../common/ScheduleLogic';
@@ -44,6 +46,8 @@ class MonthEventItem {
 export struct ExpandedTeachingCalendarView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
+  @Param qmPlusSession: QMPlusSession = new QMPlusSession();
+  @Event onOpenCourse: (source: string, id: string) => boolean = () => false;
   @Local presentedDay: DateParts | null = null;
   @Local presentedDayOpacity: number = 0;
   @Local allDayDialogDay: DateParts | null = null;
@@ -84,7 +88,7 @@ export struct ExpandedTeachingCalendarView {
 
   @Monitor('session.selectedDate', 'session.modeRawValue', 'model.schedule',
     'model.holidaysByYear', 'model.assignmentDeadlinesByDate', 'model.publicDeadlinesByDate',
-    'model.favoriteDeadlines', 'model.competitionDeadlinesEnabled',
+    'model.favoriteDeadlines', 'model.competitionDeadlinesEnabled', 'qmPlusSession.snapshot', 'model.qmplusEnabled',
     'model.conferenceDeadlinesEnabled', 'model.schoolContestNoticesEnabled',
     'model.summerCampDeadlinesEnabled', 'model.hackathonDeadlinesEnabled',
     'model.customDeadlinesEnabled', 'model.languageSettingRawValue', 'model.systemLanguageID',
@@ -806,8 +810,7 @@ export struct ExpandedTeachingCalendarView {
     }
     this.cachedTimelineDays = timelineDays;
     this.cachedTimelineAllDayItems = allDayItems;
-    this.cachedTimelineAllDayRowCount =
-      MobileCalendarTimelineLayout.expandedAllDayRowCount(maximumAllDayItems);
+    this.cachedTimelineAllDayRowCount = MobileCalendarTimelineLayout.expandedAllDayRowCount(maximumAllDayItems);
     this.cachedTimelinePlacements = MobileCalendarTimelineView.placementsFor(timelineDays);
     this.cachedTimelineRevision = revision;
     this.cachedTimelineScopeKey = scopeKey;
@@ -840,8 +843,7 @@ export struct ExpandedTeachingCalendarView {
           ForEach(this.timelineDays(), (day: CalendarTimelineDay, dayIndex: number) => {
             Column({ space: 0 }) {
               ForEach(this.timelineAllDayItemsOn(day.date).slice(0,
-                MobileCalendarTimelineLayout.expandedVisibleAllDayEventCount(
-                  this.timelineAllDayItemsOn(day.date).length)), (item: ExpandedAllDayItem) => {
+                MobileCalendarTimelineLayout.expandedVisibleAllDayEventCount(this.timelineAllDayItemsOn(day.date).length)), (item: ExpandedAllDayItem) => {
                 Row({ space: 3 }) {
                   Text(item.timeLabel)
                     .fontSize(CalendarTypography.fontSize(9, this.isPc))
@@ -860,24 +862,16 @@ export struct ExpandedTeachingCalendarView {
                   .height(MobileCalendarTimelineLayout.expandedAllDayRowHeight)
                   .padding({ left: 4, right: 4 })
                   .backgroundColor(item.fill)
+                  .borderRadius(6)
                   .onClick(() => {
                     this.activateAllDayItem(day.date, item, false);
                   })
               }, (item: ExpandedAllDayItem) => 'wide-all-day.' + item.id + AppTheme.colorKey())
-              if (MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(
-                this.timelineAllDayItemsOn(day.date).length) > 0) {
-                Text('+' + MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(
-                  this.timelineAllDayItemsOn(day.date).length).toString())
-                  .fontSize(CalendarTypography.fontSize(9, this.isPc))
-                  .fontWeight(FontWeight.Medium)
-                  .fontColor(AppTheme.secondaryText())
-                  .width('100%')
-                  .height(MobileCalendarTimelineLayout.expandedAllDayRowHeight)
-                  .textAlign(TextAlign.Start)
-                  .padding({ left: 4, right: 4 })
-                  .onClick(() => {
-                    this.presentAllDayDialog(day.date, this.mode());
-                  })
+              if (MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(this.timelineAllDayItemsOn(day.date).length) > 0) {
+                Text('+' + MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(this.timelineAllDayItemsOn(day.date).length).toString())
+                  .fontSize(9).fontColor(AppTheme.secondaryText()).width('100%')
+                  .height(MobileCalendarTimelineLayout.expandedAllDayRowHeight).borderRadius(6)
+                  .onClick(() => this.presentAllDayDialog(day.date, this.mode()))
               }
             }
             .width(MobileCalendarTimelineLayout.fittedDayWidth(
@@ -927,10 +921,17 @@ export struct ExpandedTeachingCalendarView {
     }
     const date: string = StrictDates.formatDateParts(day);
     for (const item of this.model.assignmentDeadlinesByDate.get(date) ?? []) {
+      const coursework: CalendarCourseworkItem = CalendarCourseworkProjection.cloud(item, this.model.cloudCourses);
       result.push(new ExpandedAllDayItem(date + '.assignment.' + item.id,
         this.model.text('作业') + ' · ' + item.title,
         this.deadlineTime(item.deadline), AppTheme.assignment(), AppTheme.assignmentSurface(),
-        null, CalendarDailyInfoSources.assignments));
+        null, CalendarDailyInfoSources.assignments, coursework));
+    }
+    if (this.model.qmplusEnabled && !this.model.isSampleMode()) {
+      for (const item of CalendarCourseworkProjection.qm(date, this.qmPlusSession.snapshot)) {
+        result.push(new ExpandedAllDayItem(item.key, this.model.text(item.kind === 'quiz' ? '测验' : '作业') + ' · ' + item.title,
+          this.deadlineTime(item.deadline), AppTheme.assignment(), AppTheme.assignmentSurface(), null, null, item));
+      }
     }
     for (const item of this.model.deadlineItems(date)) {
         const title: string = item.source === PublicDeadlineSource.schoolNotice ?
@@ -950,6 +951,13 @@ export struct ExpandedTeachingCalendarView {
 
   private activateAllDayItem(day: DateParts, item: ExpandedAllDayItem,
     fromDialog: boolean): void {
+    if (item.coursework !== null) {
+      if (item.coursework.courseID !== null && this.onOpenCourse(item.coursework.source, item.coursework.courseID)) {
+        this.allDayDialogDay = null; return;
+      }
+      this.presentAllDayDialog(day, this.mode());
+      return;
+    }
     if (TeachingCalendarLogic.allDayCardAction(item.linkURL) === 'link') {
       try {
         AppContext.get().openLink(item.linkURL as string);
@@ -1465,7 +1473,6 @@ export struct ExpandedTeachingCalendarView {
                       .fontSize(13)
                       .fontWeight(FontWeight.Medium)
                       .fontColor(item.tint)
-                      .maxLines(2)
                   }
                   .layoutWeight(1)
                   .alignItems(HorizontalAlign.Start)
@@ -1669,10 +1676,11 @@ class ExpandedAllDayItem {
   readonly fill: ResourceColor;
   readonly deadlineItem: PublicDeadlineItem | null;
   readonly linkURL: string | null;
+  readonly coursework: CalendarCourseworkItem | null;
 
   constructor(id: string, title: string, timeLabel: string, tint: ResourceColor,
     fill: ResourceColor, deadlineItem: PublicDeadlineItem | null = null,
-    linkURL: string | null = null) {
+    linkURL: string | null = null, coursework: CalendarCourseworkItem | null = null) {
     this.id = id;
     this.title = title;
     this.timeLabel = timeLabel;
@@ -1680,6 +1688,7 @@ class ExpandedAllDayItem {
     this.fill = fill;
     this.deadlineItem = deadlineItem;
     this.linkURL = linkURL;
+    this.coursework = coursework;
   }
 }
 

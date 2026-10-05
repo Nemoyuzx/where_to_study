@@ -10,11 +10,14 @@ import { CalendarMode, CalendarModeInfo } from './calendar/CalendarLogic';
 import { CalendarViewportPreloadController } from './calendar/CalendarViewportPreloadController';
 import { DateParts } from '../common/StrictDates';
 import { AppTheme } from '../common/AppTheme';
+import { QMPlusSession } from './QMPlusSession';
 
 @ComponentV2
 export struct CalendarSectionView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param containerWidth: number = 390;
+  @Param qmPlusSession: QMPlusSession = new QMPlusSession();
+  @Event onOpenCourse: (source: string, id: string) => boolean = () => false;
   @Local session: TeachingCalendarSession = new TeachingCalendarSession();
   private viewportPreloader: CalendarViewportPreloadController =
     new CalendarViewportPreloadController();
@@ -57,9 +60,9 @@ export struct CalendarSectionView {
         .id('calendar.exam.status')
       Column() {
     if (AdaptiveLayoutPolicy.useExpandedCalendar(this.containerWidth)) {
-      ExpandedTeachingCalendarView({ session: this.session })
+      ExpandedTeachingCalendarView({ session: this.session, qmPlusSession: this.qmPlusSession, onOpenCourse: this.onOpenCourse })
     } else {
-      MobileTeachingCalendarView({ session: this.session })
+      MobileTeachingCalendarView({ session: this.session, qmPlusSession: this.qmPlusSession, onOpenCourse: this.onOpenCourse })
     }
       }.width('100%').layoutWeight(1)
     }.width('100%').height('100%')

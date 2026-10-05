@@ -397,6 +397,8 @@ export class AppLocalization {
     'QMplus 页面已离开官方课程区域。': 'The page left the official QMplus course area.',
     'QMplus 浏览器会话未能清除，请稍后重试。':
       'The QMplus browser session could not be cleared. Try again later.',
+    'QMplus 网页会话需要清理，请重新启动应用。':
+      'The QMplus web session needs to be cleared. Please restart the app.',
     '官方登录页面暂时无法加载，请检查网络后重试。':
       'The official sign-in page could not load. Check your connection and try again.',
     '设置': 'Settings',
@@ -653,6 +655,8 @@ export class AppLocalization {
     '紧凑': 'Compact',
     '标准': 'Standard',
     '展开': 'Expanded',
+    '已展开': 'Expanded',
+    '已折叠': 'Collapsed',
     '正在同步云课堂作业…': 'Syncing UCloud assignments…',
     '今日校区班车': 'Today\'s Campus Shuttle',
     '信息查询': 'Information Search',

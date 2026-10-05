@@ -133,6 +133,7 @@ private data class CalendarSupplementaryItem(
     val title: String,
     val subtitle: String?,
     val deadlineItem: PublicDeadlineItem? = null,
+    val courseDetailKey: String? = null,
 )
 
 private enum class MonthCalendarEntryKind {
@@ -170,6 +171,7 @@ private data class CenteredAgendaRow(
     val subtitle: String?,
     val accent: Int,
     val deadlineItem: PublicDeadlineItem? = null,
+    val courseDetailKey: String? = null,
 )
 
 private class MonthExpansionIndicatorView(context: Context) : View(context) {
@@ -505,7 +507,7 @@ object TeachingCalendarLogic {
         (entryCount - visibleMonthEntryCount(entryCount, slotCapacity)).coerceAtLeast(0)
 
     fun agendaVisibleItemCount(itemCount: Int, compactWeek: Boolean): Int =
-        itemCount.coerceAtLeast(0).coerceAtMost(if (compactWeek) 1 else 3)
+        if (compactWeek && itemCount > 3) 2 else itemCount.coerceIn(0, 3)
 
     fun agendaHiddenItemCount(itemCount: Int, compactWeek: Boolean): Int =
         (itemCount - agendaVisibleItemCount(itemCount, compactWeek)).coerceAtLeast(0)
@@ -1230,6 +1232,11 @@ internal class TeachingCalendarPage(
                     refreshHolidayDataInPlace()
                 }
                 dailyInfoRepository.addObserver(scrollView, ::handleDailyInfoChanged)
+                activity.qmplusState().addObserver(scrollView) {
+                    if (activity.isCurrentUiOwner() && calendarHostRoot === scrollView && scrollView.isAttachedToWindow) {
+                        refreshDayWeekAgendaInPlace(contractDate().format(selectedDate.time))
+                    }
+                }
                 requestCalendarDataForSelection()
                 render()
             }
@@ -1239,6 +1246,7 @@ internal class TeachingCalendarPage(
                 scrollView.requestDisallowInterceptTouchEvent(false)
                 holidayRepository.removeObserver(scrollView)
                 dailyInfoRepository.removeObserver(scrollView)
+                activity.qmplusState().removeObserver(scrollView)
                 if (calendarHostRoot === scrollView) calendarHostRoot = null
                 calendarRenderAction = null
                 dismissYearPopover()
@@ -1521,6 +1529,11 @@ internal class TeachingCalendarPage(
                     refreshHolidayDataInPlace()
                 }
                 dailyInfoRepository.addObserver(root, ::handleDailyInfoChanged)
+                activity.qmplusState().addObserver(root) {
+                    if (activity.isCurrentUiOwner() && calendarHostRoot === root && root.isAttachedToWindow) {
+                        refreshDayWeekAgendaInPlace(contractDate().format(selectedDate.time))
+                    }
+                }
                 requestCalendarDataForSelection()
                 render()
             }
@@ -1529,6 +1542,7 @@ internal class TeachingCalendarPage(
                 cancelMonthExpansion()
                 holidayRepository.removeObserver(root)
                 dailyInfoRepository.removeObserver(root)
+                activity.qmplusState().removeObserver(root)
                 if (calendarHostRoot === root) calendarHostRoot = null
                 calendarRenderAction = null
                 dismissYearPopover()
@@ -3065,57 +3079,32 @@ internal class TeachingCalendarPage(
             addView(LinearLayout(activity).apply {
                 orientation = LinearLayout.HORIZONTAL
                 days.forEach { day ->
-                val items = supplementaryItemsOn(day.date)
-                val compactWeek = compact && days.size > 1
-                val visibleCount = TeachingCalendarLogic.agendaVisibleItemCount(
-                    items.size,
-                    compactWeek,
-                )
-                val hiddenCount = TeachingCalendarLogic.agendaHiddenItemCount(
-                    items.size,
-                    compactWeek,
-                )
-                val accent = items.firstOrNull()?.let { supplementaryAccent(it.kind) }
-                    ?: Palette.muted
-                addView(TextView(activity).apply {
-                    text = buildList {
-                        items.take(visibleCount).forEach { add(it.title) }
-                        if (hiddenCount > 0) add("+$hiddenCount")
-                    }.joinToString(" · ")
-                    textSize = if (compactWeek) 9.5f else 11f
-                    gravity = Gravity.CENTER
-                    maxLines = if (compactWeek) 1 else 2
-                    ellipsize = TextUtils.TruncateAt.END
-                    includeFontPadding = false
-                    setPadding(activity.dp(3), 0, activity.dp(3), 0)
-                    setThemeTextColor { accent }
-                    background = if (items.isNotEmpty()) {
-                        themedRoundedBackground(
-                            activity, { blend(accent, Palette.surface, 0.13f) }, { blend(accent, Palette.border, 0.35f) },
-                            radius = 4,
-                            borderWidthDp = 0.75f)
-                    } else {
-                        null
-                    }
-                    isClickable = items.isNotEmpty()
-                    isFocusable = items.isNotEmpty()
-                    contentDescription = if (items.isNotEmpty()) {
-                        val date = displayMonthDay(day.date)
-                        "$date，全天，$text"
-                    } else {
-                        null
-                    }
-                    setOnClickListener {
-                        if (items.isNotEmpty()) {
-                            showDayWeekAllDayDialog(day.date, items)
+                    val items = supplementaryItemsOn(day.date)
+                    val compactWeek = compact && days.size > 1
+                    val visibleCount = TeachingCalendarLogic.agendaVisibleItemCount(items.size, compactWeek = true)
+                    val hiddenCount = TeachingCalendarLogic.agendaHiddenItemCount(items.size, compactWeek = true)
+                    addView(LinearLayout(activity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        items.take(visibleCount).forEach { item ->
+                            addView(dayWeekAllDayBlock(day.date, item, items, compactWeek),
+                                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                                    if (compactWeek) activity.dp(26) else ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                                    topMargin = activity.dp(1)
+                                    bottomMargin = activity.dp(1)
+                                })
                         }
-                    }
-                }, LinearLayout.LayoutParams(0, activity.dp(if (compactWeek) 36 else 48), 1f).apply {
-                    marginStart = activity.dp(2)
-                    marginEnd = activity.dp(2)
-                })
+                        if (hiddenCount > 0) addView(dayWeekAllDayOverflow(day.date, items, hiddenCount, compactWeek),
+                            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                                if (compactWeek) activity.dp(26) else ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                                topMargin = activity.dp(1)
+                                bottomMargin = activity.dp(1)
+                            })
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        marginStart = activity.dp(2)
+                        marginEnd = activity.dp(2)
+                    })
                 }
-            }, LinearLayout.LayoutParams(0, activity.dp(if (compact && days.size > 1) 40 else 52), 1f))
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
     }
 
@@ -3139,55 +3128,74 @@ internal class TeachingCalendarPage(
             })
             val items = supplementaryItemsOn(day.date)
             items.take(3).forEach { item ->
-                val accent = supplementaryAccent(item.kind)
-                addView(TextView(activity).apply {
-                    text = "${displayMonthDay(day.date)} · ${item.title}"
-                    textSize = 11f
-                    setThemeTextColor { accent }
-                    setTypeface(typeface, Typeface.BOLD)
-                    includeFontPadding = false
-                    gravity = Gravity.CENTER
-                    maxLines = 1
-                    ellipsize = TextUtils.TruncateAt.END
-                    background = themedRoundedBackground(
-                        activity, { blend(accent, Palette.surface, 0.13f) }, { blend(accent, Palette.border, 0.35f) },
-                        radius = 12,
-                        borderWidthDp = 0.75f)
-                    setPadding(activity.dp(10), activity.dp(5), activity.dp(10), activity.dp(5))
-                    isClickable = true
-                    isFocusable = true
-                    contentDescription = "${displayMonthDay(day.date)}，全天，${item.title}"
-                    setOnClickListener {
-                        showDayWeekAllDayDialog(day.date, items)
-                    }
-                }, LinearLayout.LayoutParams(
+                addView(dayWeekAllDayBlock(day.date, item, items, compactWeek = false), LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT,
                 ).apply { marginStart = activity.dp(8) })
             }
             val hiddenCount = (items.size - 3).coerceAtLeast(0)
-            if (hiddenCount > 0) {
-                addView(TextView(activity).apply {
-                    text = "+$hiddenCount"
-                    textSize = 11f
-                    setThemeTextColor { Palette.primaryText }
-                    setTypeface(typeface, Typeface.BOLD)
-                    includeFontPadding = false
-                    gravity = Gravity.CENTER
-                    background = themedRoundedBackground(
-                        activity, { Palette.surfaceVariant }, { Palette.border },
-                        radius = 7)
-                    setPadding(activity.dp(9), activity.dp(5), activity.dp(9), activity.dp(5))
-                    isClickable = true
-                    isFocusable = true
-                    contentDescription = "查看其余 $hiddenCount 项全天日程"
-                    setOnClickListener { showDayWeekAllDayDialog(day.date, items) }
-                }, LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                ).apply { marginStart = activity.dp(8) })
-            }
+            if (hiddenCount > 0) addView(dayWeekAllDayOverflow(day.date, items, hiddenCount, compactWeek = false),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    .apply { marginStart = activity.dp(8) })
         })
+    }
+
+    private fun dayWeekAllDayBlock(
+        day: Calendar,
+        item: CalendarSupplementaryItem,
+        items: List<CalendarSupplementaryItem>,
+        compactWeek: Boolean,
+    ): TextView = TextView(activity).apply {
+        text = listOfNotNull(item.title, item.subtitle?.takeIf(String::isNotBlank)).joinToString(if (compactWeek) " · " else "\n")
+        UiText.preserveRawText(this)
+        textSize = if (compactWeek) 9.5f else 11f
+        setThemeTextColor { supplementaryAccent(item.kind) }
+        setTypeface(typeface, Typeface.BOLD)
+        includeFontPadding = false
+        gravity = Gravity.CENTER
+        maxLines = if (compactWeek) 1 else 2
+        minHeight = activity.dp(if (compactWeek) 26 else 40)
+        ellipsize = TextUtils.TruncateAt.END
+        background = themedRoundedBackground(
+            activity,
+            { blend(supplementaryAccent(item.kind), Palette.surface, 0.13f) },
+            { blend(supplementaryAccent(item.kind), Palette.border, 0.35f) },
+            radius = 10,
+            borderWidthDp = 0.75f,
+        )
+        setPadding(activity.dp(if (compactWeek) 3 else 10), activity.dp(if (compactWeek) 3 else 5),
+            activity.dp(if (compactWeek) 3 else 10), activity.dp(if (compactWeek) 3 else 5))
+        isClickable = true
+        isFocusable = true
+        contentDescription = listOfNotNull(displayMonthDay(day), activity.uiText("全天"), item.title, item.subtitle).joinToString("，")
+        setOnClickListener {
+            val courseKey = item.courseDetailKey
+            if (item.kind == CalendarSupplementaryKind.ASSIGNMENT && courseKey != null && activity.showCachedCourseDetails(courseKey)) {
+                return@setOnClickListener
+            }
+            showDayWeekAllDayDialog(day, items)
+        }
+    }
+
+    private fun dayWeekAllDayOverflow(
+        day: Calendar,
+        items: List<CalendarSupplementaryItem>,
+        hiddenCount: Int,
+        compactWeek: Boolean,
+    ): TextView = TextView(activity).apply {
+        text = "+$hiddenCount"
+        textSize = 11f
+        setThemeTextColor { Palette.primaryText }
+        setTypeface(typeface, Typeface.BOLD)
+        includeFontPadding = false
+        gravity = Gravity.CENTER
+        minHeight = activity.dp(if (compactWeek) 26 else 40)
+        background = themedRoundedBackground(activity, { Palette.surfaceVariant }, { Palette.border }, radius = 7)
+        setPadding(activity.dp(5), activity.dp(3), activity.dp(5), activity.dp(3))
+        isClickable = true
+        isFocusable = true
+        contentDescription = "查看其余 $hiddenCount 项全天日程"
+        setOnClickListener { showDayWeekAllDayDialog(day, items) }
     }
 
     private fun showDayWeekAllDayDialog(
@@ -3202,6 +3210,7 @@ internal class TeachingCalendarPage(
                     subtitle = item.subtitle,
                     accent = supplementaryAccent(item.kind),
                     deadlineItem = item.deadlineItem,
+                    courseDetailKey = item.courseDetailKey.takeIf { item.kind == CalendarSupplementaryKind.ASSIGNMENT },
                 )
             },
             contentDescription = activity.uiText(
@@ -3246,7 +3255,15 @@ internal class TeachingCalendarPage(
                             subtitle = row.subtitle.orEmpty(),
                             accent = row.accent,
                             deadlineItem = row.deadlineItem,
-                        ))
+                        ).apply {
+                            row.courseDetailKey?.let { key ->
+                                isClickable = true
+                                isFocusable = true
+                                setOnClickListener {
+                                    if (activity.showCachedCourseDetails(key)) dialog.dismiss()
+                                }
+                            }
+                        })
                     }
                 })
             }, LinearLayout.LayoutParams(
@@ -4336,6 +4353,9 @@ internal class TeachingCalendarPage(
             ))
         }
         assignmentsOn(date).forEach { assignment ->
+            val courses = dailyInfoRepository.currentTeachingCloudCourses().orEmpty()
+            val matches = courses.filter { course -> assignment.courseID?.let { it == course.id } ?:
+                (assignment.courseName?.takeIf { it.isNotBlank() }?.trim()?.let { it == course.name?.trim() } == true) }
             add(CalendarSupplementaryItem(
                 kind = CalendarSupplementaryKind.ASSIGNMENT,
                 title = "${activity.uiText("作业 DDL")} · ${assignment.title}",
@@ -4343,7 +4363,22 @@ internal class TeachingCalendarPage(
                     assignment.courseName,
                     assignment.deadline.substringAfter(' ').take(5),
                 ).joinToString(" · ").takeIf(String::isNotEmpty),
+                courseDetailKey = matches.singleOrNull()?.let { "teaching-cloud.course.${it.id}" },
             ))
+        }
+        activity.qmplusState().takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)?.let { snapshot ->
+            val courseIDs = snapshot.courses.filter { it.currentTermStatus == "current" || activity.calendarShowsOtherQMplusCourses() }
+                .map { it.id }.toSet()
+            snapshot.activities.filter { it.courseID in courseIDs }.forEach { item ->
+                val deadline = if (item.kind == "quiz") item.closesAt else item.dueAt
+                val instant = deadline?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
+                if (instant != null && contractDate().format(java.util.Date.from(instant)) == contractDate().format(date.time)) {
+                    add(CalendarSupplementaryItem(CalendarSupplementaryKind.ASSIGNMENT,
+                        activity.uiText(if (item.kind == "quiz") "测验" else "作业 DDL") + " · " + item.title,
+                        java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("Asia/Shanghai") }
+                            .format(java.util.Date.from(instant)), courseDetailKey = "qmplus.course.${item.courseID}"))
+                }
+            }
         }
         schoolNoticesOn(date).forEach { notice ->
             add(CalendarSupplementaryItem(

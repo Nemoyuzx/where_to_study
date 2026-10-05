@@ -29,6 +29,28 @@ class QueryShuttleClient implements ShuttleBusFetching {
 
 export default function querySessionTest() {
   describe('QuerySessionTest', () => {
+    it('full_timetable_starts_collapsed_and_toggling_preserves_cached_data_without_fetch', 0, async () => {
+      const session: QuerySession = new QuerySession();
+      const client: QueryShuttleClient = new QueryShuttleClient('synthetic-cached-shuttle');
+      await session.loadShuttle(client, false);
+      const fetchedAt: number = session.shuttleFetchedAtMillis;
+      session.regularScrollOffsets.set(QueryPageTab.shuttle, 120);
+      expect(session.fullTimetableExpanded).assertFalse();
+      session.toggleFullTimetable();
+      expect(session.fullTimetableExpanded).assertTrue();
+      session.selectedTabRawValue = QueryPageTab.events;
+      session.detachView(); session.attachView();
+      session.selectedTabRawValue = QueryPageTab.shuttle;
+      expect(session.fullTimetableExpanded).assertTrue();
+      for (let index: number = 0; index < 31; index++) { session.toggleFullTimetable(); }
+      expect(session.fullTimetableExpanded).assertFalse();
+      expect(client.calls).assertEqual(1);
+      expect(session.shuttleSnapshot === client.snapshot).assertTrue();
+      expect(session.shuttleFetchedAtMillis).assertEqual(fetchedAt);
+      expect(session.regularScrollOffsets.get(QueryPageTab.shuttle)).assertEqual(120);
+      expect(new QuerySession().fullTimetableExpanded).assertFalse();
+      session.dispose();
+    });
     it('keeps_lightweight_filter_and_selected_tab_state_in_memory', 0, () => {
       const session: QuerySession = new QuerySession();
       session.selectedTabRawValue = QueryPageTab.events;
