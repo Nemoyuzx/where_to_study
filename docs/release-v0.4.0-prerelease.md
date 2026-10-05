@@ -266,8 +266,14 @@ Apple 源码 `a554f23f` 已推送 `codex/v040-localization`，包内 **0.4.0（1
 
 ### 本轮验证与上传边界
 
-本轮按用户要求只做源代码、资源、隐私／请求边界检查和编译；新增回归规格仅编写、未运行。不在本机运行自动化测试、真实账号登录或 GUI／模拟器验证，编译成功不代表所有设备视觉表现已验证。Apple 111 的 macOS 与通用 iOS Simulator build 在严格并发／警告条件下均成功，未启动模拟器；源码镜像、13 语言生成资源和暂存秘密扫描通过。Apple 111 上传回执将在实际成功后记录；上传成功即停止，不检查 App Store Connect 后续处理状态，也不提交正式审核。
+本轮按用户要求只做源代码、资源、隐私／请求边界检查和编译；新增回归规格仅编写、未运行。不在本机运行自动化测试、真实账号登录或 GUI／模拟器验证，编译成功不代表所有设备视觉表现已验证。Apple 111 的 macOS 与通用 iOS Simulator build 在严格并发／警告条件下均成功，未启动模拟器；源码镜像、13 语言生成资源和暂存秘密扫描通过。Apple 111 实际上传回执如下；上传成功即停止，不检查 App Store Connect 后续处理状态，也不提交正式审核。
 
 日志目录：`release-artifacts/v0.4.0-course-cache-fixes/`。0.3.2 仍保留预发布草稿，不在本轮重新公开或上传；不向 GitHub 上传 AAB／鸿蒙包，不创建定时任务。
 
 最后补齐 Apple 课程刷新状态：每次请求有独立 flight ID，所有返回／取消／失败出口统一复位，旧等待者不能清理或覆盖同一账号的新请求。首次 macOS 111 归档在上传前主动停止以纳入该修正，没有成功上传或占用新的已发布构建；中断记录保留在 `macos-build-111-aborted-archive.log`。修正后再次编译并重新归档，正式上传回执另记。
+
+Apple 111 包源码为 `b300a2dd`（含 `275ecceb` 的全平台修复），已推送 `codex/v040-localization`。**2026-10-05 16:34:11 +0800**，macOS **0.4.0（111）**取得 `Upload succeeded`、`EXPORT SUCCEEDED`；沿用同一 Manual 主程序／Widget、已安装 Installer 身份及既有测试上传脚本。成功后未检查 App Store Connect 后续状态或提交正式审核。
+
+**2026-10-05 16:40:37 +0800**，iOS／iPadOS **0.4.0（111）**取得 `Upload succeeded`、`EXPORT SUCCEEDED`；沿用同一本地 Xcode Automatic 归档／测试上传脚本。导出过程仍有与 110 相同的旧 Xcode 账户会话警告，随后实际包分析和上传成功；本地第一次 `EXPORT SUCCEEDED` 不作为上传证据。成功后停止，未查询 App Store Connect、提交正式审核或重新上传已经成功的 111。
+
+最终回执日志：`macos-build-111-upload.log`、`ios-build-111-upload.log`；最新纯编译日志：`apple-{macos,ios}-final-compile.log`、`android-compile-final.log`、`harmony-compile-final.log`、`rust-data-compile.log`、`tauri-ui-compile.log`。这些日志留在忽略的本机产物目录，不把商店归档、AAB、鸿蒙包或用户素材加入 Git。
