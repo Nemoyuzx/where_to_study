@@ -134,11 +134,29 @@ final class QMplusConnectionPolicyTests: XCTestCase {
                 this.password = ''; this.origin = m[1] + '//' + auth[auth.length - 1];
                 this.pathname = m[3]; this.search = m[4] || ''; this.hash = m[5] || '';
             }
-            var document = { querySelectorAll: () => fixtureLinks.map(href => ({getAttribute: () => href})) };
+            var document = { defaultView: window, readyState: 'complete',
+                body: { id: 'page-login-index', classList: { contains: name => name === 'notloggedin' } },
+                querySelector: () => null,
+                querySelectorAll: selector => selector === 'a[href]' ? fixtureLinks.map(href => ({getAttribute: () => href})) : [] };
             """)
         let result = try XCTUnwrap(context.evaluateScript(QMplusConnectionPolicy.officialSSOEntryScript))
         XCTAssertNil(context.exception)
         return result.toBool()
+    }
+
+    func testExpiredReadOnlySessionGetsOneLoginRecoveryWithoutRestartingPresentation() {
+        var gate = QMplusLoginSynchronizationGate()
+        gate.beginQuietConnection()
+        let first = gate.context
+        XCTAssertFalse(gate.claimLoginRecovery(context: first))
+        XCTAssertTrue(gate.claimAutomaticSync(authenticated: true, context: first))
+        XCTAssertTrue(gate.claimLoginRecovery(context: first))
+        XCTAssertTrue(gate.claimLoginEntry(context: first))
+        gate.beginDocument()
+        XCTAssertFalse(gate.accepts(first))
+        XCTAssertFalse(gate.claimLoginEntry(context: gate.context))
+        XCTAssertTrue(gate.claimAutomaticSync(authenticated: true, context: gate.context))
+        XCTAssertFalse(gate.claimLoginRecovery(context: gate.context))
     }
 
     private func authenticationProof(origin: String, bodyClasses: [String], hasUserMenu: Bool,

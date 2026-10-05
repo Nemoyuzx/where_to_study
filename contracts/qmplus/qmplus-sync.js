@@ -135,8 +135,8 @@
   function classifyQMplusPage(doc = document) {
     try {
       if (hasMoodleErrorPage(doc)) return 'error';
-      if (doc?.readyState === 'loading') return 'loading';
       if (isMoodleGuestPage(doc)) return 'guest';
+      if (doc?.readyState === 'loading') return 'loading';
       const menu = doc?.querySelectorAll?.('.usermenu .userbutton') || [];
       if (doc?.body && menu.length > 0) return 'authenticated';
       return doc?.body?.id === 'page-site-index' &&

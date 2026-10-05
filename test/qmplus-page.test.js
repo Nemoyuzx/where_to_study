@@ -66,6 +66,8 @@ test('pure page, sync protocol and auth inspection agree on explicit Moodle erro
     [{title:' generalexceptionmessage '},'error'],[{title:'generalexceptionmessage is mentioned'},'authenticated'],
     [{ordinaryAlert:'Your coursework is due soon'},'authenticated'],
     [{ordinaryAlert:'generalexceptionmessage'},'authenticated'],[{loading:true},'loading'],
+    [{loading:true,classes:['notloggedin'],menuCount:0},'guest'],
+    [{loading:true,bodyID:'page-login-index',menuCount:0},'guest'],
     [{loading:true,bodyID:'page-error'},'error'],
   ]
   for(const [options,expected] of cases){
@@ -106,7 +108,7 @@ test('classless QM home needs a safe fixed SAML anchor and does not classify arb
   for(const href of ['https://other.invalid/auth/saml2/login.php','https://qmplus.qmul.ac.uk.evil.invalid/auth/saml2/login.php',
     'http://qmplus.qmul.ac.uk/auth/saml2/login.php','https://user@qmplus.qmul.ac.uk/auth/saml2/login.php',
     'https://qmplus.qmul.ac.uk:9443/auth/saml2/login.php','/auth/saml2/login.php?next=other',
-    '/auth/saml2/login.php?','/auth/saml2/login.php#','/auth/saml2/login.php#other','/login/index.php','javascript:void(0)']){
+    '/auth/saml2/login.php?','/auth/saml2/login.php#','/auth/saml2/login.php#other','javascript:void(0)']){
     const doc=documentFixture({bodyID:'page-site-index',menuCount:0,linkHrefs:[href]}),context=contextFor(doc)
     assert.equal(vm.runInContext(pageScript,context),'unknown',href)
     vm.runInContext(syncScript,context)

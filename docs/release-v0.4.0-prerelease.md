@@ -297,3 +297,23 @@ macOS 和通用 iOS Simulator 的严格并发／警告编译通过，未启动�
 包源码为 `80e0b2f2`，已推送 `codex/v040-localization`。macOS **0.4.0（112）** 于 **2026-10-05 17:17:21 +0800**、iOS／iPadOS **0.4.0（112）** 于 **17:23:56 +0800** 分别取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`。沿用本地 Xcode 的 macOS Manual／iOS Automatic 签名与既有测试上传脚本；未提交正式审核，成功后未检查 App Store Connect 处理状态。
 
 日志保存在 `release-artifacts/v0.4.0-build112-login-fix/`：`macos-upload.log`、`ios-upload.log` 为实际上传回执，`macos-compile.log`、`ios-compile.log` 为仅编译记录。未执行本机自动化测试或真实账号登录，112 真机效果仍待实际使用确认。
+
+## 普通 Login 后台推进：Apple 113（2026-10-05）
+
+### iOS / iPadOS
+
+默认连接和重试从后台开始；普通官方 Login GET 不再依赖密码自动填写授权，也不再被已尝试的 SSO 占用次数。访客页优先自动进入 Login，再进入已核验的 SSO；真正读取或填写账号密码仍需原有安全授权、精确身份匹配和每步一次的预算。
+
+明确的访客标记已解析时可提前进入登录；入口链接尚未解析则有限等待 DOM。每次自动 GET 之前同步撤销旧文档回调资格，避免并发回调覆盖已经发出的导航。欢迎页无法完成登录时在应用内提示重试；只读同步确认会话失效、且本次尚未提交凭据时，最多允许一次后台登录恢复及一次后续同步。
+
+### macOS
+
+同步上述后台 Login、独立次数限制、文档回调隔离和会话恢复；验证码、MFA、未知确认及需要用户输入的步骤保留官方界面。
+
+### 共用脚本
+
+三份 QMplus 分类器与 HarmonyOS 镜像同步明确访客标记的优先识别；已认证状态仍要求页面就绪。共享脚本通过语法／镜像检查；本轮不上传 Android、HarmonyOS 或 Windows／Linux 包。
+
+### 验证与上传
+
+继续遵守不在本机运行自动化测试的要求：只进行源码检查、公开官方入口核对和编译；更新的预算／恢复回归规格未执行，也没有真实账号或设备登录验证。新的 Apple 测试包使用 **0.4.0（113）**，成功回执将在上传后补充。日志目录为 `release-artifacts/v0.4.0-build113-login-entry/`。

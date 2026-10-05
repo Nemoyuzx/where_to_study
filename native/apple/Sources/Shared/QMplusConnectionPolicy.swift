@@ -11,15 +11,18 @@ struct QMplusLoginSynchronizationGate: Equatable, Sendable {
     var isActive: Bool { ownerKind != nil }
     private(set) var hasAttemptedAutomaticSync = false
     private(set) var hasFollowedLoginEntry = false
+    private(set) var hasAttemptedLoginRecovery = false
 
     var context: Context { Context(presentation: presentation, document: document) }
     mutating func beginPresentation() {
         presentation &+= 1; document &+= 1
         ownerKind = .visible; hasAttemptedAutomaticSync = false; hasFollowedLoginEntry = false
+        hasAttemptedLoginRecovery = false
     }
     mutating func beginQuietConnection() {
         presentation &+= 1; document &+= 1
         ownerKind = .quiet; hasAttemptedAutomaticSync = false; hasFollowedLoginEntry = false
+        hasAttemptedLoginRecovery = false
     }
     mutating func presentExistingConnection() { if isActive { ownerKind = .visible } }
     mutating func hideExistingConnection() { if isActive { ownerKind = .quiet } }
@@ -34,6 +37,13 @@ struct QMplusLoginSynchronizationGate: Equatable, Sendable {
     mutating func claimLoginEntry(context: Context) -> Bool {
         guard accepts(context), !hasFollowedLoginEntry else { return false }
         hasFollowedLoginEntry = true
+        return true
+    }
+    mutating func claimLoginRecovery(context: Context) -> Bool {
+        guard accepts(context), hasAttemptedAutomaticSync, !hasFollowedLoginEntry,
+              !hasAttemptedLoginRecovery else { return false }
+        hasAttemptedLoginRecovery = true
+        hasAttemptedAutomaticSync = false
         return true
     }
 }

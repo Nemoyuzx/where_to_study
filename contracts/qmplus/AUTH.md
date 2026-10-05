@@ -6,6 +6,8 @@
 
 重连从固定 Dashboard 发起新的 GET 并重新证明状态，不重用旧 DOM 作为有效会话证明。官方登录入口仅接受精确站点／允许路径和已核验链接，重复页首／页尾链接指向同一安全目的地不构成多个身份。登录回跳 POST 保留原请求与 WebKit 配置；网页自行关闭不代表认证完成，不可因此打断父窗口的原始回跳。不自动重放验证码、密码或 SAML ACS POST，也不自动删除账号或 Cookie 来恢复错误。
 
+Apple 默认连接先在后台核查 Dashboard；已确认的访客页自动进入普通 Login，再进入已核验 SSO。普通 GET 与密码填写授权分离，Login 和 SSO 各有独立的有限预算；未保存密码也能尝试复用官方会话，但不能据此读取或填写密码。发出自动 GET 前同步撤销旧 document 的回调资格，保留本次凭据步骤预算。已解析出的明确访客标记可提前识别；入口尚未解析时有限等待 DOM，已认证判定仍等待页面就绪。已确认的访客欢迎页在预算耗尽后保留缓存并提示重试，不要求用户手动点击 Login。只读同步明确返回 `QM_LOGIN_REQUIRED` 时，且本次尚未进入 Login、尚未选择账号或提交凭据，可进行一次登录恢复和一次后续自动同步；这不会重建凭据 ledger。
+
 已核实的页面白名单仅包括 `https://qmplus.qmul.ac.uk` 的已登录用户菜单，以及 `https://login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/saml2` 或同租户 `/login`。Microsoft 表单须唯一为 `form#i0281`，提交目标仍是同源同租户 `/login`；账号是可见 `input#i0116[name=loginfmt][type=email]`，普通下一步是可见 `input#idSIButton9[type=submit]`。密码阶段账号框已移除，可见 `input#i0118[name=passwd][type=password]`，`#displayName` 仅在网页内部与本机授权账号比对。预加载的 10×13、透明度 0 密码框**不是**可填写密码页。其它域名、路径、frame、未匹配的账号选择、MFA、验证码、风险、条款、Stay signed in 或未知表单均由用户手动处理。
 
 1. native 为每次真实 document 生成非敏感 nonce，并维护 presentation/document epoch、每阶段一次提交的本机 ledger。helper 在本次 document 内还绑定首次检查时的完整地址，地址变化即拒绝，地址本身永不返回。页面调用 `WTSQmAuth.inspect(nonce, accountHint?)`，只接收固定 `{v:1,stage,document,accountMatch,reason}`；不会收到网址、账号、输入值、HTML 或令牌。

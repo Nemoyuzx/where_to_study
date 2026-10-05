@@ -104,7 +104,12 @@ final class QMplusAutofillLedger {
         ssoAttempted = true; return true
     }
     func canStartOfficialLogin(presentation: UInt64, credentialRevision: UInt64) -> Bool {
-        accepts(presentation: presentation, credentialRevision: credentialRevision) && !ssoAttempted &&
+        canNavigateLoginEntry(presentation: presentation, credentialRevision: credentialRevision) && !ssoAttempted
+    }
+    // Following the official Login GET is not permission to read or submit a
+    // password. Its own presentation budget survives a previous SSO redirect.
+    func canNavigateLoginEntry(presentation: UInt64, credentialRevision: UInt64) -> Bool {
+        accepts(presentation: presentation, credentialRevision: credentialRevision) &&
             !accountAttempted && !usernameAttempted && !passwordAttempted
     }
     func claim(_ state: QMplusAuthInspection, presentation: UInt64, credentialRevision: UInt64) -> Bool {

@@ -422,6 +422,8 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         let ledger = QMplusAutofillLedger()
         ledger.begin(presentation: 1, credentialRevision: 2)
         XCTAssertTrue(ledger.claimSSO(presentation: 1, credentialRevision: 2))
+        XCTAssertTrue(ledger.canNavigateLoginEntry(presentation: 1, credentialRevision: 2),
+                      "A previously attempted SSO must not consume the independent Login GET budget")
         XCTAssertFalse(ledger.claimSSO(presentation: 1, credentialRevision: 2))
         ledger.stop()
         XCTAssertFalse(ledger.claimSSO(presentation: 1, credentialRevision: 2))
@@ -443,12 +445,14 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertTrue(ledger.canStartOfficialLogin(presentation: 1, credentialRevision: 2))
         XCTAssertTrue(ledger.claim(state(.account, match: true), presentation: 1, credentialRevision: 2))
         XCTAssertFalse(ledger.canStartOfficialLogin(presentation: 1, credentialRevision: 2))
+        XCTAssertFalse(ledger.canNavigateLoginEntry(presentation: 1, credentialRevision: 2))
         XCTAssertFalse(ledger.claimSSO(presentation: 1, credentialRevision: 2))
         ledger.recordAccountSelection(document: "nonceA123", presentation: 1, credentialRevision: 2)
         XCTAssertTrue(ledger.claim(state(.password, match: true), presentation: 1, credentialRevision: 2))
         XCTAssertFalse(ledger.claimSSO(presentation: 1, credentialRevision: 2))
         ledger.begin(presentation: 2, credentialRevision: 2)
         XCTAssertTrue(ledger.claim(state(.username), presentation: 2, credentialRevision: 2))
+        XCTAssertFalse(ledger.canNavigateLoginEntry(presentation: 2, credentialRevision: 2))
         XCTAssertFalse(ledger.claimSSO(presentation: 2, credentialRevision: 2))
     }
 
