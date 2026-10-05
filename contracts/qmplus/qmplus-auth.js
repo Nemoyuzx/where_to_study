@@ -149,6 +149,44 @@
       hit.closest('button,a,[role="button"]') === node ? node : null;
   }
 
+  // Moodle fatal_error and core exception dialogs use these explicit markers.
+  // Ordinary course notifications, including alert-danger, are not fatal pages.
+  function hasMoodleErrorPage(doc = document) {
+    if (doc?.body?.id === 'page-error') return true;
+    if (doc?.querySelector?.('[data-rel="fatalerror"], #region-main .errorbox .errorcode, main .errorbox .errorcode')) return true;
+    const titles = doc?.querySelectorAll?.('.moodle-dialogue-exception h5, .modal.show .modal-title, .modal[aria-hidden="false"] .modal-title, [role="dialog"][aria-modal="true"] .modal-title') || [];
+    return Array.from(titles).slice(0, 16).some(node => {
+      const value = node.textContent;
+      return typeof value === 'string' && value.length <= 128 && value.trim().toLowerCase() === 'generalexceptionmessage';
+    });
+  }
+  function isMoodleGuestPage(doc = document) {
+    const body = doc?.body;
+    return !!body && (body.id === 'page-login-index' || body.classList?.contains('notloggedin') || body.classList?.contains('guestuser'));
+  }
+  function hasSafeOfficialSAMLLink(doc = document) {
+    const links = doc?.querySelectorAll?.('a[href]') || [];
+    for (const link of links) {
+      const href = link.getAttribute?.('href');
+      if (typeof href !== 'string' || href.length > 2048 || href.includes('?') || href.includes('#')) continue;
+      try {
+        const target = new URL(href, 'https://qmplus.qmul.ac.uk');
+        if (target.origin === 'https://qmplus.qmul.ac.uk' && !target.username && !target.password &&
+          target.pathname === '/auth/saml2/login.php' && !target.search && !target.hash) return true;
+      } catch {}
+    }
+    return false;
+  }
+  function classifyQMplusPage(doc = document) {
+    try {
+      if (hasMoodleErrorPage(doc)) return 'error';
+      if (doc?.readyState === 'loading') return 'loading';
+      if (isMoodleGuestPage(doc)) return 'guest';
+      const menu = doc?.querySelectorAll?.('.usermenu .userbutton') || [];
+      if (doc?.body && menu.length > 0) return 'authenticated';
+      return doc?.body?.id === 'page-site-index' && hasSafeOfficialSAMLLink(doc) ? 'guest' : 'unknown';
+    } catch { return 'unknown'; }
+  }
   function inspectUnsafe(nonce, accountHint, allowBind) {
     if (!validNonce(nonce)) return result('manual', nonce, false, reasons.invalidNonce);
     if (boundDocument === null && allowBind) {
@@ -159,15 +197,14 @@
     }
     const site = context();
     if (site === 'untrusted') return result('manual', nonce, false, reasons.untrusted);
-    if (document.readyState === 'loading') return result('loading', nonce, false, reasons.loading);
     if (site === 'qm') {
-      const body = document.body;
-      const menu = exactlyOne('.usermenu .userbutton');
-      return body && !body.classList.contains('notloggedin') &&
-        !body.classList.contains('guestuser') && menu ?
+      const kind = classifyQMplusPage();
+      if (kind === 'loading') return result('loading', nonce, false, reasons.loading);
+      return kind === 'authenticated' ?
         result('authenticated', nonce, false, reasons.authenticated) :
         result('manual', nonce, false, reasons.unsupported);
     }
+    if (document.readyState === 'loading') return result('loading', nonce, false, reasons.loading);
     if (site !== 'ms') return result('manual', nonce, false, reasons.unsupported);
     const chooser = exactlyOne('#tilesHolder');
     if (chooser && visible(chooser)) {

@@ -9,6 +9,7 @@ use zeroize::Zeroizing;
 
 pub const SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-sync.js");
 const AUTH_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-auth.js");
+const PAGE_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-page.js");
 const MS_ORIGIN: &str = "https://login.microsoftonline.com";
 const MAXIMUM_ACCOUNT_SETTLING_POLLS: u8 = 12;
 const MS_PATHS: [&str; 2] = [
@@ -115,6 +116,8 @@ pub struct QmState {
     close_after_sync: Mutex<bool>,
     main_focus_watched: AtomicBool,
     connection_status: Mutex<ConnectionStatus>,
+    page_kind: Mutex<&'static str>,
+    dashboard_started: AtomicBool,
 }
 #[derive(Default, Clone, Serialize)]
 pub struct ConnectionStatus {
@@ -186,6 +189,9 @@ impl AuthLedger {
     }
     fn accepts(&self, credential_revision: u64) -> bool {
         self.active && self.credential_revision == credential_revision
+    }
+    fn can_begin_sso(&self, credential_revision: u64) -> bool {
+        self.accepts(credential_revision) && !self.account_attempted && !self.username_attempted && !self.password_attempted
     }
     fn stop(&mut self) {
         self.active = false;
@@ -313,9 +319,18 @@ fn trusted_auth_page(url: &tauri::Url) -> bool {
         && url.password().is_none()
         && url.scheme() == "https"
         && (url.port().is_none() || url.port() == Some(443))
-        && ((url.origin().ascii_serialization() == MS_ORIGIN && MS_PATHS.contains(&url.path()))
-            || (url.origin().ascii_serialization() == ORIGIN && url.path() == "/login/index.php"))
+        && url.origin().ascii_serialization() == MS_ORIGIN && MS_PATHS.contains(&url.path())
 }
+fn official_qm_page(url: &tauri::Url) -> bool {
+    url.origin().ascii_serialization() == ORIGIN && url.username().is_empty() && url.password().is_none()
+}
+fn guest_entry(url: &tauri::Url) -> bool {
+    official_qm_page(url) && url.fragment().is_none() &&
+        ((url.path() == "/" && matches!(url.query(), None | Some("redirect=0"))) ||
+         (url.path() == "/login/index.php" && url.query().is_none()))
+}
+fn page_allows_sync(url: &tauri::Url, kind: &str) -> bool { kind == "authenticated" && valid_business_page(url) }
+const APPROVED_SSO: &str = "(()=>{const targets=new Set(Array.from(document.querySelectorAll('a[href]')).flatMap(a=>{try{const u=new URL(a.getAttribute('href'),location.href);return u.href==='https://qmplus.qmul.ac.uk/auth/saml2/login.php'&&!u.username&&!u.password&&!u.search&&!u.hash?[u.href]:[];}catch{return[];}}));return targets.size===1;})()";
 fn show_login(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
@@ -661,6 +676,7 @@ pub fn accept_qmplus_snapshot(
     }
     let u = window.url().map_err(|_| "QMplus 页面不可用。")?;
     if !valid_source(window.label(), &u)
+        || *state.page_kind.lock().map_err(|_| "QMplus 状态不可用。")? != "authenticated"
         || revision != state.revision.load(Ordering::SeqCst)
         || payload.len() > MAXIMUM_SNAPSHOT_BYTES
     {
@@ -720,6 +736,7 @@ pub fn accept_qmplus_auth(
         || !valid_nonce(&report.document)
         || report.reason.len() > 32
         || ![
+            "page",
             "loading",
             "account",
             "username",
@@ -733,6 +750,43 @@ pub fn accept_qmplus_auth(
         return Err("QMplus 登录状态已失效。".into());
     }
     let url = window.url().map_err(|_| "QMplus 页面不可用。")?;
+    if report.stage == "page" {
+        let auth = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?;
+        if !official_qm_page(&url) || !state.owner_active.load(Ordering::SeqCst) ||
+            !auth.document.as_ref().is_some_and(|doc| doc.nonce == report.document && doc.url == url) {
+            return Err("QMplus 来源或会话已失效。".into());
+        }
+        drop(auth);
+        let kind = match report.reason.as_str() {
+            "authenticated" => "authenticated", "guest" | "guest_sso" => "guest", "error" => "error",
+            "loading" => "loading", _ => "unknown",
+        };
+        *state.page_kind.lock().map_err(|_| "QMplus 页面不可用。")? = kind;
+        if kind == "error" { require_manual(&app, &window, "QM_ERROR_PAGE"); return Ok(false); }
+        if kind == "loading" { return Ok(false); }
+        if kind == "guest" && guest_entry(&url) && report.reason == "guest_sso" &&
+            crate::qmplus_login::authorized(&app).is_some() && state.auth.lock().ok().is_some_and(|a| a.ledger.can_begin_sso(crate::qmplus_login::revision())) {
+            let mut started = state.sso_started.lock().map_err(|_| "QMplus 页面不可用。")?;
+            if !*started {
+                *started = true;
+                let current = serde_json::to_string(url.as_str()).map_err(|_| "QMplus 页面不可用。")?;
+                let _ = window.eval(format!("(()=>{{if(location.href!=={current})return;const kind={PAGE_SCRIPT};if(kind==='guest'&&{APPROVED_SSO})location.assign('https://qmplus.qmul.ac.uk/auth/saml2/login.php');}})()"));
+                return Ok(false);
+            }
+        }
+        if kind == "authenticated" && guest_entry(&url) {
+            if !state.dashboard_started.swap(true, Ordering::SeqCst) {
+                window.navigate(tauri::Url::parse("https://qmplus.qmul.ac.uk/my/").map_err(|_| "QMplus 地址无效。")?)
+                    .map_err(|_| "QMplus 页面不可用。")?;
+            } else { require_manual(&app, &window, "UNSUPPORTED_PAGE"); }
+            return Ok(false);
+        }
+        if page_allows_sync(&url, kind) {
+            let _ = window.eval(format!("if({DOCUMENT_GUARD}){{{SCRIPT}}}"));
+            let _ = window.eval(sync_bridge(revision));
+        } else if url.path() != "/auth/saml2/login.php" { require_manual(&app, &window, "UNSUPPORTED_PAGE"); }
+        return Ok(false);
+    }
     let credential_revision = crate::qmplus_login::revision();
     let mut auth = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?;
     let document = auth
@@ -854,12 +908,12 @@ pub fn accept_qmplus_auth(
 }
 fn sync_bridge(revision: u64) -> String {
     format!(
-        r#"if({DOCUMENT_GUARD}){{
+        r#"(()=>{{if({DOCUMENT_GUARD}){{const kind={PAGE_SCRIPT};if(kind!=='authenticated')return;
       const button=document.createElement('button');button.textContent='同步课程 / Sync courses';
       button.style='position:fixed;right:12px;top:12px;z-index:2147483647;padding:12px';
-      button.onclick=async()=>{{button.disabled=true;try{{await window.__TAURI_INTERNALS__.invoke('begin_qmplus_sync',{{revision:{revision}}});const result=await WTSQmSync();await window.__TAURI_INTERNALS__.invoke('accept_qmplus_snapshot',{{payload:JSON.stringify(result),revision:{revision}}});button.textContent='同步完成 / Synced';}}catch(e){{button.textContent='请重新登录或重试 / Retry';}}finally{{button.disabled=false;}}}};document.body.appendChild(button);
-      if(['/my','/my/'].includes(location.pathname)&&!document.body.classList.contains('notloggedin')&&!document.body.classList.contains('guestuser')&&document.querySelector('.usermenu .userbutton'))button.click();
-    }}"#
+      button.onclick=async()=>{{button.disabled=true;try{{const current={PAGE_SCRIPT};if(current!=='authenticated')throw new Error('QM_ERROR_PAGE');await window.__TAURI_INTERNALS__.invoke('begin_qmplus_sync',{{revision:{revision}}});const result=await WTSQmSync();await window.__TAURI_INTERNALS__.invoke('accept_qmplus_snapshot',{{payload:JSON.stringify(result),revision:{revision}}});button.textContent='同步完成 / Synced';}}catch(e){{button.textContent='请重新登录或重试 / Retry';}}finally{{button.disabled=false;}}}};document.body.appendChild(button);
+      if(['/my','/my/'].includes(location.pathname))button.click();
+    }}}})()"#
     )
 }
 #[tauri::command]
@@ -869,6 +923,7 @@ pub fn begin_qmplus_sync(
     revision: u64,
 ) -> Result<(), String> {
     if state.feature_blocked.load(Ordering::SeqCst)
+        || *state.page_kind.lock().map_err(|_| "QMplus 页面不可用。")? != "authenticated"
         || !state.owner_active.load(Ordering::SeqCst)
         || revision != state.revision.load(Ordering::SeqCst)
         || window
@@ -900,7 +955,7 @@ pub fn connect_qmplus(
     state.set_feature_enabled(true);
     if let Some(w) = app
         .get_webview_window("qmplus")
-        .filter(|_| state.owner_active.load(Ordering::SeqCst))
+        .filter(|_| state.owner_active.load(Ordering::SeqCst) && state.page_kind.lock().ok().is_none_or(|kind| *kind != "error"))
     {
         let _ = w.show();
         w.set_focus().map_err(|_| "无法打开 QMplus。")?;
@@ -908,6 +963,8 @@ pub fn connect_qmplus(
     }
     let revision = state.revision.fetch_add(1, Ordering::SeqCst) + 1;
     state.stop_autofill();
+    state.dashboard_started.store(false, Ordering::SeqCst);
+    *state.page_kind.lock().map_err(|_| "QMplus 页面不可用。")? = "unknown";
     *state
         .sso_started
         .lock()
@@ -964,35 +1021,30 @@ pub fn connect_qmplus(
         let state = handle.state::<QmState>();
         if state.feature_blocked.load(Ordering::SeqCst) || !state.owner_active.load(Ordering::SeqCst) { return; }
         let revision = state.revision.load(Ordering::SeqCst);
-        let quiet = state.quiet_owner.load(Ordering::SeqCst);
         if p.event() == tauri::webview::PageLoadEvent::Started {
+            *state.page_kind.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = "unknown";
             state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).document = None;
             if valid_business_page(p.url()) && !["/my", "/my/"].contains(&p.url().path()) {
                 *state.close_after_sync.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = false;
             }
             return;
         }
-        if p.event() == tauri::webview::PageLoadEvent::Finished
-            && valid_business_page(p.url())
-            && w.url().ok().is_some_and(|url| valid_business_page(&url))
-        {
-            let _ = w.eval(format!("if({DOCUMENT_GUARD}){{{SCRIPT}}}"));
-            let _ = w.eval(sync_bridge(revision));
-        } else if p.event() == tauri::webview::PageLoadEvent::Finished {
+        if p.event() == tauri::webview::PageLoadEvent::Finished {
             let Some(current) = w.url().ok().filter(|u| u == p.url()) else { return; };
             let Some(window) = handle.get_webview_window("qmplus") else { return; };
+            if official_qm_page(&current) {
+                let nonce = match crate::scoped_cache::new_account_scope() {
+                    Ok(v) => v.trim_start_matches("opaque-v1:").to_string(),
+                    Err(_) => { require_manual(handle,&window,"DOCUMENT_UNAVAILABLE"); return; }
+                };
+                state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).document = Some(AuthDocument { nonce: nonce.clone(), url: current.clone() });
+                let encoded_nonce = serde_json::to_string(&nonce).unwrap_or_default();
+                let encoded_url = serde_json::to_string(current.as_str()).unwrap_or_default();
+                let _ = window.eval(format!("(()=>{{if(location.href!=={encoded_url})return;const kind={PAGE_SCRIPT};const reason=kind==='guest'&&{APPROVED_SSO}?'guest_sso':kind;window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'page',document:{encoded_nonce},accountMatch:false,reason}}}}).catch(()=>{{}});}})()"));
+                return;
+            }
             let credentials = crate::qmplus_login::authorized(handle);
             let active = state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).ledger.accepts(crate::qmplus_login::revision());
-            if quiet && active && (current.as_str() == "https://qmplus.qmul.ac.uk/?redirect=0" || (current.origin().ascii_serialization() == ORIGIN && current.path() == "/login/index.php")) && credentials.is_some() {
-                let mut sso = state.sso_started.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                if !*sso {
-                    *sso = true;
-                    // Confirm the live guest landing's sole ordinary Login link;
-                    // preserve an authenticated homepage and never trust arbitrary hrefs.
-                    let _ = window.eval("(()=>{if(location.origin!=='https://qmplus.qmul.ac.uk'||window.top!==window)return;if(document.querySelector('.usermenu .userbutton')&&!document.body.classList.contains('guestuser')&&!document.body.classList.contains('notloggedin'))return;const links=Array.from(document.querySelectorAll('a[href]')).filter(a=>a.getAttribute('href')==='/auth/saml2/login.php');if(links.length===1)location.assign('https://qmplus.qmul.ac.uk/auth/saml2/login.php');})()");
-                    return;
-                }
-            }
             if !trusted_auth_page(&current) || credentials.is_none() || !active { require_manual(handle,&window,"UNSUPPORTED_PAGE"); return; }
             let nonce = match crate::scoped_cache::new_account_scope() {
                 Ok(v) => v.trim_start_matches("opaque-v1:").to_string(),
@@ -1631,7 +1683,7 @@ mod tests {
                 &tauri::Url::parse(&format!("{MS_ORIGIN}{path}")).unwrap()
             ));
         }
-        assert!(trusted_auth_page(
+        assert!(!trusted_auth_page(
             &tauri::Url::parse(&format!("{ORIGIN}/login/index.php")).unwrap()
         ));
         for url in [
@@ -1643,6 +1695,44 @@ mod tests {
             "https://name@login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/login",
             "https://qmplus.qmul.ac.uk/auth/saml2/login.php",
         ] { assert!(!trusted_auth_page(&tauri::Url::parse(url).unwrap())); }
+    }
+    #[test]
+    fn only_exact_official_guest_entries_and_authenticated_business_pages_are_eligible() {
+        for suffix in ["/", "/?redirect=0", "/login/index.php"] {
+            let url = tauri::Url::parse(&format!("{ORIGIN}{suffix}")).unwrap();
+            assert!(guest_entry(&url));
+            assert!(!page_allows_sync(&url, "authenticated"));
+        }
+        for url in [
+            "https://qmplus.qmul.ac.uk/?redirect=1",
+            "https://qmplus.qmul.ac.uk/?redirect=0&other=1",
+            "https://qmplus.qmul.ac.uk/login/index.php?redirect=0",
+            "https://qmplus.qmul.ac.uk/login/index.php#retry",
+            "https://qmplus.qmul.ac.uk/course/view.php?id=1",
+            "https://name@qmplus.qmul.ac.uk/",
+            "https://qmplus.qmul.ac.uk:444/",
+            "https://qmplus.qmul.ac.uk.evil.test/",
+        ] { assert!(!guest_entry(&tauri::Url::parse(url).unwrap())); }
+        let dashboard = tauri::Url::parse(&format!("{ORIGIN}/my/")).unwrap();
+        assert!(page_allows_sync(&dashboard, "authenticated"));
+        for kind in ["error", "guest", "unknown", "loading"] {
+            assert!(!page_allows_sync(&dashboard, kind));
+        }
+    }
+    #[test]
+    fn guest_fallback_never_restarts_sso_after_identity_or_password_submission() {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        assert!(ledger.can_begin_sso(7));
+        assert!(!ledger.can_begin_sso(8));
+        assert!(ledger.claim("account", "nonceA123", true, 7));
+        assert!(!ledger.can_begin_sso(7));
+        ledger.stop();
+        assert!(!ledger.can_begin_sso(7));
+        ledger.begin(8);
+        assert!(ledger.can_begin_sso(8));
+        assert!(ledger.claim("username", "nonceB456", false, 8));
+        assert!(!ledger.can_begin_sso(8));
     }
     #[test]
     fn username_submission_payload_has_no_password_and_reports_reject_unknown_fields() {

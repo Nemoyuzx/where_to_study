@@ -5,8 +5,10 @@ import vm from 'node:vm'
 
 const script = fs.readFileSync(new URL('../contracts/qmplus/qmplus-sync.js', import.meta.url), 'utf8')
 function page(extras={}) {
+  const document={readyState:'complete',body:{classList:{contains:()=>false}},querySelector:()=>null,
+    querySelectorAll:selector=>selector==='.usermenu .userbutton'?[{}]:[]}
   const context = vm.createContext({URL,URLSearchParams,TextEncoder,TextDecoder,Intl,Date,AbortController,setTimeout,clearTimeout,
-    location:{origin:'https://qmplus.qmul.ac.uk'},document:{body:{classList:{contains:()=>false}}},M:{cfg:{sesskey:'synthetic-session-only'}},...extras})
+    location:{origin:'https://qmplus.qmul.ac.uk'},document,M:{cfg:{sesskey:'synthetic-session-only'}},...extras})
   vm.runInContext(script,context)
   return context
 }

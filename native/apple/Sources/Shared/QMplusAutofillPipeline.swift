@@ -52,7 +52,8 @@ enum QMplusAutofillPolicy {
         guard QMplusConnectionPolicy.isHTTPSNavigation(url), url?.host?.lowercased() == "qmplus.qmul.ac.uk", let url,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.fragment == nil else { return false }
         if components.percentEncodedPath == "/login/index.php" { return components.percentEncodedQuery == nil }
-        return components.percentEncodedPath == "/" && components.percentEncodedQuery == "redirect=0"
+        return components.percentEncodedPath == "/"
+            && (components.percentEncodedQuery == nil || components.percentEncodedQuery == "redirect=0")
     }
     static func isValidNonce(_ nonce: String) -> Bool {
         (8...64).contains(nonce.utf8.count) && nonce.utf8.allSatisfy {

@@ -21,6 +21,7 @@ internal class QmplusLoginAutomationGate {
     private var selectedAccountDocument: Long? = null
     private var claimedAccountDocument: Long? = null
     private var attemptedSSO = false
+    private var attemptedDashboard = false
 
     fun beginDocument(): Long {
         document++; installedDocument = null; submittedUsernameDocument = null; selectedAccountDocument = null; claimedAccountDocument = null
@@ -39,8 +40,12 @@ internal class QmplusLoginAutomationGate {
         installedDocument = expectedDocument; return true
     }
     fun claimSSO(expectedDocument: Long, savedOptIn: Boolean): Boolean {
-        if (!savedOptIn || !accepts(expectedDocument) || requiresManualInteraction || attemptedSSO) return false
+        if (!savedOptIn || !accepts(expectedDocument) || requiresManualInteraction || attemptedSSO || hasAttemptedCredentialSubmission()) return false
         attemptedSSO = true; return true
+    }
+    fun claimDashboard(expectedDocument: Long): Boolean {
+        if (!accepts(expectedDocument) || attemptedDashboard) return false
+        attemptedDashboard = true; return true
     }
     fun claimFill(expectedDocument: Long, stage: String, savedOptIn: Boolean, accountMatch: Boolean = false): Boolean {
         if (!savedOptIn || !accepts(expectedDocument) || requiresManualInteraction || installedDocument != expectedDocument) return false
@@ -78,11 +83,15 @@ internal object QmplusLoginPagePolicy {
     private const val QM_TENANT = "569df091-b013-40e3-86ee-bd9cb9e25814"
     const val SSO_START_URL = "https://qmplus.qmul.ac.uk/auth/saml2/login.php"
     fun isSSOEntry(value: String): Boolean = trustedURI(value)?.let {
-        it.host.equals("qmplus.qmul.ac.uk", true) && (it.rawPath == "/login/index.php" ||
-            (it.rawPath == "/" && it.rawQuery == "redirect=0"))
+        it.host.equals("qmplus.qmul.ac.uk", true) &&
+            ((it.rawPath == "/login/index.php" && it.rawQuery == null) ||
+                (it.rawPath == "/" && it.rawQuery in listOf(null, "redirect=0")))
     } == true
     fun isSSOTransit(value: String): Boolean = trustedURI(value)?.let {
-        it.host.equals("qmplus.qmul.ac.uk", true) && it.rawPath == "/auth/saml2/login.php"
+        it.host.equals("qmplus.qmul.ac.uk", true) && it.rawPath == "/auth/saml2/login.php" && it.rawQuery == null
+    } == true
+    fun isOfficialQMPage(value: String): Boolean = runCatching { URI(value) }.getOrNull()?.let {
+        it.scheme.equals("https", true) && it.host.equals("qmplus.qmul.ac.uk", true) && it.rawUserInfo == null && it.port in listOf(-1, 443)
     } == true
     private fun trustedURI(value: String): URI? = runCatching { URI(value) }.getOrNull()?.takeIf {
         it.scheme.equals("https", true) && it.rawUserInfo == null && it.port in listOf(-1, 443) && it.rawFragment == null
@@ -99,15 +108,31 @@ internal object QmplusLoginPagePolicy {
             }
     } == true
 
-    val authenticatedPageScript = """
-        (() => {
-            if (window.top !== window || location.origin !== 'https://qmplus.qmul.ac.uk') return false;
-            if (!['/my/', '/my/index.php', '/course/view.php', '/mod/assign/view.php', '/mod/quiz/view.php'].includes(location.pathname)) return false;
-            const body = document.body;
-            return !!body && !body.classList.contains('notloggedin') && !body.classList.contains('guestuser')
-                && document.querySelectorAll('.usermenu .userbutton').length === 1;
+    const val UNKNOWN_PAGE_SCRIPT = "(()=>'unknown')()"
+    fun authenticatedPageScript(pageScript: String): String =
+        "(() => { const kind = $pageScript; return kind === 'authenticated'; })()"
+    fun approvedSSOEntryScript(pageScript: String): String = """
+        (() => { const kind = $pageScript; if (kind !== 'guest') return false;
+          const targets = new Set(Array.from(document.querySelectorAll('a[href]')).flatMap(link => {
+            try { const u = new URL(link.getAttribute('href'), location.href);
+              return u.href === '$SSO_START_URL' && u.origin === 'https://qmplus.qmul.ac.uk' &&
+                !u.username && !u.password && !u.search && !u.hash ? [u.href] : [];
+            } catch { return []; }
+          })); return targets.size === 1;
         })()
     """.trimIndent()
+}
+
+internal enum class QmplusPageKind {
+    AUTHENTICATED, GUEST, ERROR, UNKNOWN, LOADING;
+    companion object {
+        fun decode(encoded: String): QmplusPageKind = runCatching {
+            require(encoded.length <= 64)
+            when (JSONArray("[$encoded]").get(0) as? String) {
+                "authenticated" -> AUTHENTICATED; "guest" -> GUEST; "error" -> ERROR; "loading" -> LOADING; else -> UNKNOWN
+            }
+        }.getOrDefault(UNKNOWN)
+    }
 }
 
 internal interface QmplusAuthRenderer {
@@ -167,6 +192,8 @@ internal class QmplusAuthFlow(
     private val quietConnection: Boolean = true,
     private val requestedTarget: String = QmplusPolicy.START_URL,
     private val featureEnabled: () -> Boolean = { true },
+    private val pageScript: String = QmplusLoginPagePolicy.UNKNOWN_PAGE_SCRIPT,
+    private val pageObserved: (QmplusPageKind) -> Unit = {},
 ) {
     private val gate = QmplusLoginAutomationGate()
     private var url: String? = null
@@ -193,22 +220,14 @@ internal class QmplusAuthFlow(
         gate.beginDocument(); url = value; nonce = UUID.randomUUID().toString()
         accountHint = null; installed = false; busy = false; lastSubmittedStage = null; postSubmitChecks = 0; initialLayoutChecks = 0
         begin()
-        if (!QmplusPolicy.isBusinessPage(value) && !QmplusLoginPagePolicy.canInspectAuthenticationPage(value) &&
+        if (!QmplusLoginPagePolicy.isOfficialQMPage(value) && !QmplusLoginPagePolicy.canInspectAuthenticationPage(value) &&
             !(savedOptIn && (QmplusLoginPagePolicy.isSSOTransit(value) || QmplusLoginPagePolicy.isSSOEntry(value)))) manualRequired()
     }
     fun pageReady(value: String) {
         if (!checkFeature() || url != value || busy || renderer.currentURL != value || !renderer.active) return
         val document = gate.document
-        if (QmplusPolicy.isBusinessPage(value)) { inspectSession(document, value); return }
+        if (QmplusLoginPagePolicy.isOfficialQMPage(value)) { inspectSession(document, value); return }
         if (manual || !savedOptIn) { manualRequired(); return }
-        if (QmplusLoginPagePolicy.isSSOTransit(value)) { schedulePoll(document, value); return }
-        if (QmplusLoginPagePolicy.isSSOEntry(value)) {
-            authorized(document, value) {
-                if (gate.claimSSO(document, true)) { reportPhase("sso_navigation"); renderer.navigateToOfficialSSO() }
-                else manualRequired()
-            }
-            return
-        }
         if (!QmplusLoginPagePolicy.isMicrosoftPage(value)) { manualRequired(); return }
         if (!installed) install(document, value) else inspect(document, value)
     }
@@ -257,11 +276,40 @@ internal class QmplusAuthFlow(
     private fun inspectSession(document: Long, value: String) {
         busy = true
         val weak = WeakReference(this)
-        evaluate(document, value, guarded(value, QmplusLoginPagePolicy.authenticatedPageScript)) { result ->
+        evaluate(document, value, guarded(value, pageScript)) { result ->
             val owner = weak.get() ?: return@evaluate
             if (!owner.checkedCurrent(document, value)) return@evaluate
             owner.busy = false
-            if (owner.gate.claimAutomaticSync(document, result == "true")) {
+            val kind = QmplusPageKind.decode(result)
+            owner.pageObserved(kind)
+            if (kind == QmplusPageKind.ERROR) { owner.reportPhase("QM_ERROR_PAGE"); owner.manualRequired(); return@evaluate }
+            if (kind == QmplusPageKind.LOADING || (QmplusLoginPagePolicy.isSSOTransit(value) &&
+                    kind != QmplusPageKind.AUTHENTICATED && !owner.manual && owner.savedOptIn)) {
+                owner.schedulePoll(document, value); return@evaluate
+            }
+            if (kind == QmplusPageKind.GUEST && QmplusLoginPagePolicy.isSSOEntry(value) && !owner.manual && owner.savedOptIn) {
+                owner.authorized(document, value) {
+                    owner.busy = true
+                    owner.evaluate(document, value, owner.guarded(value, QmplusLoginPagePolicy.approvedSSOEntryScript(owner.pageScript))) approvalReply@{ approved ->
+                        if (!owner.checkedCurrent(document, value) || owner.manual) return@approvalReply
+                        owner.busy = false
+                        if (approved != "true") { owner.manualRequired(); return@approvalReply }
+                        owner.authorized(document, value) {
+                            if (owner.gate.claimSSO(document, true)) {
+                                owner.reportPhase("sso_navigation"); owner.renderer.navigateToOfficialSSO()
+                            } else owner.manualRequired()
+                        }
+                    }
+                }
+                return@evaluate
+            }
+            if (kind == QmplusPageKind.AUTHENTICATED && !QmplusPolicy.isBusinessPage(value)) {
+                if (QmplusLoginPagePolicy.isSSOEntry(value) && owner.gate.claimDashboard(document))
+                    owner.renderer.openBusinessPage(QmplusPolicy.START_URL)
+                else owner.manualRequired()
+                return@evaluate
+            }
+            if (owner.gate.claimAutomaticSync(document, kind == QmplusPageKind.AUTHENTICATED)) {
                 owner.cancelDeadline?.invoke(); owner.cancelDeadline = null
                 owner.cancelPoll?.invoke(); owner.cancelPoll = null
                 if (owner.quietConnection) {
@@ -275,7 +323,7 @@ internal class QmplusAuthFlow(
                         owner.renderer.openBusinessPage(owner.requestedTarget)
                     owner.reportPhase("detail_visible"); owner.reveal()
                 }
-            } else if (result != "true") owner.manualRequired()
+            } else if (kind != QmplusPageKind.AUTHENTICATED) owner.manualRequired()
         }
     }
     private fun install(document: Long, value: String) {

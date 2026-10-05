@@ -32,6 +32,10 @@ struct QMplusLoginSynchronizationGate: Equatable, Sendable {
     }
 }
 
+enum QMplusOfficialPageStatus: String, Sendable {
+    case loading, authenticated, guest, error, unknown
+}
+
 enum QMplusConnectionPolicy {
     static func isHTTPSNavigation(_ url: URL?) -> Bool {
         guard let url else { return false }
@@ -49,17 +53,33 @@ enum QMplusConnectionPolicy {
             && ["qmplus.qmul.ac.uk", "login.microsoftonline.com"].contains(host.lowercased())
     }
 
-    // Only a Boolean leaves the official QM page. Do not inspect configuration,
-    // cookies, credentials, storage, account labels, or the URL's query string.
-    static let authenticatedPageScript = """
+    // Only a fixed enum leaves the official main document. Shared with the
+    // other clients; error-page text, identities and session material stay local.
+    static let pageStatusScript: String = {
+        guard let url = Bundle.main.url(forResource: "qmplus-page", withExtension: "js"),
+              let source = try? String(contentsOf: url, encoding: .utf8) else { return "'unknown'" }
+        return source.trimmingCharacters(in: .whitespacesAndNewlines)
+    }()
+    static let authenticatedPageScript = "(\(pageStatusScript)) === 'authenticated'"
+
+    // This only confirms an official entry link; it never follows a page-supplied
+    // query or reads credentials. Repeated header/footer links share one target.
+    static let officialSSOEntryScript = """
         (() => {
-            if (location.origin !== 'https://qmplus.qmul.ac.uk') return false;
-            const body = document.body;
-            // Moodle's core only guarantees the negative body class. Its
-            // authenticated user menu renders userbutton; guests do not.
-            return !!body && !body.classList.contains('notloggedin')
-                && !body.classList.contains('guestuser')
-                && !!document.querySelector('.usermenu .userbutton');
+            if (window.top !== window || location.origin !== 'https://qmplus.qmul.ac.uk') return false;
+            return Array.from(document.querySelectorAll('a[href]')).some(link => {
+                try {
+                    const url = new URL(link.getAttribute('href'), location.origin);
+                    return url.origin === location.origin && !url.username && !url.password
+                        && url.pathname === '/auth/saml2/login.php' && !url.search && !url.hash;
+                } catch { return false; }
+            });
         })()
         """
+
+    static func officialHTTPFailureCode(status: Int, isMainFrame: Bool, url: URL?) -> String? {
+        guard isMainFrame, isHTTPSNavigation(url), url?.host?.lowercased() == "qmplus.qmul.ac.uk",
+              (400...599).contains(status) else { return nil }
+        return "QM_HTTP_\(status)"
+    }
 }

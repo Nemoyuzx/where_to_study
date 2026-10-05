@@ -430,6 +430,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
     }
 
     func testVerifiedQMplusGuestLandingCanUseFixedSSOEntry() {
+        XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/")))
         XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/?redirect=0")))
         XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/login/index.php")))
         XCTAssertEqual(QMplusAutofillPolicy.ssoURL.absoluteString, "https://qmplus.qmul.ac.uk/auth/saml2/login.php")
@@ -437,7 +438,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
     }
 
     func testOtherQMplusLandingQueriesAndForeignHostsRemainManual() {
-        for value in ["https://qmplus.qmul.ac.uk/", "https://qmplus.qmul.ac.uk/?redirect=1",
+        for value in ["https://qmplus.qmul.ac.uk/?redirect=1",
                       "https://qmplus.qmul.ac.uk/?redirect=0&other=1", "https://qmplus.qmul.ac.uk/?redirect=%30",
                       "https://qmplus.qmul.ac.uk/?redirect=0#other", "https://qmplus.qmul.ac.uk.evil.invalid/?redirect=0",
                       "https://qmplus.qmul.ac.uk/login/index.php?other=1"] {

@@ -92,20 +92,65 @@
     }
     return values;
   }
-  globalThis.WTSQmProtocol = Object.freeze({currentTermStatus, londonDate, safeURL, timingTexts, includesAssessmentActivity});
+  // Moodle fatal_error and core exception dialogs use these explicit markers.
+  // Ordinary course notifications, including alert-danger, are not fatal pages.
+  function hasMoodleErrorPage(doc = document) {
+    if (doc?.body?.id === 'page-error') return true;
+    if (doc?.querySelector?.('[data-rel="fatalerror"], #region-main .errorbox .errorcode, main .errorbox .errorcode')) return true;
+    const titles = doc?.querySelectorAll?.('.moodle-dialogue-exception h5, .modal.show .modal-title, .modal[aria-hidden="false"] .modal-title, [role="dialog"][aria-modal="true"] .modal-title') || [];
+    return Array.from(titles).slice(0, 16).some(node => {
+      const value = node.textContent;
+      return typeof value === 'string' && value.length <= 128 && value.trim().toLowerCase() === 'generalexceptionmessage';
+    });
+  }
+  function isMoodleGuestPage(doc = document) {
+    const body = doc?.body;
+    return !!body && (body.id === 'page-login-index' || body.classList?.contains('notloggedin') || body.classList?.contains('guestuser'));
+  }
+  function hasSafeOfficialSAMLLink(doc = document) {
+    const links = doc?.querySelectorAll?.('a[href]') || [];
+    for (const link of links) {
+      const href = link.getAttribute?.('href');
+      if (typeof href !== 'string' || href.length > 2048 || href.includes('?') || href.includes('#')) continue;
+      try {
+        const target = new URL(href, 'https://qmplus.qmul.ac.uk');
+        if (target.origin === 'https://qmplus.qmul.ac.uk' && !target.username && !target.password &&
+          target.pathname === '/auth/saml2/login.php' && !target.search && !target.hash) return true;
+      } catch {}
+    }
+    return false;
+  }
+  function classifyQMplusPage(doc = document) {
+    try {
+      if (hasMoodleErrorPage(doc)) return 'error';
+      if (doc?.readyState === 'loading') return 'loading';
+      if (isMoodleGuestPage(doc)) return 'guest';
+      const menu = doc?.querySelectorAll?.('.usermenu .userbutton') || [];
+      if (doc?.body && menu.length > 0) return 'authenticated';
+      return doc?.body?.id === 'page-site-index' && hasSafeOfficialSAMLLink(doc) ? 'guest' : 'unknown';
+    } catch { return 'unknown'; }
+  }
+  globalThis.WTSQmProtocol = Object.freeze({currentTermStatus, londonDate, safeURL, timingTexts, includesAssessmentActivity, hasMoodleErrorPage, classifyQMplusPage});
   globalThis.WTSQmSync = async function(options = {}) {
     const fetched = new Date().toISOString();
     const result = {schema_version:1, source:'qmplus', fetched_at:fetched, ok:true, partial:false, courses:[], activities:[], warnings:[]};
     const fail = code => ({...result, ok:false, error_code:code});
     if (location.origin !== origin) return fail('QM_ORIGIN_REQUIRED');
-    if (!globalThis.M?.cfg?.sesskey || document.body?.classList.contains('notloggedin')) return fail('QM_LOGIN_REQUIRED');
+    const pageKind = classifyQMplusPage();
+    if (pageKind === 'error') return fail('QM_ERROR_PAGE');
+    if (pageKind !== 'authenticated' || !globalThis.M?.cfg?.sesskey) return fail('QM_LOGIN_REQUIRED');
     if (globalThis.__wtsQmFlight) return fail('QM_SYNC_BUSY');
     const job = {cancelled:false, controller:null};
     globalThis.__wtsQmFlight = job;
     globalThis.WTSQmCancel = () => { job.cancelled = true; job.controller?.abort(); };
     const started = Date.now();
     const warn = code => { result.partial = true; if (result.warnings.length < 40 && !result.warnings.includes(code)) result.warnings.push(code); };
-    const check = () => { if (job.cancelled || Date.now() - started > 120000) throw new Error('QM_CANCELLED_OR_TIMEOUT'); };
+    const check = () => {
+      if (job.cancelled || Date.now() - started > 120000) throw new Error('QM_CANCELLED_OR_TIMEOUT');
+      const kind = classifyQMplusPage();
+      if (kind === 'error') throw new Error('QM_ERROR_PAGE');
+      if (kind !== 'authenticated') throw new Error('QM_LOGIN_REQUIRED');
+    };
     async function request(url, body) {
       check();
       const u = new URL(url, origin);
@@ -189,7 +234,7 @@
             try {
               const html = await request(item.url); const doc = new DOMParser().parseFromString(html,'text/html');
               const region = doc.querySelector('#region-main') || doc.querySelector('main');
-              if (!region || doc.querySelector('form[action*="login"]')) throw new Error('QM_DETAIL_NOT_AVAILABLE');
+              if (!region || hasMoodleErrorPage(doc) || classifyQMplusPage(doc) === 'guest' || doc.querySelector('form[action*="login"]')) throw new Error('QM_DETAIL_NOT_AVAILABLE');
               const clean = element => text(element?.textContent?.replace(/\s+/g,' '),1000);
               const dateTexts = Array.from(region.querySelectorAll('.activity-dates,[data-region="activity-dates"],.quizinfo')).flatMap(element => {
                 // textContent joins adjacent quiz paragraphs without whitespace
@@ -215,6 +260,7 @@
     }
     finally { if (globalThis.__wtsQmFlight === job) { delete globalThis.__wtsQmFlight; delete globalThis.WTSQmCancel; } }
     function finishSnapshot() {
+      check();
       if (new TextEncoder().encode(JSON.stringify(result)).byteLength > maxBytes && result.activities.length) {
         // Bound temporary allocations to logarithmic serialization passes,
         // rather than encoding the whole snapshot once for every dropped row.

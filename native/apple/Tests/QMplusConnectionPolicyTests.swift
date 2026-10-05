@@ -79,21 +79,73 @@ final class QMplusConnectionPolicyTests: XCTestCase {
         XCTAssertFalse(try authenticationProof(origin: "https://qmplus.qmul.ac.uk", bodyClasses: ["guestuser"], hasUserMenu: true))
         XCTAssertFalse(try authenticationProof(origin: "https://login.microsoftonline.com", bodyClasses: [], hasUserMenu: true))
         XCTAssertFalse(try authenticationProof(origin: "https://qmplus.qmul.ac.uk.evil.invalid", bodyClasses: [], hasUserMenu: true))
-        for field in ["document.cookie", "sesskey", "M.cfg", "localStorage", "sessionStorage", "textContent", "innerHTML", "location.search"] {
+        for field in ["document.cookie", "sesskey", "M.cfg", "localStorage", "sessionStorage", "innerHTML", "location.search"] {
             XCTAssertFalse(QMplusConnectionPolicy.authenticatedPageScript.contains(field))
         }
     }
 
-    private func authenticationProof(origin: String, bodyClasses: [String], hasUserMenu: Bool) throws -> Bool {
+    func testHTTPFailuresAndFatalDOMCannotBecomeAuthenticatedPages() throws {
+        XCTAssertFalse(try authenticationProof(origin: "https://qmplus.qmul.ac.uk", bodyClasses: [], hasUserMenu: true, bodyID: "page-error"))
+        XCTAssertFalse(try authenticationProof(origin: "https://qmplus.qmul.ac.uk", bodyClasses: [], hasUserMenu: true, fatal: true))
+        XCTAssertFalse(try authenticationProof(origin: "https://qmplus.qmul.ac.uk", bodyClasses: [], hasUserMenu: true, exceptionTitle: "generalexceptionmessage"))
+        XCTAssertTrue(try authenticationProof(origin: "https://qmplus.qmul.ac.uk", bodyClasses: [], hasUserMenu: true, exceptionTitle: "Ordinary course announcement"))
+        XCTAssertEqual(QMplusConnectionPolicy.officialHTTPFailureCode(status: 500, isMainFrame: true, url: URL(string: "https://qmplus.qmul.ac.uk/auth/saml2/sp/saml2-acs.php")), "QM_HTTP_500")
+        XCTAssertNil(QMplusConnectionPolicy.officialHTTPFailureCode(status: 500, isMainFrame: false, url: URL(string: "https://qmplus.qmul.ac.uk/")))
+        XCTAssertNil(QMplusConnectionPolicy.officialHTTPFailureCode(status: 200, isMainFrame: true, url: URL(string: "https://qmplus.qmul.ac.uk/")))
+        XCTAssertNil(QMplusConnectionPolicy.officialHTTPFailureCode(status: 500, isMainFrame: true, url: URL(string: "https://fixture.invalid/")))
+    }
+
+    func testOfficialEntryRequiresAnExactSafeSSOLinkAndAcceptsResponsiveDuplicates() throws {
+        for links in [["/auth/saml2/login.php"], ["https://qmplus.qmul.ac.uk/auth/saml2/login.php"],
+                      ["/auth/saml2/login.php", "/auth/saml2/login.php"]] {
+            XCTAssertTrue(try officialEntry(links))
+        }
+        for links in [[], ["https://fixture.invalid/auth/saml2/login.php"], ["/auth/saml2/login.php?unknown=1"],
+                      ["/auth/saml2/login.php#other"], ["http://qmplus.qmul.ac.uk/auth/saml2/login.php"],
+                      ["https://fixture:fixture@qmplus.qmul.ac.uk/auth/saml2/login.php"]] {
+            XCTAssertFalse(try officialEntry(links))
+        }
+    }
+
+    private func officialEntry(_ links: [String]) throws -> Bool {
+        let context = try XCTUnwrap(JSContext())
+        context.setObject(links, forKeyedSubscript: "fixtureLinks" as NSString)
+        context.evaluateScript("""
+            var window = this; window.top = window;
+            var location = { origin: 'https://qmplus.qmul.ac.uk' };
+            function URL(value, base) {
+                var href = value.charAt(0) === '/' ? base + value : value;
+                var m = href.match(/^(https?:)\\/\\/([^/]+)([^?#]*)(\\?[^#]*)?(#.*)?$/);
+                if (!m) throw new Error('fixture URL');
+                var auth = m[2].split('@'); this.username = auth.length > 1 ? auth[0] : '';
+                this.password = ''; this.origin = m[1] + '//' + auth[auth.length - 1];
+                this.pathname = m[3]; this.search = m[4] || ''; this.hash = m[5] || '';
+            }
+            var document = { querySelectorAll: () => fixtureLinks.map(href => ({getAttribute: () => href})) };
+            """)
+        let result = try XCTUnwrap(context.evaluateScript(QMplusConnectionPolicy.officialSSOEntryScript))
+        XCTAssertNil(context.exception)
+        return result.toBool()
+    }
+
+    private func authenticationProof(origin: String, bodyClasses: [String], hasUserMenu: Bool,
+                                     bodyID: String = "page-my-index", fatal: Bool = false, exceptionTitle: String = "") throws -> Bool {
         let context = try XCTUnwrap(JSContext())
         context.setObject(origin, forKeyedSubscript: "fixtureOrigin" as NSString)
         context.setObject(bodyClasses, forKeyedSubscript: "fixtureBodyClasses" as NSString)
         context.setObject(hasUserMenu, forKeyedSubscript: "fixtureHasUserMenu" as NSString)
+        context.setObject(bodyID, forKeyedSubscript: "fixtureBodyID" as NSString)
+        context.setObject(fatal, forKeyedSubscript: "fixtureFatal" as NSString)
+        context.setObject(exceptionTitle, forKeyedSubscript: "fixtureTitle" as NSString)
         context.evaluateScript("""
+            var window = this; window.top = window;
             var location = { origin: fixtureOrigin };
             var document = {
-                body: { classList: { contains: value => fixtureBodyClasses.indexOf(value) >= 0 } },
-                querySelector: selector => selector === '.usermenu .userbutton' && fixtureHasUserMenu ? {} : null
+                defaultView: window, readyState: 'complete',
+                body: { id: fixtureBodyID, classList: { contains: value => fixtureBodyClasses.indexOf(value) >= 0 } },
+                querySelector: () => fixtureFatal ? {} : null,
+                querySelectorAll: selector => selector === '.usermenu .userbutton'
+                    ? (fixtureHasUserMenu ? [{}] : []) : (fixtureTitle ? [{textContent: fixtureTitle}] : [])
             };
             """)
         let value = try XCTUnwrap(context.evaluateScript(QMplusConnectionPolicy.authenticatedPageScript))

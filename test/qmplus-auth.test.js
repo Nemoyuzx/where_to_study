@@ -61,6 +61,10 @@ function fixture(overrides={}) {
     dispatchEvent(event){listeners.get(event.type)?.(event)}
   };window.top=window;window.getComputedStyle=node=>node.style
   const document={body,readyState:state.readyState,defaultView:window,
+    querySelector(selector) {
+      if(selector==='[data-rel="fatalerror"], #region-main .errorbox .errorcode, main .errorbox .errorcode')return state.fatalMarker??null
+      return this.querySelectorAll(selector)[0]??null
+    },
     querySelectorAll(selector) {
       const inputs=state.stage==='username'?[user,pass,submit]:[pass,submit]
       if(selector==='form#i0281')return [form]
@@ -71,6 +75,7 @@ function fixture(overrides={}) {
       if(selector==='#displayName')return state.stage==='username'?[]:[displayName]
       if(selector==='#tilesHolder')return state.chooser?[state.chooser]:[]
       if(selector==='.usermenu .userbutton')return state.menu?[state.menu]:[]
+      if(selector==='.moodle-dialogue-exception h5, .modal.show .modal-title, .modal[aria-hidden="false"] .modal-title, [role="dialog"][aria-modal="true"] .modal-title')return state.errorTitles??[]
       if(selector.startsWith('input, textarea,'))return [...inputs,...state.extra,...(state.alert?[state.alert]:[])]
       throw new Error(`unhandled fake selector: ${selector}`)
     },

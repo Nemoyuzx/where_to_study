@@ -9,7 +9,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.4.0"
-    CURRENT_PROJECT_VERSION: "106"
+    CURRENT_PROJECT_VERSION: "107"
     CODE_SIGN_STYLE: Automatic
 targets:
   WhereToStudyMac:
@@ -25,6 +25,8 @@ targets:
       - path: ../../contracts/qmplus/qmplus-sync.js
         buildPhase: resources
       - path: ../../contracts/qmplus/qmplus-auth.js
+        buildPhase: resources
+      - path: ../../contracts/qmplus/qmplus-page.js
         buildPhase: resources
       - path: Resources/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -115,6 +117,8 @@ targets:
       - path: ../../contracts/qmplus/qmplus-sync.js
         buildPhase: resources
       - path: ../../contracts/qmplus/qmplus-auth.js
+        buildPhase: resources
+      - path: ../../contracts/qmplus/qmplus-page.js
         buildPhase: resources
       - path: Resources/PrivacyInfo.xcprivacy
         buildPhase: resources

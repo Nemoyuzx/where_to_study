@@ -72,6 +72,8 @@ export class QMPlusSession {
   private loginForegroundRevision: number = 0;
   private ownedWebOwner: QMPlusLoginOwner | null = null;
   private retireOwnedWeb: (() => void) | null = null;
+  private restartOwnedWeb: (() => void) | null = null;
+  private officialPageLoading: boolean = false;
   private readonly clearIncognitoData: () => void;
   private readonly savedLoginStore: QMPlusSavedLoginStoring;
   private readonly authorizationJournal: QMPlusAuthorizationJournal;
@@ -120,10 +122,11 @@ export class QMPlusSession {
       owner.presentationRevision === this.loginPresentationRevision;
   }
 
-  bindLoginWeb(owner: QMPlusLoginOwner, retire: () => void): void {
+  bindLoginWeb(owner: QMPlusLoginOwner, retire: () => void, restart?: () => void): void {
     if (!this.isLoginOwnerCurrent(owner)) { return; }
     this.ownedWebOwner = owner;
     this.retireOwnedWeb = retire;
+    this.restartOwnedWeb = restart ?? null;
   }
 
   unbindLoginWeb(owner: QMPlusLoginOwner): void {
@@ -131,12 +134,14 @@ export class QMPlusSession {
       owner.presentationRevision !== this.ownedWebOwner.presentationRevision) { return; }
     this.ownedWebOwner = null;
     this.retireOwnedWeb = null;
+    this.restartOwnedWeb = null;
   }
 
   private stopOwnedLoginWeb(): boolean {
     const retire: (() => void) | null = this.retireOwnedWeb;
     this.ownedWebOwner = null;
     this.retireOwnedWeb = null;
+    this.restartOwnedWeb = null;
     if (retire === null) { return true; }
     try { retire(); return true; } catch (e) {
       QMPlusSession.ownedWebClearPendingInProcess = true;
@@ -390,7 +395,14 @@ export class QMPlusSession {
 
   openLogin(url: string = QMPlusURLPolicy.home): void {
     if (!this.isFeatureEnabled || this.loginSettingsBusy || (QMPlusSession.ownedWebClearPendingInProcess && !this.clearOwnedWebSession())) { return; }
-    if (this.loginVisible) { this.presentLogin(); return; }
+    if (this.loginVisible) {
+      if (this.errorCode !== 'QM_ERROR_PAGE' || this.officialPageLoading) { this.presentLogin(); return; }
+      const restart: (() => void) | null = this.restartOwnedWeb;
+      this.closeLogin();
+      this.openLogin(QMPlusURLPolicy.home);
+      if (restart !== null && this.loginVisible) { restart(); }
+      return;
+    }
     this.loginPresentationRevision++;
     this.targetURL = QMPlusURLPolicy.isBusinessPage(url) ? url : QMPlusURLPolicy.home;
     this.explicitDetailRequest = this.targetURL !== QMPlusURLPolicy.home &&
@@ -408,6 +420,18 @@ export class QMPlusSession {
     }
     this.error = '';
     this.errorCode = '';
+  }
+
+  noteOfficialPageLoading(owner: QMPlusLoginOwner, loading: boolean): void {
+    if (this.isLoginOwnerCurrent(owner)) { this.officialPageLoading = loading; }
+  }
+
+  noteOfficialPageError(owner: QMPlusLoginOwner): void {
+    if (!this.isLoginOwnerCurrent(owner)) { return; }
+    this.cancelSync();
+    this.errorCode = 'QM_ERROR_PAGE';
+    this.error = 'QMplus 同步失败。';
+    this.presentLogin();
   }
 
   closeLogin(): void {
@@ -452,7 +476,7 @@ export class QMPlusSession {
       // 部分失败保留上一份明确标注时间的快照，绝不把接口失败当空课程。
       const message: string = e instanceof Error ? e.message : 'QM_SYNC_FAILED';
       // 上游页面的 error_code 仍属未信任数据；只保留明确识别的登录状态。
-      this.errorCode = message === 'QM_LOGIN_REQUIRED' ? message : '';
+      this.errorCode = message === 'QM_LOGIN_REQUIRED' || message === 'QM_ERROR_PAGE' ? message : '';
       this.error = this.errorCode === 'QM_LOGIN_REQUIRED' ? '请先在官方 QMplus 网页完成登录。' :
         'QMplus 同步失败。';
     }

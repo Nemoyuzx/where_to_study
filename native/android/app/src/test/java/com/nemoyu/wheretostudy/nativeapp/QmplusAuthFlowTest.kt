@@ -32,7 +32,7 @@ class QmplusAuthFlowTest {
         assertTrue(checkNotNull(fixture.credentials.lastPassword).password.all { it == '\u0000' })
         signIn.reply("\"PASSWORD_SUBMITTED\"")
         fixture.open(QmplusPolicy.START_URL)
-        fixture.renderer.take().reply("true")
+        fixture.renderer.take().reply("\"authenticated\"")
         assertEquals(1, fixture.authenticated)
         assertEquals(0, fixture.reveals)
         assertTrue(fixture.phases.containsAll(listOf("installing", "username_submitted", "password_submitted", "authenticated")))
@@ -52,20 +52,106 @@ class QmplusAuthFlowTest {
         }
     }
 
+    @Test fun canonicalPageKindsNeverTreatAnErrorUnknownGuestOrBooleanAsAuthenticated() {
+        for (kind in listOf("error", "unknown", "guest")) {
+            val fixture = Fixture()
+            fixture.open(QmplusPolicy.START_URL)
+            val request = fixture.renderer.take()
+            assertTrue(request.script.contains(fixture.pageHelper))
+            request.reply(JSONObject.quote(kind))
+            assertEquals(0, fixture.authenticated)
+            assertEquals(1, fixture.reveals)
+            assertTrue(fixture.renderer.navigations.isEmpty())
+            assertEquals(0, fixture.credentials.passwordReads)
+            if (kind == "error") assertTrue(fixture.phases.contains("QM_ERROR_PAGE"))
+            fixture.flow.close()
+        }
+        assertEquals(QmplusPageKind.UNKNOWN, QmplusPageKind.decode("true"))
+        assertEquals(QmplusPageKind.UNKNOWN, QmplusPageKind.decode("\"authenticated\"" + " ".repeat(65)))
+    }
+
+    @Test fun bareWelcomeRequiresGuestAndSafeDestinationThenFreshAuthorizationBeforeFixedSSO() {
+        for (entry in listOf("https://qmplus.qmul.ac.uk/", "https://qmplus.qmul.ac.uk/?redirect=0")) {
+            val fixture = Fixture(); fixture.open(entry)
+            assertTrue(fixture.renderer.navigations.isEmpty())
+            fixture.renderer.take().reply("\"guest\"")
+            val approval = fixture.renderer.take()
+            assertTrue(approval.script.contains("targets.size === 1"))
+            approval.reply("true")
+            assertEquals(listOf(QmplusLoginPagePolicy.SSO_START_URL), fixture.renderer.navigations)
+            assertEquals(0, fixture.credentials.accountReads)
+            assertEquals(0, fixture.credentials.passwordReads)
+            fixture.flow.close()
+        }
+        for (revoke in listOf(false, true)) {
+            val fixture = Fixture(); fixture.open("https://qmplus.qmul.ac.uk/")
+            fixture.renderer.take().reply("\"guest\"")
+            val approval = fixture.renderer.take()
+            if (revoke) fixture.credentials.allowed = false
+            approval.reply(if (revoke) "true" else "false")
+            assertTrue(fixture.renderer.navigations.isEmpty())
+            assertEquals(1, fixture.reveals)
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun completedCredentialAttemptAndRetiredDocumentsCannotRestartSSOFromGuest() {
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "username")
+        fixture.renderer.take().reply("\"USERNAME_SUBMITTED\"")
+        fixture.open("https://qmplus.qmul.ac.uk/login/index.php")
+        fixture.renderer.take().reply("\"guest\"")
+        fixture.renderer.take().reply("true")
+        assertTrue(fixture.renderer.navigations.isEmpty())
+        assertEquals(1, fixture.reveals)
+        fixture.flow.close()
+        val late = Fixture(); late.open("https://qmplus.qmul.ac.uk/")
+        late.renderer.take().reply("\"guest\"")
+        val oldApproval = late.renderer.take()
+        late.open(QmplusPolicy.START_URL)
+        oldApproval.reply("true")
+        assertTrue(late.renderer.navigations.isEmpty())
+        late.renderer.take().reply("\"authenticated\"")
+        assertEquals(1, late.authenticated)
+        late.flow.close()
+    }
+
+    @Test fun authenticatedWelcomeGetsOnlyOneFixedDashboardGetWithoutSSOOrCredentials() {
+        val fixture = Fixture()
+        fixture.open("https://qmplus.qmul.ac.uk/")
+        fixture.renderer.take().reply("\"authenticated\"")
+        assertEquals(listOf(QmplusPolicy.START_URL), fixture.renderer.navigations)
+        fixture.open(QmplusPolicy.START_URL)
+        fixture.renderer.take().reply("\"authenticated\"")
+        assertEquals(1, fixture.authenticated)
+        fixture.open("https://qmplus.qmul.ac.uk/")
+        fixture.renderer.take().reply("\"authenticated\"")
+        assertEquals(1, fixture.renderer.navigations.size)
+        assertEquals(0, fixture.credentials.accountReads)
+        assertEquals(0, fixture.credentials.passwordReads)
+        fixture.flow.close()
+    }
+
     @Test fun approvedSSOEntryNavigatesFixedURLOnceAndCannotReplayAfterBackOrRevocation() {
         val fixture = Fixture()
         fixture.open("https://qmplus.qmul.ac.uk/login/index.php")
+        fixture.renderer.take().reply("\"guest\"")
+        fixture.renderer.take().reply("true")
         assertEquals(listOf(QmplusLoginPagePolicy.SSO_START_URL), fixture.renderer.navigations)
         fixture.open(QmplusLoginPagePolicy.SSO_START_URL)
+        fixture.renderer.take().reply("\"loading\"")
         fixture.open(MS)
         fixture.renderer.take().reply("\"AUTH_INSTALLED\"")
         fixture.open("https://qmplus.qmul.ac.uk/login/index.php")
+        fixture.renderer.take().reply("\"guest\"")
+        fixture.renderer.take().reply("true")
         assertEquals(1, fixture.renderer.navigations.size)
         assertEquals(1, fixture.reveals)
         fixture.flow.close()
         val revoked = Fixture()
         revoked.credentials.allowed = false
         revoked.open("https://qmplus.qmul.ac.uk/login/index.php")
+        revoked.renderer.take().reply("\"guest\"")
         assertTrue(revoked.renderer.navigations.isEmpty())
         assertEquals(1, revoked.reveals)
         revoked.flow.close()
@@ -76,6 +162,7 @@ class QmplusAuthFlowTest {
             "https://login.microsoftonline.com/common/Consent", "https://qmplus.qmul.ac.uk/login/other.php")
         pages.forEach { page ->
             val fixture = Fixture(); fixture.open(page)
+            if (QmplusLoginPagePolicy.isOfficialQMPage(page)) fixture.renderer.take().reply("\"unknown\"")
             assertEquals(1, fixture.reveals)
             assertEquals(0, fixture.credentials.accountReads)
             assertEquals(0, fixture.credentials.passwordReads)
@@ -293,19 +380,19 @@ class QmplusAuthFlowTest {
             "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=3").forEach { target ->
             val alreadySignedIn = Fixture(quiet = false, target = target)
             alreadySignedIn.open(target)
-            alreadySignedIn.renderer.take().reply("true")
+            alreadySignedIn.renderer.take().reply("\"authenticated\"")
             assertEquals(0, alreadySignedIn.authenticated)
             assertEquals(1, alreadySignedIn.reveals)
             assertTrue(alreadySignedIn.renderer.navigations.isEmpty())
             assertTrue(alreadySignedIn.phases.contains("detail_visible")); alreadySignedIn.flow.close()
             val afterLogin = Fixture(quiet = false, target = target)
             afterLogin.open(QmplusPolicy.START_URL)
-            afterLogin.renderer.take().reply("true")
+            afterLogin.renderer.take().reply("\"authenticated\"")
             assertEquals(listOf(target), afterLogin.renderer.navigations)
             assertEquals(0, afterLogin.authenticated)
             assertEquals(1, afterLogin.reveals)
             afterLogin.open(target)
-            afterLogin.renderer.take().reply("true")
+            afterLogin.renderer.take().reply("\"authenticated\"")
             assertEquals(1, afterLogin.renderer.navigations.size)
             assertEquals(0, afterLogin.authenticated); afterLogin.flow.close()
         }
@@ -314,17 +401,17 @@ class QmplusAuthFlowTest {
     @Test fun interruptedAuthenticatedSyncMayResumeOnceWithoutReadingOrRetryingCredentials() {
         val fixture = Fixture()
         fixture.open(QmplusPolicy.START_URL)
-        fixture.renderer.take().reply("true")
+        fixture.renderer.take().reply("\"authenticated\"")
         assertEquals(1, fixture.authenticated)
         // Activity cancels the in-flight renderer work on background and alone
         // reports that interruption. Suspending does not renew credential claims.
         fixture.flow.suspend()
         fixture.flow.interruptedSync()
         fixture.flow.pageReady(QmplusPolicy.START_URL)
-        fixture.renderer.take().reply("true")
+        fixture.renderer.take().reply("\"authenticated\"")
         assertEquals(2, fixture.authenticated)
         fixture.flow.pageReady(QmplusPolicy.START_URL)
-        fixture.renderer.take().reply("true")
+        fixture.renderer.take().reply("\"authenticated\"")
         assertEquals(2, fixture.authenticated)
         assertEquals(0, fixture.credentials.accountReads)
         assertEquals(0, fixture.credentials.passwordReads)
@@ -337,13 +424,13 @@ class QmplusAuthFlowTest {
         for (failed in listOf(false, true)) {
             val fixture = Fixture()
             fixture.open(QmplusPolicy.START_URL)
-            fixture.renderer.take().reply("true")
+            fixture.renderer.take().reply("\"authenticated\"")
             if (failed) fixture.flow.manualRequired()
             fixture.flow.suspend()
             fixture.flow.pageReady(QmplusPolicy.START_URL)
-            fixture.renderer.take().reply("true")
+            fixture.renderer.take().reply("\"authenticated\"")
             fixture.open(QmplusPolicy.START_URL)
-            fixture.renderer.take().reply("true")
+            fixture.renderer.take().reply("\"authenticated\"")
             assertEquals(1, fixture.authenticated)
             assertEquals(0, fixture.credentials.accountReads)
             assertEquals(0, fixture.credentials.passwordReads)
@@ -366,7 +453,7 @@ class QmplusAuthFlowTest {
         assertEquals(1, fixture.credentials.passwordReads)
         signIn.reply("\"PASSWORD_SUBMITTED\"")
         fixture.open(QmplusPolicy.START_URL)
-        fixture.renderer.take().reply("true")
+        fixture.renderer.take().reply("\"authenticated\"")
         assertEquals(1, fixture.authenticated)
         assertEquals(0, fixture.reveals)
         assertTrue(fixture.phases.contains("account_selected"))
@@ -527,12 +614,14 @@ class QmplusAuthFlowTest {
         val renderer = Renderer(); val credentials = Credentials(); val scheduler = Scheduler()
         val helper = generateSequence(File(checkNotNull(System.getProperty("user.dir")))) { it.parentFile }
             .map { File(it, "contracts/qmplus/qmplus-auth.js") }.first { it.isFile }.readText()
+        val pageHelper = generateSequence(File(checkNotNull(System.getProperty("user.dir")))) { it.parentFile }
+            .map { File(it, "contracts/qmplus/qmplus-page.js") }.first { it.isFile }.readText()
         var reveals = 0; var authenticated = 0
         var featureAllowed = true
         val phases = mutableListOf<String>()
         val flow = QmplusAuthFlow(renderer, credentials, scheduler, optIn, REVISION, helper,
             reveal = { reveals++ }, authenticated = { authenticated++ }, reportPhase = { phases += it },
-            quietConnection = quiet, requestedTarget = target, featureEnabled = { featureAllowed })
+            quietConnection = quiet, requestedTarget = target, featureEnabled = { featureAllowed }, pageScript = pageHelper)
         fun open(value: String) { renderer.currentURL = value; flow.pageStarted(value); flow.pageReady(value) }
         fun replyStage(request: Request, stage: String, match: Boolean = false, reason: String = "READY") {
             request.reply(JSONObject().put("v", 1).put("stage", stage).put("document", request.nonce())

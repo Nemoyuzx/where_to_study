@@ -119,10 +119,25 @@ class QmplusLoginAutomationTest {
         assertFalse(gate.claimSSO(back, true))
         assertTrue(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/login/index.php"))
         assertTrue(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/?redirect=0"))
+        assertTrue(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/"))
+        assertFalse(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/login/index.php?next=other"))
         assertFalse(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/?redirect=0&next=other"))
         assertFalse(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/?redirect=1"))
         assertFalse(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk.evil.invalid/login/index.php"))
         assertFalse(QmplusLoginPagePolicy.isSSOEntry("https://qmplus.qmul.ac.uk/login/other.php"))
         assertEquals("https://qmplus.qmul.ac.uk/auth/saml2/login.php", QmplusLoginPagePolicy.SSO_START_URL)
+    }
+
+    @Test fun guestFallbackCannotStartSSOAfterAnyCredentialAttemptAndDashboardGetIsOnceOnly() {
+        val gate = QmplusLoginAutomationGate()
+        val first = gate.beginDocument()
+        assertTrue(gate.installed(first, "AUTH_INSTALLED"))
+        assertTrue(gate.claimFill(first, "username", true))
+        val back = gate.beginDocument()
+        assertFalse(gate.claimSSO(back, true))
+        assertTrue(gate.claimDashboard(back))
+        assertFalse(gate.claimDashboard(back))
+        assertFalse(gate.claimDashboard(gate.beginDocument()))
+        gate.close()
     }
 }

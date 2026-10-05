@@ -2,6 +2,10 @@
 
 `qmplus-auth.js` 与只读业务同步脚本 `qmplus-sync.js` 完全分开。native 仅在用户已明确保存独立 QMplus/Microsoft 账号密码、开启匹配的本机授权，且当前 ArkWeb/WKWebView/WebView 是官方**主文档**时安装此脚本。安装必须返回固定 `AUTH_INSTALLED`；已有同名全局返回 `AUTH_CONFLICT`，不得向它发送凭据。脚本不发送网络请求、不读 Cookie/Storage，不注册可被网页主动调用的 native 密码桥。
 
+`qmplus-page.js` 是独立的只读主文档分类器，只返回 `loading / guest / authenticated / error / unknown`，不创建消息桥、不读取输入、存储或会话键。只有经过当前 owner／文档的已登录证明，原生同步入口才可用。明确的 Moodle fatal-error 标记或异常对话框优先于菜单；普通课程提醒不是 fatal-error。手机首页可能没有 `notloggedin` class，仅当 `page-site-index`、无菜单和安全的同源 SAML 链接共同存在时才补判访客。共享同步脚本在读取会话键和每个业务请求之前重复验证，HTTP 200 的错误／欢迎详情不能误标为已获取。
+
+重连从固定 Dashboard 发起新的 GET 并重新证明状态，不重用旧 DOM 作为有效会话证明。官方登录入口仅接受精确站点／允许路径和已核验链接，重复页首／页尾链接指向同一安全目的地不构成多个身份。登录回跳 POST 保留原请求与 WebKit 配置；网页自行关闭不代表认证完成，不可因此打断父窗口的原始回跳。不自动重放验证码、密码或 SAML ACS POST，也不自动删除账号或 Cookie 来恢复错误。
+
 已核实的页面白名单仅包括 `https://qmplus.qmul.ac.uk` 的已登录用户菜单，以及 `https://login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/saml2` 或同租户 `/login`。Microsoft 表单须唯一为 `form#i0281`，提交目标仍是同源同租户 `/login`；账号是可见 `input#i0116[name=loginfmt][type=email]`，普通下一步是可见 `input#idSIButton9[type=submit]`。密码阶段账号框已移除，可见 `input#i0118[name=passwd][type=password]`，`#displayName` 仅在网页内部与本机授权账号比对。预加载的 10×13、透明度 0 密码框**不是**可填写密码页。其它域名、路径、frame、未匹配的账号选择、MFA、验证码、风险、条款、Stay signed in 或未知表单均由用户手动处理。
 
 1. native 为每次真实 document 生成非敏感 nonce，并维护 presentation/document epoch、每阶段一次提交的本机 ledger。helper 在本次 document 内还绑定首次检查时的完整地址，地址变化即拒绝，地址本身永不返回。页面调用 `WTSQmAuth.inspect(nonce, accountHint?)`，只接收固定 `{v:1,stage,document,accountMatch,reason}`；不会收到网址、账号、输入值、HTML 或令牌。

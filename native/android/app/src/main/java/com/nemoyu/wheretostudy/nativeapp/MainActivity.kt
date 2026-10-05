@@ -953,6 +953,16 @@ class MainActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != QMPLUS_REQUEST_CODE || isFinishing || isDestroyed) return
         val repository = activitySession.qmplus
+        if (data?.getBooleanExtra(QmplusActivity.EXTRA_RECONNECT_REQUEST, false) == true) {
+            val current = repository.connection
+            val token = data.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN)
+            val generation = data.getLongExtra(QmplusActivity.EXTRA_GENERATION, -1)
+            val featureRevision = data.getLongExtra(QmplusActivity.EXTRA_FEATURE_REVISION, -1)
+            if (repository.isFeatureEnabled && current != null && current.token == token &&
+                current.generation == generation && current.featureRevision == featureRevision &&
+                repository.finishConnection(token)) connectQmplus()
+            return // A recovery request never accepts the old page's result.
+        }
         if (data?.getBooleanExtra(QmplusActivity.EXTRA_OWNER_EXPIRED, false) == true) {
             val expiredToken = data.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN)
             if (repository.isFeatureEnabled &&

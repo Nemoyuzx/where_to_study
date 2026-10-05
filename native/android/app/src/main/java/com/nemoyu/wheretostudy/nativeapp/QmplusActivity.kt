@@ -41,6 +41,7 @@ class QmplusActivity : Activity() {
     private var browser: WebView? = null
     private lateinit var status: TextView
     private lateinit var syncButton: TextView
+    private lateinit var reconnectButton: TextView
     private val handler = Handler(Looper.getMainLooper())
     private var navigationRevision = 0L
     private var syncStartedAt = 0L
@@ -53,6 +54,9 @@ class QmplusActivity : Activity() {
     private val authHandler = Handler(Looper.getMainLooper())
     private var foreground = false
     private var documentFinished = false
+    private var authenticatedDocument = false
+    private val pageScript by lazy { runCatching { assets.open("qmplus-page.js").bufferedReader().use { it.readText() } }
+        .getOrDefault(QmplusLoginPagePolicy.UNKNOWN_PAGE_SCRIPT) }
     private var loginVisible = false
     private var quietConnection = true
     private lateinit var featureStore: QmplusFeatureStore
@@ -122,6 +126,17 @@ class QmplusActivity : Activity() {
                 setOnClickListener { beginSync() }
             }
             addView(syncButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            reconnectButton = TextView(this@QmplusActivity).apply {
+                text = getString(R.string.qmplus_connect); textSize = 15f; gravity = Gravity.CENTER
+                setThemeTextColor { Palette.primaryText }; visibility = View.GONE
+                minimumHeight = dp(UiMetrics.controlHeightDp); setPadding(dp(12), 0, dp(12), 0)
+                setOnClickListener {
+                    if (closing || !this@QmplusActivity.foreground || !documentFinished || !isFeatureCurrent()) return@setOnClickListener
+                    setResult(RESULT_CANCELED, resultIntent().putExtra(EXTRA_RECONNECT_REQUEST, true))
+                    closing = true; authFlow?.close(); invalidateSync(); finish()
+                }
+            }
+            addView(reconnectButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         })
         status = TextView(this).apply {
             text = getString(R.string.qmplus_web_login_notice); textSize = 13f
@@ -151,7 +166,7 @@ class QmplusActivity : Activity() {
                     !QmplusPolicy.allowsHTTPSNavigation(url)
                 override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                     weakOwner.get()?.let { owner ->
-                        owner.invalidateSync(resumeInterrupted = true); owner.documentFinished = false
+                        owner.authenticatedDocument = false; owner.invalidateSync(resumeInterrupted = true); owner.documentFinished = false
                         owner.authFlow?.pageStarted(url.orEmpty())
                     }
                 }
@@ -159,7 +174,8 @@ class QmplusActivity : Activity() {
                     weakOwner.get()?.let { owner ->
                         if (owner.closing) return
                         owner.documentFinished = true
-                        owner.syncButton.isEnabled = QmplusPolicy.isBusinessPage(url.orEmpty()) && !owner.syncing
+                        owner.syncButton.isEnabled = false
+                        owner.reconnectButton.visibility = View.GONE
                         if (!owner.syncing) owner.status.text = owner.getString(
                             if (owner.quietConnection) R.string.qmplus_web_login_notice else R.string.qmplus_saved_login_manual)
                         owner.inspectFinishedDocument(url.orEmpty())
@@ -220,7 +236,13 @@ class QmplusActivity : Activity() {
                 if (diagnosticsEnabled)
                     weakOwner.get()?.status?.contentDescription = "qmplus.auth.$phase"
             }, quietConnection = quietConnection, requestedTarget = startURL(),
-            featureEnabled = { weakOwner.get()?.isFeatureCurrent() == true })
+            featureEnabled = { weakOwner.get()?.isFeatureCurrent() == true }, pageScript = pageScript,
+            pageObserved = { kind -> weakOwner.get()?.let { owner ->
+                owner.authenticatedDocument = kind == QmplusPageKind.AUTHENTICATED && QmplusPolicy.isBusinessPage(owner.browser?.url.orEmpty())
+                owner.syncButton.isEnabled = owner.authenticatedDocument && !owner.syncing && !owner.closing
+                owner.reconnectButton.visibility = if (kind == QmplusPageKind.ERROR) View.VISIBLE else View.GONE
+                if (kind == QmplusPageKind.ERROR) owner.status.setText(R.string.qmplus_web_error)
+            } })
         if (!quietConnection) revealOfficialWindow()
     }
 
@@ -251,7 +273,7 @@ class QmplusActivity : Activity() {
             }
         }
         handler.postDelayed(deadline, 2_000)
-        runCatching { view.evaluateJavascript(QmplusLoginPagePolicy.authenticatedPageScript) { authenticated ->
+        runCatching { view.evaluateJavascript(QmplusLoginPagePolicy.authenticatedPageScript(pageScript)) { authenticated ->
             val owner = weakOwner.get() ?: return@evaluateJavascript
             owner.handler.removeCallbacks(deadline)
             if (owner.closing || owner.syncing || !owner.foreground || !owner.isFeatureCurrent() ||
@@ -331,7 +353,7 @@ class QmplusActivity : Activity() {
         if (resumeInterrupted && syncing && !closing) authFlow?.interruptedSync()
         cancelRendererFlight()
         navigationRevision++; syncing = false; handler.removeCallbacksAndMessages(null)
-        if (::syncButton.isInitialized) syncButton.isEnabled = QmplusPolicy.isBusinessPage(browser?.url.orEmpty()) && !closing
+        if (::syncButton.isInitialized) syncButton.isEnabled = authenticatedDocument && QmplusPolicy.isBusinessPage(browser?.url.orEmpty()) && !closing
     }
 
     private fun clearSession(thenOpen: Boolean) {
@@ -396,6 +418,7 @@ class QmplusActivity : Activity() {
         internal const val EXTRA_AUTH_DIAGNOSTICS = "qmplus_auth_diagnostics"
         internal const val EXTRA_FEATURE_REVISION = "qmplus_feature_revision"
         internal const val EXTRA_OWNER_EXPIRED = "qmplus_owner_expired"
+        internal const val EXTRA_RECONNECT_REQUEST = "qmplus_reconnect_request"
     }
 
     internal fun closeForLogout() { closing = true; authFlow?.close(); invalidateSync(); browser?.stopLoading(); finish() }
@@ -423,6 +446,7 @@ class QmplusActivity : Activity() {
     }
     private fun resultIntent(): Intent = Intent().putExtra(EXTRA_GENERATION, generation)
         .putExtra(EXTRA_CONNECTION_TOKEN, connectionToken)
+        .putExtra(EXTRA_FEATURE_REVISION, intent.getLongExtra(EXTRA_FEATURE_REVISION, -1))
     private fun startURL(): String = intent.getStringExtra(EXTRA_START_URL)?.takeIf(QmplusPolicy::isBusinessPage)
         ?: QmplusPolicy.START_URL
 

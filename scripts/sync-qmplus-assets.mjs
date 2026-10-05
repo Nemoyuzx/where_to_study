@@ -1,6 +1,6 @@
 // Mechanical copies of the reviewed canonical scripts, never generated auth code.
 import {readFileSync, writeFileSync, existsSync} from 'node:fs'
-for (const name of ['qmplus-sync.js','qmplus-auth.js']) {
+for (const name of ['qmplus-sync.js','qmplus-auth.js','qmplus-page.js']) {
   const source=new URL(`../contracts/qmplus/${name}`,import.meta.url)
   const target=new URL(`../native/harmony/entry/src/main/resources/rawfile/${name}`,import.meta.url)
   const bytes=readFileSync(source)

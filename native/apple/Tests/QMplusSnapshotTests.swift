@@ -7,6 +7,61 @@ import XCTest
 
 @MainActor
 final class QMplusSnapshotTests: XCTestCase {
+    func testReconnectionRequestsFreshDashboardWithoutReplayingCallbackOrAttachingSecrets() {
+        let request = QMplusStore.dashboardRequest()
+        XCTAssertEqual(request.url?.absoluteString, "https://qmplus.qmul.ac.uk/my/")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
+        XCTAssertNil(request.httpBody)
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertNil(request.value(forHTTPHeaderField: "Cookie"))
+    }
+    func testLiveErrorReportedBySyncRevokesButtonAndPreservesPriorSnapshot() throws {
+        for code in ["QM_LOGIN_REQUIRED", "QM_ERROR_PAGE"] {
+            let suite = "QMLivePageError.\(UUID().uuidString)"
+            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            defer { defaults.removePersistentDomain(forName: suite) }
+            let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+            let seed = try XCTUnwrap(store.beginSynchronization())
+            store.receive(try payload(), request: seed)
+            let previous = store.snapshot
+            XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+            XCTAssertTrue(store.acceptOfficialPageStatus(.authenticated, context: store.currentConnectionContext))
+            let flight = try XCTUnwrap(store.beginSynchronization())
+            store.receive(Data("{\"ok\":false,\"partial\":false,\"error_code\":\"\(code)\"}".utf8), request: flight)
+            XCTAssertFalse(store.canSynchronize)
+            XCTAssertFalse(store.isSyncing)
+            XCTAssertEqual(store.snapshot, previous)
+            XCTAssertTrue(store.isRetainingPreviousSnapshot)
+        }
+    }
+    func testGuestErrorAndLateProofCannotEnableSynchronizationOrReplacePriorData() throws {
+        let suite = "QMPageProof.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
+        let seed = try XCTUnwrap(store.beginSynchronization())
+        store.receive(try payload(), request: seed)
+        let prior = store.snapshot
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        let context = store.currentConnectionContext
+        XCTAssertTrue(store.acceptOfficialPageStatus(.guest, context: context))
+        XCTAssertFalse(store.canSynchronize)
+        XCTAssertTrue(store.acceptOfficialPageStatus(.authenticated, context: context))
+        XCTAssertTrue(store.canSynchronize)
+        let late = try XCTUnwrap(store.beginSynchronization())
+        XCTAssertTrue(store.acceptOfficialPageStatus(.error, context: context))
+        XCTAssertFalse(store.canSynchronize)
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertEqual(store.navigationFailureCode, "QM_OFFICIAL_EXCEPTION")
+        XCTAssertEqual(store.statusKey, "QMplus 官方网页登录失败，请重试")
+        store.receive(try payload(title: "Late rejected result"), request: late)
+        XCTAssertEqual(store.snapshot, prior)
+        store.endPresentation()
+        XCTAssertTrue(store.beginConnectionOwner(quiet: false))
+        XCTAssertFalse(store.acceptOfficialPageStatus(.authenticated, context: context))
+        XCTAssertFalse(store.canSynchronize)
+    }
     func testVerifiedSynchronizationHidesVisibleSheetWithoutCancellingOwnerOrResult() throws {
         let suite = "QMSyncHide.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

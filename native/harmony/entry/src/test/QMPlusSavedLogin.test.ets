@@ -76,6 +76,70 @@ async function authorization(current: QMPlusSession): Promise<QMPlusLoginAuthori
 
 export default function qmPlusSavedLoginTest() {
   describe('QMPlusSavedLoginTest', () => {
+    it('official_error_reconnect_retires_old_owner_and_uses_dashboard_without_deleting_saved_state', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const current: QMPlusSession = session(store, new FakeAuthorizationJournal());
+      expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
+      expect(await current.setAutoFillEnabled(true)).assertTrue();
+      current.openLogin();
+      const ticket: QMPlusLoginAuthorization = await authorization(current);
+      const saved: QMPlusSavedLogin | null = store.login;
+      let stops: number = 0;
+      let restarts: number = 0;
+      current.bindLoginWeb(ticket.owner, (): void => { stops++; }, (): void => { restarts++; });
+      const generation: number = current.beginSync();
+      current.noteOfficialPageError(ticket.owner);
+      expect(current.errorCode).assertEqual('QM_ERROR_PAGE');
+      expect(current.loginPresented).assertTrue();
+      expect(current.isCurrent(generation)).assertFalse();
+      current.openLogin('https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=1');
+      expect(stops).assertEqual(1);
+      expect(restarts).assertEqual(1);
+      expect(current.targetURL).assertEqual('https://qmplus.qmul.ac.uk/my/');
+      expect(current.isAuthorizationCurrent(ticket)).assertFalse();
+      expect(current.errorCode).assertEqual('');
+      expect(current.explicitDetailRequest).assertFalse();
+      expect(store.login === saved).assertTrue();
+      expect(store.clearCount).assertEqual(0);
+      current.noteOfficialPageError(ticket.owner);
+      expect(current.errorCode).assertEqual('');
+      current.dispose();
+    });
+
+    it('opening_while_the_official_callback_is_loading_does_not_reload_or_retire_owner', 0, () => {
+      const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
+      current.openLogin();
+      const owner = current.loginOwner();
+      let stops: number = 0;
+      let restarts: number = 0;
+      current.bindLoginWeb(owner, (): void => { stops++; }, (): void => { restarts++; });
+      current.noteOfficialPageError(owner);
+      current.noteOfficialPageLoading(owner, true);
+      current.openLogin();
+      expect(stops).assertEqual(0);
+      expect(restarts).assertEqual(0);
+      expect(current.isLoginOwnerCurrent(owner)).assertTrue();
+      expect(current.loginPresented).assertTrue();
+      current.noteOfficialPageLoading(owner, false);
+      current.openLogin();
+      expect(stops).assertEqual(1);
+      expect(restarts).assertEqual(1);
+      current.dispose();
+    });
+
+    it('guest_entry_policy_is_exact_and_sso_is_not_restarted_after_credentials', 0, () => {
+      expect(QMPlusAuthNavigationPolicy.isQMLoginLanding('https://qmplus.qmul.ac.uk/')).assertTrue();
+      expect(QMPlusAuthNavigationPolicy.isQMLoginLanding('https://qmplus.qmul.ac.uk/?redirect=0')).assertTrue();
+      expect(QMPlusAuthNavigationPolicy.isQMLoginLanding('https://qmplus.qmul.ac.uk/login/index.php')).assertTrue();
+      expect(QMPlusAuthNavigationPolicy.isQMLoginLanding('https://qmplus.qmul.ac.uk/login/index.php?next=x')).assertFalse();
+      expect(QMPlusAuthNavigationPolicy.isQMLoginLanding('https://qmplus.qmul.ac.uk/?redirect=0&next=x')).assertFalse();
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger();
+      ledger.begin();
+      expect(ledger.credentialsAttempted()).assertFalse();
+      expect(ledger.claimUsername('document_1')).assertTrue();
+      ledger.beginDocument();
+      expect(ledger.credentialsAttempted()).assertTrue();
+    });
     it('explicit_official_activity_opens_visibly_and_is_not_closed_as_a_background_connection', 0, async () => {
       const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
       expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
