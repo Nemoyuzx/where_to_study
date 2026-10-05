@@ -320,12 +320,18 @@ final class QMplusSnapshotTests: XCTestCase {
         let store = QMplusStore(defaults: defaults)
         let first = try XCTUnwrap(store.beginSynchronization())
         store.receive(try payload(), request: first)
+        let previous = try XCTUnwrap(store.snapshot)
         let second = try XCTUnwrap(store.beginSynchronization())
         store.receive(Data("{\"ok\":false,\"partial\":false,\"error_code\":\"QM_LOGIN_REQUIRED\"}".utf8), request: second)
-        XCTAssertEqual(store.snapshot?.activities.count, 1)
+        XCTAssertEqual(store.snapshot, previous)
         XCTAssertTrue(store.isRetainingPreviousSnapshot)
-        XCTAssertEqual(store.statusKey, "请先在 QMplus 官方网页完成登录")
+        XCTAssertEqual(store.statusKey, "QMplus 官方网页登录失败，请重试")
         XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.isShowingConnection)
+        store.receive(try payload(title: "Retired failure callback"), request: second)
+        XCTAssertEqual(store.snapshot, previous)
+        XCTAssertNil(store.webView, "A synthetic expired-session result must not launch a browser or read a real session")
     }
 
     func testCompletedVisibleAndQuietFlightsRejectLateFailureAndDuplicateResult() throws {
@@ -467,7 +473,7 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertNil(store.webView, "Pure quiet-owner tests must not open WebKit or touch a real session")
     }
 
-    func testQuietFailureShowsSameOwnerForManualRetryWithoutErasingPreviousSnapshot() throws {
+    func testQuietFailureKeepsSameOwnerHiddenUntilExplicitManualRetryWithoutErasingPreviousSnapshot() throws {
         let suite = "QMplusQuietFailureTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -478,18 +484,35 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertTrue(store.beginConnectionOwner(quiet: true))
         let failed = try XCTUnwrap(store.beginSynchronization())
         store.receive(try payload(activityURL: "https://evil.invalid/mod/quiz/view.php?id=2"), request: failed)
-        XCTAssertTrue(store.isShowingConnection)
+        XCTAssertFalse(store.isShowingConnection, "An ordinary sync failure must not automatically reveal a login page")
         XCTAssertTrue(store.hasActiveConnection)
-        XCTAssertFalse(store.beginConnectionOwner(quiet: false), "Failure must reveal the same session, not create another owner")
+        XCTAssertTrue(store.requiresManualContinuation)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.beginConnectionOwner(quiet: false), "Failure must preserve the same session, not create another owner")
         XCTAssertEqual(store.snapshot, previous)
         XCTAssertTrue(store.isRetainingPreviousSnapshot)
         XCTAssertEqual(store.statusKey, "QMplus 同步失败，请检查官方网页登录状态后重试")
+        XCTAssertFalse(store.isSyncing)
+        store.receive(try payload(title: "Retired failure callback"), request: failed)
+        XCTAssertEqual(store.snapshot, previous)
+        store.continueManually(sampleMode: false)
+        XCTAssertTrue(store.isShowingConnection, "Only the explicit manual action may reveal this non-MFA page")
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertFalse(store.requiresManualContinuation)
+        XCTAssertFalse(store.beginConnectionOwner(quiet: true))
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertNil(store.webView, "Showing the existing synthetic owner must not create WebKit")
         store.endPresentation()
+        store.resumeAuthenticationRecognitionForActiveScene()
         XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.isShowingConnection)
+        XCTAssertEqual(store.snapshot, previous)
         XCTAssertNil(store.webView)
     }
 
-    func testInactiveSceneCancelsQuietWorkButPreservesTheLastVerifiedSnapshot() throws {
+    func testInactiveSceneSuspendsQuietWorkButPreservesItsOwnerAndLastVerifiedSnapshot() throws {
         let suite = "QMplusInactiveQuietTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -502,11 +525,22 @@ final class QMplusSnapshotTests: XCTestCase {
         store.stopAutomaticLoginForInactiveScene()
         store.receive(try payload(title: "Late synthetic title"), request: late)
         XCTAssertEqual(store.snapshot, previous)
-        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertTrue(store.hasActiveConnection, "Switching to an authenticator app must preserve the same connection owner")
         XCTAssertFalse(store.isShowingConnection)
         XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
         XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.beginConnectionOwner(quiet: false), "Inactivity must not permit a second owner")
+        XCTAssertTrue(store.isRetainingPreviousSnapshot)
         XCTAssertNil(store.webView)
+        store.endPresentation()
+        store.resumeAuthenticationRecognitionForActiveScene()
+        store.receive(try payload(title: "After explicit close"), request: late)
+        XCTAssertEqual(store.snapshot, previous)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.isShowingConnection)
     }
 
     func testInactiveSceneRetainsVisibleManualOwnerAndRejectsOldSyncWithoutErasingLastGoodData() throws {
@@ -532,7 +566,7 @@ final class QMplusSnapshotTests: XCTestCase {
         store.endPresentation()
     }
 
-    func testForegroundRecognitionResumesVisibleOwnerWithoutRestoringCredentialAutofill() throws {
+    func testForegroundRecognitionResumesVisibleOwnerAndPreservedLedgerWithoutCreatingARequest() throws {
         let suite = "QMplusForegroundRecognitionTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -549,10 +583,12 @@ final class QMplusSnapshotTests: XCTestCase {
         let manualStatus = store.statusKey
 
         store.resumeAuthenticationRecognitionForActiveScene()
-        XCTAssertTrue(store.hasActiveAuthenticationRecognition, "Only read-only session recognition may resume")
-        XCTAssertFalse(store.hasActiveAutofillLedger, "Foregrounding must not authorize another username or password submission")
+        XCTAssertTrue(store.hasActiveAuthenticationRecognition)
+        XCTAssertTrue(store.hasActiveAutofillLedger, "Foregrounding restores access to the same once-only ledger, not fresh stage budgets")
         XCTAssertTrue(store.hasActiveConnection)
         XCTAssertTrue(store.isShowingConnection, "The user's visible MFA presentation must remain open")
+        XCTAssertFalse(store.beginConnectionOwner(quiet: true))
+        XCTAssertFalse(store.isSyncing, "Foregrounding alone must not construct a synthetic sync request")
         XCTAssertEqual(store.statusKey, manualStatus)
         store.receive(try payload(title: "Retired callback"), request: oldRequest)
         XCTAssertNil(store.snapshot)
@@ -560,7 +596,8 @@ final class QMplusSnapshotTests: XCTestCase {
         store.receive(try payload(title: "Verified after foreground"), request: recognized)
         XCTAssertEqual(store.statusKey, "QMplus 同步完成")
         XCTAssertEqual(store.snapshot?.activities.first?.title, "Verified after foreground")
-        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertTrue(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.isSyncing)
         XCTAssertNil(store.webView, "This lifecycle test must not load a webpage or real session")
 
         store.endPresentation()
@@ -571,13 +608,28 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertFalse(store.isShowingConnection)
     }
 
-    func testForegroundRecognitionCannotReviveAQuietOwnerCancelledDuringInactivity() throws {
+    func testForegroundRecognitionResumesThePreservedQuietOwnerButCannotReviveAnExplicitlyClosedOwner() throws {
         let suite = "QMplusQuietForegroundTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = QMplusStore(defaults: defaults, allowsCredentialStorage: false)
         XCTAssertTrue(store.beginConnectionOwner(quiet: true))
+        let late = try XCTUnwrap(store.beginSynchronization())
         store.stopAutomaticLoginForInactiveScene()
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertTrue(store.hasActiveAuthenticationRecognition)
+        XCTAssertTrue(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.beginConnectionOwner(quiet: false), "Foregrounding must reuse the existing owner")
+        XCTAssertFalse(store.isSyncing)
+        XCTAssertFalse(store.isShowingConnection)
+        store.receive(try payload(title: "Retired quiet callback"), request: late)
+        XCTAssertNil(store.snapshot)
+        XCTAssertNil(store.webView)
+        store.endPresentation()
         store.resumeAuthenticationRecognitionForActiveScene()
         XCTAssertFalse(store.hasActiveConnection)
         XCTAssertFalse(store.hasActiveAuthenticationRecognition)
@@ -586,7 +638,7 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertNil(store.webView)
     }
 
-    func testRepeatedConnectRevealsExistingQuietOwnerWithoutStartingAnotherBrowserOrRequest() throws {
+    func testRepeatedConnectKeepsExistingQuietFlightHiddenWithoutStartingAnotherBrowserOrRequest() throws {
         let suite = "QMplusRepeatedConnectTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
@@ -595,15 +647,22 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertEqual(store.statusKey, "正在确认 QMplus 登录状态…")
         let request = try XCTUnwrap(store.beginSynchronization())
         store.connect(sampleMode: false)
-        XCTAssertTrue(store.isShowingConnection)
+        XCTAssertFalse(store.isShowingConnection, "Repeating Connect must not reveal an ordinary in-flight page")
         XCTAssertTrue(store.hasActiveConnection)
+        XCTAssertTrue(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.requiresManualContinuation)
+        XCTAssertFalse(store.beginConnectionOwner(quiet: false))
         XCTAssertTrue(store.isSyncing)
         XCTAssertNil(store.beginSynchronization())
         XCTAssertNil(store.webView)
         store.endPresentation()
+        store.resumeAuthenticationRecognitionForActiveScene()
         store.receive(try payload(), request: request)
         XCTAssertNil(store.snapshot)
         XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertFalse(store.hasActiveAuthenticationRecognition)
+        XCTAssertFalse(store.hasActiveAutofillLedger)
+        XCTAssertFalse(store.isShowingConnection)
     }
 
     func testRestrictedQuizDoesNotBlockOtherNewDeadlines() throws {
