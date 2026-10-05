@@ -120,7 +120,7 @@ test("client versions consistently release 0.4.0 with fresh distribution build c
   assert.match(nativeAndroid, /versionName = "0\.4\.0"/);
   assert.match(nativeAndroid, /versionCode = 62/);
   assert.match(nativeApple, /MARKETING_VERSION: "0\.4\.0"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "109"/);
+  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "110"/);
   assert.match(nativeHarmony, /"versionName": "0\.4\.0"/);
   assert.match(nativeHarmony, /"versionCode": 1002039/);
   assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.4\.0'/);
