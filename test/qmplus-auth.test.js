@@ -20,6 +20,14 @@ class FakeElement {
     this.tagName=tagName
     this.classList={contains:token=>classes.includes(token)}
   }
+  get textContent() { return (this._text??'')+(this.children??[]).map(node=>node.textContent).join('') }
+  set textContent(value) { this._text=value;this.children=[] }
+  get childElementCount() { return this.children.length }
+  appendChild(child) { this.children.push(child);child.parentElement=this;return child }
+  querySelectorAll(selector) {
+    if(selector==='*')return this.children.flatMap(node=>[node,...node.querySelectorAll('*')])
+    throw new Error(`unhandled element selector: ${selector}`)
+  }
   getAttribute(name) { return this.attrs[name] ?? null }
   hasAttribute(name) { return Object.hasOwn(this.attrs,name) }
   closest() { for(let n=this;n;n=n.parentElement)if(n.attrs.role==='button'||['BUTTON','A'].includes(n.tagName))return n;return null }
@@ -84,6 +92,7 @@ function fixture(overrides={}) {
       if(selector==='input[autocomplete="one-time-code"], input[name="otc"]')return state.extra.filter(n=>
         n instanceof FakeInput&&(n.attrs.autocomplete==='one-time-code'||n.name==='otc'))
       if(selector==='h1, h2, [role="heading"]')return state.extra.filter(n=>['H1','H2'].includes(n.tagName)||n.attrs.role==='heading')
+      if(selector==='#idDiv_SAOTCS_Title')return state.extra.filter(n=>n.id==='idDiv_SAOTCS_Title')
       if(selector==='button, select, [role="button"]')return state.extra.filter(n=>['BUTTON','SELECT'].includes(n.tagName)||n.attrs.role==='button')
       if(selector==='#tilesHolder')return state.chooser?[state.chooser]:[]
       if(selector==='.usermenu .userbutton')return state.menu?[state.menu]:[]
@@ -148,6 +157,30 @@ function chooserFixture(options={}) {
   return {...f,holder,row,content}
 }
 
+function mixedChooserFixture() {
+  const f=chooserFixture()
+  f.row.rect.height=112;f.content.rect.height=84;f.content.textContent=''
+  const name=new FakeElement({textContent:'Synthetic Display Name',rect:{left:100,top:60,width:280,height:22}})
+  const emailLine=new FakeElement({rect:{left:100,top:86,width:280,height:22}})
+  const email=new FakeElement({tagName:'SMALL',textContent:account,rect:{left:100,top:86,width:280,height:22}})
+  emailLine.appendChild(email)
+  const statusLine=new FakeElement({rect:{left:100,top:112,width:280,height:20}})
+  const status=new FakeElement({tagName:'SMALL',textContent:'Signed in',rect:{left:100,top:112,width:280,height:20}})
+  statusLine.appendChild(status)
+  for(const node of [name,emailLine,statusLine])f.content.appendChild(node)
+  const menu=new FakeElement({rect:{left:410,top:82,width:24,height:24}})
+  menu.attrs={role:'button','data-test-id':account+'-menu-dots'};menu.parentElement=f.holder
+  const originalHit=f.document.elementFromPoint.bind(f.document)
+  f.document.elementFromPoint=(x,y)=>{
+    if(f.state.occluder)return f.state.occluder
+    if(f.state.stage!=='chooser')return originalHit(x,y)
+    if(f.state.menuAtRowCenter&&x===f.row.rect.left+f.row.rect.width/2&&y===f.row.rect.top+f.row.rect.height/2)return menu
+    return [menu,email,name,status].find(node=>!node.hidden&&node.style.opacity!=='0'&&
+      x>=node.rect.left&&x<=node.rect.left+node.rect.width&&y>=node.rect.top&&y<=node.rect.top+node.rect.height)??originalHit(x,y)
+  }
+  return {...f,name,emailLine,email,statusLine,status,menu}
+}
+
 test('exact official cached-account tile is selected without a password, then independently confirms the same-document password identity',()=>{
   const f=chooserFixture()
   const step=inspect(f);assertFixed(step);assert.equal(step.stage,'account');assert.equal(step.accountMatch,true)
@@ -165,7 +198,7 @@ test('exact official cached-account tile is selected without a password, then in
 test('account tile requires both exact identities and never accepts another account, duplicate, menu, MFA or missing authorization hint',()=>{
   const absent=chooserFixture();const prompt=inspect(absent,'');assertFixed(prompt)
   assert.equal(prompt.stage,'account');assert.equal(prompt.reason,'ACCOUNT_HINT_REQUIRED');assert.equal(prompt.accountMatch,false)
-  for(const variant of ['attribute','display','duplicate','menu','disabled','mfa','alert','unknown-shape']) {
+  for(const variant of ['attribute','display','duplicate','disabled','mfa','alert','unknown-shape']) {
     const f=chooserFixture()
     if(variant==='attribute')f.row.attrs['data-test-id']='other@example.org'
     if(variant==='display')f.content.textContent='student@example.org.evil'
@@ -173,7 +206,6 @@ test('account tile requires both exact identities and never accepts another acco
       const duplicate=new FakeElement({classes:['table'],rect:f.row.rect});duplicate.attrs={...f.row.attrs};
       duplicate.parentElement=f.holder;duplicate.querySelectorAll=f.row.querySelectorAll;f.state.chooserRows.push(duplicate)
     }
-    if(variant==='menu'){const menu=new FakeElement();menu.attrs.role='button';menu.parentElement=f.row;f.state.occluder=menu}
     if(variant==='disabled')f.row.attrs['aria-disabled']='true'
     if(variant==='mfa')f.state.extra.push(new FakeInput({id:'otp',type:'text'}))
     if(variant==='alert')f.state.alert=new FakeElement()
@@ -182,6 +214,104 @@ test('account tile requires both exact identities and never accepts another acco
     assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED',variant)
     assert.equal(f.row.clicked,0);assert.equal(f.pass.value,'')
   }
+})
+
+test('an explicitly pending picker waits without selecting until its async tiles are available',()=>{
+  const f=chooserFixture()
+  f.holder.attrs['data-test-asynctilesloaded']='false'
+  f.state.chooserRows=[]
+  let state=inspect(f);assertFixed(state)
+  assert.equal(state.stage,'loading');assert.equal(state.reason,'LOADING')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED')
+  assert.equal(f.row.clicked,0);assert.equal(f.pass.value,'')
+  f.holder.attrs['data-test-asynctilesloaded']='true';f.state.chooserRows=[f.row]
+  state=inspect(f);assert.equal(state.stage,'account');assert.equal(state.reason,'READY')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'ACCOUNT_SELECTED')
+  assert.equal(f.row.clicked,1)
+})
+
+test('only a unique exact account may wait for layout or hit readiness and a menu never receives a click',()=>{
+  for(const variant of ['small','transparent','content-hidden','menu','occluded']){
+    const f=chooserFixture()
+    if(variant==='small')f.row.rect.width=1
+    if(variant==='transparent')f.row.style.opacity='0'
+    if(variant==='content-hidden')f.content.hidden=true
+    if(variant==='menu'){
+      const menu=new FakeElement();menu.attrs.role='button';menu.parentElement=f.row;f.state.occluder=menu
+    }
+    if(variant==='occluded')f.state.occluder=new FakeElement()
+    const state=inspect(f);assertFixed(state)
+    assert.equal(state.stage,'loading',variant);assert.equal(state.reason,'LOADING',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED',variant)
+    assert.equal(f.row.clicked,0);assert.equal(f.state.occluder?.clicked??0,0);assert.equal(f.pass.value,'')
+    f.row.rect.width=400;f.row.style.opacity='1';f.content.hidden=false;f.state.occluder=null
+    assert.equal(inspect(f).stage,'account',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'ACCOUNT_SELECTED',variant)
+    assert.equal(f.row.clicked,1)
+  }
+  const unknown=chooserFixture();unknown.state.chooserRows=[]
+  assert.equal(inspect(unknown).reason,'ACCOUNT_CHOOSER')
+  const mismatch=chooserFixture();mismatch.row.attrs['data-test-id']='other@example.org';mismatch.row.style.opacity='0'
+  assert.equal(inspect(mismatch).stage,'manual')
+})
+
+test('a mixed display-name, email and status tile uses the email region while a separate menu covers the row center',()=>{
+  const f=mixedChooserFixture()
+  assert.equal(f.content.textContent,'Synthetic Display Name'+account+'Signed in')
+  f.state.menuAtRowCenter=true
+  assert.equal(f.document.elementFromPoint(f.row.rect.left+f.row.rect.width/2,f.row.rect.top+f.row.rect.height/2),f.menu)
+  const state=inspect(f);assertFixed(state)
+  assert.equal(state.stage,'account');assert.equal(state.accountMatch,true)
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'ACCOUNT_SELECTED')
+  assert.equal(f.row.clicked,1);assert.equal(f.email.clicked,0);assert.equal(f.menu.clicked,0)
+  assert.equal(f.pass.value,'')
+})
+
+test('mixed account content still rejects wrong identities, partial addresses, duplicate visible leaves and duplicate rows',()=>{
+  for(const variant of ['attribute','different-email','partial-email','no-email','two-emails','foreign-email','duplicate-row','duplicate-content','disabled']){
+    const f=mixedChooserFixture()
+    if(variant==='attribute')f.row.attrs['data-test-id']='other@example.org'
+    if(variant==='different-email')f.email.textContent='other@example.org'
+    if(variant==='partial-email')f.email.textContent=account+'.evil'
+    if(variant==='no-email')f.email.textContent='Synthetic Student'
+    if(variant==='two-emails'||variant==='foreign-email'){
+      f.content.appendChild(new FakeElement({tagName:'SMALL',textContent:variant==='two-emails'?account:'other@example.org',
+        rect:{left:100,top:136,width:280,height:20}}))
+    }
+    if(variant==='duplicate-row'){
+      const row=new FakeElement({classes:['table'],rect:f.row.rect});row.attrs={...f.row.attrs};row.parentElement=f.holder
+      row.querySelectorAll=f.row.querySelectorAll;f.state.chooserRows.push(row)
+    }
+    if(variant==='duplicate-content')f.row.querySelectorAll=selector=>selector==='div.table-cell.text-left.content'?[f.content,f.content]:[]
+    if(variant==='disabled')f.row.attrs['aria-disabled']='true'
+    assert.equal(inspect(f).stage,'manual',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED',variant)
+    assert.equal(f.row.clicked,0);assert.equal(f.menu.clicked,0);assert.equal(f.pass.value,'')
+  }
+})
+
+test('a matching mixed email waits for visibility or a safe hit and never clicks an overflow menu',()=>{
+  for(const variant of ['hidden-email','zero-email','sibling-menu','nested-menu','foreign-overlay']){
+    const f=mixedChooserFixture()
+    if(variant==='hidden-email')f.email.hidden=true
+    if(variant==='zero-email')f.email.rect.width=0
+    if(variant==='sibling-menu'||variant==='nested-menu'){
+      if(variant==='nested-menu')f.menu.parentElement=f.row
+      f.state.occluder=f.menu
+    }
+    if(variant==='foreign-overlay')f.state.occluder=new FakeElement()
+    assert.equal(inspect(f).stage,'loading',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED',variant)
+    assert.equal(f.row.clicked,0);assert.equal(f.menu.clicked,0)
+    f.email.hidden=false;f.email.rect.width=280;f.state.occluder=null
+    assert.equal(inspect(f).stage,'account',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'account',account}),'ACCOUNT_SELECTED',variant)
+    assert.equal(f.row.clicked,1);assert.equal(f.menu.clicked,0)
+  }
+  const changed=mixedChooserFixture();assert.equal(inspect(changed).stage,'account')
+  changed.email.textContent='other@example.org'
+  assert.equal(changed.auth.fillAndSubmit({document:nonce,stage:'account',account}),'MANUAL_REQUIRED')
+  assert.equal(changed.row.clicked,0)
 })
 
 test('account selection is claimed once and a different document or identity cannot reuse its password proof',()=>{
@@ -631,6 +761,29 @@ test('recognized KMSI continuation requires current identity and submits Yes onc
   }
 })
 
+test('missing KMSI identity evidence never becomes an account mismatch or permission to continue',()=>{
+  for(const variant of ['missing','hidden','occluded','name-only','no-hint']){
+    const f=continuationFixture()
+    if(variant==='missing'){
+      const query=f.document.querySelectorAll.bind(f.document)
+      f.document.querySelectorAll=selector=>selector==='#displayName'?[]:query(selector)
+    }
+    if(variant==='hidden')f.displayName.hidden=true
+    if(variant==='occluded'){
+      const hit=f.document.elementFromPoint.bind(f.document)
+      f.document.elementFromPoint=(x,y)=>y<80?new FakeElement():hit(x,y)
+    }
+    if(variant==='name-only')f.displayName.textContent='Synthetic Display Name'
+    const state=inspect(f,variant==='no-hint'?'':account,nonce,true);assertFixed(state)
+    assert.equal(state.stage,'manual',variant)
+    assert.equal(state.reason,variant==='no-hint'?'ACCOUNT_HINT_REQUIRED':'KNOWN_FORM_ABSENT',variant)
+    if(variant!=='no-hint')assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'continue',account,identityAcknowledged:true}),'MANUAL_REQUIRED')
+    assert.equal(f.submit.clicked,0);assert.equal(f.back.clicked,0)
+  }
+  const other=continuationFixture();other.displayName.textContent='other@example.org'
+  assert.equal(inspect(other,account,nonce,true).reason,'ACCOUNT_MISMATCH')
+})
+
 test('the confirmed MFA method-selection heading requests user interaction without choosing or sending a code',()=>{
   for(const title of ['Verify your identity', '验证您的身份', '驗證您的身分', '驗證您的身份']){
     for(const tagName of ['H1','H2','DIV']){
@@ -652,6 +805,74 @@ test('the confirmed MFA method-selection heading requests user interaction witho
   const consent=new FakeInput({type:'checkbox'})
   heading.parentElement=unknown.form;consent.parentElement=unknown.form;unknown.state.extra.push(heading,consent)
   assert.equal(inspect(unknown).stage,'manual')
+})
+
+test('the official MSAL MFA title ID is read-only evidence when it is unique, visible and has the exact confirmed title',()=>{
+  for(const title of ['Verify your identity','验证您的身份','驗證您的身分']){
+    const f=fixture({readyState:'loading'})
+    const marker=new FakeElement({id:'idDiv_SAOTCS_Title',textContent:title,rect:{left:500,top:100,width:280,height:32}})
+    marker.parentElement=f.form;f.state.extra.push(marker)
+    assert.equal(marker.tagName,'DIV');assert.equal(marker.getAttribute('role'),null)
+    const state=inspect(f);assertFixed(state)
+    assert.equal(state.stage,'challenge');assert.equal(state.reason,'MFA_REQUIRED')
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED')
+    assert.equal(marker.clicked,0);assert.equal(f.user.value,'');assert.equal(f.submit.clicked,0)
+    marker.hidden=true;assert.equal(inspect(f).stage,'loading')
+    marker.hidden=false;marker.textContent='Accept additional permissions'
+    assert.equal(inspect(f).stage,'loading')
+    marker.textContent=title;f.state.extra.push(marker)
+    assert.equal(inspect(f).stage,'loading','A duplicated nonsemantic marker is not sufficient challenge evidence')
+  }
+})
+
+test('the exact device-auth verification path only observes pending or MFA states and never fills any form',()=>{
+  for(const path of ['/common/DeviceAuthTls/reprocess','/COMMON/DEVICEAUTHTLS/REPROCESS']){
+    for(const readyState of ['loading','complete']){
+      const f=fixture({url:new URL('https://login.microsoftonline.com'+path),readyState})
+      const pending=inspect(f,'');assertFixed(pending)
+      assert.equal(pending.stage,'loading');assert.equal(pending.reason,'LOADING')
+      for(const stage of ['account','username','password','continue']){
+        const request={document:nonce,stage,account}
+        if(stage==='password')Object.assign(request,{password:secret,identityAcknowledged:true})
+        if(stage==='continue')request.identityAcknowledged=true
+        assert.equal(f.auth.fillAndSubmit(request),'MANUAL_REQUIRED',stage)
+      }
+      assert.equal(f.user.value,'');assert.equal(f.pass.value,'');assert.equal(f.user.focused,undefined)
+      assert.equal(f.submit.clicked,0)
+      const title=new FakeElement({id:'idDiv_SAOTCS_Title',textContent:'验证您的身份',rect:{left:500,top:100,width:280,height:32}})
+      title.parentElement=f.form;f.state.extra.push(title)
+      const challenge=inspect(f,'');assertFixed(challenge)
+      assert.equal(challenge.stage,'challenge');assert.equal(challenge.reason,'MFA_REQUIRED')
+      assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret,identityAcknowledged:true}),'MANUAL_REQUIRED')
+      assert.equal(f.user.value,'');assert.equal(f.pass.value,'');assert.equal(f.submit.clicked,0);assert.equal(title.clicked,0)
+    }
+    const continuation=continuationFixture({url:'https://login.microsoftonline.com'+path})
+    assert.equal(inspect(continuation,account,nonce,true).stage,'loading')
+    assert.equal(continuation.auth.fillAndSubmit({document:nonce,stage:'continue',account,identityAcknowledged:true}),'MANUAL_REQUIRED')
+    assert.equal(continuation.submit.clicked,0);assert.equal(continuation.back.clicked,0)
+  }
+})
+
+test('verification-only path matching does not allow adjacent paths, other hosts, frames or credential-path case folding',()=>{
+  for(const url of [
+    'https://login.microsoftonline.com/common/DeviceAuthTls/reprocess/',
+    'https://login.microsoftonline.com/common/DeviceAuthTls/other',
+    'https://login.microsoftonline.com/common/%44eviceAuthTls/reprocess',
+    'https://login.microsoftonline.com/other/DeviceAuthTls/reprocess',
+    'https://login.microsoftonline.com.evil.invalid/common/DeviceAuthTls/reprocess',
+    'http://login.microsoftonline.com/common/DeviceAuthTls/reprocess',
+    `https://login.microsoftonline.com/${tenant}/LOGIN`
+  ]){
+    const f=fixture({url:new URL(url)})
+    const title=new FakeElement({id:'idDiv_SAOTCS_Title',textContent:'Verify your identity'})
+    title.parentElement=f.form;f.state.extra.push(title)
+    assert.equal(inspect(f).stage,'manual',url)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED')
+    assert.equal(f.user.value,'');assert.equal(f.submit.clicked,0)
+  }
+  const frame=fixture({url:new URL('https://login.microsoftonline.com/common/DeviceAuthTls/reprocess')})
+  frame.window.top={}
+  assert.equal(inspect(frame).stage,'manual')
 })
 
 test('KMSI never generalizes to unknown consent, permissions, alerts, extra controls or another account',()=>{

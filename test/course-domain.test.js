@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {assignmentsForCourse, isEbuCourse, submissionCounts, courseTimestamp, courseActivityKey, CourseRequestOwner} from '../src/course-domain.js'
+import {assignmentsForCourse, groupTeachingCloudCourses, teachingCloudCourseIDs, isEbuCourse, submissionCounts, courseTimestamp, courseActivityKey, CourseRequestOwner} from '../src/course-domain.js'
 
 test('QM EBU scope is anchored on the full name, not a substring or short-name guess',()=>{
   assert.equal(isEbuCourse({name:'  ebu1234 - Fixture'}),true)
@@ -13,6 +13,48 @@ test('course association uses official ID and rejects ambiguous same-name old ca
   assert.deepEqual(assignmentsForCourse(items,a,[a,b]).map(i=>i.id),[1])
   assert.deepEqual(assignmentsForCourse(items,a,[a]).map(i=>i.id),[1,3])
   assert.equal(assignmentsForCourse(null,a,[a]),null)
+})
+test('current Teaching Cloud presentation groups exact trimmed names and retains all original records and teachers',()=>{
+  const courses=[
+    {id:'class-a',name:'  通信原理 ',teacher_names:[' 张老师 ','李老师'],url:'https://ucloud.bupt.edu.cn/'},
+    {id:'other',name:'通信原理实验',teacher_names:['实验老师']},
+    {id:'class-b',name:'通信原理',teacher_names:['张老师','王老师','李老师','']},
+    {id:'missing-a',name:null,teacher_names:[]},{id:'missing-b',name:' ',teacher_names:[]},
+    {id:'case-a',name:'English Course',teacher_names:[]},{id:'case-b',name:'english Course',teacher_names:[]},
+    {id:'spacing',name:'English  Course',teacher_names:[]}
+  ]
+  const snapshot=structuredClone(courses)
+  const groups=groupTeachingCloudCourses(courses)
+  assert.equal(groups.length,7)
+  assert.equal(groups[0].name,'通信原理')
+  assert.deepEqual(groups[0].teacher_names,['张老师','李老师','王老师'])
+  assert.deepEqual(teachingCloudCourseIDs(groups[0]),['class-a','class-b'])
+  assert.equal(groups[0].source_courses[0],courses[0])
+  assert.equal(groups[0].source_courses[1],courses[2])
+  assert.notEqual(groups[2].presentation_key,groups[3].presentation_key)
+  assert.deepEqual(courses,snapshot)
+  const reversed=groupTeachingCloudCourses([...courses].reverse()).find(course=>course.name==='通信原理')
+  assert.equal(reversed.presentation_key,groups[0].presentation_key)
+})
+test('merged course activities include every teaching class without losing colliding assignment IDs or inferring a foreign ID',()=>{
+  const directory=[{id:'a',name:'Course',teacher_names:['One']},{id:'b',name:' Course ',teacher_names:['Two']},
+    {id:'c',name:'Course lab',teacher_names:[]}]
+  const [course]=groupTeachingCloudCourses(directory)
+  const items=[
+    {id:'same',course_id:'a',title:'Class A task',deadline:'2026-10-09 12:00:00',status:'未提交'},
+    {id:'same',course_id:'b',title:'Class B task',deadline:'2026-10-09 12:00:00',status:'已提交'},
+    {id:'later',course_id:'b',title:'Second class task',status:'not submitted'},
+    {id:'legacy',course_name:' Course ',title:'Older name-only task',status:'Submitted'},
+    {id:'foreign',course_id:'not-in-directory',course_name:'Course',status:'未提交'},
+    {id:'lab',course_id:'c',course_name:'Course lab',status:'未提交'}
+  ]
+  const selected=assignmentsForCourse(items,course,directory)
+  assert.deepEqual(selected,items.slice(0,4))
+  assert.equal(selected[1],items[1])
+  assert.deepEqual(submissionCounts(selected),{pending:2,submitted:2})
+  assert.notEqual(courseActivityKey(selected[0]),courseActivityKey(selected[1]))
+  assert.equal(assignmentsForCourse(null,course,directory),null)
+  assert.deepEqual(assignmentsForCourse([],course,directory),[])
 })
 test('course chips count only explicit Assignment submission states, not Quiz completion',()=>{
   const counts=submissionCounts([{status:' 未提交 '},{status:'NOT SUBMITTED'},{status:'Nothing submitted'},

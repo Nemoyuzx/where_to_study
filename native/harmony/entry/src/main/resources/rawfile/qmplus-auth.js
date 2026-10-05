@@ -7,6 +7,7 @@
   const msPagePaths = new Set([`/${tenant}/saml2`, `/${tenant}/login`]);
   const msFormPath = `/${tenant}/login`;
   const kmsiPath = '/kmsi';
+  const verificationPath = '/common/deviceauthtls/reprocess';
   const reasons = Object.freeze({
     ready: 'READY', authenticated: 'AUTHENTICATED', loading: 'LOADING',
     invalidNonce: 'INVALID_NONCE', staleDocument: 'STALE_DOCUMENT',
@@ -45,6 +46,9 @@
       if (url.origin === msOrigin && msPagePaths.has(url.pathname)) return 'ms';
       // KMSI is a continuation-only surface. Never send credentials here.
       if (url.origin === msOrigin && url.pathname === kmsiPath) return 'kmsi';
+      // Observed Microsoft device-auth handoff hosts MFA selection. Only this
+      // exact path is case-insensitive, and it permits read-only recognition.
+      if (url.origin === msOrigin && url.pathname.toLowerCase() === verificationPath) return 'verification';
       return 'unsupported';
     } catch { return 'untrusted'; }
   }
@@ -126,10 +130,13 @@
     if (Array.from(codeFields).slice(0, 16).some(node => node instanceof HTMLInputElement &&
       ['text', 'tel', 'number'].includes(node.type) && visible(node, 40, 16))) return reasons.mfa;
     const headings = document.querySelectorAll('h1, h2, [role="heading"]');
+    // The official MSAL UI handler identifies this title on its MFA method
+    // picker. It may be a plain DIV without a semantic heading role.
+    const methodTitle = exactlyOne('#idDiv_SAOTCS_Title');
     const approvalTitles = new Set(['approve sign in request', 'approve sign-in request',
       'check your authenticator app', 'open your authenticator app', '批准登录请求', '核准登入要求',
       'verify your identity', '验证您的身份', '驗證您的身分', '驗證您的身份']);
-    return Array.from(headings).slice(0, 32).some(node => {
+    return [...Array.from(headings).slice(0, 32), ...(methodTitle ? [methodTitle] : [])].some(node => {
       const title = node.textContent;
       return typeof title === 'string' && title.length <= 128 && visible(node) &&
         approvalTitles.has(title.trim().toLowerCase());
@@ -196,7 +203,21 @@
       hit.parentElement.parentElement === container;
   }
 
-  function accountChoice(holder, key) {
+  function accountLabel(content, key) {
+    if (accountKey(content.textContent) === key) return content;
+    if (typeof content.querySelectorAll !== 'function') return null;
+    const descendants = content.querySelectorAll('*');
+    if (descendants.length > 128) return null;
+    // A signed-in tile can show a display name and a status around its UPN.
+    // Only a complete email in one leaf is identity evidence, never a substring
+    // of the combined cell text or text from the neighbouring overflow menu.
+    const addresses = Array.from(descendants).filter(node => node.childElementCount === 0 && accountKey(node.textContent));
+    const visibleAddresses = addresses.filter(node => visible(node));
+    const candidates = visibleAddresses.length ? visibleAddresses : addresses;
+    return candidates.length === 1 && accountKey(candidates[0].textContent) === key ? candidates[0] : null;
+  }
+
+  function accountChoice(holder, key, requireReady = true) {
     // Observed official picker: a DIV.table role-button carries the UPN in
     // data-test-id and displays it in its unique content cell. Never select
     // the other-account tile, the overflow menu, or a partial-name match.
@@ -205,17 +226,23 @@
     const matches = Array.from(holder.querySelectorAll('div.table[role="button"][data-test-id]')).filter(node => {
       if (node.tagName !== 'DIV' || node.getAttribute('role') !== 'button' ||
         !node.classList?.contains('table') || node.getAttribute('aria-disabled') === 'true' ||
-        node.hasAttribute?.('disabled') || accountKey(node.getAttribute('data-test-id')) !== key ||
-        !visible(node, 60, 20)) return false;
+        node.hasAttribute?.('disabled') || accountKey(node.getAttribute('data-test-id')) !== key) return false;
       const contents = node.querySelectorAll('div.table-cell.text-left.content');
-      if (contents.length !== 1 || accountKey(contents[0].textContent) !== key ||
-        !visible(contents[0])) return false;
+      if (contents.length !== 1 || !accountLabel(contents[0], key)) return false;
       return true;
     });
     if (matches.length !== 1) return null;
-    const node = matches[0], rect = node.getBoundingClientRect();
-    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-    return visible(node, 60, 20, true) && !!hit && typeof hit.closest === 'function' &&
+    // A structurally exact identity may exist before its first usable layout.
+    // Native can wait finitely, but only the ready path may authorize a click.
+    if (!requireReady) return matches[0];
+    const contents = matches[0].querySelectorAll('div.table-cell.text-left.content');
+    const label = accountLabel(contents[0], key);
+    if (!label || !visible(contents[0]) || !visible(label)) return null;
+    const node = matches[0], rect = node.getBoundingClientRect(), labelRect = label.getBoundingClientRect();
+    const x = labelRect.left + labelRect.width / 2, y = labelRect.top + labelRect.height / 2;
+    if (x < rect.left || x > rect.left + rect.width || y < rect.top || y > rect.top + rect.height) return null;
+    const hit = document.elementFromPoint(x, y);
+    return visible(node, 60, 20) && !!hit && node.contains(hit) && typeof hit.closest === 'function' &&
       hit.closest('button,a,[role="button"]') === node ? node : null;
   }
 
@@ -287,15 +314,21 @@
         result('authenticated', nonce, false, reasons.authenticated) :
         result('manual', nonce, false, reasons.unsupported);
     }
-    if (site !== 'ms' && site !== 'kmsi') return result('manual', nonce, false, reasons.unsupported);
+    if (site !== 'ms' && site !== 'kmsi' && site !== 'verification') return result('manual', nonce, false, reasons.unsupported);
     const challenge = challengeReason();
     if (challenge) return result('challenge', nonce, false, challenge);
+    if (site === 'verification') return result('loading', nonce, false, reasons.loading);
     if (document.readyState === 'loading') return result('loading', nonce, false, reasons.loading);
     const continuationTitle = exactlyOne('#kmsiTitle');
     if (continuationTitle && visible(continuationTitle)) {
       if (!knownContinuation()) return result('manual', nonce, false, reasons.interference);
       const hint = accountKey(accountHint);
-      if (!matchingDisplayName(hint)) return result('manual', nonce, false, reasons.mismatch);
+      if (!hint) return result('manual', nonce, false, reasons.hint);
+      const identity = exactlyOne('#displayName');
+      if (!identity || !visible(identity, 1, 1, true) || !accountKey(identity.textContent)) {
+        return result('manual', nonce, false, reasons.absent);
+      }
+      if (accountKey(identity.textContent) !== hint) return result('manual', nonce, false, reasons.mismatch);
       if (continueAttempted) return result('manual', nonce, true, reasons.attempted);
       return result('continue', nonce, true, hasIdentityAcknowledgement(hint, identityAcknowledged) ?
         reasons.ready : reasons.currentAccount);
@@ -304,10 +337,14 @@
     const chooser = exactlyOne('#tilesHolder');
     if (chooser && visible(chooser)) {
       if (hasInterference(new Set())) return result('manual', nonce, false, reasons.interference);
+      if (chooser.getAttribute('data-test-asynctilesloaded') === 'false') {
+        return result('loading', nonce, false, reasons.loading);
+      }
       const hint = accountKey(accountHint);
       if (!hint) return result('account', nonce, false, reasons.hint);
-      if (!accountChoice(chooser, hint)) return result('manual', nonce, false, reasons.chooser);
+      if (!accountChoice(chooser, hint, false)) return result('manual', nonce, false, reasons.chooser);
       if (accountAttempted || usernameAttempted || passwordAttempted) return result('manual', nonce, true, reasons.attempted);
+      if (!accountChoice(chooser, hint)) return result('loading', nonce, true, reasons.loading);
       return result('account', nonce, true, reasons.ready);
     }
     const verified = formAndSubmit();

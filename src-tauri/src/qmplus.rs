@@ -11,6 +11,7 @@ pub const SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-sync.js");
 const AUTH_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-auth.js");
 const PAGE_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-page.js");
 const MS_ORIGIN: &str = "https://login.microsoftonline.com";
+const MS_VERIFICATION_PATH: &str = "/common/deviceauthtls/reprocess";
 const MAXIMUM_ACCOUNT_SETTLING_POLLS: u8 = 12;
 const MAXIMUM_SUBMISSION_SETTLING_POLLS: u8 = 24;
 const MS_PATHS: [&str; 2] = [
@@ -397,12 +398,34 @@ pub struct AuthReport {
     reason: String,
 }
 fn trusted_auth_page(url: &tauri::Url) -> bool {
+    trusted_microsoft_origin(url)
+        && (MS_PATHS.contains(&url.path()) || url.path() == "/kmsi")
+}
+fn trusted_microsoft_origin(url: &tauri::Url) -> bool {
     url.username().is_empty()
         && url.password().is_none()
         && url.scheme() == "https"
         && (url.port().is_none() || url.port() == Some(443))
         && url.origin().ascii_serialization() == MS_ORIGIN
-        && (MS_PATHS.contains(&url.path()) || url.path() == "/kmsi")
+}
+fn trusted_verification_page(url: &tauri::Url) -> bool {
+    trusted_microsoft_origin(url) && url.path().eq_ignore_ascii_case(MS_VERIFICATION_PATH)
+}
+fn passive_microsoft_transit(url: &tauri::Url) -> bool {
+    let device_transport = url.username().is_empty()
+        && url.password().is_none()
+        && url.scheme() == "https"
+        && (url.port().is_none() || url.port() == Some(443))
+        && url.origin().ascii_serialization() == "https://device.login.microsoftonline.com";
+    (trusted_microsoft_origin(url) || device_transport)
+        && !trusted_auth_page(url) && !trusted_verification_page(url)
+}
+fn verification_report_allowed(report: &AuthReport) -> bool {
+    !report.account_match && match report.stage.as_str() {
+        "challenge" => ["CAPTCHA_REQUIRED", "MFA_REQUIRED"].contains(&report.reason.as_str()),
+        "loading" => report.reason == "LOADING",
+        _ => false,
+    }
 }
 fn official_qm_page(url: &tauri::Url) -> bool {
     url.origin().ascii_serialization() == ORIGIN
@@ -680,7 +703,7 @@ impl QmState {
 fn cancel_autofill(app: &tauri::AppHandle) {
     app.state::<QmState>().stop_autofill();
     if let Some(window) = app.get_webview_window("qmplus") {
-        if window.url().ok().is_some_and(|url| trusted_auth_page(&url)) {
+        if window.url().ok().is_some_and(|url| trusted_auth_page(&url) || trusted_verification_page(&url)) {
             let _ = window.eval(
                 "if(window.top===window)window.dispatchEvent(new Event('wts-qm-auth-stop'));"
                     .to_string(),
@@ -1018,6 +1041,11 @@ pub fn accept_qmplus_auth(
     }
     let url = window.url().map_err(|_| "QMplus 页面不可用。")?;
     let credential_revision = crate::qmplus_login::revision();
+    // This exact common endpoint is a read-only verification surface. It must
+    // never become a route to identity claims, saved secrets or submissions.
+    if trusted_verification_page(&url) && !verification_report_allowed(&report) {
+        return Err("QMplus 登录状态已失效。".into());
+    }
     if report.stage == "submitted" {
         // A real navigation can retire its source document before the IPC ACK
         // arrives. Only a claim made by this live owner and credential revision
@@ -1138,7 +1166,7 @@ pub fn accept_qmplus_auth(
     let document = auth
         .document_for_report(&report.document, &url, credential_revision)
         .ok_or("QMplus 登录状态已失效。")?;
-    if !trusted_auth_page(&url)
+    if (!trusted_auth_page(&url) && !trusted_verification_page(&url))
         || (url.path() == "/kmsi"
             && ["account", "username", "password"].contains(&report.stage.as_str()))
     {
@@ -1299,12 +1327,15 @@ pub fn accept_qmplus_auth(
 }
 fn sync_bridge(revision: u64) -> String {
     format!(
-        r#"(()=>{{if({DOCUMENT_GUARD}){{const kind={PAGE_SCRIPT};if(kind!=='authenticated')return;
-      const button=document.createElement('button');button.textContent='同步课程 / Sync courses';
-      button.style='position:fixed;right:12px;top:12px;z-index:2147483647;padding:12px';
-      button.onclick=async()=>{{button.disabled=true;try{{const current={PAGE_SCRIPT};if(current!=='authenticated')throw new Error('QM_ERROR_PAGE');await window.__TAURI_INTERNALS__.invoke('begin_qmplus_sync',{{revision:{revision}}});const result=await WTSQmSync();await window.__TAURI_INTERNALS__.invoke('accept_qmplus_snapshot',{{payload:JSON.stringify(result),revision:{revision}}});button.textContent='同步完成 / Synced';}}catch(e){{button.textContent='请重新登录或重试 / Retry';}}finally{{button.disabled=false;}}}};document.body.appendChild(button);
-      if(['/my','/my/'].includes(location.pathname))button.click();
-    }}}})()"#
+        r#"(async()=>{{if(!({DOCUMENT_GUARD})||!['/my','/my/'].includes(location.pathname))return;
+      const kind={PAGE_SCRIPT};if(kind!=='authenticated'||Object.prototype.hasOwnProperty.call(globalThis,'WTSQmAutoSyncStarted'))return;
+      Object.defineProperty(globalThis,'WTSQmAutoSyncStarted',{{value:true,writable:false,configurable:false}});
+      try{{const current={PAGE_SCRIPT};if(current!=='authenticated')return;
+        await window.__TAURI_INTERNALS__.invoke('begin_qmplus_sync',{{revision:{revision}}});
+        const result=await WTSQmSync();
+        await window.__TAURI_INTERNALS__.invoke('accept_qmplus_snapshot',{{payload:JSON.stringify(result),revision:{revision}}});
+      }}catch{{/* The native owner retains its previous snapshot and bounded sync watchdog. */}}
+    }})()"#
     )
 }
 #[tauri::command]
@@ -1545,9 +1576,22 @@ fn connect_qmplus_on_main(
                 let _ = window.eval(format!("(()=>{{if(location.href!=={encoded_url})return;const kind={PAGE_SCRIPT};const reason=kind==='guest'&&{APPROVED_SSO}?'guest_sso':kind==='guest'&&{APPROVED_LOGIN_ENTRY}?'guest_login':kind;window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'page',document:{encoded_nonce},accountMatch:false,reason}}}}).catch(()=>{{}});}})()"));
                 return;
             }
-            let credentials = crate::qmplus_login::authorized(handle);
             let active = state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).ledger.accepts(crate::qmplus_login::revision());
-            if !trusted_auth_page(&current) || !active { require_manual(handle,&window,"UNSUPPORTED_PAGE"); return; }
+            let verification_only = trusted_verification_page(&current);
+            if active && passive_microsoft_transit(&current)
+                && state.quiet_timeout_is_current(revision)
+                && state.quiet_deadline.lock().ok().is_some_and(|deadline| deadline.is_some())
+            {
+                // Microsoft may traverse a transport document before its MFA
+                // page. Preserve this owner's ledger only under the existing
+                // deadline: no new nonce, script, vault read, action or renewal.
+                record_connection_status(handle, "checking", "MICROSOFT_TRANSIT");
+                return;
+            }
+            if (!trusted_auth_page(&current) && !verification_only) || !active { require_manual(handle,&window,"UNSUPPORTED_PAGE"); return; }
+            // Verification inspection receives no saved identity or password,
+            // and does not even read the secure record for this document.
+            let credentials = if verification_only { None } else { crate::qmplus_login::authorized(handle) };
             let nonce = match crate::scoped_cache::new_account_scope() {
                 Ok(v) => v.trim_start_matches("opaque-v1:").to_string(),
                 Err(_) => { require_manual(handle,&window,"DOCUMENT_UNAVAILABLE"); return; }
@@ -1556,7 +1600,7 @@ fn connect_qmplus_on_main(
                 nonce: nonce.clone(), url: current.clone(),
             });
             let account = credentials.as_ref().map(|v| v.account.as_str()).unwrap_or("");
-            let identity_acknowledged = state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).ledger.identity_acknowledged(crate::qmplus_login::revision());
+            let identity_acknowledged = !verification_only && state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).ledger.identity_acknowledged(crate::qmplus_login::revision());
             // No password is sent during helper installation or username inspection.
             let script = Zeroizing::new(format!(r#"(()=>{{const install={AUTH_SCRIPT};if(install!=='AUTH_INSTALLED'){{window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'manual',document:{nonce},accountMatch:false,reason:'AUTH_CONFLICT'}}}}).catch(()=>{{}});return;}}
               let attempts=0,settling=0,cancelled=false,timer,accountHint={account};
@@ -1584,6 +1628,28 @@ fn connect_qmplus_on_main(
     let handle = app.clone();
     window.on_window_event(move |event| {
         let state = handle.state::<QmState>();
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            if state.owner_active.load(Ordering::SeqCst)
+                && state.window_revision.load(Ordering::SeqCst) == window_revision
+            {
+                // A user's close dismisses this task, not the browser profile.
+                // Keep session-only engine state alive until the app exits.
+                // Explicit disconnect revokes the owner before requesting a
+                // real close, so profile erasure still crosses its barrier.
+                api.prevent_close();
+                cancel_autofill(&handle);
+                state.retire_connection_preserving_snapshot();
+                if let Some(window) = handle.get_webview_window("qmplus") {
+                    if window.url().ok().is_some_and(|url| official_qm_page(&url)) {
+                        let _ = window.eval("if(typeof WTSQmCancel==='function')WTSQmCancel();");
+                    }
+                    let _ = window.hide();
+                    if let Ok(blank) = tauri::Url::parse("about:blank") { let _ = window.navigate(blank); }
+                }
+                record_connection_status(&handle, "cancelled", "WINDOW_CLOSED");
+                return;
+            }
+        }
         if matches!(event, tauri::WindowEvent::Destroyed)
             && state.window_revision.load(Ordering::SeqCst) == window_revision
         {
@@ -1650,6 +1716,8 @@ mod tests {
     fn parking_retires_connection_callbacks_without_deleting_the_verified_snapshot() {
         let state = QmState::default();
         state.publish(sample(), 0).unwrap();
+        *state.profile_id.lock().unwrap() = Some("existing-browser-profile".into());
+        state.window_revision.store(42, Ordering::SeqCst);
         state.owner_active.store(true, Ordering::SeqCst);
         state.quiet_owner.store(true, Ordering::SeqCst);
         state.auth.lock().unwrap().ledger.begin(7);
@@ -1660,6 +1728,8 @@ mod tests {
         assert!(!state.auth.lock().unwrap().ledger.accepts(7));
         assert_eq!(*state.page_kind.lock().unwrap(), "unknown");
         assert!(state.assessment_snapshot().is_some());
+        assert_eq!(state.profile_id.lock().unwrap().as_deref(), Some("existing-browser-profile"));
+        assert_eq!(state.window_revision.load(Ordering::SeqCst), 42);
         assert!(state.publish(sample(), 0).is_err());
     }
 
@@ -2332,6 +2402,103 @@ mod tests {
             "https://login.microsoftonline.com/common/kmsi",
             "https://login.microsoftonline.com.evil.test/kmsi",
         ] { assert!(!trusted_auth_page(&tauri::Url::parse(url).unwrap())); }
+    }
+    #[test]
+    fn device_auth_verification_is_an_exact_readonly_path_not_a_credential_surface() {
+        for path in ["/common/DeviceAuthTls/reprocess", MS_VERIFICATION_PATH] {
+            let url = tauri::Url::parse(&format!("{MS_ORIGIN}{path}?flow=synthetic")).unwrap();
+            assert!(trusted_verification_page(&url));
+            assert!(!trusted_auth_page(&url));
+            assert!(!official_qm_page(&url));
+            assert!(!valid_source("qmplus", &url));
+        }
+        for url in [
+            "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess/",
+            "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess/next",
+            "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess-other",
+            "https://login.microsoftonline.com/common/DeviceAuthTls/%72eprocess",
+            "https://login.microsoftonline.com/common/login",
+            "https://login.microsoftonline.com/other/DeviceAuthTls/reprocess",
+            "https://login.microsoftonline.com:444/common/DeviceAuthTls/reprocess",
+            "https://user@login.microsoftonline.com/common/DeviceAuthTls/reprocess",
+            "http://login.microsoftonline.com/common/DeviceAuthTls/reprocess",
+            "https://login.microsoftonline.com.evil.test/common/DeviceAuthTls/reprocess",
+            "https://qmplus.qmul.ac.uk/common/DeviceAuthTls/reprocess",
+        ] {
+            assert!(!trusted_verification_page(&tauri::Url::parse(url).unwrap()), "{url}");
+        }
+    }
+    #[test]
+    fn microsoft_transit_classification_never_expands_automation_or_verification_paths() {
+        let transit = tauri::Url::parse("https://login.microsoftonline.com/common/transport-fixture").unwrap();
+        assert!(passive_microsoft_transit(&transit));
+        assert!(!trusted_auth_page(&transit));
+        assert!(!trusted_verification_page(&transit));
+        for url in [
+            "https://login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/login",
+            "https://login.microsoftonline.com/kmsi",
+            "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess",
+            "http://login.microsoftonline.com/common/transport-fixture",
+            "https://login.microsoftonline.com:444/common/transport-fixture",
+            "https://name@login.microsoftonline.com/common/transport-fixture",
+            "https://login.microsoftonline.com.evil.test/common/transport-fixture",
+            "https://qmplus.qmul.ac.uk/common/transport-fixture",
+        ] {
+            assert!(!passive_microsoft_transit(&tauri::Url::parse(url).unwrap()), "{url}");
+        }
+    }
+    #[test]
+    fn device_login_host_is_passive_only_with_exact_https_origin() {
+        for path in ["/", "/common/DeviceAuthTls/reprocess", MS_PATHS[1], "/kmsi"] {
+            let url = tauri::Url::parse(&format!("https://device.login.microsoftonline.com{path}")).unwrap();
+            assert!(passive_microsoft_transit(&url));
+            assert!(!trusted_auth_page(&url));
+            assert!(!trusted_verification_page(&url));
+        }
+        for url in [
+            "http://device.login.microsoftonline.com/",
+            "https://device.login.microsoftonline.com:444/",
+            "https://name@device.login.microsoftonline.com/",
+            "https://device.login.microsoftonline.com.evil.test/",
+            "https://evil-device.login.microsoftonline.com/",
+        ] {
+            assert!(!passive_microsoft_transit(&tauri::Url::parse(url).unwrap()), "{url}");
+        }
+    }
+    #[test]
+    fn verification_metadata_rejects_identity_proofs_submissions_and_business_reports() {
+        let report = |stage: &str, reason: &str, account_match: bool| AuthReport {
+            v: 1, stage: stage.into(), document: "nonceA123".into(), account_match, reason: reason.into(),
+        };
+        assert!(verification_report_allowed(&report("challenge", "MFA_REQUIRED", false)));
+        assert!(verification_report_allowed(&report("challenge", "CAPTCHA_REQUIRED", false)));
+        assert!(verification_report_allowed(&report("loading", "LOADING", false)));
+        for (stage, reason) in [
+            ("account", "READY"), ("username", "READY"), ("password", "READY"), ("continue", "READY"),
+            ("password", "CURRENT_ACCOUNT_VERIFIED"), ("continue", "CURRENT_ACCOUNT_VERIFIED"),
+            ("submitted", "ACCOUNT_SELECTED"), ("submitted", "USERNAME_SUBMITTED"),
+            ("submitted", "PASSWORD_SUBMITTED"), ("submitted", "CONTINUE_SUBMITTED"),
+            ("page", "authenticated"), ("challenge", "READY"), ("loading", "CURRENT_ACCOUNT_VERIFIED"),
+        ] {
+            assert!(!verification_report_allowed(&report(stage, reason, false)), "{stage}: {reason}");
+        }
+        assert!(!verification_report_allowed(&report("challenge", "MFA_REQUIRED", true)));
+    }
+    #[test]
+    fn verification_capability_grants_only_auth_metadata_on_the_exact_verified_url() {
+        let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/qmplus-verification.json")).unwrap();
+        assert_eq!(capability["windows"], serde_json::json!(["qmplus"]));
+        assert_eq!(capability["local"], false);
+        assert_eq!(capability["permissions"], serde_json::json!(["allow-accept-qmplus-auth"]));
+        let urls = capability["remote"]["urls"].as_array().unwrap();
+        assert_eq!(urls.len(), 2);
+        for value in urls {
+            let raw = value.as_str().unwrap();
+            assert!(!raw.contains('*'));
+            let url = tauri::Url::parse(raw).unwrap();
+            assert!(trusted_verification_page(&url));
+            assert!(!trusted_auth_page(&url));
+        }
     }
     #[test]
     fn only_exact_official_guest_entries_and_authenticated_business_pages_are_eligible() {

@@ -100,7 +100,55 @@ export class CourseSubmissionCounts {
   }
 }
 
+export class UCloudCourseGroup {
+  readonly id: string;
+  readonly name: string | null;
+  readonly teacherNames: string[];
+  readonly courseIDs: string[];
+
+  constructor(members: UCloudCourse[]) {
+    this.courseIDs = Array.from(new Set<string>(members.map((course: UCloudCourse): string => course.id))).sort();
+    this.id = this.courseIDs[0];
+    const name: string = members[0].name?.trim() ?? '';
+    this.name = name.length > 0 ? name : null;
+    const teachers: Set<string> = new Set<string>();
+    members.forEach((course: UCloudCourse): void => course.teacherNames.forEach((teacher: string): void => {
+      const teacherName: string = teacher.trim();
+      if (teacherName.length > 0) { teachers.add(teacherName); }
+    }));
+    this.teacherNames = Array.from(teachers);
+  }
+}
+
 export class CourseCloudScope {
+  // The caller supplies only the current-term directory; source DTOs stay unchanged.
+  static groups(courses: UCloudCourse[]): UCloudCourseGroup[] {
+    const groups: Map<string, UCloudCourse[]> = new Map<string, UCloudCourse[]>();
+    courses.forEach((course: UCloudCourse): void => {
+      const name: string = course.name?.trim() ?? '';
+      const key: string = name.length > 0 ? 'name:' + name : 'id:' + course.id;
+      const members: UCloudCourse[] = groups.get(key) ?? [];
+      members.push(course);
+      groups.set(key, members);
+    });
+    return Array.from(groups.values()).map((members: UCloudCourse[]): UCloudCourseGroup => new UCloudCourseGroup(members));
+  }
+
+  static groupAssignmentsFor(course: UCloudCourseGroup, directory: UCloudCourse[],
+    catalog: AssignmentDeadlineItem[], catalogLoaded: boolean): AssignmentDeadlineItem[] {
+    if (!catalogLoaded) { return []; }
+    const name: string = course.name ?? '';
+    const uniqueLegacyName: boolean = name.length > 0 && directory.filter((candidate: UCloudCourse): boolean =>
+      candidate.name?.trim() === name).length === 1;
+    return catalog.filter((item: AssignmentDeadlineItem): boolean =>
+      (item.courseID !== null && course.courseIDs.includes(item.courseID)) ||
+      (item.courseID === null && uniqueLegacyName && item.courseName?.trim() === name));
+  }
+
+  static assignmentKey(item: AssignmentDeadlineItem): string {
+    return (item.courseID === null ? 'missing' : 'id:' + item.courseID.length.toString() + ':' + item.courseID) + ':' + item.id;
+  }
+
   static assignmentsFor(course: UCloudCourse, directory: UCloudCourse[],
     catalog: AssignmentDeadlineItem[], catalogLoaded: boolean): AssignmentDeadlineItem[] {
     if (!catalogLoaded) { return []; }
@@ -114,14 +162,22 @@ export class CourseCloudScope {
   static submissionCounts(items: AssignmentDeadlineItem[]): CourseSubmissionCounts {
     let pending: number = 0;
     let submitted: number = 0;
+    const evidence: Map<string, Set<string>> = new Map<string, Set<string>>();
     for (const item of items) {
       const status: string = item.status?.trim().toLowerCase() ?? '';
+      const key: string = CourseCloudScope.assignmentKey(item);
+      const states: Set<string> = evidence.get(key) ?? new Set<string>();
       if (status === '未提交' || status === 'not submitted' || status === 'nothing submitted' ||
-        status === 'no submissions have been made yet') { pending++; }
+        status === 'no submissions have been made yet') { states.add('pending'); }
       else if (status === '已提交' || status === 'submitted' || status === 'submitted for grading') {
-        submitted++;
+        states.add('submitted');
       }
+      evidence.set(key, states);
     }
+    evidence.forEach((states: Set<string>): void => {
+      if (states.size !== 1) { return; }
+      if (states.has('pending')) { pending++; } else { submitted++; }
+    });
     return new CourseSubmissionCounts(pending, submitted);
   }
 }

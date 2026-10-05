@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "qmplus-verification-inspection",
+  "description": "Read-only challenge metadata from the exact Microsoft DeviceAuthTls verification document; no credential, submission or business-sync commands",
+  "windows": ["qmplus"],
+  "remote": {
+    "urls": [
+      "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess",
+      "https://login.microsoftonline.com/common/deviceauthtls/reprocess"
+    ]
+  },
+  "local": false,
+  "permissions": ["allow-accept-qmplus-auth"]
+}

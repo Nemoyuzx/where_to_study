@@ -988,6 +988,10 @@ class MainActivity : Activity() {
         val token = data?.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN) ?: repository.connection?.token
         if (!repository.finishConnection(token) || data == null) return
         val generation = data.getLongExtra(QmplusActivity.EXTRA_GENERATION, -1)
+        if (data.getBooleanExtra(QmplusActivity.EXTRA_PAGE_NOT_READY, false)) {
+            repository.synchronizationNotReady(generation)
+            return
+        }
         if (data.getBooleanExtra(QmplusActivity.EXTRA_CONNECT_REQUIRED, false)) {
             repository.connectionRequired(generation)
             return

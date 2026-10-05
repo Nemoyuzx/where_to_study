@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "capabilities": ["main", "qmplus-business-snapshot"],
+      "capabilities": ["main", "qmplus-business-snapshot", "qmplus-verification-inspection"],
       "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
     }
   },

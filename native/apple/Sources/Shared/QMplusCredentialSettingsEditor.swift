@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 // Store retains both references across Settings tab/sidebar reconstruction;
 // only this editing subtree subscribes to credential drafts and authorization.
@@ -21,19 +24,24 @@ struct QMplusCredentialSettingsEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 12) {
+            #if os(iOS)
+            HStack(alignment: .center, spacing: 12) {
                 Text(text("保存 QMplus 登录信息并在官方页面自动填写（可选）"))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(0)
-                Toggle("", isOn: optedIn)
-                    .labelsHidden().toggleStyle(.switch).fixedSize()
-                    .frame(width: 52, alignment: .trailing)
-                    .layoutPriority(1)
-                    .accessibilityLabel(text("保存 QMplus 登录信息并在官方页面自动填写（可选）"))
-                    .disabled(sampleMode).accessibilityIdentifier("settings.qmplus.autofill")
+                QMplusNativeCredentialSwitch(isOn: optedIn, enabled: !sampleMode,
+                    tint: theme.primary, label: text("保存 QMplus 登录信息并在官方页面自动填写（可选）"))
+                    .fixedSize().layoutPriority(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            #else
+            Toggle(text("保存 QMplus 登录信息并在官方页面自动填写（可选）"), isOn: optedIn)
+            .toggleStyle(.switch)
+            .disabled(sampleMode)
+            .accessibilityIdentifier("settings.qmplus.autofill")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            #endif
             Text(text("保存后会在本机安全存储中保留独立 QMplus 登录资料。首次默认开启自动填写，也可在保存前关闭。"))
                 .font(.caption).foregroundStyle(theme.secondaryText)
             if authorization.isEnabled {
@@ -82,3 +90,40 @@ struct QMplusCredentialSettingsEditor: View {
         .accessibilityIdentifier("settings.qmplus.credentials")
     }
 }
+
+#if os(iOS)
+// Reserve the UIKit control's fitting size rather than a fixed width. A long
+// SwiftUI label must not compress the native switch's rounded track.
+private struct QMplusNativeCredentialSwitch: UIViewRepresentable {
+    @Binding var isOn: Bool
+    let enabled: Bool
+    let tint: Color
+    let label: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(isOn: $isOn) }
+    func makeUIView(context: Context) -> UISwitch {
+        let control = UISwitch()
+        control.setContentCompressionResistancePriority(.required, for: .horizontal)
+        control.setContentHuggingPriority(.required, for: .horizontal)
+        control.addTarget(context.coordinator, action: #selector(Coordinator.changed(_:)), for: .valueChanged)
+        return control
+    }
+    func updateUIView(_ control: UISwitch, context: Context) {
+        context.coordinator.isOn = $isOn
+        if control.isOn != isOn { control.setOn(isOn, animated: false) }
+        control.isEnabled = enabled
+        control.onTintColor = UIColor(tint)
+        control.accessibilityLabel = label
+        control.accessibilityIdentifier = "settings.qmplus.autofill"
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UISwitch, context: Context) -> CGSize? {
+        let fitted = uiView.sizeThatFits(.zero), intrinsic = uiView.intrinsicContentSize
+        return CGSize(width: max(fitted.width, intrinsic.width), height: max(fitted.height, intrinsic.height))
+    }
+    @MainActor final class Coordinator: NSObject {
+        var isOn: Binding<Bool>
+        init(isOn: Binding<Bool>) { self.isOn = isOn }
+        @objc func changed(_ control: UISwitch) { isOn.wrappedValue = control.isOn }
+    }
+}
+#endif

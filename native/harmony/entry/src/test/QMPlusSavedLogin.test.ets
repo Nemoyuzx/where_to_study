@@ -4,6 +4,7 @@ import { QMPlusSavedLogin, QMPlusSavedLoginStoring } from '../main/ets/store/QMP
 import { QMPlusAuthAttemptLedger, QMPlusAuthNavigationPolicy } from '../main/ets/view/QMPlusConnectionView';
 import { QMPlusAuthorizationJournal, QMPlusLoginAuthorization, QMPlusSession } from '../main/ets/view/QMPlusSession';
 import { QMPlusSnapshot, QMPlusURLPolicy } from '../main/ets/net/QMPlusSnapshot';
+import { QMPlusWebProfileStoring } from '../main/ets/store/QMPlusWebProfileStore';
 
 class Gate {
   private finish: () => void = () => {};
@@ -58,6 +59,26 @@ class FakeAuthorizationJournal implements QMPlusAuthorizationJournal {
   }
 }
 
+class RetainedWebProfile implements QMPlusWebProfileStoring {
+  ready: boolean = true;
+  reserves: number = 0;
+  clears: number = 0;
+  lifecycleFlushes: number = 0;
+  reserveWebMount(): boolean { this.reserves++; return this.ready; }
+  noteWebLoaded(): void {}
+  isReady(): boolean { return this.ready; }
+  requiresRestart(): boolean { return !this.ready; }
+  markClearPending(): boolean { this.ready = false; return true; }
+  hasDurableClearPending(): boolean { return !this.ready; }
+  async prepare(): Promise<boolean> { return this.ready; }
+  async clear(): Promise<boolean> { this.clears++; this.ready = true; return true; }
+  async flush(): Promise<boolean> { return this.ready; }
+  flushOnLifecycle(): boolean {
+    if (!this.ready) { return false; }
+    this.lifecycleFlushes++; return true;
+  }
+}
+
 function session(store: FakeLoginStore, journal: FakeAuthorizationJournal): QMPlusSession {
   let sequence: number = 0;
   // Host-side Hypium on Darwin cannot call device CryptoFramework RNG. Every
@@ -77,6 +98,98 @@ async function authorization(current: QMPlusSession): Promise<QMPlusLoginAuthori
 
 export default function qmPlusSavedLoginTest() {
   describe('QMPlusSavedLoginTest', () => {
+    it('page_not_ready_retains_session_profile_and_last_good_snapshot_for_a_normal_retry', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const profile: RetainedWebProfile = new RetainedWebProfile();
+      const current: QMPlusSession = new QMPlusSession((): void => {}, store,
+        new FakeAuthorizationJournal(), (): string => 'a'.repeat(32), profile);
+      const cached: QMPlusSnapshot = new QMPlusSnapshot('2026-10-05T00:00:00Z', false, [], [], []);
+      current.snapshot = cached;
+      current.openLogin();
+      expect(await current.prepareOfficialWeb(current.loginOwner())).assertTrue();
+      current.completeSync(current.beginSync(), '{"schema_version":1,"source":"qmplus","fetched_at":"2026-10-05T00:00:00Z","ok":false,"partial":false,"courses":[],"activities":[],"warnings":[],"error_code":"QM_PAGE_NOT_READY"}');
+      expect(current.errorCode).assertEqual('QM_PAGE_NOT_READY');
+      expect(current.manualContinuationRequired).assertFalse();
+      expect(current.loginVisible).assertFalse();
+      expect(current.snapshot === cached).assertTrue();
+      expect(profile.clears).assertEqual(0);
+      expect(store.clearCount).assertEqual(0);
+      expect(profile.lifecycleFlushes).assertEqual(1);
+      current.openLogin();
+      expect(await current.prepareOfficialWeb(current.loginOwner())).assertTrue();
+      expect(profile.clears).assertEqual(0);
+      current.closeLogin();
+    });
+    it('background_close_and_reopen_flush_and_reuse_the_same_profile_without_clearing', 0, async () => {
+      const profile: RetainedWebProfile = new RetainedWebProfile();
+      const current: QMPlusSession = new QMPlusSession((): void => {}, new FakeLoginStore(),
+        new FakeAuthorizationJournal(), (): string => 'a'.repeat(32), profile);
+      current.openLogin();
+      const owner = current.loginOwner();
+      expect(await current.prepareOfficialWeb(owner)).assertTrue();
+      current.setLoginForeground(false);
+      expect(profile.lifecycleFlushes).assertEqual(1);
+      current.setLoginForeground(true);
+      current.closeLogin();
+      expect(profile.lifecycleFlushes).assertEqual(2);
+      expect(profile.clears).assertEqual(0);
+      current.openLogin();
+      expect(await current.prepareOfficialWeb(current.loginOwner())).assertTrue();
+      expect(profile.reserves).assertEqual(2);
+      expect(profile.clears).assertEqual(0);
+      expect(current.isLoginOwnerCurrent(owner)).assertFalse();
+      profile.markClearPending();
+      current.persistOfficialWebSession();
+      expect(profile.lifecycleFlushes).assertEqual(2);
+      current.dispose();
+    });
+
+    it('identical_saved_credentials_with_autofill_off_preserve_profile_record_and_authorization_choice', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const saved: QMPlusSavedLogin = new QMPlusSavedLogin('a'.repeat(32), 'student@example.org', 'synthetic-pass');
+      store.login = saved;
+      const journal: FakeAuthorizationJournal = new FakeAuthorizationJournal();
+      const profile: RetainedWebProfile = new RetainedWebProfile();
+      const current: QMPlusSession = new QMPlusSession((): void => {}, store, journal, (): string => 'b'.repeat(32), profile);
+      await current.restoreSavedLoginStatus();
+      expect(current.autoFillEnabled).assertFalse();
+      current.openLogin();
+      const owner = current.loginOwner();
+      expect(await current.prepareOfficialWeb(owner)).assertTrue();
+      expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
+      expect(store.login === saved).assertTrue();
+      expect(store.saveCount).assertEqual(0);
+      expect(profile.clears).assertEqual(0);
+      expect(current.autoFillEnabled).assertFalse();
+      expect(journal.value).assertNull();
+      expect(current.isLoginOwnerCurrent(owner)).assertTrue();
+      current.dispose();
+    });
+    it('passive_microsoft_transport_paths_never_become_injectable', 0, () => {
+      for (const host of ['login.microsoftonline.com', 'device.login.microsoftonline.com']) {
+        const url: string = 'https://' + host + '/common/intermediate';
+        expect(QMPlusAuthNavigationPolicy.isMicrosoftTransitPage(url)).assertTrue();
+        expect(QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url)).assertFalse();
+        expect(QMPlusAuthNavigationPolicy.isVerificationPage(url)).assertFalse();
+        for (const other of [url.replace('https:', 'http:'), url.replace('.com/', '.com.evil.invalid/'),
+          url.replace('https://', 'https://user@'), url.replace('https://', 'https://evil.'),
+          url.replace('.com/', '.com:444/')]) {
+          expect(QMPlusAuthNavigationPolicy.isMicrosoftTransitPage(other)).assertFalse();
+        }
+      }
+    });
+    it('device_auth_reprocess_is_readonly_verification_not_a_credential_or_kmsi_path', 0, () => {
+      const url: string = 'https://login.microsoftonline.com/common/DeviceAuthTls/reprocess';
+      expect(QMPlusAuthNavigationPolicy.isVerificationPage(url)).assertTrue();
+      expect(QMPlusAuthNavigationPolicy.isVerificationPage(url.toLowerCase())).assertTrue();
+      expect(QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url)).assertFalse();
+      for (const other of [url + '/', url + '/extra', url + '#fragment', url.replace('https:', 'http:'),
+        url.replace('login.microsoftonline.com', 'user@login.microsoftonline.com'),
+        url.replace('login.microsoftonline.com', 'login.microsoftonline.com.evil.invalid'),
+        url.replace('DeviceAuthTls', '%44eviceAuthTls'), url.replace('reprocess', 'login')]) {
+        expect(QMPlusAuthNavigationPolicy.isVerificationPage(other)).assertFalse();
+      }
+    });
     it('a_foreground_warm_owner_reveals_only_verification_then_returns_to_quiet_work', 0, () => {
       const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
       current.openLogin(QMPlusURLPolicy.home, true);
@@ -159,7 +272,7 @@ export default function qmPlusSavedLoginTest() {
       expect(QMPlusAuthNavigationPolicy.isQMGuestEntry('https://qmplus.qmul.ac.uk/my/?wants=other')).assertFalse();
     });
 
-    it('official_error_reconnect_retires_old_owner_and_uses_dashboard_without_deleting_saved_state', 0, async () => {
+    it('official_error_waits_for_manual_continue_before_explicit_restart_without_deleting_saved_state', 0, async () => {
       const store: FakeLoginStore = new FakeLoginStore();
       const current: QMPlusSession = session(store, new FakeAuthorizationJournal());
       expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
@@ -173,10 +286,16 @@ export default function qmPlusSavedLoginTest() {
       const generation: number = current.beginSync();
       current.noteOfficialPageError(ticket.owner);
       expect(current.errorCode).assertEqual('QM_ERROR_PAGE');
-      expect(current.loginPresented).assertTrue();
+      expect(current.loginPresented).assertFalse();
+      expect(current.manualContinuationRequired).assertTrue();
       expect(current.isCurrent(generation)).assertFalse();
       current.openLogin('https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=1');
       expect(stops).assertEqual(1);
+      expect(restarts).assertEqual(0);
+      expect(current.loginPresented).assertTrue();
+      expect(current.isLoginOwnerCurrent(ticket.owner)).assertTrue();
+      current.openLogin();
+      expect(stops).assertEqual(2);
       expect(restarts).assertEqual(1);
       expect(current.targetURL).assertEqual('https://qmplus.qmul.ac.uk/my/');
       expect(current.isAuthorizationCurrent(ticket)).assertFalse();
@@ -199,13 +318,13 @@ export default function qmPlusSavedLoginTest() {
       current.noteOfficialPageError(owner);
       current.noteOfficialPageLoading(owner, true);
       current.openLogin();
-      expect(stops).assertEqual(0);
+      expect(stops).assertEqual(1); // Error already suspended automation before this loading callback.
       expect(restarts).assertEqual(0);
       expect(current.isLoginOwnerCurrent(owner)).assertTrue();
       expect(current.loginPresented).assertTrue();
       current.noteOfficialPageLoading(owner, false);
       current.openLogin();
-      expect(stops).assertEqual(1);
+      expect(stops).assertEqual(2);
       expect(restarts).assertEqual(1);
       current.dispose();
     });
@@ -237,7 +356,7 @@ export default function qmPlusSavedLoginTest() {
       expect(current.targetURL).assertEqual('https://qmplus.qmul.ac.uk/mod/assign/view.php?id=1');
       current.dispose();
     });
-    it('authorized_quiet_owner_reveals_same_connection_on_second_connect_and_cancels_on_background', 0, async () => {
+    it('authorized_quiet_owner_stays_quiet_until_verified_challenge_and_cancels_on_background', 0, async () => {
       const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
       expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
       expect(await current.setAutoFillEnabled(true)).assertTrue();
@@ -246,9 +365,12 @@ export default function qmPlusSavedLoginTest() {
       expect(current.loginPresented).assertFalse();
       current.cancelQuietLoginOnBackground();
       expect(current.loginVisible).assertFalse();
+      current.setLoginForeground(true);
       current.openLogin();
       const generation: number = current.beginSync();
       current.openLogin();
+      expect(current.loginPresented).assertFalse();
+      current.presentVerification();
       expect(current.loginPresented).assertTrue();
       expect(current.isCurrent(generation)).assertTrue();
       current.cancelQuietLoginOnBackground();
@@ -428,15 +550,18 @@ export default function qmPlusSavedLoginTest() {
       current.dispose();
     });
 
-    it('sync_failure_reveals_same_owner_and_retains_a_manual_retry', 0, async () => {
+    it('sync_failure_defers_the_same_owner_until_explicit_manual_continue', 0, async () => {
       const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
       expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
       expect(await current.setAutoFillEnabled(true)).assertTrue();
       current.openLogin();
       current.failSync(current.beginSync(), 'QMplus 同步已超时，请稍后重试。');
       expect(current.loginVisible).assertTrue();
-      expect(current.loginPresented).assertTrue();
+      expect(current.loginPresented).assertFalse();
+      expect(current.manualContinuationRequired).assertTrue();
       expect(current.error.length > 0).assertTrue();
+      current.openLogin();
+      expect(current.loginPresented).assertTrue();
       current.dispose();
     });
     it('only_exact_official_main_document_may_start_saml_once_per_presentation', 0, () => {
@@ -852,8 +977,12 @@ export default function qmPlusSavedLoginTest() {
       expect(current.isAuthorizationCurrent(ticket)).assertTrue();
       expect(retireCalls).assertEqual(0);
       current.failSync(generation, 'QMplus 同步失败。');
+      expect(current.loginPresented).assertFalse();
+      expect(current.manualContinuationRequired).assertTrue();
+      expect(retireCalls).assertEqual(1);
+      current.openLogin();
       expect(current.loginPresented).assertTrue();
-      expect(retireCalls).assertEqual(0);
+      expect(retireCalls).assertEqual(1);
       current.dispose();
     });
 

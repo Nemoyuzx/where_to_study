@@ -17,6 +17,28 @@ function response(data, extras={}, raw=false) {
   let delivered=false
   return {ok:true,headers:{get:()=>null},body:{getReader:()=>({read:async()=>{if(delivered)return {done:true};delivered=true;return {value:bytes,done:false}},releaseLock(){},cancel:async()=>{}}),cancel:async()=>{}},...extras}
 }
+function configurationClock(onWait=()=>{}) {
+  let now=Date.parse('2026-10-03T10:00:00Z'),waits=0,nextTimer=0
+  const timers=new Set()
+  class ClockDate extends Date {
+    constructor(...args){super(...(args.length?args:[now]))}
+    static now(){return now}
+  }
+  return {
+    Date:ClockDate,
+    setTimeout(callback,delay){
+      const timer=++nextTimer;timers.add(timer)
+      if(delay<=250)Promise.resolve().then(()=>{
+        if(!timers.delete(timer))return
+        now+=delay;onWait(++waits);callback()
+      })
+      return timer
+    },
+    clearTimeout(timer){timers.delete(timer)},
+    advance(milliseconds){now+=milliseconds},
+    get waits(){return waits},get pending(){return timers.size}
+  }
+}
 test('QM dates use London daylight saving, reject gaps and ambiguous folds',()=>{
   const p=page().WTSQmProtocol
   assert.equal(p.londonDate('Friday, 5 December 2025, 10:00 AM'),'2025-12-05T10:00:00.000Z')
@@ -67,9 +89,78 @@ test('QM URL projections strip session query strings and reject other hosts',()=
 test('QM foreign/anonymous origin cannot synchronize or expose session material',async()=>{
   const foreign=await page({location:{origin:'https://login.microsoftonline.com'}}).WTSQmSync()
   assert.equal(foreign.error_code,'QM_ORIGIN_REQUIRED')
-  const anonymous=await page({M:{cfg:{}}}).WTSQmSync()
+  const anonymousPage=page({M:{cfg:{}}})
+  anonymousPage.document.body.id='page-login-index'
+  const anonymous=await anonymousPage.WTSQmSync()
   assert.equal(anonymous.error_code,'QM_LOGIN_REQUIRED')
   assert.doesNotMatch(JSON.stringify(anonymous),/sesskey|cookie|synthetic-session/)
+})
+
+test('QM authenticated pages wait read-only for late configuration while retaining one bounded flight',async()=>{
+  let context,requests=0
+  const clock=configurationClock(attempt=>{
+    assert.equal(requests,0,'No RPC is allowed before the configuration is ready')
+    if(attempt===3)context.M={cfg:{sesskey:'synthetic-ready-only'}}
+  })
+  context=page({...clock,M:undefined,fetch:async(url)=>{
+    requests++;assert.equal(new URL(url).searchParams.get('sesskey'),'synthetic-ready-only')
+    return response({courses:[],nextoffset:0})
+  }})
+  const pending=context.WTSQmSync()
+  assert.equal((await context.WTSQmSync()).error_code,'QM_SYNC_BUSY')
+  const snapshot=await pending
+  assert.equal(snapshot.ok,true);assert.equal(requests,1);assert.equal(clock.waits,3)
+  assert.equal(context.__wtsQmFlight,undefined);assert.equal(context.WTSQmCancel,undefined)
+  assert.equal(clock.pending,0)
+  assert.doesNotMatch(JSON.stringify(snapshot),/sesskey|synthetic-ready|cookie|password/)
+})
+
+test('QM missing or invalid configuration is page-not-ready, never expired login or an empty-key RPC',async()=>{
+  for(const value of [undefined,null,'','  ',1]){
+    let requests=0
+    const clock=configurationClock()
+    const context=page({...clock,M:{cfg:{sesskey:value}},fetch:async()=>{requests++;throw new Error('unexpected request')}})
+    const snapshot=await context.WTSQmSync()
+    assert.equal(snapshot.ok,false);assert.equal(snapshot.error_code,'QM_PAGE_NOT_READY')
+    assert.equal(requests,0);assert.equal(clock.waits,20);assert.equal(clock.pending,0)
+    assert.equal(context.__wtsQmFlight,undefined);assert.equal(context.WTSQmCancel,undefined)
+    assert.doesNotMatch(JSON.stringify(snapshot),/sesskey|cookie|password/)
+  }
+})
+
+test('QM configuration wait respects cancellation, page classification, origin and the original total deadline',async()=>{
+  for(const mode of ['cancel','guest','error','unknown','origin','deadline']){
+    let context,requests=0
+    const clock=configurationClock(()=>{
+      if(mode==='cancel')context.WTSQmCancel()
+      if(mode==='guest')context.document.body.id='page-login-index'
+      if(mode==='error')context.document.body.id='page-error'
+      if(mode==='unknown')context.document.querySelectorAll=()=>[]
+      if(mode==='origin')context.location.origin='https://foreign.invalid'
+      if(mode==='deadline')clock.advance(119750)
+    })
+    context=page({...clock,M:{cfg:{}},fetch:async()=>{requests++;throw new Error('unexpected request')}})
+    const snapshot=await context.WTSQmSync()
+    const expected={cancel:'QM_CANCELLED_OR_TIMEOUT',guest:'QM_LOGIN_REQUIRED',error:'QM_ERROR_PAGE',
+      unknown:'QM_PAGE_NOT_READY',origin:'QM_ORIGIN_REQUIRED',deadline:'QM_CANCELLED_OR_TIMEOUT'}[mode]
+    assert.equal(snapshot.error_code,expected,mode)
+    assert.equal(requests,0);assert.equal(clock.waits,1);assert.equal(clock.pending,0)
+    assert.equal(context.__wtsQmFlight,undefined);assert.equal(context.WTSQmCancel,undefined)
+  }
+})
+
+test('QM lost configuration before a later RPC shares the finite wait budget and never publishes false success',async()=>{
+  let context,requests=0
+  const clock=configurationClock(attempt=>{if(attempt===3)context.M.cfg.sesskey='synthetic-ready-only'})
+  context=page({...clock,M:{cfg:{}},fetch:async(url)=>{
+    requests++;assert.equal(new URL(url).searchParams.get('sesskey'),'synthetic-ready-only')
+    context.M.cfg.sesskey=''
+    return response({courses:[{id:12,fullname:'EBU1000 - Fixture - 2026/27'}],nextoffset:0})
+  }})
+  const snapshot=await context.WTSQmSync()
+  assert.equal(snapshot.ok,false);assert.equal(snapshot.error_code,'QM_PAGE_NOT_READY')
+  assert.equal(requests,1);assert.equal(clock.waits,20)
+  assert.equal(context.__wtsQmFlight,undefined);assert.equal(clock.pending,0)
 })
 test('QM catalogue AJAX remains read-only, bounded and discovers no private identity fields',async()=>{
   const requests=[]

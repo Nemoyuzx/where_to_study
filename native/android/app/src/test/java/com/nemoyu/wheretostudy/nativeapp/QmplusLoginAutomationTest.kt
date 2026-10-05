@@ -4,6 +4,32 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QmplusLoginAutomationTest {
+    @Test fun passiveMicrosoftTransitNeverExpandsTheInjectionWhitelist() {
+        for (host in listOf("login.microsoftonline.com", "device.login.microsoftonline.com")) {
+            val url = "https://$host/common/intermediate"
+            assertTrue(QmplusLoginPagePolicy.isMicrosoftTransitPage(url))
+            assertFalse(QmplusLoginPagePolicy.isMicrosoftPage(url))
+            assertFalse(QmplusLoginPagePolicy.canInspectAuthenticationPage(url))
+            assertFalse(QmplusLoginPagePolicy.isVerificationPage(url))
+            for (other in listOf(url.replace("https:", "http:"), url.replace(".com/", ".com.evil.invalid/"),
+                url.replace("https://", "https://user@"), url.replace("https://", "https://evil."),
+                url.replace(".com/", ".com:444/"))) {
+                assertFalse(QmplusLoginPagePolicy.isMicrosoftTransitPage(other))
+            }
+        }
+    }
+    @Test fun deviceAuthReprocessIsInspectionOnlyAndNeverACredentialPage() {
+        val value = "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess"
+        assertTrue(QmplusLoginPagePolicy.isVerificationPage(value))
+        assertTrue(QmplusLoginPagePolicy.canInspectAuthenticationPage(value))
+        assertFalse(QmplusLoginPagePolicy.isMicrosoftPage(value))
+        for (other in listOf("$value/", "$value/extra", "$value#fragment", value.replace("https:", "http:"),
+            value.replace("login.microsoftonline.com", "user@login.microsoftonline.com"),
+            value.replace("login.microsoftonline.com", "login.microsoftonline.com.evil.invalid"),
+            value.replace("DeviceAuthTls", "%44eviceAuthTls"), value.replace("reprocess", "login"))) {
+            assertFalse(QmplusLoginPagePolicy.isVerificationPage(other))
+        }
+    }
     @Test fun confirmedIdentitySurvivesNavigationButPasswordAndContinueBudgetsDoNotReset() {
         val gate = QmplusLoginAutomationGate()
         val first = gate.beginDocument()

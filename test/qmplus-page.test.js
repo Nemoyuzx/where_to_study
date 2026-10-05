@@ -127,7 +127,8 @@ test('guest, error, loading and unknown pages issue no RPC and do not read a sta
     vm.runInContext(syncScript,context)
     const snapshot=await context.WTSQmSync()
     assert.equal(snapshot.ok,false)
-    assert.equal(snapshot.error_code,context.WTSQmProtocol.hasMoodleErrorPage(doc)?'QM_ERROR_PAGE':'QM_LOGIN_REQUIRED')
+    const kind=context.WTSQmProtocol.classifyQMplusPage(doc)
+    assert.equal(snapshot.error_code,kind==='error'?'QM_ERROR_PAGE':kind==='guest'?'QM_LOGIN_REQUIRED':'QM_PAGE_NOT_READY')
     assert.equal(requests,0);assert.equal(privateReads,0)
     assert.equal(context.__wtsQmFlight,undefined)
   }

@@ -116,12 +116,65 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertEqual(fixture.evaluator.submissions.count, 1)
         XCTAssertFalse(fixture.ledger.passwordAttempted)
         XCTAssertLessThanOrEqual(fixture.evaluator.inspections, 10)
+        XCTAssertEqual(fixture.identityMismatchCount, 0)
         let unmatched = Fixture()
-        unmatched.evaluator.states = [state(.manual, reason: .chooser)]
+        let expired = expectation(description: "An initially unknown picker reaches its bounded read-only retry limit")
+        unmatched.onManual = { expired.fulfill() }
+        unmatched.evaluator.fallbackState = state(.manual, reason: .chooser)
         unmatched.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(unmatched.manualCount, 0, "The first picker inspection must not stop before its tiles can mount")
+        XCTAssertFalse(unmatched.ledger.hasIdentityAcknowledgement(for: "nonceA123"))
+        await fulfillment(of: [expired], timeout: 2)
         XCTAssertTrue(unmatched.evaluator.submissions.isEmpty)
-        XCTAssertTrue(unmatched.waits.isEmpty)
+        XCTAssertEqual(unmatched.waits.count, 8)
+        XCTAssertEqual(unmatched.evaluator.inspections, 9)
+        XCTAssertTrue(unmatched.evaluator.identityAcknowledgements.allSatisfy { !$0 })
+        XCTAssertFalse(unmatched.ledger.accountAttempted)
+        XCTAssertFalse(unmatched.ledger.usernameAttempted)
+        XCTAssertFalse(unmatched.ledger.passwordAttempted)
         XCTAssertEqual(unmatched.manualCount, 1)
+        XCTAssertEqual(unmatched.identityMismatchCount, 0, "An unknown picker is not proof that the cached business identity is wrong")
+    }
+
+    func testInitialPickerRechecksUntilReadyWithoutCreatingIdentityBeforeTheRealAccountACK() async {
+        let fixture = Fixture()
+        let ready = expectation(description: "A delayed exact account tile becomes ready")
+        fixture.evaluator.holdsSubmission = true
+        fixture.evaluator.states = [state(.manual, reason: .chooser), state(.manual, reason: .chooser), state(.account, match: true)]
+        fixture.evaluator.onInspection = {
+            XCTAssertNil(fixture.ledger.accountSelectedDocument)
+            XCTAssertNil(fixture.ledger.usernameSubmittedDocument)
+            XCTAssertFalse(fixture.ledger.hasIdentityAcknowledgement(for: "nonceA123"))
+            if fixture.evaluator.inspections == 3 { ready.fulfill() }
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [ready], timeout: 2)
+        XCTAssertEqual(fixture.waits, [.milliseconds(250), .milliseconds(500)])
+        XCTAssertEqual(fixture.evaluator.identityAcknowledgements, [false, false, false])
+        XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+        guard case .account = fixture.evaluator.submissions[0] else { return XCTFail("Only the matched account tile may be selected") }
+        XCTAssertTrue(fixture.ledger.accountAttempted)
+        XCTAssertNil(fixture.ledger.accountSelectedDocument, "A pending click result is not an identity acknowledgement")
+        XCTAssertEqual(fixture.identityMismatchCount, 0)
+        XCTAssertEqual(fixture.manualCount, 0)
+        fixture.evaluator.finishSubmission(.accountSelected)
+        XCTAssertEqual(fixture.ledger.accountSelectedDocument, "nonceA123")
+        XCTAssertTrue(fixture.ledger.hasIdentityAcknowledgement(for: "nonceB456"))
+        fixture.pipeline.cancel()
+    }
+
+    func testPickerWaitingOnlySignalsBusinessIdentityMismatchWhenThePageExplicitlyConfirmsIt() async {
+        let fixture = Fixture()
+        let completed = expectation(description: "An explicit account mismatch terminates picker observation")
+        fixture.onManual = { completed.fulfill() }
+        fixture.evaluator.states = [state(.manual, reason: .chooser), state(.manual, reason: .mismatch)]
+        fixture.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(fixture.identityMismatchCount, 0)
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertEqual(fixture.identityMismatchCount, 1)
+        XCTAssertEqual(fixture.manualCount, 1)
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+        XCTAssertEqual(fixture.waits, [.milliseconds(250)])
     }
 
     func testAccountSelectionACKFromTheSameOwnerAuthorizesTheNextMatchedPasswordDocument() {
@@ -423,6 +476,70 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertEqual(fixture.waits, [.milliseconds(250), .seconds(1), .seconds(1)])
     }
 
+    func testVerificationOnlyPipelineObservesMFAWithAnEmptyHintWithoutReadingSavedCredentials() async {
+        let fixture = Fixture(verificationOnly: true)
+        let completed = expectation(description: "Read-only verification observation reaches an unrecognized successor")
+        fixture.onManual = { completed.fulfill() }
+        fixture.evaluator.states = [state(.loading, reason: .loading), state(.challenge, reason: .mfaRequired),
+                                    state(.challenge, reason: .mfaRequired), state(.manual, reason: .unsupported)]
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertEqual(fixture.credentialReads, 0, "Even an available secure-store record must not be read for the verification route")
+        XCTAssertEqual(fixture.evaluator.accountHints, ["", "", "", ""])
+        XCTAssertEqual(fixture.challengeCount, 1)
+        XCTAssertEqual(fixture.manualCount, 1)
+        XCTAssertEqual(fixture.identityMismatchCount, 0)
+        XCTAssertEqual(fixture.progressCount, 0)
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+        XCTAssertFalse(fixture.ledger.accountAttempted)
+        XCTAssertFalse(fixture.ledger.usernameAttempted)
+        XCTAssertFalse(fixture.ledger.passwordAttempted)
+        XCTAssertFalse(fixture.ledger.continuationAttempted)
+        XCTAssertEqual(fixture.waits, [.milliseconds(250), .seconds(1), .seconds(1)])
+    }
+
+    func testVerificationOnlyLoadingHasABoundedReadOnlyBudgetWithoutCredentialsOrSubmissions() async {
+        let fixture = Fixture(verificationOnly: true)
+        let completed = expectation(description: "Verification title mounting reaches its finite native budget")
+        fixture.onManual = { completed.fulfill() }
+        fixture.evaluator.fallbackState = state(.loading, reason: .loading)
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertEqual(fixture.waits.count, 36)
+        XCTAssertEqual(fixture.evaluator.inspections, 37)
+        XCTAssertEqual(fixture.waits.first, .milliseconds(250))
+        XCTAssertTrue(fixture.waits.dropFirst().allSatisfy { $0 == .milliseconds(500) })
+        XCTAssertEqual(fixture.credentialReads, 0)
+        XCTAssertTrue(fixture.evaluator.accountHints.allSatisfy(\.isEmpty))
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+        XCTAssertEqual(fixture.challengeCount, 0)
+        XCTAssertEqual(fixture.manualCount, 1)
+    }
+
+    func testVerificationOnlyPipelineRejectsAllCredentialAndContinuationReportsWithoutClaimingAStage() {
+        let forbidden = [state(.account, match: true), state(.username), state(.password, match: true),
+                         state(.continuation, match: true), state(.password, match: true, reason: .currentAccountVerified),
+                         state(.continuation, match: true, reason: .currentAccountVerified),
+                         state(.authenticated, reason: .authenticated), state(.challenge, reason: .ready),
+                         state(.loading, reason: .ready), state(.manual, reason: .mismatch)]
+        for report in forbidden {
+            let fixture = Fixture(verificationOnly: true)
+            fixture.evaluator.states = [report]
+            fixture.pipeline.start(source: "synthetic source")
+            XCTAssertEqual(fixture.credentialReads, 0, report.stage.rawValue)
+            XCTAssertEqual(fixture.evaluator.accountHints, [""])
+            XCTAssertTrue(fixture.evaluator.submissions.isEmpty, report.stage.rawValue)
+            XCTAssertTrue(fixture.waits.isEmpty)
+            XCTAssertEqual(fixture.manualCount, 1)
+            XCTAssertEqual(fixture.challengeCount, 0)
+            XCTAssertEqual(fixture.identityMismatchCount, 0, "A read-only verification document cannot invalidate the saved business identity")
+            XCTAssertFalse(fixture.ledger.accountAttempted)
+            XCTAssertFalse(fixture.ledger.usernameAttempted)
+            XCTAssertFalse(fixture.ledger.passwordAttempted)
+            XCTAssertFalse(fixture.ledger.continuationAttempted)
+        }
+    }
+
     func testSuccessfulPasswordACKWaitsFinitelyForTheOldSPADOMWithoutSubmittingTwice() async {
         let fixture = Fixture()
         let completed = expectation(description: "Post-submit old DOM has a bounded observation budget")
@@ -552,12 +669,13 @@ final class QMplusAutofillPipelineTests: XCTestCase {
             fixture.evaluator.states = [state(.manual, reason: reason)]
             let completed = expectation(description: "Manual state \(reason.rawValue) stops without submitting")
             fixture.onManual = { completed.fulfill() }
-            if reason == .form || reason == .absent { fixture.evaluator.fallbackState = state(.manual, reason: reason) }
+            if [.chooser, .form, .absent].contains(reason) { fixture.evaluator.fallbackState = state(.manual, reason: reason) }
             fixture.pipeline.start(source: "synthetic source")
             await fulfillment(of: [completed], timeout: 2)
             XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
             XCTAssertEqual(fixture.manualCount, 1)
-            if reason == .form || reason == .absent { XCTAssertEqual(fixture.waits.count, 8) }
+            XCTAssertEqual(fixture.identityMismatchCount, reason == .mismatch ? 1 : 0)
+            if [.chooser, .form, .absent].contains(reason) { XCTAssertEqual(fixture.waits.count, 8) }
         }
         let stale = Fixture()
         stale.evaluator.states = [state(.username, document: "nonceB456")]
@@ -617,6 +735,50 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertTrue(ledger.claimSSO(presentation: 2, credentialRevision: 2))
     }
 
+    func testDeviceAuthenticationIsPassiveWithoutCredentialOrVerificationAuthority() {
+        for path in ["/", "/common/DeviceAuthTls/reprocess", "/kmsi", "/\(QMplusAutofillPolicy.tenant)/login"] {
+            let url = URL(string: "https://device.login.microsoftonline.com" + path)
+            XCTAssertTrue(QMplusAutofillPolicy.isPassiveMicrosoftTransit(url))
+            XCTAssertFalse(QMplusAutofillPolicy.isTrustedMicrosoftDocument(url))
+            XCTAssertFalse(QMplusAutofillPolicy.isInspectableMicrosoftDocument(url))
+        }
+        for value in ["http://device.login.microsoftonline.com", "https://device.login.microsoftonline.com:444",
+                      "https://device.login.microsoftonline.com.evil.invalid", "https://device.login.microsoftonline.com@evil.invalid",
+                      "https://untrusted@device.login.microsoftonline.com"] {
+            XCTAssertFalse(QMplusAutofillPolicy.isPassiveMicrosoftTransit(URL(string: value)), value)
+        }
+    }
+
+    func testVerificationInspectionWhitelistNeverBecomesACredentialWhitelist() {
+        for value in ["https://login.microsoftonline.com/common/DeviceAuthTls/reprocess",
+                      "https://login.microsoftonline.com/COMMON/DEVICEAUTHTLS/REPROCESS?synthetic=1"] {
+            let url = URL(string: value)
+            XCTAssertTrue(QMplusAutofillPolicy.isMicrosoftVerificationDocument(url), value)
+            XCTAssertTrue(QMplusAutofillPolicy.isInspectableMicrosoftDocument(url), value)
+            XCTAssertFalse(QMplusAutofillPolicy.isTrustedMicrosoftDocument(url), "An inspectable verification route must never authorize credential reads")
+        }
+        for path in ["/\(QMplusAutofillPolicy.tenant)/saml2", "/\(QMplusAutofillPolicy.tenant)/login", "/kmsi"] {
+            let url = URL(string: "https://login.microsoftonline.com" + path)
+            XCTAssertTrue(QMplusAutofillPolicy.isTrustedMicrosoftDocument(url))
+            XCTAssertTrue(QMplusAutofillPolicy.isInspectableMicrosoftDocument(url))
+            XCTAssertFalse(QMplusAutofillPolicy.isMicrosoftVerificationDocument(url))
+        }
+        for value in ["https://login.microsoftonline.com/common/DeviceAuthTls/reprocess/",
+                      "https://login.microsoftonline.com/common/DeviceAuthTls/other",
+                      "https://login.microsoftonline.com/common/%44eviceAuthTls/reprocess",
+                      "https://login.microsoftonline.com/other/DeviceAuthTls/reprocess",
+                      "https://login.microsoftonline.com.evil.invalid/common/DeviceAuthTls/reprocess",
+                      "http://login.microsoftonline.com/common/DeviceAuthTls/reprocess",
+                      "https://login.microsoftonline.com:444/common/DeviceAuthTls/reprocess",
+                      "https://synthetic@login.microsoftonline.com/common/DeviceAuthTls/reprocess",
+                      "https://login.microsoftonline.com/\(QMplusAutofillPolicy.tenant)/LOGIN"] {
+            let url = URL(string: value)
+            XCTAssertFalse(QMplusAutofillPolicy.isMicrosoftVerificationDocument(url), value)
+            XCTAssertFalse(QMplusAutofillPolicy.isInspectableMicrosoftDocument(url), value)
+            XCTAssertFalse(QMplusAutofillPolicy.isTrustedMicrosoftDocument(url), value)
+        }
+    }
+
     func testVerifiedQMplusGuestLandingCanUseFixedSSOEntry() {
         XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/")))
         XCTAssertTrue(QMplusAutofillPolicy.isQMplusLoginDocument(URL(string: "https://qmplus.qmul.ac.uk/?redirect=0")))
@@ -662,10 +824,11 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         var credentialsAvailable = true
         var ownerIsCurrent: @MainActor () -> Bool = { true }
         var viewportReady = true
-        var credentialReads = 0, manualCount = 0, progressCount = 0, challengeCount = 0
+        var credentialReads = 0, manualCount = 0, progressCount = 0, challengeCount = 0, identityMismatchCount = 0
         var onManual: (@MainActor () -> Void)?
         var waits: [Duration] = []
         let nonce: String
+        let verificationOnly: Bool
         let saved = QMplusSavedCredentials(marker: .init(recordID: UUID(), authorizationNonce: UUID()),
             account: "synthetic@example.invalid", password: "synthetic-password")
         private var pipelineCache: QMplusAutofillPipeline?
@@ -677,20 +840,23 @@ final class QMplusAutofillPipelineTests: XCTestCase {
                 return self.current && self.ownerIsCurrent()
             },
             viewportReady: { [weak self] in self?.viewportReady == true },
+            verificationOnly: verificationOnly,
             credentials: { [weak self] in
                 self?.credentialReads += 1
                 guard let self, self.credentialsAvailable else { return nil }
                 return self.saved
             }, manual: { [weak self] in self?.manualCount += 1; self?.onManual?() },
             challenge: { [weak self] in self?.challengeCount += 1 },
+            identityMismatch: { [weak self] in self?.identityMismatchCount += 1 },
             progress: { [weak self] _ in self?.progressCount += 1 }, wait: { [weak self] duration in
                 self?.waits.append(duration); await Task.yield()
             })
             pipelineCache = pipeline
             return pipeline
         }
-        init(ledger: QMplusAutofillLedger? = nil, nonce: String = "nonceA123") {
+        init(ledger: QMplusAutofillLedger? = nil, nonce: String = "nonceA123", verificationOnly: Bool = false) {
             self.ledger = ledger ?? QMplusAutofillLedger(); self.nonce = nonce
+            self.verificationOnly = verificationOnly
             if ledger == nil { self.ledger.begin(presentation: 1, credentialRevision: 1) }
         }
     }
@@ -703,6 +869,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         var onInspection: (@MainActor () -> Void)?
         var submissions: [QMplusAuthSubmission] = []
         var identityAcknowledgements: [Bool] = []
+        var accountHints: [String] = []
         var holdsInstallation = false, holdsInspection = false, holdsSubmission = false
         private var installCallback: (@MainActor @Sendable (QMplusAuthInstallResult) -> Void)?
         private var inspectCallback: (@MainActor @Sendable (QMplusAuthInspection?) -> Void)?
@@ -711,7 +878,8 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         func install(_: String, completion: @escaping @MainActor @Sendable (QMplusAuthInstallResult) -> Void) {
             if holdsInstallation { installCallback = completion } else { completion(installResult) }
         }
-        func inspect(nonce _: String, accountHint _: String, completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
+        func inspect(nonce _: String, accountHint: String, completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
+            accountHints.append(accountHint)
             inspections += 1
             onInspection?()
             if holdsInspection { inspectCallback = completion }

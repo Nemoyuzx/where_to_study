@@ -96,6 +96,11 @@ enum AdaptiveLayoutPolicy {
 @MainActor
 final class PrimaryNavigationState: ObservableObject {
     @Published var selectedSection: AppSection = .planner
+    init() {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE"] == "1" { selectedSection = .settings }
+        #endif
+    }
 }
 
 @MainActor

@@ -30,12 +30,43 @@ export function qmplusActivitiesForCourse(snapshot, course) {
     .filter(item => item.course_id === course.id && isQmplusAssessmentActivity(item))
 }
 
+// The Teaching Cloud directory comes from /site/list/student/current. Group
+// only this current-term view; source records, IDs and cached DTOs stay intact.
+export function groupTeachingCloudCourses(directory) {
+  const groups = new Map()
+  for (const course of directory) {
+    const name = typeof course.name === 'string' ? course.name.trim() : ''
+    const key = JSON.stringify(name ? ['name', name] : ['id', String(course.id)])
+    let group = groups.get(key)
+    if (!group) {
+      group = {...course, name: name || null, presentation_key: key, source_courses: [], teacher_names: []}
+      groups.set(key, group)
+    }
+    group.source_courses.push(course)
+    for (const teacher of course.teacher_names || []) {
+      const value = typeof teacher === 'string' ? teacher.trim() : ''
+      if (value && !group.teacher_names.includes(value)) group.teacher_names.push(value)
+    }
+  }
+  return [...groups.values()]
+}
+
+export function teachingCloudCourseIDs(course) {
+  return (course.source_courses || [course]).map(source => String(source.id))
+}
+
 export function assignmentsForCourse(items, course, directory) {
   if (!Array.isArray(items)) return null
+  const courseIDs = new Set(teachingCloudCourseIDs(course))
   const name = course.name?.trim()
-  const uniqueName = name && directory.filter(c => c.name?.trim() === name).length === 1
+  const namedCourses = name ? directory.filter(c => c.name?.trim() === name) : []
+  // An ID-less legacy item may belong to the logical group when every exact
+  // name match is a member. An explicit unknown ID never falls back to a name.
+  const uniqueName = namedCourses.length > 0 && (course.source_courses
+    ? namedCourses.every(c => teachingCloudCourseIDs(c).every(id => courseIDs.has(id)))
+    : namedCourses.length === 1)
   return items.filter(item => item.course_id != null
-    ? String(item.course_id) === String(course.id)
+    ? courseIDs.has(String(item.course_id))
     : uniqueName && item.course_name?.trim() === name)
 }
 

@@ -30,6 +30,15 @@ export class QMPlusAuthNavigationPolicy {
     return QMPlusAuthNavigationPolicy.microsoftPage.test(url);
   }
 
+  static isVerificationPage(url: string): boolean {
+    return /^https:\/\/login\.microsoftonline\.com\/common\/deviceauthtls\/reprocess(?:\?[^\s#]*)?$/i.test(url);
+  }
+
+  static isMicrosoftTransitPage(url: string): boolean {
+    return /^https:\/\/(?:device\.)?login\.microsoftonline\.com(?::443)?(?:[/?#][^\s]*)?$/i.test(url) &&
+      !QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url) && !QMPlusAuthNavigationPolicy.isVerificationPage(url);
+  }
+
   static shouldStartSAML(url: string, currentURL: string, active: boolean,
     authorized: boolean, alreadyStarted: boolean): boolean {
     return active && authorized && !alreadyStarted &&
@@ -246,7 +255,6 @@ export struct QMPlusConnectionView {
   private documentReadyURL: string = '';
   private pageScript: string = '';
   private dashboardRestored: boolean = false;
-  @Local officialPageAuthenticated: boolean = false;
   private authWindow: window.Window | null = null;
   private authWindowListener: ((event: window.WindowEventType) => void) | null = null;
   private readonly authLedger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger();
@@ -276,13 +284,13 @@ export struct QMPlusConnectionView {
     this.autoSyncPending = !this.session.explicitDetailRequest;
     this.detailTargetRestored = false;
     this.profileInitializationStarted = false;
-    if (!this.model.isSampleMode()) { void this.session.restoreSavedLoginStatus(); }
     this.attachAuthWindow();
   }
 
   aboutToDisappear(): void {
     const owner: QMPlusLoginOwner | null = this.loginOwner;
     const ownsPresentation: boolean = owner !== null && this.session.isLoginOwnerCurrent(owner);
+    if (ownsPresentation) { this.session.persistOfficialWebSession(); }
     if (owner !== null) { this.session.unbindLoginWeb(owner); }
     this.detachAuthWindow();
     this.invalidateAuth();
@@ -320,7 +328,7 @@ export struct QMPlusConnectionView {
     this.session.bindLoginWeb(owner, (): void => this.retireOfficialWeb(), (): void => this.restartOfficialWeb());
     this.authLedger.begin(); this.authSAMLStarted = false; this.authPlainLoginStarted = false;
     this.autoSyncPending = true; this.detailTargetRestored = false; this.dashboardRestored = false;
-    this.officialPageAuthenticated = false; this.documentReadyURL = '';
+    this.documentReadyURL = '';
     this.profileInitializationStarted = false;
     // Explicit recovery creates a fresh native owner and a dashboard GET,
     // never ArkWeb refresh(), SAML/MFA POST replay, or cookie removal.
@@ -404,6 +412,12 @@ export struct QMPlusConnectionView {
     if (wasForeground) { return; }
     const url: string = this.safeCurrentURL();
     if (url !== this.documentReadyURL) { return; }
+    if (QMPlusAuthNavigationPolicy.isVerificationPage(url) && this.authNonce.length > 0) {
+      if (this.authHelperInstalled && url === this.authURL) {
+        void this.runVerificationInspection(this.authPresentationRevision, this.pageRevision, url, this.authNonce, true);
+      } else { this.requireManualAuth(''); }
+      return;
+    }
     if (QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url) && this.authNonce.length > 0) {
       if (this.authLedger.isActive() && this.authHelperInstalled && url === this.authURL) {
         // Same document and same once-only claims; only the local authorization
@@ -843,11 +857,15 @@ export struct QMPlusConnectionView {
     if (!this.ownsLoginPresentation()) { return; }
     this.session.resumeAutomaticLogin();
     this.documentReadyURL = '';
-    this.officialPageAuthenticated = false;
     if (this.loginOwner !== null) { this.session.noteOfficialPageLoading(this.loginOwner, true); }
     this.invalidateAuth();
     if (url === 'about:blank') { this.pageRevision++; return; }
+    if (QMPlusAuthNavigationPolicy.isMicrosoftTransitPage(url) && this.authLedger.isActive()) {
+      this.session.waitForMicrosoftTransit();
+    }
     if (this.session.autoFillEnabled && !QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url) &&
+      !QMPlusAuthNavigationPolicy.isVerificationPage(url) &&
+      !QMPlusAuthNavigationPolicy.isMicrosoftTransitPage(url) &&
       !QMPlusAuthNavigationPolicy.isOfficialQMPage(url) &&
       url !== QMPlusAuthNavigationPolicy.qmSAMLStart && !QMPlusURLPolicy.isBusinessPage(url)) {
       this.requireManualAuth('');
@@ -909,31 +927,93 @@ export struct QMPlusConnectionView {
       void this.handleQMPage(this.authPresentationRevision, this.pageRevision, url);
       return;
     }
-    if (!this.model.isSampleMode() && this.session.autoFillEnabled &&
-      QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url)) {
-      if (!this.authLedger.isActive()) { this.session.deferManualLogin(); return; }
+    if (!this.model.isSampleMode() && QMPlusAuthNavigationPolicy.isVerificationPage(url)) {
       if (this.authNonce.length > 0) { return; }
       try {
-        const nonce: string = newQMPlusRecordID();
-        this.authNonce = nonce;
-        this.authLedger.beginDocument(nonce);
+        this.authNonce = newQMPlusRecordID();
         this.authURL = url;
-        const owner: number = this.authPresentationRevision;
-        const page: number = this.pageRevision;
-        void this.runAuth(owner, page, url, nonce);
-      } catch (e) {
-        this.requireManualAuth('');
-      }
+        void this.runVerificationInspection(this.authPresentationRevision, this.pageRevision, url, this.authNonce);
+      } catch (e) { this.requireManualAuth(''); }
+      return;
+    }
+    if (!this.model.isSampleMode() && QMPlusAuthNavigationPolicy.isKnownMicrosoftPage(url)) {
+      void this.startMicrosoftAuthAfterRestore(this.authPresentationRevision, this.pageRevision, url);
+      return;
+    }
+    if (QMPlusAuthNavigationPolicy.isMicrosoftTransitPage(url)) {
+      // Unknown official Microsoft documents are transport only. Wait for
+      // navigation without injecting or reading any saved credential.
+      if (this.authLedger.isActive()) { this.session.waitForMicrosoftTransit(); }
       return;
     }
     if (this.session.autoFillEnabled) { this.requireManualAuth(''); }
+  }
+
+  private async startMicrosoftAuthAfterRestore(owner: number, page: number, url: string): Promise<void> {
+    // A cookie can redirect straight to Microsoft before the local ASSET and
+    // authorization journal finish loading. Re-check this exact document once
+    // restoration completes; another page/end callback may already own it.
+    await this.session.restoreSavedLoginStatus();
+    if (!this.sameOwnedPage(owner, page, url) || this.documentReadyURL !== url ||
+      this.model.isSampleMode() || this.authNonce.length > 0) { return; }
+    if (!this.session.autoFillEnabled || !this.authLedger.isActive()) { this.session.deferManualLogin(); return; }
+    try {
+      const nonce: string = newQMPlusRecordID();
+      this.authNonce = nonce;
+      this.authLedger.beginDocument(nonce);
+      this.authURL = url;
+      await this.runAuth(owner, page, url, nonce);
+    } catch (e) {
+      if (this.sameOwnedPage(owner, page, url)) { this.requireManualAuth(''); }
+    }
+  }
+
+  private sameVerificationPage(owner: number, page: number, url: string, nonce: string): boolean {
+    return this.sameOwnedPage(owner, page, url) && !this.model.isSampleMode() && nonce.length > 0 &&
+      nonce === this.authNonce && url === this.authURL && QMPlusAuthNavigationPolicy.isVerificationPage(url);
+  }
+
+  private async runVerificationInspection(owner: number, page: number, url: string, nonce: string,
+    resumeDocument: boolean = false): Promise<void> {
+    const guard: string = 'window.top===window&&location.origin==="https://login.microsoftonline.com"&&' +
+      'location.pathname.toLowerCase()==="/common/deviceauthtls/reprocess"&&location.href===' + JSON.stringify(url);
+    try {
+      if (!this.sameVerificationPage(owner, page, url, nonce)) { return; }
+      if (!resumeDocument) {
+        const source: string = await this.loadAuthScript();
+        if (!this.sameVerificationPage(owner, page, url, nonce)) { return; }
+        const installed: string = this.decodeAuthReply(await this.controller.runJavaScript(
+          'if(' + guard + '){\n' + source + '\n}else "STALE_DOCUMENT";'));
+        if (!this.sameVerificationPage(owner, page, url, nonce)) { return; }
+        if (installed !== 'AUTH_INSTALLED') { this.requireManualAuth(''); return; }
+        this.authHelperInstalled = true;
+      }
+      let deadline: number = Date.now() + 4500;
+      while (this.sameVerificationPage(owner, page, url, nonce) && Date.now() < deadline) {
+        const raw: string = this.decodeAuthReply(await this.controller.runJavaScript(
+          '(function(){if(!(' + guard + '))return "{}";return JSON.stringify(WTSQmAuth.inspect(' + JSON.stringify(nonce) + ',""));})()'));
+        if (!this.sameVerificationPage(owner, page, url, nonce)) { return; }
+        const state: QMPlusAuthInspection | null = QMPlusAuthInspection.parse(raw, nonce);
+        if (state?.stage === 'challenge') {
+          this.authStatus = this.manualAuthStatus(state.reason);
+          this.session.presentVerification();
+          await this.waitForAuthStep(750);
+          deadline = Date.now() + 4500;
+        } else if (state?.stage === 'loading' && state.reason === 'LOADING') {
+          this.session.resumeAutomaticLogin();
+          await this.waitForAuthStep();
+        } else { this.requireManualAuth(''); return; }
+      }
+      if (this.sameVerificationPage(owner, page, url, nonce)) { this.requireManualAuth(''); }
+    } catch (e) {
+      if (this.sameVerificationPage(owner, page, url, nonce)) { this.requireManualAuth(''); }
+    }
   }
 
   private async handleQMPage(owner: number, page: number, url: string): Promise<void> {
     try {
       const kind: string = await this.inspectQMPage(owner, page, url);
       if (!this.sameOwnedPage(owner, page, url)) { return; }
-      this.officialPageAuthenticated = kind === 'authenticated' && QMPlusURLPolicy.isBusinessPage(url);
       if (kind === 'error') {
         if (this.loginOwner !== null) { this.session.noteOfficialPageError(this.loginOwner); }
         this.requireManualAuth('UNSUPPORTED_PAGE'); return;
@@ -1001,14 +1081,6 @@ export struct QMPlusConnectionView {
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
           .layoutWeight(1)
-        Button(this.model.text(this.session.syncing ? '正在同步…' : '同步课程'))
-          .type(ButtonType.Normal)
-          .height(ControlMetrics.height)
-          .enabled(!this.session.syncing && this.officialPageAuthenticated)
-          .backgroundColor(AppTheme.surfaceVariant())
-          .fontColor(AppTheme.primary())
-          .id('qmplus.login.sync')
-          .onClick(() => { void this.runSync(); })
         if (this.session.errorCode === 'QM_ERROR_PAGE' || this.session.errorCode === 'QM_WEB_CLEAR_PENDING') {
           Button(this.model.text('连接 QMplus'))
             .height(ControlMetrics.height)

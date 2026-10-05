@@ -970,7 +970,7 @@ internal class InformationQueryPage(
     private fun coursesContent(): LinearLayout = privateQueryContent {
         val (courses, loading, error) = courseState().also { renderedCourses = it }
         renderedAssignments = assignmentState()
-        addView(courseSectionHeader(activity.getString(R.string.course_source_teaching_cloud), courses?.size,
+        addView(courseSectionHeader(activity.getString(R.string.course_source_teaching_cloud), courses?.let { CourseDirectoryLogic.teachingCloudGroups(it).size },
             R.id.course_current_refresh, !loading, activity.getString(R.string.current_courses_refresh)) {
                 dailyInfoRepository.loadCurrentCourses(force = true)
             })
@@ -1042,7 +1042,7 @@ internal class InformationQueryPage(
 
     private fun appendCourseRows(list: LinearLayout, advance: Boolean) {
         if (advance && (!list.isAttachedToWindow || !root.isAttachedToWindow)) return
-        val courses = dailyInfoRepository.currentTeachingCloudCourses().orEmpty()
+        val courses = CourseDirectoryLogic.teachingCloudGroups(dailyInfoRepository.currentTeachingCloudCourses().orEmpty())
         val assignments = dailyInfoRepository.allAssignments()
         val target = if (advance) (list.childCount + 20).coerceAtMost(courses.size)
             else sessionState.visibleCourseCount.coerceAtMost(courses.size)
@@ -1050,7 +1050,7 @@ internal class InformationQueryPage(
             val course = courses[index]
             val key = "teaching-cloud.course.${course.id}"
             list.addView(inlineCourseRow(key, course.name ?: activity.uiText("课程未标注"),
-                course.teacherNames, CourseDirectoryLogic.teachingCloudCounts(course.id, assignments)))
+                course.teacherNames, CourseDirectoryLogic.teachingCloudCounts(course, assignments)))
         }
         sessionState.visibleCourseCount = maxOf(20, target)
     }
@@ -1109,10 +1109,10 @@ internal class InformationQueryPage(
 
     private fun populateInlineAssignments(key: String, body: LinearLayout) {
         body.removeAllViews()
-        val cloud = dailyInfoRepository.currentTeachingCloudCourses()?.firstOrNull { "teaching-cloud.course.${it.id}" == key }
+        val cloud = CourseDirectoryLogic.teachingCloudGroupForKey(dailyInfoRepository.currentTeachingCloudCourses().orEmpty(), key)
         val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
         val qm = snapshot?.courses?.firstOrNull { "qmplus.course.${it.id}" == key }
-        val cloudItems = cloud?.let { CourseDirectoryLogic.teachingCloudAssignments(it.id, dailyInfoRepository.allAssignments()) }
+        val cloudItems = cloud?.let { CourseDirectoryLogic.teachingCloudAssignments(it, dailyInfoRepository.allAssignments()) }
         val qmItems = qm?.let { course -> snapshot?.activities.orEmpty().filter { it.courseID == course.id } }.orEmpty()
         val visible = sessionState.inlineCourseCounts[key] ?: 20
         if (cloud != null && cloudItems == null) body.addView(statusCard(activity.getString(R.string.course_assignments_not_loaded)))
@@ -1182,7 +1182,7 @@ internal class InformationQueryPage(
     }
 
     private fun courseDetailsBody(key: String): LinearLayout? {
-        val cloud = dailyInfoRepository.currentTeachingCloudCourses()?.firstOrNull { "teaching-cloud.course.${it.id}" == key }
+        val cloud = CourseDirectoryLogic.teachingCloudGroupForKey(dailyInfoRepository.currentTeachingCloudCourses().orEmpty(), key)
         val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
         val qm = snapshot?.courses?.firstOrNull { "qmplus.course.${it.id}" == key }
         if (cloud == null && qm == null) return null
@@ -1198,7 +1198,7 @@ internal class InformationQueryPage(
             })
             cloud?.teacherNames?.forEach { addView(eventDetailText(it, 2)) }
             if (cloud != null) {
-                val assignments = CourseDirectoryLogic.teachingCloudAssignments(cloud.id, dailyInfoRepository.allAssignments())
+                val assignments = CourseDirectoryLogic.teachingCloudAssignments(cloud, dailyInfoRepository.allAssignments())
                 addView(eventDetailText(activity.getString(R.string.course_detail_assignments), 2))
                 if (assignments == null) addView(statusCard(activity.getString(R.string.course_assignments_not_loaded)))
                 else if (assignments.isEmpty()) addView(statusCard(activity.getString(R.string.course_no_cached_assignments)))

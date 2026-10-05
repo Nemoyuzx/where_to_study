@@ -1213,6 +1213,12 @@ private struct QMplusSettingsSurface: View {
                     VStack(alignment: .leading) { connectionActions }
                 }
                 .buttonStyle(.bordered)
+                #if DEBUG && targetEnvironment(simulator)
+                if ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE"] == "1" {
+                    Button("QA: Show courses") { model.navigation.selectedSection = .courses }
+                        .accessibilityIdentifier("qa.qmplus.show-courses")
+                }
+                #endif
                 if store.requiresManualContinuation {
                     Button { store.continueManually(sampleMode: model.isSampleMode) } label: {
                         Label(model.localized("手动继续"), systemImage: "arrow.up.forward.app")

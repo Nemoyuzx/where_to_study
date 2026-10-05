@@ -286,6 +286,16 @@ internal class QmplusRepository(context: Context,
         notifyObservers()
     }
 
+    fun synchronizationNotReady(expectedGeneration: Long) {
+        synchronized(stateLock) {
+            if (closed.get() || !featureIsCurrentLocked() || generation != expectedGeneration || connection != null) return
+            // A delayed Moodle configuration is a retryable read, not a failed login.
+            manualContinuationRequired = false
+            error = "QMplus 同步失败；保留上次课程缓存。"
+        }
+        notifyObservers()
+    }
+
     fun connectionExpired(expectedGeneration: Long = generation) {
         synchronized(stateLock) {
             if (closed.get() || !featureIsCurrentLocked() || generation != expectedGeneration || connection != null) return

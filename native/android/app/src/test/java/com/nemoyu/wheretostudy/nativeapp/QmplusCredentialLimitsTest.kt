@@ -11,6 +11,9 @@ class QmplusCredentialLimitsTest {
         assertFalse(QmplusCredentialLimits.valid("synthetic@example.invalid", CharArray(2049) { 'x' }))
         assertTrue(QmplusCredentialLimits.valid("synthetic@example.invalid", CharArray(2048) { 'x' }))
         assertFalse(QmplusCredentialLimits.valid("synthetic\u0000", "synthetic".toCharArray()))
+        assertFalse(QmplusCredentialLimits.valid("short-account", "synthetic".toCharArray()))
+        assertFalse(QmplusCredentialLimits.valid("student @example.invalid", "synthetic".toCharArray()))
+        assertFalse(QmplusCredentialLimits.valid("student@@example.invalid", "synthetic".toCharArray()))
         assertTrue(QmplusCredentialLimits.valid("  synthetic@example.invalid  ", "設定 raw secret".toCharArray()))
     }
 }

@@ -145,25 +145,41 @@
   }
   globalThis.WTSQmProtocol = Object.freeze({currentTermStatus, londonDate, safeURL, timingTexts, includesAssessmentActivity, hasMoodleErrorPage, classifyQMplusPage});
   globalThis.WTSQmSync = async function(options = {}) {
+    const started = Date.now();
     const fetched = new Date().toISOString();
     const result = {schema_version:1, source:'qmplus', fetched_at:fetched, ok:true, partial:false, courses:[], activities:[], warnings:[]};
     const fail = code => ({...result, ok:false, error_code:code});
     if (location.origin !== origin) return fail('QM_ORIGIN_REQUIRED');
     const pageKind = classifyQMplusPage();
     if (pageKind === 'error') return fail('QM_ERROR_PAGE');
-    if (pageKind !== 'authenticated' || !globalThis.M?.cfg?.sesskey) return fail('QM_LOGIN_REQUIRED');
+    if (pageKind === 'guest') return fail('QM_LOGIN_REQUIRED');
+    if (pageKind !== 'authenticated') return fail('QM_PAGE_NOT_READY');
     if (globalThis.__wtsQmFlight) return fail('QM_SYNC_BUSY');
     const job = {cancelled:false, controller:null};
     globalThis.__wtsQmFlight = job;
     globalThis.WTSQmCancel = () => { job.cancelled = true; job.controller?.abort(); };
-    const started = Date.now();
+    let configurationWaits = 0;
     const warn = code => { result.partial = true; if (result.warnings.length < 40 && !result.warnings.includes(code)) result.warnings.push(code); };
     const check = () => {
-      if (job.cancelled || Date.now() - started > 120000) throw new Error('QM_CANCELLED_OR_TIMEOUT');
+      if (job.cancelled || Date.now() - started >= 120000) throw new Error('QM_CANCELLED_OR_TIMEOUT');
+      if (location.origin !== origin) throw new Error('QM_ORIGIN_REQUIRED');
       const kind = classifyQMplusPage();
       if (kind === 'error') throw new Error('QM_ERROR_PAGE');
-      if (kind !== 'authenticated') throw new Error('QM_LOGIN_REQUIRED');
+      if (kind === 'guest') throw new Error('QM_LOGIN_REQUIRED');
+      if (kind !== 'authenticated') throw new Error('QM_PAGE_NOT_READY');
     };
+    async function readySessionKey() {
+      // The authenticated menu can mount before Moodle's page configuration.
+      // Keep one bounded, cancellable flight; absence is not an expired login.
+      while (true) {
+        check();
+        const value = globalThis.M?.cfg?.sesskey;
+        if (typeof value === 'string' && value.trim().length > 0) return value;
+        if (configurationWaits >= 20) throw new Error('QM_PAGE_NOT_READY');
+        configurationWaits++;
+        await new Promise(resolve => setTimeout(resolve, Math.min(250, Math.max(0, 120000 - (Date.now() - started)))));
+      }
+    }
     async function request(url, body) {
       check();
       const u = new URL(url, origin);
@@ -188,7 +204,8 @@
     async function ajax(method, args) {
       const allowed = ['core_course_get_enrolled_courses_by_timeline_classification','core_courseformat_get_state'];
       if (!allowed.includes(method)) throw new Error('QM_METHOD_REJECTED');
-      const u = new URL('/lib/ajax/service.php', origin); u.searchParams.set('sesskey', M.cfg.sesskey); u.searchParams.set('info', method);
+      const sessionKey = await readySessionKey();
+      const u = new URL('/lib/ajax/service.php', origin); u.searchParams.set('sesskey', sessionKey); u.searchParams.set('info', method);
       const a = JSON.parse(await request(u.href, [{index:0,methodname:method,args}]));
       if (!Array.isArray(a) || !a[0] || a[0].error) throw new Error('QM_API_REJECTED');
       return a[0].data;
@@ -223,7 +240,7 @@
           const raw = await ajax('core_courseformat_get_state',{courseid:Number(c.id)}); state=JSON.parse(typeof raw==='string'?raw:raw.data);
           if (!state || typeof state.cm !== 'object' || state.cm === null) throw new Error('QM_MODULE_FORMAT');
         }
-        catch { check(); warn('QM_MODULE_PARTIAL'); continue; }
+        catch (error) { check(); if (error?.message === 'QM_PAGE_NOT_READY') throw error; warn('QM_MODULE_PARTIAL'); continue; }
         const modules = Array.isArray(state.cm)?state.cm:Object.values(state.cm);
         for (const m of modules) {
           if (!m || typeof m !== 'object') { warn('QM_MODULE_PARTIAL'); continue; }

@@ -13,6 +13,7 @@ export interface QMPlusWebProfileStoring {
   prepare(): Promise<boolean>;
   clear(): Promise<boolean>;
   flush(): Promise<boolean>;
+  flushOnLifecycle?(): boolean;
   businessScope?(): string;
   hasBeenMounted?(): boolean;
 }
@@ -206,6 +207,17 @@ export class QMPlusWebProfileStore implements QMPlusWebProfileStoring {
       await webview.WebCookieManager.saveCookieAsync();
       // ArkWeb persists only engine/server-permitted cookies. Session cookies
       // are not promised across restart (notably PC, 2-in-1 and tablet).
+      return revision === QMPlusWebProfileStore.clearRevision && this.isReady();
+    } catch (e) { return false; }
+  }
+
+  flushOnLifecycle(): boolean {
+    if (!this.isReady() || !QMPlusWebProfileStore.initializedInProcess) { return false; }
+    const revision: number = QMPlusWebProfileStore.clearRevision;
+    try {
+      // Lifecycle teardown must not abandon an unawaited persistence request.
+      // The official engine retains cookie expiry and session-cookie policy.
+      webview.WebCookieManager.saveCookieSync();
       return revision === QMPlusWebProfileStore.clearRevision && this.isReady();
     } catch (e) { return false; }
   }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { AppSection, AppSectionInfo } from '../main/ets/common/AppSection';
 import { CoursePageContract, CoursePageTab, CourseQMPlusScope,
-  CourseCloudScope } from '../main/ets/common/CourseLogic';
+  CourseCloudScope, UCloudCourseGroup } from '../main/ets/common/CourseLogic';
 import { QueryPageContract, QueryPageTab } from '../main/ets/common/QueryLogic';
 import { AppLanguage, AppLocalization } from '../main/ets/common/AppLocalization';
 import { CourseSession } from '../main/ets/view/CourseSession';
@@ -11,6 +11,41 @@ import { AssignmentDeadlineItem } from '../main/ets/net/CalendarDailyInfoClient'
 
 export default function courseLogicTest() {
   describe('CourseLogicTest', () => {
+    it('same_current_name_groups_preserve_all_teachers_source_ids_and_assignments', 0, () => {
+      const first: UCloudCourse = new UCloudCourse('site-2', ' Algorithms ', [' Teacher A ', 'Teacher B']);
+      const second: UCloudCourse = new UCloudCourse('site-1', 'Algorithms', ['Teacher B', 'Teacher C']);
+      const other: UCloudCourse = new UCloudCourse('site-3', 'algorithms', ['Teacher D']);
+      const source: UCloudCourse[] = [first, second, other];
+      const groups: UCloudCourseGroup[] = CourseCloudScope.groups(source);
+      expect(groups.length).assertEqual(2);
+      const merged: UCloudCourseGroup = groups[0];
+      expect(merged.id).assertEqual('site-1');
+      expect(merged.name).assertEqual('Algorithms');
+      expect(merged.courseIDs.join(',')).assertEqual('site-1,site-2');
+      expect(merged.teacherNames.join(',')).assertEqual('Teacher A,Teacher B,Teacher C');
+      const a: AssignmentDeadlineItem = new AssignmentDeadlineItem('shared', 'A', 'Algorithms', '2026-11-01', '已提交', 'site-1');
+      const b: AssignmentDeadlineItem = new AssignmentDeadlineItem('shared', 'B', 'Algorithms', '2026-11-02', '未提交', 'site-2');
+      const outside: AssignmentDeadlineItem = new AssignmentDeadlineItem('outside', 'Other', 'algorithms', '2026-11-03', '未提交', 'site-3');
+      const items: AssignmentDeadlineItem[] = CourseCloudScope.groupAssignmentsFor(merged, source, [a, b, outside], true);
+      expect(items.length).assertEqual(2);
+      expect(items[0] === a).assertTrue();
+      expect(items[1] === b).assertTrue();
+      expect(CourseCloudScope.assignmentKey(a) === CourseCloudScope.assignmentKey(b)).assertFalse();
+      const counts = CourseCloudScope.submissionCounts([a, b, b]);
+      expect(counts.pending).assertEqual(1);
+      expect(counts.submitted).assertEqual(1);
+      expect(first.name).assertEqual(' Algorithms ');
+      expect(first.teacherNames[0]).assertEqual(' Teacher A ');
+      expect(source.length).assertEqual(3);
+      expect(CourseCloudScope.groupAssignmentsFor(merged, source, [a, b], false).length).assertEqual(0);
+    });
+
+    it('grouping_keeps_unnamed_case_and_internal_space_variants_separate', 0, () => {
+      const courses: UCloudCourse[] = [new UCloudCourse('1', null), new UCloudCourse('2', ' '),
+        new UCloudCourse('3', 'Data Science'), new UCloudCourse('4', 'Data  Science'), new UCloudCourse('5', 'data Science')];
+      expect(CourseCloudScope.groups(courses).length).assertEqual(5);
+    });
+
     it('courses_are_primary_and_private_queries_stay_in_their_own_page', 0, () => {
       expect(AppSectionInfo.all.length).assertEqual(5);
       expect(AppSectionInfo.all[2]).assertEqual(AppSection.courses);

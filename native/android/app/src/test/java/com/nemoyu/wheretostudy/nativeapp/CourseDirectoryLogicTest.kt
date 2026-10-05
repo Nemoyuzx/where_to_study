@@ -4,6 +4,39 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CourseDirectoryLogicTest {
+    @Test fun sameCurrentCourseNameMergesOnlyPresentationAndKeepsAllTeachersAndSourceAssignments() {
+        val first = TeachingCloudCourse("site-2", "  Algorithms  ", " Teacher A ", listOf(" Teacher A ", "Teacher B"))
+        val second = TeachingCloudCourse("site-1", "Algorithms", "Teacher C", listOf("Teacher B", "Teacher C"))
+        val other = TeachingCloudCourse("site-3", "algorithms", "Teacher D")
+        val source = listOf(first, second, other)
+        val groups = CourseDirectoryLogic.teachingCloudGroups(source)
+        assertEquals(2, groups.size)
+        val merged = groups.first()
+        assertEquals("site-1", merged.id)
+        assertEquals("Algorithms", merged.name)
+        assertEquals(setOf("site-1", "site-2"), merged.courseIDs)
+        assertEquals(listOf("Teacher A", "Teacher B", "Teacher C"), merged.teacherNames)
+        val a = task("shared-assignment-id", "site-1", "已提交")
+        val b = task("shared-assignment-id", "site-2", "未提交")
+        val outside = task("outside", "site-3", "未提交")
+        assertEquals(listOf(a, b), CourseDirectoryLogic.teachingCloudAssignments(merged, listOf(a, b, outside)))
+        assertEquals(CourseSubmissionCounts(1, 1), CourseDirectoryLogic.teachingCloudCounts(merged, listOf(a, b, b, outside)))
+        assertEquals(merged, CourseDirectoryLogic.teachingCloudGroupForKey(source, "teaching-cloud.course.site-2"))
+        assertEquals("  Algorithms  ", first.name)
+        assertEquals(listOf(" Teacher A ", "Teacher B"), first.teacherNames)
+        assertEquals(3, source.size)
+    }
+
+    @Test fun unnamedCoursesStaySeparateAndGroupingDoesNotCollapseInternalSpacesOrCase() {
+        val courses = listOf(TeachingCloudCourse("1", null, null), TeachingCloudCourse("2", " ", null),
+            TeachingCloudCourse("3", "Data Science", null), TeachingCloudCourse("4", "Data  Science", null),
+            TeachingCloudCourse("5", "data Science", null))
+        assertEquals(5, CourseDirectoryLogic.teachingCloudGroups(courses).size)
+        val group = CourseDirectoryLogic.teachingCloudGroups(courses).first()
+        assertNull(CourseDirectoryLogic.teachingCloudAssignments(group, null))
+        assertEquals(CourseSubmissionCounts(null, null), CourseDirectoryLogic.teachingCloudCounts(group, null))
+    }
+
     @Test fun countsUseOnlyExplicitSubmissionEvidenceAndNeverProduceZeroBadges() {
         val statuses = listOf(null, "unknown", "complete", "finished", "已完成", "已批改", "已驳回", "0")
         val unknown = statuses.mapIndexed { index, status -> task("$index", "one", status) }

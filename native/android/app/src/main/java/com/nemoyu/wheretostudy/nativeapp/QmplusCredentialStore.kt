@@ -37,6 +37,7 @@ internal object QmplusCredentialLimits {
     const val MAXIMUM_ACCOUNT_CHARACTERS = 320
     const val MAXIMUM_PASSWORD_CHARACTERS = 2048
     fun valid(account: String, password: CharArray): Boolean = account.trim().isNotEmpty() &&
+        Regex("^[^\\s@]+@[^\\s@]+$").matches(account.trim()) &&
         account.length <= MAXIMUM_ACCOUNT_CHARACTERS && password.isNotEmpty() &&
         password.size <= MAXIMUM_PASSWORD_CHARACTERS && '\u0000' !in account && '\u0000' !in password
 }

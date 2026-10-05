@@ -13,6 +13,48 @@ struct TeachingCloudCourse: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+// Display-only grouping. Source course records, API identifiers and persisted
+// snapshots remain unchanged, including every separately taught class.
+struct TeachingCloudCourseGroup: Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String?
+    let courses: [TeachingCloudCourse]
+    let teacherNames: [String]
+    var courseIDs: Set<String> { Set(courses.map(\.id)) }
+}
+
+enum TeachingCloudCourseGrouping {
+    static func normalizedName(_ name: String?) -> String? {
+        guard let value = name?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
+        return value
+    }
+
+    static func groups(_ courses: [TeachingCloudCourse]) -> [TeachingCloudCourseGroup] {
+        var members = [[TeachingCloudCourse]]()
+        var namedIndices = [String: Int]()
+        for course in courses {
+            if let name = normalizedName(course.name) {
+                if let index = namedIndices[name] { members[index].append(course) }
+                else { namedIndices[name] = members.count; members.append([course]) }
+            } else {
+                // Missing names never identify unrelated classes as one course.
+                members.append([course])
+            }
+        }
+        return members.compactMap { courses in
+            let ordered = courses.sorted { $0.id < $1.id }
+            guard let representative = ordered.first else { return nil }
+            let teachers = Set(ordered.flatMap(\.teacherNames).compactMap { normalizedName($0) }).sorted()
+            return TeachingCloudCourseGroup(id: representative.id, name: normalizedName(representative.name),
+                                            courses: ordered, teacherNames: teachers)
+        }
+    }
+
+    static func group(containing courseID: String, in courses: [TeachingCloudCourse]) -> TeachingCloudCourseGroup? {
+        groups(courses).first { $0.courseIDs.contains(courseID) }
+    }
+}
+
 protocol TeachingCloudCourseFetching: Sendable {
     func fetchCurrentCourses(force: Bool) async throws -> [TeachingCloudCourse]
     func reset() async
@@ -42,6 +84,7 @@ extension TeachingCloudCourseFetching {
 @MainActor
 final class TeachingCloudCourseStore: ObservableObject {
     @Published private(set) var courses: [TeachingCloudCourse]?
+    var courseGroups: [TeachingCloudCourseGroup]? { courses.map(TeachingCloudCourseGrouping.groups) }
     @Published private(set) var isLoading = false
     @Published private(set) var isRefreshing = false
     @Published private(set) var errorMessage = ""

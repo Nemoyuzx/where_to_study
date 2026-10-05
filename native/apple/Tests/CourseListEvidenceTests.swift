@@ -24,15 +24,51 @@ final class CourseListEvidenceTests: XCTestCase {
         XCTAssertEqual(items.first?.courseName, "Original API title")
     }
 
-    func testAssignmentJoinUsesSiteIDAndRequiresUniqueExactLegacyCourseName() {
+    func testGroupedAssignmentJoinUsesEveryOriginalSiteIDAndExactLegacyGroupName() {
         let a = TeachingCloudCourse(id: "a", name: "Same name")
         let b = TeachingCloudCourse(id: "b", name: "Same name")
         let cached = [assignment("id-match", courseID: "a", name: "Old name"),
                       assignment("different-id", courseID: "b", name: "Same name"),
                       assignment("legacy", courseID: nil, name: "Same name")]
-        XCTAssertEqual(CourseListEvidence.teachingCloudAssignments(course: a, roster: [a, b], cached: cached).map(\.id), ["id-match"])
+        XCTAssertEqual(CourseListEvidence.teachingCloudAssignments(course: a, roster: [a, b], cached: cached).map(\.id), ["different-id", "id-match", "legacy"])
         XCTAssertEqual(CourseListEvidence.teachingCloudAssignments(course: a, roster: [a], cached: cached).map(\.id), ["id-match", "legacy"])
         XCTAssertTrue(CourseListEvidence.teachingCloudAssignments(course: a, roster: [a], cached: [assignment("partial-name", courseID: nil, name: "Same")]).isEmpty)
+        XCTAssertTrue(CourseListEvidence.teachingCloudAssignments(course: a, roster: [a], cached: [assignment("foreign-id", courseID: "foreign", name: "Same name")]).isEmpty)
+    }
+
+    func testGroupedAssignmentsPreserveClassScopedDuplicatesAndCountBothClasses() throws {
+        let roster = [TeachingCloudCourse(id: "a", name: "Course"), TeachingCloudCourse(id: "b", name: " Course ")]
+        let group = try XCTUnwrap(TeachingCloudCourseGrouping.groups(roster).first)
+        let first = AssignmentDeadlineItem(id: "same-assignment-id", title: "Class A task", courseName: "Course",
+            deadline: "2026-11-08 18:00:00", status: "未提交", courseID: "a")
+        let second = AssignmentDeadlineItem(id: "same-assignment-id", title: "Class B task", courseName: "Course",
+            deadline: "2026-11-08 18:00:00", status: "已提交", courseID: "b")
+        let items = CourseListEvidence.teachingCloudAssignments(group: group, cached: [first, first, second])
+        XCTAssertEqual(items, [first, second])
+        XCTAssertEqual(Set(items.map(\.teachingCloudDisplayID)).count, 2, "Both class rows need independent SwiftUI identities")
+        XCTAssertEqual(CourseListEvidence.submissionCounts(statuses: items.map(\.status)), .init(pending: 1, submitted: 1))
+        XCTAssertEqual(CourseListEvidence.cachedAssignments(query: nil,
+            byDate: ["2026-11-08": [first, second], "2026-11-09": [first]]).count, 2)
+    }
+
+    func testUnnamedCoursesNeverShareLegacyAssignmentsOrAnotherOriginalCourseID() throws {
+        let roster = [TeachingCloudCourse(id: "a", name: nil), TeachingCloudCourse(id: "b", name: " ")]
+        let group = try XCTUnwrap(TeachingCloudCourseGrouping.group(containing: "a", in: roster))
+        let cached = [assignment("a-task", courseID: "a", name: nil),
+                      assignment("b-task", courseID: "b", name: nil),
+                      assignment("unknown", courseID: nil, name: " ")]
+        XCTAssertEqual(CourseListEvidence.teachingCloudAssignments(group: group, cached: cached).map(\.id), ["a-task"])
+    }
+
+    func testCalendarSelectionForTheSecondClassResolvesTheWholeCurrentCourseGroup() throws {
+        let roster = [TeachingCloudCourse(id: "a", name: "Course"), TeachingCloudCourse(id: "b", name: "Course")]
+        let first = assignment("first", courseID: "a", name: "Course")
+        let second = assignment("second", courseID: "b", name: "Course")
+        let selected = try XCTUnwrap(CourseDeadlineCalendarProjection.teachingCloudSelection(second, roster: roster))
+        XCTAssertEqual(selected.courseID, "b", "Calendar events keep their original class binding")
+        let group = try XCTUnwrap(TeachingCloudCourseGrouping.group(containing: selected.courseID, in: roster))
+        XCTAssertEqual(group.id, "a")
+        XCTAssertEqual(CourseListEvidence.teachingCloudAssignments(group: group, cached: [first, second]), [first, second])
     }
 
     func testCountsUseOnlyExplicitSubmissionStatusNeverCompletionOrUnknown() {

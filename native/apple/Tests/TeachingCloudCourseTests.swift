@@ -7,6 +7,41 @@ import XCTest
 
 @MainActor
 final class TeachingCloudCourseTests: XCTestCase {
+    func testDisplayGroupingUsesTrimmedExactNamesAndLeavesSourceRecordsUnchanged() throws {
+        let courses = [
+            TeachingCloudCourse(id: "class-b", name: " Same course\n", teacherNames: [" Tutor B ", "Tutor A", " "]),
+            TeachingCloudCourse(id: "class-a", name: "Same course", teacherNames: ["Tutor A", "Tutor C"]),
+            TeachingCloudCourse(id: "case-sensitive", name: "same course", teacherNames: []),
+            TeachingCloudCourse(id: "unnamed-a", name: nil),
+            TeachingCloudCourse(id: "unnamed-b", name: " \n ")
+        ]
+        let original = try JSONEncoder().encode(courses)
+        let groups = TeachingCloudCourseGrouping.groups(courses)
+        XCTAssertEqual(groups.count, 4)
+        XCTAssertEqual(groups.map(\.id), ["class-a", "case-sensitive", "unnamed-a", "unnamed-b"])
+        XCTAssertEqual(groups[0].name, "Same course")
+        XCTAssertEqual(groups[0].courseIDs, Set(["class-a", "class-b"]))
+        XCTAssertEqual(groups[0].teacherNames, ["Tutor A", "Tutor B", "Tutor C"])
+        XCTAssertEqual(groups[0].courses.map(\.id), ["class-a", "class-b"])
+        XCTAssertNil(groups[2].name)
+        XCTAssertNil(groups[3].name)
+        XCTAssertEqual(groups.flatMap(\.courses).count, courses.count)
+        XCTAssertEqual(try JSONDecoder().decode([TeachingCloudCourse].self, from: original), courses,
+                       "Grouping must not rewrite cached source names, teachers or IDs")
+    }
+
+    func testGroupRepresentativeAndMemberLookupDoNotDependOnRosterOrder() throws {
+        let a = TeachingCloudCourse(id: "a", name: "Course", teacherNames: ["Tutor B"])
+        let b = TeachingCloudCourse(id: "b", name: " Course ", teacherNames: ["Tutor A"])
+        let forward = try XCTUnwrap(TeachingCloudCourseGrouping.group(containing: "a", in: [a, b]))
+        let reversed = try XCTUnwrap(TeachingCloudCourseGrouping.group(containing: "b", in: [b, a]))
+        XCTAssertEqual(forward, reversed)
+        XCTAssertEqual(forward.id, "a")
+        XCTAssertEqual(forward.teacherNames, ["Tutor A", "Tutor B"])
+        XCTAssertNil(TeachingCloudCourseGrouping.group(containing: "missing", in: [a, b]))
+        XCTAssertTrue(TeachingCloudCourseGrouping.groups([]).isEmpty)
+    }
+
     func testDefaultCourseDestinationAndMovedAcademicModesHaveEnglishNames() {
         let session = CoursesViewSession()
         XCTAssertEqual(session.selectedMode, .currentCourses)
@@ -35,12 +70,14 @@ final class TeachingCloudCourseTests: XCTestCase {
         let calls = await client.calls
         XCTAssertEqual(calls, 1)
         let first = store.courses
+        XCTAssertEqual(store.courseGroups?.flatMap(\.courses), first)
         await client.failNext()
         await store.load(owner: "owner", sampleMode: false, force: true)
         XCTAssertEqual(store.courses, first)
         XCTAssertFalse(store.errorMessage.isEmpty)
         store.invalidate()
         XCTAssertNil(store.courses)
+        XCTAssertNil(store.courseGroups)
         await store.load(owner: "sample", sampleMode: true)
         let finalCalls = await client.calls
         XCTAssertEqual(finalCalls, 2, "Sample mode must not contact teaching cloud")

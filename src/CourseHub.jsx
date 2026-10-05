@@ -1,12 +1,12 @@
 import { uiText } from './ui-text.js'
 import { uiDateLocale } from './ui-languages.js'
-import {useEffect,useState,useRef,useId} from 'react'
+import {useEffect,useState,useRef,useId,useMemo} from 'react'
 import {useCourseData} from './use-course-data.js'
 import AnimatedDisclosure from './AnimatedDisclosure.jsx'
 import {BookOpen,CheckCircle2,CalendarClock,Clock3,RefreshCw,ExternalLink,ChevronDown,Info,X} from 'lucide-react'
 import GradesPanel from './GradesPanel.jsx'
 import PrivateQueriesPanel from './PrivateQueriesPanel.jsx'
-import {assignmentsForCourse,isEbuCourse,qmplusActivitiesForCourse,submissionCounts,courseTimestamp,courseActivityKey,CourseRequestOwner} from './course-domain.js'
+import {assignmentsForCourse,groupTeachingCloudCourses,teachingCloudCourseIDs,isEbuCourse,qmplusActivitiesForCourse,submissionCounts,courseTimestamp,courseActivityKey,CourseRequestOwner} from './course-domain.js'
 
 function time(value,language) {
   const date=new Date(courseTimestamp(value))
@@ -104,11 +104,11 @@ export function CourseDetail({course,source,items,language,busy,error,onRefresh,
   </div>
 }
 
-// Calendar deadlines carry the same Teaching Cloud DTO. A name is joined only
-// when unique in that platform's directory; a mismatched ID never falls back.
+// Calendar deadlines resolve against the same current-term course projection
+// as the list. An explicit unmatched ID never falls back to a course name.
 export function calendarCourseForAssignment(item,directory) {
   if(item.course_id!=null) {
-    const matches=directory.filter(course=>String(course.id)===String(item.course_id))
+    const matches=directory.filter(course=>teachingCloudCourseIDs(course).includes(String(item.course_id)))
     return matches.length===1?matches[0]:null
   }
   const name=item.course_name?.trim()
@@ -119,7 +119,8 @@ export function calendarCourseForAssignment(item,directory) {
 export function CalendarAssignmentCourseDetail({item,language,courseDataOwner,hasAcademicAccount,onClose}) {
   const text=(zh,english)=>uiText(language,zh,english)
   const data=useCourseData(courseDataOwner)
-  const course=calendarCourseForAssignment(item,data.courses||[])
+  const directory=useMemo(()=>groupTeachingCloudCourses(data.courses||[]),[data.courses])
+  const course=calendarCourseForAssignment(item,directory)
   const items=course&&data.assignments!==null?assignmentsForCourse(data.assignments,course,data.courses||[]):[item]
   async function refresh() {
     if(!data.cloudBusy&&hasAcademicAccount)await courseDataOwner?.refresh(true).catch(()=>{})
@@ -132,6 +133,7 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
   const text=(zh,english,values)=>uiText(language,zh,english,values)
   const data=useCourseData(courseDataOwner)
   const {courses,qm,assignments:assignmentItems,cloudBusy:busy,cloudError:cloudError}=data
+  const cloudCourses=useMemo(()=>groupTeachingCloudCourses(courses||[]),[courses])
   const [tab,setTab]=useState('courses'),[error,setError]=useState('')
   const [selection,setSelection]=useState(null),[detailBusy,setDetailBusy]=useState(false),[detailError,setDetailError]=useState('')
   const owner=useRef(null)
@@ -156,12 +158,14 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
     } catch {if(owner.current.accepts('detail',detailRevision))setDetailError('课程作业获取失败，请检查设置中的教学云平台密码。')}
     finally {if(owner.current.accepts('detail',detailRevision))setDetailBusy(false)}
   }
-  function open(source,course) {owner.current.next('detail');setSelection({source,id:course.id});setDetailError('');setDetailBusy(false)}
+  function open(source,course) {owner.current.next('detail');setSelection({source,id:source==='ucloud'?course.presentation_key:course.id});setDetailError('');setDetailBusy(false)}
   function closeDetail(){owner.current.next('detail');setSelection(null);setDetailBusy(false);setDetailError('')}
   const eligibleQmCourses=(qm?.courses||[]).filter(isEbuCourse)
   const qmCourses=eligibleQmCourses.filter(course=>course.current_term_status==='current')
   const otherQmCourses=eligibleQmCourses.filter(course=>course.current_term_status!=='current')
-  const selectedCourse=selection&&(selection.source==='qmplus'?(qmplusEnabled?eligibleQmCourses:[]):courses||[]).find(course=>course.id===selection.id)
+  const selectedCourse=selection&&(selection.source==='qmplus'
+    ? (qmplusEnabled?eligibleQmCourses:[]).find(course=>course.id===selection.id)
+    : cloudCourses.find(course=>course.presentation_key===selection.id))
   const qmActivities=course=>qmplusActivitiesForCourse(qm,course)
   const cloudActivities=course=>assignmentsForCourse(assignmentItems,course,courses||[])
   useEffect(()=>{if(selection&&!selectedCourse)closeDetail()},[selection,selectedCourse])
@@ -171,11 +175,11 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
     <GradesPanel command={command} language={language} enabled={tab==='grades'} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount}/>
     {['exams','assignments'].map(kind=><PrivateQueriesPanel key={kind} kind={kind} enabled={tab===kind} command={command} courseDataOwner={courseDataOwner} language={language} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount} examSnapshot={examSnapshot} assignmentSnapshot={assignmentItems}/>)}
     {tab==='courses'&&<>
-      <header className="query-section-header"><div><h2>{text('教学云平台课程', 'Teaching Cloud courses')}</h2>{courses!==null&&<small>{courses.length} {text('门', 'courses')}</small>}</div><button disabled={busy} onClick={()=>reload(true)}><RefreshCw size={16}/>{text('刷新', 'Refresh')}</button></header>
+      <header className="query-section-header"><div><h2>{text('教学云平台课程', 'Teaching Cloud courses')}</h2>{courses!==null&&<small>{cloudCourses.length} {text('门', 'courses')}</small>}</div><button disabled={busy} onClick={()=>reload(true)}><RefreshCw size={16}/>{text('刷新', 'Refresh')}</button></header>
       {(error||cloudError)&&<p role="alert">{text(error||cloudError,error||cloudError)}</p>}{!hasAcademicAccount&&<button onClick={onOpenAccount}>{text('前往个人账户', 'Configure academic account')}</button>}
       {data.fetchedAt&&<small>{text('最近同步','Last synchronized')}：{time(data.fetchedAt,language)}</small>}
       {data.cacheWarning&&<p role="status">{text('本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。','Course data was loaded, but the local cache was not updated. A restart may show the previous cache.')}</p>}
-      <div className="course-list">{(courses||[]).map(course=><CourseRow key={course.id} course={course} items={cloudActivities(course)} language={language} source="ucloud" busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onOpen={()=>open('ucloud',course)}/>)}</div>
+      <div className="course-list">{cloudCourses.map(course=><CourseRow key={course.presentation_key} course={course} items={cloudActivities(course)} language={language} source="ucloud" busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onOpen={()=>open('ucloud',course)}/>)}</div>
       {courses?.length===0&&<p>{text('当前接口没有返回课程。', 'No current courses returned.')}</p>}
       {qmplusEnabled&&<>
       <header className="query-section-header"><div><div className="qmplus-title"><h2>QMplus · {text('EBU 课程', 'EBU courses')}</h2><small>{text('仅适用国院','For the International School only')}</small></div>{qm&&<small>{qmCourses.length} {text('门', 'courses')}</small>}</div><div className="course-actions"><button onClick={()=>courseDataOwner?.syncQM(false).catch(()=>setError('无法打开 QMplus。'))}><ExternalLink size={16}/>{text('连接／同步', 'Connect / sync')}</button><button onClick={()=>courseDataOwner?.reloadQM().catch(()=>{})}><RefreshCw size={16}/>{text('读取同步结果', 'Load synchronized data')}</button></div></header>

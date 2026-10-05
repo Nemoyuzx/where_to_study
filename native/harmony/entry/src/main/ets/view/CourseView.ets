@@ -3,7 +3,7 @@ import { accessibility } from '@kit.AccessibilityKit';
 import { AppTheme } from '../common/AppTheme';
 import { ControlMetrics } from '../common/ControlMetrics';
 import { CoursePageContract, CoursePageTab, CourseQMPlusScope,
-  CourseCloudScope, CourseSubmissionCounts } from '../common/CourseLogic';
+  CourseCloudScope, CourseSubmissionCounts, UCloudCourseGroup } from '../common/CourseLogic';
 import { AppLanguage } from '../common/AppLocalization';
 import { PhoneNavigationLayout } from '../common/DeviceState';
 import { AppModel } from '../model/AppModel';
@@ -12,7 +12,6 @@ import { AssignmentQueryView, ExamQueryView } from './AcademicQueryViews';
 import { GradeQueryView } from './GradeQueryView';
 import { CourseSession } from './CourseSession';
 import { QMPlusSession } from './QMPlusSession';
-import { UCloudCourse } from '../net/UCloudAssignmentClient';
 import { QMPlusActivity, QMPlusCourse } from '../net/QMPlusSnapshot';
 import { AppContext } from '../store/AppContext';
 import { AssignmentDeadlineItem, CalendarDailyInfoSources } from '../net/CalendarDailyInfoClient';
@@ -84,9 +83,13 @@ export struct CourseView {
     return this.model.resolvedLanguage() === AppLanguage.english && translated === chinese ? english : translated;
   }
 
-  private selectedCloudCourse(): UCloudCourse | undefined {
-    return this.model.cloudCourses.find((course: UCloudCourse): boolean =>
-      course.id === this.session.selectedCourseID);
+  private cloudCourseGroups(): UCloudCourseGroup[] {
+    return CourseCloudScope.groups(this.model.cloudCourses);
+  }
+
+  private selectedCloudCourse(): UCloudCourseGroup | undefined {
+    return this.cloudCourseGroups().find((course: UCloudCourseGroup): boolean =>
+      course.courseIDs.includes(this.session.selectedCourseID));
   }
 
   private selectedQMPlusCourse(): QMPlusCourse | undefined {
@@ -94,12 +97,12 @@ export struct CourseView {
       course.id === this.session.selectedCourseID);
   }
 
-  private cloudAssignments(course: UCloudCourse): AssignmentDeadlineItem[] {
-    return CourseCloudScope.assignmentsFor(course, this.model.cloudCourses,
+  private cloudAssignments(course: UCloudCourseGroup): AssignmentDeadlineItem[] {
+    return CourseCloudScope.groupAssignmentsFor(course, this.model.cloudCourses,
       this.model.assignmentCatalog, this.model.assignmentCatalogFetchedAt.length > 0);
   }
 
-  private cloudSubmissionCounts(course: UCloudCourse): CourseSubmissionCounts {
+  private cloudSubmissionCounts(course: UCloudCourseGroup): CourseSubmissionCounts {
     return CourseCloudScope.submissionCounts(this.cloudAssignments(course));
   }
 
@@ -200,7 +203,7 @@ export struct CourseView {
   private overviewCount(): string {
     const parts: string[] = [];
     if (this.model.cloudCoursesFetchedAt.length > 0) {
-      parts.push(this.localized('教学云 ', 'Teaching Cloud ') + this.model.cloudCourses.length.toString() +
+      parts.push(this.localized('教学云 ', 'Teaching Cloud ') + this.cloudCourseGroups().length.toString() +
         this.localized(' 门', ' courses'));
     }
     if (this.model.qmplusEnabled && this.qmPlusSession.snapshot !== null && !this.model.isSampleMode()) {
@@ -235,7 +238,7 @@ export struct CourseView {
   }
 
   @Builder
-  inlineCloudAssignments(course: UCloudCourse) {
+  inlineCloudAssignments(course: UCloudCourseGroup) {
     if (this.model.assignmentCatalogFetchedAt.length === 0) {
       Text(this.localized('该课作业尚未在本机同步；可到“作业”栏目手动刷新。',
         'Assignments for this course have not been synced here. Refresh manually in Assignments.'))
@@ -252,7 +255,7 @@ export struct CourseView {
           (value: string): boolean => value.length > 0).join(' · '))
           .fontSize(12).fontColor(AppTheme.secondaryText()).width('100%')
       }.padding(10).width('100%').borderRadius(8).backgroundColor(AppTheme.surfaceVariant())
-    }, (item: AssignmentDeadlineItem) => 'inline.cloud.' + course.id + '.' + item.id)
+    }, (item: AssignmentDeadlineItem) => 'inline.cloud.' + course.id + '.' + CourseCloudScope.assignmentKey(item))
     if (this.cloudAssignments(course).length > this.session.visibleCloudAssignments) {
       Button(this.model.text('加载更多')).height(ControlMetrics.height)
         .onClick(() => { this.session.visibleCloudAssignments += 40; })
@@ -425,7 +428,7 @@ export struct CourseView {
   @Builder
   courseDetailContent() {
     if (this.session.selectedCourseSource === 'ucloud' && this.selectedCloudCourse() !== undefined) {
-      this.cloudCourseDetail(this.selectedCloudCourse() as UCloudCourse)
+      this.cloudCourseDetail(this.selectedCloudCourse() as UCloudCourseGroup)
     } else if (this.session.selectedCourseSource === 'qmplus' && this.selectedQMPlusCourse() !== undefined) {
       this.qmPlusCourseDetail(this.selectedQMPlusCourse() as QMPlusCourse)
     } else {
@@ -443,7 +446,7 @@ export struct CourseView {
   }
 
   @Builder
-  cloudCourseDetail(course: UCloudCourse) {
+  cloudCourseDetail(course: UCloudCourseGroup) {
     Column({ space: 12 }) {
       Text(course.name ?? course.id)
         .fontSize(21)
@@ -498,7 +501,7 @@ export struct CourseView {
             .borderRadius(8)
             .backgroundColor(AppTheme.surfaceVariant())
             .alignItems(HorizontalAlign.Start)
-          }, (item: AssignmentDeadlineItem) => item.id + '|' + item.deadline)
+          }, (item: AssignmentDeadlineItem) => CourseCloudScope.assignmentKey(item) + '|' + item.deadline)
         if (this.cloudAssignments(course).length > this.session.visibleCloudAssignments) {
           Button(this.model.text('加载更多'))
             .type(ButtonType.Normal)
@@ -608,12 +611,12 @@ export struct CourseView {
           .fontSize(13)
           .fontColor(AppTheme.secondaryText())
       } else {
-        ForEach(this.model.cloudCourses, (course: UCloudCourse, index: number) => {
+        ForEach(this.cloudCourseGroups(), (course: UCloudCourseGroup, index: number) => {
           this.cloudCourseRow(course)
-          if (index < this.model.cloudCourses.length - 1) {
+          if (index < this.cloudCourseGroups().length - 1) {
             Divider().strokeWidth(0.5).color(AppTheme.border()).margin({ left: 52 })
           }
-        }, (course: UCloudCourse) => course.id)
+        }, (course: UCloudCourseGroup) => course.id)
       }
       Button(this.model.text('打开教学云平台'))
         .type(ButtonType.Normal)
@@ -663,7 +666,7 @@ export struct CourseView {
   }
 
   @Builder
-  cloudCourseRow(course: UCloudCourse) {
+  cloudCourseRow(course: UCloudCourseGroup) {
     Column({ space: 8 }) {
     Row({ space: 12 }) {
       Row({ space: 12 }) {
@@ -677,7 +680,9 @@ export struct CourseView {
         Flex({ wrap: FlexWrap.Wrap,
           space: { main: LengthMetrics.vp(6), cross: LengthMetrics.vp(5) } }) {
           if (course.teacherNames.length > 0) {
-            this.courseChip($r('sys.symbol.book_open_fill'), course.teacherNames.join('、'))
+            ForEach(course.teacherNames, (teacher: string) => {
+              this.courseChip($r('sys.symbol.book_open_fill'), teacher)
+            }, (teacher: string) => teacher)
           } else {
             this.courseChip($r('sys.symbol.book_open_fill'), this.localized('教学云', 'Teaching Cloud'))
           }

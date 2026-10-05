@@ -74,6 +74,53 @@ test('calendar course details reject ambiguous names, duplicate IDs and mismatch
   assert.equal(calendarCourseForAssignment({},[first]),null)
 })
 
+test('calendar details resolve any original teaching class ID to the complete current course group',()=>{
+  const first={id:'a',name:'Same',teacher_names:['First']},second={id:'b',name:' Same ',teacher_names:['Second']}
+  const groups=courseDomain.groupTeachingCloudCourses([first,second])
+  assert.equal(calendarCourseForAssignment({course_id:'b',course_name:'Old name'},groups),groups[0])
+  assert.equal(calendarCourseForAssignment({course_name:' Same '},groups),groups[0])
+  assert.equal(calendarCourseForAssignment({course_id:'missing',course_name:'Same'},groups),null)
+})
+
+test('Teaching Cloud card, disclosure and info use one grouped projection with all teachers and assignments',()=>{
+  const data={courses:[{id:'a',name:'Same',teacher_names:['First']},{id:'b',name:' Same ',teacher_names:['Second','First']}],
+    assignments:[{id:'one',course_id:'a',status:'未提交'},{id:'two',course_id:'b',status:'已提交'}],qm:null}
+  const {default:Hub,CourseRow:Row,CourseDetail:Detail,CourseActivityBody:Body}=load(
+    `${courseSource}\nexport {CourseRow,CourseActivityBody}`,
+    {'./use-course-data.js':{useCourseData:()=>data}})
+  const internals=React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE
+  const state=[],refs=[]
+  function render(component,props) {
+    let stateIndex=0,refIndex=0
+    const previous=internals.H
+    internals.H={useState:initial=>{
+      const index=stateIndex++
+      if(!(index in state))state[index]=initial
+      return [state[index],value=>{state[index]=typeof value==='function'?value(state[index]):value}]
+    },useRef:initial=>refs[refIndex++]||=( {current:initial} ),useEffect:()=>{},useMemo:fn=>fn(),useId:()=> 'merged-course'}
+    try{return component(props)}finally{internals.H=previous}
+  }
+  const props={command:()=>{throw Error('unexpected fetch')},language:'en',hasAcademicAccount:true,qmplusEnabled:false}
+  const rows=descendants(render(Hub,props)).filter(node=>node.type===Row)
+  assert.equal(rows.length,1)
+  assert.deepEqual(rows[0].props.course.teacher_names,['First','Second'])
+  assert.deepEqual(rows[0].props.items,data.assignments)
+  rows[0].props.onOpen()
+  const detail=descendants(render(Hub,props)).find(node=>node.type===Detail)
+  assert.ok(detail)
+  assert.equal(detail.props.course.presentation_key,rows[0].props.course.presentation_key)
+  assert.deepEqual(detail.props.items,data.assignments)
+  const previous=internals.H
+  internals.H={useState:initial=>[initial,()=>{}],useId:()=> 'merged-course-body'}
+  try {
+    const body=descendants(Row(rows[0].props)).find(node=>node.type===Body)
+    assert.deepEqual(body.props.items,data.assignments)
+    assert.deepEqual(courseDomain.submissionCounts(body.props.items),{pending:1,submitted:1})
+  }finally{internals.H=previous}
+  data.courses=[...data.courses].reverse()
+  assert.deepEqual(descendants(render(Hub,props)).find(node=>node.type===Detail).props.items,data.assignments)
+})
+
 test('all-semester grade groups retain source order and unknown terms without inferring IDs',()=>{
   const items=[{id:'one',semester_name:'Autumn',score:0},{id:'two',semester_name:'Spring',score:'A'},
     {id:'three',semester_name:'Autumn',score:'B'},{id:'four',semester_name:''},{id:'five'}]

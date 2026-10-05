@@ -55,6 +55,18 @@ enum QMplusAutofillPolicy {
               let url, let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath else { return false }
         return ["/\(tenant)/saml2", "/\(tenant)/login", "/kmsi"].contains(path)
     }
+    static func isMicrosoftVerificationDocument(_ url: URL?) -> Bool {
+        guard QMplusConnectionPolicy.isHTTPSNavigation(url), url?.host?.lowercased() == "login.microsoftonline.com",
+              let url, let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath else { return false }
+        return path.lowercased() == "/common/deviceauthtls/reprocess"
+    }
+    static func isInspectableMicrosoftDocument(_ url: URL?) -> Bool {
+        isTrustedMicrosoftDocument(url) || isMicrosoftVerificationDocument(url)
+    }
+    static func isPassiveMicrosoftTransit(_ url: URL?) -> Bool {
+        guard QMplusConnectionPolicy.isHTTPSNavigation(url) else { return false }
+        return ["login.microsoftonline.com", "device.login.microsoftonline.com"].contains(url?.host?.lowercased() ?? "")
+    }
     static func isQMplusLoginDocument(_ url: URL?) -> Bool {
         guard QMplusConnectionPolicy.isHTTPSNavigation(url), url?.host?.lowercased() == "qmplus.qmul.ac.uk", let url,
               let components = URLComponents(url: url, resolvingAgainstBaseURL: false), components.fragment == nil else { return false }
@@ -221,11 +233,59 @@ final class QMplusWebKitAutofillEvaluator: QMplusAutofillEvaluating {
                  completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
         guard let browser else { completion(nil); return }
         browser.callAsyncJavaScript("return WTSQmAuth.inspect(documentNonce, accountHint, identityAcknowledged);",
-            arguments: ["documentNonce": nonce, "accountHint": accountHint, "identityAcknowledged": identityAcknowledged], in: nil, in: world) { result in
+            arguments: ["documentNonce": nonce, "accountHint": accountHint, "identityAcknowledged": identityAcknowledged], in: nil, in: world) { [weak self] result in
                 guard case let .success(value) = result else { completion(nil); return }
-                completion(QMplusAuthInspection.decode(value))
+                let state = QMplusAuthInspection.decode(value)
+                #if DEBUG
+                self?.traceAccountLayout(state, hint: accountHint)
+                #endif
+                completion(state)
             }
     }
+    #if DEBUG
+    // Opt-in simulator diagnostics contain only fixed status codes, counts,
+    // geometry and equality booleans. Never return DOM text, identities or URLs.
+    private func traceAccountLayout(_ state: QMplusAuthInspection?, hint: String) {
+        guard ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE"] == "1",
+              let browser, let state else { return }
+        FileHandle.standardError.write(Data("WTS_QM_AUTH stage=\(state.stage.rawValue) reason=\(state.reason.rawValue) match=\(state.accountMatch) savedHint=\(!hint.isEmpty)\n".utf8))
+        guard QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url) else { return }
+        guard state.stage == .account || state.reason == .chooser || state.stage == .loading else { return }
+        browser.callAsyncJavaScript("""
+            const key = accountHint.trim().toLowerCase();
+            const norm = value => typeof value === 'string' ? value.trim().toLowerCase() : '';
+            const holder = document.querySelector('#tilesHolder');
+            const rows = Array.from(document.querySelectorAll('#tilesHolder div.table[role="button"][data-test-id]')).slice(0, 4);
+            const rectangle = node => {
+                const r = node?.getBoundingClientRect();
+                return r ? [r.x, r.y, r.width, r.height].map(value => Math.round(value)) : [];
+            };
+            return JSON.stringify({ready:document.readyState, viewport:[innerWidth,innerHeight],
+                holders:document.querySelectorAll('#tilesHolder').length,
+                asyncPending:holder?.getAttribute('data-test-asynctilesloaded') === 'false',
+                rows:rows.map(row => {
+                    const content = row.querySelector('div.table-cell.text-left.content');
+                    const r = row.getBoundingClientRect();
+                    const hit = document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+                    const leaves = content ? Array.from(content.querySelectorAll('*')).filter(node =>
+                        node.childElementCount === 0 && norm(node.textContent) === key) : [];
+                    return {attributeMatch:norm(row.getAttribute('data-test-id'))===key,
+                        contentMatch:norm(content?.textContent)===key,
+                        contentChildren:content?.childElementCount ?? 0,
+                        emailLeaves:leaves.length, rowRect:rectangle(row), contentRect:rectangle(content),
+                        emailRects:leaves.map(rectangle),
+                        centerOwned:hit?.closest('button,a,[role="button"]')===row,
+                        emailOwned:leaves.map(node=>{
+                            const r=node.getBoundingClientRect();
+                            return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)?.closest('button,a,[role="button"]')===row;
+                        })};
+                })});
+            """, arguments: ["accountHint": hint], in: nil, in: world) { result in
+                guard case let .success(value) = result, let text = value as? String, text.utf8.count <= 4096 else { return }
+                FileHandle.standardError.write(Data("WTS_QM_LAYOUT \(text)\n".utf8))
+            }
+    }
+    #endif
     func submit(_ submission: QMplusAuthSubmission, completion: @escaping @MainActor @Sendable (QMplusAuthSubmissionResult?) -> Void) {
         guard let browser else { completion(nil); return }
         let call = Self.submissionCall(submission)
@@ -267,6 +327,7 @@ final class QMplusAutofillPipeline {
     private let nonce: String
     private let isCurrent: @MainActor () -> Bool
     private let viewportReady: @MainActor () -> Bool
+    private let verificationOnly: Bool
     private let credentials: @MainActor () -> QMplusSavedCredentials?
     private let manual: @MainActor () -> Void
     private let challenge: @MainActor () -> Void
@@ -284,6 +345,7 @@ final class QMplusAutofillPipeline {
     init(evaluator: any QMplusAutofillEvaluating, ledger: QMplusAutofillLedger, presentation: UInt64,
          credentialRevision: UInt64, nonce: String, isCurrent: @escaping @MainActor () -> Bool,
          viewportReady: @escaping @MainActor () -> Bool = { true },
+         verificationOnly: Bool = false,
          credentials: @escaping @MainActor () -> QMplusSavedCredentials?, manual: @escaping @MainActor () -> Void,
          challenge: @escaping @MainActor () -> Void = {},
          identityMismatch: @escaping @MainActor () -> Void = {},
@@ -292,6 +354,7 @@ final class QMplusAutofillPipeline {
         self.evaluator = evaluator; self.ledger = ledger; self.presentation = presentation
         self.credentialRevision = credentialRevision; self.nonce = nonce; self.isCurrent = isCurrent
         self.viewportReady = viewportReady
+        self.verificationOnly = verificationOnly
         self.credentials = credentials; self.manual = manual; self.identityMismatch = identityMismatch
         self.challenge = challenge
         self.progress = progress; self.wait = wait
@@ -315,7 +378,7 @@ final class QMplusAutofillPipeline {
         guard accepts else { return }
         guard viewportReady() else { waitForViewport(attempt: attempt); return }
         viewportWaitCount = 0
-        if accountHint == nil {
+        if !verificationOnly && accountHint == nil {
             if let saved = credentials(), accepts { accountHint = QMplusAutofillPolicy.accountKey(saved.account) }
         }
         guard accepts else { return }
@@ -332,8 +395,9 @@ final class QMplusAutofillPipeline {
             if state.stage == .loading && state.reason == .loading {
                 // The verification form may not have mounted yet. A missing
                 // saved identity must not stop read-only challenge detection.
-                self.scheduleInspection(attempt: attempt); return
+                self.scheduleInspection(attempt: attempt, maximumAttempts: self.verificationOnly ? 36 : 8); return
             }
+            guard !self.verificationOnly else { self.requireManual(); return }
             guard self.accountHint != nil else { self.requireManual(); return }
             if state.reason == .currentAccountVerified {
                 guard self.ledger.recordVerifiedIdentity(state, presentation: self.presentation,
@@ -355,6 +419,12 @@ final class QMplusAutofillPipeline {
                 // Wait finitely; no credential submission happens in this state.
                 self.scheduleInspection(attempt: attempt); return
             }
+            if state.stage == .manual && state.reason == .chooser && !self.ledger.accountAttempted &&
+                !self.ledger.usernameAttempted && !self.ledger.passwordAttempted && !self.ledger.continuationAttempted {
+                // Microsoft's first account tile can arrive after its holder.
+                // Inspect finitely before pausing; no identity is inferred.
+                self.scheduleInspection(attempt: attempt); return
+            }
             if state.stage == .manual && [.attempted, .chooser].contains(state.reason)
                 && self.ledger.hasIdentityAcknowledgement(for: self.nonce) && !self.ledger.passwordAttempted {
                 // The observed chooser briefly retains its empty container
@@ -365,7 +435,7 @@ final class QMplusAutofillPipeline {
                   self.accepts, let saved = self.credentials(), self.accepts,
                   QMplusAutofillPolicy.accountKey(saved.account) == self.accountHint,
                   saved.password.utf16.count <= 2048 else {
-                if [.chooser, .mismatch].contains(state.reason) { self.identityMismatch() }
+                if state.reason == .mismatch { self.identityMismatch() }
                 self.requireManual(); return
             }
             let submission: QMplusAuthSubmission

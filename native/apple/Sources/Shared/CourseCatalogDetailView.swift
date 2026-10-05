@@ -19,7 +19,8 @@ struct CourseCatalogDetailPresentationHost: View {
     private var selectionIsAvailable: Bool {
         guard let selected = session.detailSelection else { return false }
         switch selected.source {
-        case .teachingCloud: return teachingCloud.courses?.contains { $0.id == selected.courseID } == true
+        case .teachingCloud:
+            return TeachingCloudCourseGrouping.group(containing: selected.courseID, in: teachingCloud.courses ?? []) != nil
         case .qmplus: return qmplus.snapshot?.courses.contains {
             $0.id == selected.courseID && QMplusCourseSelection.includesCourse($0)
         } == true
@@ -76,11 +77,11 @@ private struct CourseCatalogDetailView: View {
     }
 
     @ViewBuilder private var teachingCloudDetail: some View {
-        if let course = teachingCloud.courses?.first(where: { $0.id == selection.courseID }) {
+        if let course = TeachingCloudCourseGrouping.group(containing: selection.courseID, in: teachingCloud.courses ?? []) {
             Text(model.isSampleMode ? model.localized(course.name ?? course.id) : course.name ?? course.id)
                 .font(.title2.weight(.semibold))
             Text(model.localized("教学云本学期课程")).font(.caption).foregroundStyle(theme.secondaryText)
-            Text("ID: \(course.id)").font(.caption).foregroundStyle(theme.secondaryText)
+            Text("ID: \(course.courseIDs.sorted().joined(separator: ", "))").font(.caption).foregroundStyle(theme.secondaryText)
             if !course.teacherNames.isEmpty {
                 Text(model.localized("教师") + ": " + course.teacherNames.map { model.isSampleMode ? model.localized($0) : $0 }.joined(separator: " · "))
             }
@@ -103,12 +104,12 @@ private struct CourseCatalogDetailView: View {
             Text(model.localized("以下内容仅来自本机已同步缓存；未列出不代表已经提交或没有作业。"))
                 .font(.caption).foregroundStyle(theme.secondaryText)
             let cached = CourseListEvidence.cachedAssignments(query: assignments.assignmentQueryItems, byDate: assignments.assignmentsByDate)
-            let items = CourseListEvidence.teachingCloudAssignments(course: course, roster: teachingCloud.courses ?? [], cached: cached)
+            let items = CourseListEvidence.teachingCloudAssignments(group: course, cached: cached)
             if items.isEmpty {
                 Text(model.localized("当前缓存没有可关联的本课作业。"))
                     .font(.callout).foregroundStyle(theme.secondaryText)
             }
-            ForEach(items) { item in
+            ForEach(items, id: \.teachingCloudDisplayID) { item in
                 TeachingCloudCachedAssignmentRow(item: item)
             }
         } else { unavailableContent }

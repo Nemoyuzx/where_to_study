@@ -6,6 +6,22 @@ struct CourseSubmissionCounts: Equatable, Sendable {
     var hasEvidence: Bool { pending > 0 || submitted > 0 }
 }
 
+struct TeachingCloudAssignmentDisplayID: Hashable, Sendable {
+    let courseID: String?
+    let legacyCourseName: String?
+    let assignmentID: String
+}
+
+extension AssignmentDeadlineItem {
+    // Assignment IDs are scoped to their original classes in the merged UI.
+    // This computed identity never changes the cached/API assignment record.
+    var teachingCloudDisplayID: TeachingCloudAssignmentDisplayID {
+        .init(courseID: courseID,
+              legacyCourseName: courseID == nil ? TeachingCloudCourseGrouping.normalizedName(courseName) : nil,
+              assignmentID: id)
+    }
+}
+
 enum CourseListEvidence {
     static func qmplusShanghaiTime(_ value: String?) -> String? {
         guard let date = QMplusSnapshotPolicy.utcDate(value) else { return nil }
@@ -31,13 +47,19 @@ enum CourseListEvidence {
 
     static func teachingCloudAssignments(course: TeachingCloudCourse, roster: [TeachingCloudCourse],
                                          cached: [AssignmentDeadlineItem]) -> [AssignmentDeadlineItem] {
-        let uniqueName = course.name.map { name in roster.filter { $0.name == name }.count == 1 } ?? false
-        var seen = Set<String>()
+        guard let group = TeachingCloudCourseGrouping.group(containing: course.id, in: roster) else { return [] }
+        return teachingCloudAssignments(group: group, cached: cached)
+    }
+
+    static func teachingCloudAssignments(group: TeachingCloudCourseGroup,
+                                         cached: [AssignmentDeadlineItem]) -> [AssignmentDeadlineItem] {
+        let courseIDs = group.courseIDs
+        var seen = Set<TeachingCloudAssignmentDisplayID>()
         return cached.filter { item in
-            if let courseID = item.courseID { return courseID == course.id }
-            return uniqueName && course.name != nil && item.courseName == course.name
-        }.filter { seen.insert($0.id).inserted }
-            .sorted { ($0.deadline, $0.id) < ($1.deadline, $1.id) }
+            if let courseID = item.courseID { return courseIDs.contains(courseID) }
+            return group.name != nil && TeachingCloudCourseGrouping.normalizedName(item.courseName) == group.name
+        }.filter { seen.insert($0.teachingCloudDisplayID).inserted }
+            .sorted { ($0.deadline, $0.id, $0.courseID ?? "") < ($1.deadline, $1.id, $1.courseID ?? "") }
     }
 
     static func qmplusActivities(courseID: String, snapshot: QMplusSnapshot?) -> [QMplusActivity] {
@@ -51,9 +73,9 @@ enum CourseListEvidence {
     static func cachedAssignments(query: [AssignmentDeadlineItem]?,
                                   byDate: [String: [AssignmentDeadlineItem]]) -> [AssignmentDeadlineItem] {
         if let query { return query }
-        var seen = Set<String>()
+        var seen = Set<TeachingCloudAssignmentDisplayID>()
         return byDate.keys.sorted(by: >).flatMap { byDate[$0] ?? [] }.filter { item in
-            seen.insert((item.courseID ?? item.courseName ?? "") + "|" + item.id).inserted
+            seen.insert(item.teachingCloudDisplayID).inserted
         }
     }
 }

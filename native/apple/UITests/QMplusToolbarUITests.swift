@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class QMplusToolbarUITests: XCTestCase {
-    func testSyntheticToolbarKeepsBothActionsVisibleEnabledAndInsideBoundsInBothLanguages() {
+    func testToolbarOnlyKeepsReloadAndLoginDoesNotRequireManualSyncInBothLanguages() {
         continueAfterFailure = false
         for language in ["zh-Hans", "en"] {
             let app = XCUIApplication()
@@ -13,26 +13,14 @@ final class QMplusToolbarUITests: XCTestCase {
             let reload = app.buttons["qmplus.connection.reload"].firstMatch
             let sync = app.buttons["qmplus.connection.sync"].firstMatch
             XCTAssertTrue(reload.waitForExistence(timeout: 5))
-            XCTAssertTrue(sync.waitForExistence(timeout: 5))
+            XCTAssertFalse(sync.exists)
             XCTAssertEqual(reload.label, language == "en" ? "Open the official QMplus login page" : "打开 QMplus 官方登录页")
-            XCTAssertEqual(sync.label, language == "en" ? "Sync after login" : "登录后同步")
             XCTAssertTrue(reload.isEnabled)
-            XCTAssertFalse(sync.isEnabled)
             assertVisibleBounds(reload, in: app)
-            assertVisibleBounds(sync, in: app)
             reload.tap()
             XCTAssertTrue(app.staticTexts["qmplus.toolbar.fixture.actions"].label.contains("reload=1"))
-            setSwitch(app.switches["qmplus.toolbar.fixture.ready"].firstMatch, on: true, in: app)
-            waitForEnabled(sync, enabled: true, in: app)
-            XCTAssertTrue(sync.isEnabled)
-            assertVisibleBounds(sync, in: app)
-            sync.tap()
-            XCTAssertTrue(app.staticTexts["qmplus.toolbar.fixture.actions"].label.contains("sync=1"))
-            setSwitch(app.switches["qmplus.toolbar.fixture.busy"].firstMatch, on: true, in: app)
-            waitForEnabled(sync, enabled: false, in: app)
-            XCTAssertFalse(sync.isEnabled)
             assertVisibleBounds(reload, in: app)
-            assertVisibleBounds(sync, in: app)
+            XCTAssertFalse(sync.exists)
             XCTAssertEqual(app.webViews.count, 0, "The fixture must never construct a login WebView")
             app.terminate()
         }

@@ -298,12 +298,18 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     private func presentExistingConnection(stopAutofill: Bool = true, verificationRequired: Bool = false,
-                                           explicitlyRequested: Bool = false) {
+                                           explicitlyRequested: Bool = false, callerLine: Int = #line) {
         guard hasActiveConnection else { return }
         if let browser = popupWebView ?? webView, isAutofillApplicationInactive(browser) {
             stopAutomaticLoginForInactiveScene(); return
         }
         guard verificationRequired || explicitlyRequested || manualContinuationRequested else {
+            #if DEBUG
+            if ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE"] == "1" {
+                let browser = popupWebView ?? webView
+                FileHandle.standardError.write(Data("WTS_QM_PAUSE caller=\(callerLine) ledger=\(hasActiveAutofillLedger) suspended=\(automaticLoginSuspended) host=\(browser?.url?.host ?? "none") scheme=\(browser?.url?.scheme ?? "none")\n".utf8))
+            }
+            #endif
             pauseForManualContinuation()
             return
         }
@@ -316,6 +322,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     private func pauseForManualContinuation() {
         guard hasActiveConnection else { return }
+        #if DEBUG
+        traceMicrosoftRouteForQA(popupWebView ?? webView)
+        #endif
         cancelAutofill(); autofillLedger.stop(); cancelAuthenticationProbe()
         quietPreflightTimeoutTask?.cancel(); quietPreflightTimeoutTask = nil
         requiresManualContinuation = true
@@ -325,6 +334,47 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         }
         loginGate.hideExistingConnection()
     }
+
+    // Transport documents may commit before Microsoft's recognized login/MFA
+    // page. Await navigation under the same deadline without filling/clicking.
+    private func waitForMicrosoftTransit(_ browser: WKWebView) -> Bool {
+        guard hasActiveAutofillLedger, QMplusAutofillPolicy.isPassiveMicrosoftTransit(browser.url) else { return false }
+        cancelAutofill()
+        cancelAuthenticationProbe()
+        currentHost = browser.url?.host ?? "login.microsoftonline.com"
+        statusKey = "正在确认 QMplus 登录状态…"
+        resumeSilentAuthentication()
+        if isQuietConnection, quietPreflightTimeoutTask == nil { scheduleQuietPreflightTimeout() }
+        return true
+    }
+
+    #if DEBUG
+    private func traceMicrosoftRouteForQA(_ browser: WKWebView?) {
+        guard ProcessInfo.processInfo.environment["WTS_QMPLUS_AUTH_TRACE"] == "1", let browser,
+              browser.url?.host?.lowercased() == "login.microsoftonline.com", let path = browser.url?.path else { return }
+        let known = Set(["common", "organizations", "saml2", "login", "kmsi", "sas", "beginauth",
+                         "processauth", "endauth", "oauth2", "v2.0", "authorize"])
+        let route = path.split(separator: "/").map { component -> String in
+            let part = component.lowercased()
+            if part == QMplusAutofillPolicy.tenant { return "tenant" }
+            return known.contains(part) ? part : "other"
+        }.joined(separator: "/")
+        FileHandle.standardError.write(Data("WTS_QM_ROUTE \(route)\n".utf8))
+        browser.evaluateJavaScript("""
+            JSON.stringify({titleID:!!document.querySelector('#idDiv_SAOTCS_Title'),
+                titleTextID:!!document.querySelector('#idDiv_SAOTCS_Title_Text'),
+                proofs:!!document.querySelector('#idDiv_SAOTCS_Proofs'),
+                proofsSection:!!document.querySelector('#idDiv_SAOTCS_Proofs_Section'),
+                challengeTitle:Array.from(document.querySelectorAll('h1,h2,[role="heading"],#idDiv_SAOTCS_Title,#idDiv_SAOTCS_Title_Text'))
+                    .some(node=>['verify your identity','验证您的身份','驗證您的身分','驗證您的身份'].includes(node.textContent.trim().toLowerCase())),
+                chooser:document.querySelectorAll('#tilesHolder').length,
+                otp:document.querySelectorAll('input[name="otc"],input[autocomplete="one-time-code"]').length})
+            """) { value, _ in
+                guard let text = value as? String, text.utf8.count <= 1024 else { return }
+                FileHandle.standardError.write(Data("WTS_QM_SAFE_DOM \(text)\n".utf8))
+            }
+    }
+    #endif
 
     func continueManually(sampleMode: Bool) {
         guard featureEnabled, !sampleMode else { return }
@@ -741,13 +791,13 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             // Microsoft pages whose autofill starts before didFinish.
             lastReviewedDocumentURL = webView.url
         }
-        if QMplusAutofillPolicy.isTrustedMicrosoftDocument(webView.url) {
+        if QMplusAutofillPolicy.isInspectableMicrosoftDocument(webView.url) {
             startAutofill(in: webView)
         } else if webView === self.webView, Self.isSyncOrigin(webView.url) {
             // The official DOM may be ready while analytics, images or other
             // subresources still keep isLoading true and delay didFinish.
             reviewCurrentDocument(in: webView)
-        } else if !Self.isSyncOrigin(webView.url) {
+        } else if !Self.isSyncOrigin(webView.url), !waitForMicrosoftTransit(webView) {
             currentHost = webView.url?.host ?? ""
             presentExistingConnection()
         }
@@ -830,7 +880,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     private func acceptsAutofillDocument(_ document: OwnedAutofillDocument, browser: WKWebView) -> Bool {
         hasActiveAutofillLedger && ownsAutofillDocument(document, browser: browser) && browser.url == document.url
-            && QMplusAutofillPolicy.isTrustedMicrosoftDocument(browser.url)
+            && QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url)
             && credentialAuthorization.credentialRevision == document.credentialRevision
     }
 
@@ -856,7 +906,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard !automaticLoginSuspended else { return }
         if isAutofillApplicationInactive(browser) { stopAutomaticLoginForInactiveScene(); return }
         guard hasActiveConnection, (popupWebView ?? webView) === browser,
-              QMplusAutofillPolicy.isTrustedMicrosoftDocument(browser.url), let url = browser.url,
+              QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url), let url = browser.url,
               hasActiveAutofillLedger else {
             presentExistingConnection(); return
         }
@@ -902,8 +952,10 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             }, viewportReady: { [weak self, weak browser] in
                 guard let self, let browser else { return false }
                 return self.hasUsableAutofillViewport(browser)
-            }, credentials: { [weak self, weak browser] in
+            }, verificationOnly: QMplusAutofillPolicy.isMicrosoftVerificationDocument(document.url),
+            credentials: { [weak self, weak browser] in
                 guard let self, let browser, self.credentialDraft.wantsToSave,
+                      QMplusAutofillPolicy.isTrustedMicrosoftDocument(browser.url),
                       self.acceptsAutofillDocument(document, browser: browser),
                       self.hasUsableAutofillViewport(browser) else { return nil }
                 let saved = self.credentialAuthorization.loadAuthorizedCredentials(expectedRevision: document.credentialRevision)
@@ -967,8 +1019,10 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
               browser.url != nil, committedMainDocumentContext == loginGate.context else { return }
         lastReviewedDocumentURL = browser.url
         guard Self.isSyncOrigin(browser.url) else {
-            if QMplusAutofillPolicy.isTrustedMicrosoftDocument(browser.url) {
+            if QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url) {
                 startAutofill(in: browser)
+            } else if waitForMicrosoftTransit(browser) {
+                return
             } else {
                 if !credentialAuthorization.isEnabled, !credentialAuthorization.statusKey.isEmpty {
                     statusKey = credentialAuthorization.statusKey
@@ -1135,9 +1189,10 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     private func reviewAuthenticationPopup(_ popup: WKWebView) {
         guard hasActiveAuthenticationRecognition else { return }
-        if QMplusAutofillPolicy.isTrustedMicrosoftDocument(popup.url) {
+        if QMplusAutofillPolicy.isInspectableMicrosoftDocument(popup.url) {
             startAutofill(in: popup); return
         }
+        if waitForMicrosoftTransit(popup) { return }
         guard Self.isSyncOrigin(popup.url) else { return }
         let context = loginGate.context
         let document = popupDocument

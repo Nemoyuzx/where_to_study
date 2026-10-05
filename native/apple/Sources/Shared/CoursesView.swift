@@ -140,7 +140,7 @@ struct CoursesView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(model.localized("教学云本学期课程")).font(.headline)
-                        if let courses = teachingCloud.courses {
+                        if let courses = teachingCloud.courseGroups {
                             Text(model.localizedFormat("%d 门课程", courses.count)).font(.caption).foregroundStyle(theme.secondaryText)
                         }
                     }
@@ -168,12 +168,12 @@ struct CoursesView: View {
                         PersonalAccountQueryButton(identifier: "courses.ucloud.account")
                     }
                 }
-                if let courses = teachingCloud.courses {
+                if let courses = teachingCloud.courseGroups {
                     let cached = CourseListEvidence.cachedAssignments(query: assignmentStore.assignmentQueryItems,
                                                                      byDate: assignmentStore.assignmentsByDate)
                     if courses.isEmpty { Text(model.localized("本学期暂无教学云课程")).foregroundStyle(theme.secondaryText) }
                     ForEach(courses) { course in
-                        let assignments = CourseListEvidence.teachingCloudAssignments(course: course, roster: courses, cached: cached)
+                        let assignments = CourseListEvidence.teachingCloudAssignments(group: course, cached: cached)
                         CourseCatalogRow(title: model.isSampleMode ? model.localized(course.name ?? course.id) : course.name ?? course.id,
                                          metadata: course.teacherNames.map { model.isSampleMode ? model.localized($0) : $0 }.joined(separator: " · "),
                                          metadataSymbol: "person", counts: CourseListEvidence.submissionCounts(statuses: assignments.map(\.status)),
@@ -187,7 +187,7 @@ struct CoursesView: View {
                                     Text(model.localized("当前缓存没有可关联的本课作业。"))
                                         .font(.caption).foregroundStyle(theme.secondaryText)
                                 }
-                                ForEach(assignments) { TeachingCloudCachedAssignmentRow(item: $0) }
+                                ForEach(assignments, id: \.teachingCloudDisplayID) { TeachingCloudCachedAssignmentRow(item: $0) }
                                 Button(model.localized("刷新教学云作业")) {
                                     Task { await assignmentStore.loadAssignmentQuery(sampleMode: model.isSampleMode, force: true) }
                                 }

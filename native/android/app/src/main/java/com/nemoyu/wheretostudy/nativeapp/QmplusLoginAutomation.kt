@@ -124,11 +124,20 @@ internal object QmplusLoginPagePolicy {
     fun isMicrosoftPage(value: String): Boolean = trustedURI(value)?.let {
         it.host.equals("login.microsoftonline.com", true) && it.rawPath in setOf("/$QM_TENANT/saml2", "/$QM_TENANT/login", "/kmsi")
     } == true
+    fun isVerificationPage(value: String): Boolean = trustedURI(value)?.let {
+        it.host.equals("login.microsoftonline.com", true) && it.rawPath.equals("/common/deviceauthtls/reprocess", true)
+    } == true
+    fun isMicrosoftTransitPage(value: String): Boolean = runCatching { URI(value) }.getOrNull()?.let {
+        it.scheme.equals("https", true) && (it.host.equals("login.microsoftonline.com", true) ||
+            it.host.equals("device.login.microsoftonline.com", true)) &&
+            it.rawUserInfo == null && it.port in listOf(-1, 443) &&
+            !isMicrosoftPage(value) && !isVerificationPage(value)
+    } == true
     fun canInspectAuthenticationPage(value: String): Boolean = runCatching { URI(value) }.getOrNull()?.let {
         it.scheme.equals("https", true) && it.rawUserInfo == null && it.port in listOf(-1, 443) &&
             it.rawFragment == null && when {
                 it.host.equals("qmplus.qmul.ac.uk", true) -> isSSOEntry(value)
-                it.host.equals("login.microsoftonline.com", true) -> it.rawPath in setOf("/$QM_TENANT/saml2", "/$QM_TENANT/login", "/kmsi")
+                it.host.equals("login.microsoftonline.com", true) -> isMicrosoftPage(value) || isVerificationPage(value)
                 else -> false
             }
     } == true
@@ -266,12 +275,22 @@ internal class QmplusAuthFlow(
         accountHint = null; installed = false; busy = false; lastSubmittedStage = null; postSubmitChecks = 0; initialLayoutChecks = 0
         begin()
         if (!QmplusLoginPagePolicy.isOfficialQMPage(value) && !QmplusLoginPagePolicy.canInspectAuthenticationPage(value) &&
+            !QmplusLoginPagePolicy.isMicrosoftTransitPage(value) &&
             !(savedOptIn && (QmplusLoginPagePolicy.isSSOTransit(value) || QmplusLoginPagePolicy.isSSOEntry(value)))) manualRequired()
     }
     fun pageReady(value: String) {
         if (!checkFeature() || url != value || busy || renderer.currentURL != value || !renderer.active) return
         val document = gate.document
         if (QmplusLoginPagePolicy.isOfficialQMPage(value)) { inspectSession(document, value); return }
+        if (!manual && QmplusLoginPagePolicy.isVerificationPage(value)) {
+            if (!installed) installVerification(document, value) else inspectVerification(document, value)
+            return
+        }
+        if (!manual && QmplusLoginPagePolicy.isMicrosoftTransitPage(value)) {
+            // The original connection deadline keeps running across redirects.
+            // Only navigation is observed here: no helper, credential read, or action.
+            schedulePoll(document, value); return
+        }
         if (manual || !savedOptIn) { manualRequired(); return }
         if (!QmplusLoginPagePolicy.isMicrosoftPage(value)) { manualRequired(); return }
         if (!installed) install(document, value) else inspect(document, value)
@@ -287,7 +306,8 @@ internal class QmplusAuthFlow(
         gate.manualInteractionRequired(); cancelPoll?.invoke(); cancelPoll = null
         cancelDeadline?.invoke(); cancelDeadline = null
         reportPhase("manual")
-        if (!savedOptIn) reveal() else manualContinuation()
+        if (!savedOptIn && !QmplusLoginPagePolicy.isVerificationPage(url.orEmpty()) &&
+            !QmplusLoginPagePolicy.isMicrosoftTransitPage(url.orEmpty())) reveal() else manualContinuation()
     }
     fun suspend() {
         if (closed) return
@@ -396,6 +416,39 @@ internal class QmplusAuthFlow(
             }
         }
     }
+
+    private fun installVerification(document: Long, value: String) {
+        if (!checkedCurrent(document, value) || !QmplusLoginPagePolicy.isVerificationPage(value)) return
+        if (helper.isBlank() || helper.length > 64 * 1024) { manualRequired(); return }
+        busy = true
+        evaluate(document, value, "if (window.top === window && location.href === ${JSONObject.quote(value)}) {\n$helper\n} else 'STALE_DOCUMENT';") { encoded ->
+            if (!checkedCurrent(document, value) || manual) return@evaluate
+            busy = false
+            if (!gate.installed(document, QmplusAuthResultCodec.code(encoded).orEmpty())) { manualRequired(); return@evaluate }
+            installed = true
+            inspectVerification(document, value)
+        }
+    }
+
+    private fun inspectVerification(document: Long, value: String) {
+        if (!checkedCurrent(document, value) || manual || !QmplusLoginPagePolicy.isVerificationPage(value)) return
+        busy = true
+        evaluate(document, value, guarded(value, "WTSQmAuth.inspect(${JSONObject.quote(nonce)}, '')")) { encoded ->
+            if (!checkedCurrent(document, value) || manual) return@evaluate
+            busy = false
+            val state = QmplusAuthResultCodec.observation(encoded, nonce)
+            when {
+                state?.stage == "challenge" -> {
+                    manualRequired(challenge = true); schedulePoll(document, value, 750)
+                }
+                state?.stage == "loading" && state.reason == "LOADING" -> {
+                    if (waitingForVerification) { waitingForVerification = false; verificationFinished(); begin() }
+                    schedulePoll(document, value)
+                }
+                else -> manualRequired()
+            }
+        }
+    }
     private fun loadAccount(document: Long, value: String) {
         busy = true
         val weak = WeakReference(this)
@@ -456,6 +509,7 @@ internal class QmplusAuthFlow(
         }
     }
     private fun submit(document: Long, value: String, state: QmplusAuthObservation) {
+        if (!QmplusLoginPagePolicy.isMicrosoftPage(value)) { manualRequired(); return }
         authorized(document, value) {
             if (runCatching { URI(value).rawPath == "/kmsi" }.getOrDefault(false) && state.stage != "continue") {
                 manualRequired(); return@authorized

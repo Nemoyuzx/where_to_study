@@ -7,6 +7,86 @@ import org.junit.Test
 
 /** Production flow, fake transport/clock/secure-store callbacks. No browser or external requests. */
 class QmplusAuthFlowTest {
+    @Test fun microsoftTransitDoesNotInspectOrReadSecretsAndKeepsTheOriginalDeadlineAcrossHops() {
+        val fixture = Fixture(optIn = false)
+        fixture.open("https://device.login.microsoftonline.com/common/intermediate")
+        assertTrue(fixture.renderer.pending.isEmpty())
+        fixture.scheduler.advance(20_000)
+        fixture.open("https://login.microsoftonline.com/common/another-intermediate")
+        assertTrue(fixture.renderer.pending.isEmpty())
+        fixture.scheduler.advance(5_000)
+        assertEquals(1, fixture.deferrals)
+        assertEquals(0, fixture.reveals)
+        assertEquals(0, fixture.credentials.authorizationChecks)
+        assertEquals(0, fixture.credentials.accountReads)
+        assertEquals(0, fixture.credentials.passwordReads)
+        fixture.flow.close()
+    }
+
+    @Test fun passwordAckSurvivesPassiveMicrosoftTransitUntilTheRecognizedMFA() {
+        val fixture = installed()
+        fixture.replyStage(fixture.renderer.take(), "password", match = true, reason = "CURRENT_ACCOUNT_VERIFIED")
+        fixture.renderer.take().reply("\"PASSWORD_SUBMITTED\"")
+        val reads = fixture.credentials.authorizationChecks
+        fixture.open("https://device.login.microsoftonline.com/common/intermediate")
+        assertTrue(fixture.renderer.pending.isEmpty())
+        assertEquals(reads, fixture.credentials.authorizationChecks)
+        assertEquals(0, fixture.handoffs)
+        fixture.open(VERIFICATION)
+        fixture.renderer.take().reply("\"AUTH_INSTALLED\"")
+        fixture.replyStage(fixture.renderer.take(), "challenge", reason = "MFA_REQUIRED")
+        assertEquals(1, fixture.reveals)
+        assertEquals(0, fixture.deferrals)
+        assertEquals(1, fixture.credentials.passwordReads)
+        fixture.flow.close()
+    }
+
+    @Test fun verificationOnlyPathDetectsMFAWithoutAnySavedAuthorizationOrSecretRead() {
+        val fixture = Fixture(optIn = false)
+        fixture.open(VERIFICATION)
+        fixture.renderer.take().reply("\"AUTH_INSTALLED\"")
+        fixture.replyStage(fixture.renderer.take(), "challenge", reason = "MFA_REQUIRED")
+        assertEquals(1, fixture.reveals)
+        assertEquals(0, fixture.credentials.authorizationChecks)
+        assertEquals(0, fixture.credentials.accountReads)
+        assertEquals(0, fixture.credentials.passwordReads)
+        fixture.flow.close()
+    }
+
+    @Test fun verificationOnlyPathRejectsEverySubmissionStageEvenWithMatchingIdentity() {
+        for (stage in listOf("account", "username", "password", "continue")) {
+            val fixture = Fixture()
+            fixture.open(VERIFICATION)
+            fixture.renderer.take().reply("\"AUTH_INSTALLED\"")
+            fixture.replyStage(fixture.renderer.take(), stage, match = true)
+            assertEquals(1, fixture.deferrals)
+            assertEquals(0, fixture.reveals)
+            assertEquals(0, fixture.credentials.authorizationChecks)
+            assertEquals(0, fixture.credentials.accountReads)
+            assertEquals(0, fixture.credentials.passwordReads)
+            assertTrue(fixture.renderer.pending.isEmpty())
+            fixture.flow.close()
+        }
+    }
+
+    @Test fun verificationOnlyLoadingHasADeadlineAndRetiredOwnerCannotReveal() {
+        val loading = Fixture(optIn = false)
+        loading.open(VERIFICATION)
+        loading.renderer.take().reply("\"AUTH_INSTALLED\"")
+        loading.replyStage(loading.renderer.take(), "loading", reason = "LOADING")
+        loading.scheduler.advance(25_000)
+        assertEquals(1, loading.deferrals)
+        assertEquals(0, loading.reveals)
+        loading.flow.close()
+        val retired = Fixture(optIn = false)
+        retired.open(VERIFICATION)
+        retired.renderer.take().reply("\"AUTH_INSTALLED\"")
+        val old = retired.renderer.take()
+        retired.flow.close()
+        retired.replyStage(old, "challenge", reason = "MFA_REQUIRED")
+        assertEquals(0, retired.handoffs)
+    }
+
     @Test fun passwordAcknowledgementAllowsABoundedReadonlyWaitForTheOldFilledForm() {
         val fixture = installed()
         fixture.replyStage(fixture.renderer.take(), "password", match = true, reason = "CURRENT_ACCOUNT_VERIFIED")
@@ -272,6 +352,11 @@ class QmplusAuthFlowTest {
         pages.forEach { page ->
             val fixture = Fixture(); fixture.open(page)
             if (QmplusLoginPagePolicy.isOfficialQMPage(page)) fixture.renderer.take().reply("\"unknown\"")
+            if (QmplusLoginPagePolicy.isMicrosoftTransitPage(page)) {
+                assertEquals(0, fixture.handoffs)
+                assertTrue(fixture.renderer.pending.isEmpty())
+                fixture.scheduler.advance(25_000)
+            }
             assertEquals(1, fixture.handoffs)
             assertEquals(0, fixture.credentials.accountReads)
             assertEquals(0, fixture.credentials.passwordReads)
@@ -690,13 +775,13 @@ class QmplusAuthFlowTest {
         fun take(): Request = pending.removeAt(0)
     }
     private class Credentials : QmplusAuthCredentials {
-        var allowed = true; var closed = false; var accountReads = 0; var passwordReads = 0
+        var allowed = true; var closed = false; var accountReads = 0; var passwordReads = 0; var authorizationChecks = 0
         var authorizedRevision = REVISION
         var deferAccount = false; var deferPassword = false
         var accountCallback: ((String?) -> Unit)? = null
         var passwordCallback: ((QmplusSavedLogin?) -> Unit)? = null
         var lastPassword: QmplusSavedLogin? = null
-        override fun authorized(revision: Long, completion: (Boolean) -> Unit) { completion(allowed && revision == authorizedRevision) }
+        override fun authorized(revision: Long, completion: (Boolean) -> Unit) { authorizationChecks++; completion(allowed && revision == authorizedRevision) }
         override fun account(revision: Long, completion: (String?) -> Unit) {
             accountReads++; if (deferAccount) accountCallback = completion else completion(ACCOUNT)
         }
@@ -742,6 +827,7 @@ class QmplusAuthFlowTest {
     }
     private companion object {
         const val MS = "https://login.microsoftonline.com/569df091-b013-40e3-86ee-bd9cb9e25814/saml2?synthetic=1"
+        const val VERIFICATION = "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess"
         const val ACCOUNT = "synthetic@example.invalid"
         const val REVISION = 7L
     }

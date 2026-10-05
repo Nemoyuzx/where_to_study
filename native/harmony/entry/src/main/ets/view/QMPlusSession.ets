@@ -284,7 +284,7 @@ export class QMPlusSession {
   async saveSavedLogin(account: string, password: string): Promise<boolean> {
     if (this.loginSettingsBusy) { return false; }
     const observedRevision: number = this.loginSettingsRevision;
-    // Saving exactly the already-authorized record is a no-op: do not rotate
+    // Saving exactly the existing record is a no-op, even with autofill off: do not rotate
     // its marker, retire its owner or delete a still-valid official session.
     // The secret comparison stays in native memory and is never logged.
     await this.restoreSavedLoginStatus();
@@ -292,8 +292,11 @@ export class QMPlusSession {
       const previous: QMPlusSavedLogin | null = await this.savedLoginStore.load();
       const marker: string | null = await this.authorizationJournal.getString(QMPlusSession.autoFillAuthorizationKey);
       if (observedRevision !== this.loginSettingsRevision || this.loginSettingsBusy) { return false; }
-      if (previous !== null && this.autoFillEnabled && marker === previous.recordID &&
+      if (previous !== null &&
         previous.account.trim().toLowerCase() === account.trim().toLowerCase() && previous.password === password) {
+        this.savedLoginAvailable = true;
+        this.autoFillEnabled = marker === previous.recordID;
+        this.restoredLoginSettings = true;
         if (this.webProfile !== null && !this.webProfile.isReady()) {
           this.setWebClearError();
           this.loginSettingsError = 'QMplus 网页会话需要清理，请重新启动应用。';
@@ -555,7 +558,7 @@ export class QMPlusSession {
   }
 
   closeLogin(): void {
-    if (this.webProfile !== null && this.officialWebProfileReady) { void this.webProfile.flush(); }
+    this.persistOfficialWebSession();
     this.stopOwnedLoginWeb();
     this.cancelQuietDeadline();
     this.loginPresentationRevision++;
@@ -619,12 +622,14 @@ export class QMPlusSession {
       // 部分失败保留上一份明确标注时间的快照，绝不把接口失败当空课程。
       const message: string = e instanceof Error ? e.message : 'QM_SYNC_FAILED';
       // 上游页面的 error_code 仍属未信任数据；只保留明确识别的登录状态。
-      this.errorCode = message === 'QM_LOGIN_REQUIRED' || message === 'QM_ERROR_PAGE' ? message : '';
+      this.errorCode = message === 'QM_LOGIN_REQUIRED' || message === 'QM_ERROR_PAGE' ||
+        message === 'QM_PAGE_NOT_READY' ? message : '';
       this.error = this.errorCode === 'QM_LOGIN_REQUIRED' ? '请先在官方 QMplus 网页完成登录。' :
         'QMplus 同步失败。';
     }
     this.syncing = false;
     if (this.error.length === 0 && !this.explicitDetailRequest) { this.closeLogin(); }
+    else if (this.errorCode === 'QM_PAGE_NOT_READY') { this.closeLogin(); }
     else if (this.error.length > 0) { this.deferManualLogin(); }
   }
 
@@ -719,7 +724,7 @@ export class QMPlusSession {
   }
 
   dispose(): void {
-    if (this.webProfile !== null && this.officialWebProfileReady) { void this.webProfile.flush(); }
+    this.persistOfficialWebSession();
     this.loginSettingsRevision++;
     this.loginSettingsBusy = false;
     this.autoFillEnabled = false;
@@ -765,6 +770,17 @@ export class QMPlusSession {
     }, 25000);
   }
 
+  waitForMicrosoftTransit(): void {
+    if (!this.loginVisible || !this.loginForeground || this.automaticLoginPaused || this.quietDeadlineTimer >= 0) { return; }
+    // An existing connection deadline is never renewed by intermediate URLs.
+    // Explicit detail windows may not have had a quiet-connection timer yet.
+    const revision: number = this.loginPresentationRevision;
+    this.quietDeadlineTimer = setTimeout((): void => {
+      this.quietDeadlineTimer = -1;
+      if (this.loginVisible && revision === this.loginPresentationRevision && !this.syncing) { this.deferManualLogin(); }
+    }, 25000);
+  }
+
   deferManualLogin(): void {
     if (!this.loginVisible || this.automaticLoginPaused) { return; }
     this.automaticLoginPaused = true;
@@ -788,10 +804,17 @@ export class QMPlusSession {
 
   setLoginForeground(foreground: boolean): void {
     if (this.loginForeground === foreground) { return; }
+    if (!foreground) { this.persistOfficialWebSession(); }
     this.loginForeground = foreground;
     // Preserve the visible official/MFA owner, but an old ASSET callback cannot
     // regain authority merely because the same window becomes active again.
     this.loginForegroundRevision++;
+  }
+
+  persistOfficialWebSession(): void {
+    if (!this.loginVisible || !this.officialWebProfileReady || this.webProfile === null) { return; }
+    if (this.webProfile.flushOnLifecycle !== undefined) { this.webProfile.flushOnLifecycle(); }
+    else { void this.webProfile.flush(); }
   }
 
   private cancelQuietDeadline(): void {
