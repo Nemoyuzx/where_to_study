@@ -60,7 +60,7 @@ pub struct Activity {
 impl Activity {
     // Moodle assign modules can also be administrative forms. This mirrors the
     // shared protocol's narrow policy, never a missing-date or broad review filter.
-    fn is_assessment(&self) -> bool {
+    pub(crate) fn is_assessment(&self) -> bool {
         if self.kind != "assignment" {
             return true;
         }
@@ -108,6 +108,7 @@ pub struct Snapshot {
 #[derive(Default)]
 pub struct QmState {
     pub snapshot: Mutex<Option<Snapshot>>,
+    new_assignment_ids: Mutex<(String, Vec<String>)>,
     pub revision: AtomicU64,
     feature_blocked: AtomicBool,
     owner_active: AtomicBool,
@@ -216,8 +217,18 @@ impl AuthLedger {
                 || self.account_selected_document.is_some()
                 || (self.password_submitted && self.verified_password_document.is_some()))
     }
-    fn verify_current_identity(&mut self, stage: &str, nonce: &str, account_match: bool, credential_revision: u64) -> bool {
-        if !self.accepts(credential_revision) || !valid_nonce(nonce) || !account_match || self.continue_attempted {
+    fn verify_current_identity(
+        &mut self,
+        stage: &str,
+        nonce: &str,
+        account_match: bool,
+        credential_revision: u64,
+    ) -> bool {
+        if !self.accepts(credential_revision)
+            || !valid_nonce(nonce)
+            || !account_match
+            || self.continue_attempted
+        {
             return false;
         }
         match stage {
@@ -257,9 +268,14 @@ impl AuthLedger {
         nonce: &str,
         credential_revision: u64,
     ) -> bool {
-        if !self.accepts(credential_revision) || !valid_nonce(nonce)
-            || stage != "manual" || reason != "ACCOUNT_CHOOSER"
-            || self.account_attempted || self.username_attempted || self.password_attempted || self.continue_attempted
+        if !self.accepts(credential_revision)
+            || !valid_nonce(nonce)
+            || stage != "manual"
+            || reason != "ACCOUNT_CHOOSER"
+            || self.account_attempted
+            || self.username_attempted
+            || self.password_attempted
+            || self.continue_attempted
             || self.initial_account_settling_polls >= MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS
         {
             return false;
@@ -290,8 +306,10 @@ impl AuthLedger {
     }
     fn is_awaiting_navigation(&self, nonce: &str, credential_revision: u64) -> bool {
         self.accepts(credential_revision)
-            && ((self.password_submitted && self.password_claimed_document.as_deref() == Some(nonce))
-                || (self.continue_submitted && self.continue_claimed_document.as_deref() == Some(nonce)))
+            && ((self.password_submitted
+                && self.password_claimed_document.as_deref() == Some(nonce))
+                || (self.continue_submitted
+                    && self.continue_claimed_document.as_deref() == Some(nonce)))
     }
     fn claim_submission_settling(&mut self, nonce: &str, credential_revision: u64) -> bool {
         if !self.is_awaiting_navigation(nonce, credential_revision)
@@ -324,7 +342,11 @@ impl AuthLedger {
                 self.account_claimed_document = Some(nonce.to_owned());
                 true
             }
-            "username" if !self.username_attempted && !self.password_attempted && !self.continue_attempted => {
+            "username"
+                if !self.username_attempted
+                    && !self.password_attempted
+                    && !self.continue_attempted =>
+            {
                 self.username_attempted = true;
                 self.username_claimed_document = Some(nonce.to_owned());
                 true
@@ -405,7 +427,10 @@ struct AuthFill<'a> {
     account: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     password: Option<&'a str>,
-    #[serde(rename = "identityAcknowledged", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "identityAcknowledged",
+        skip_serializing_if = "Option::is_none"
+    )]
     identity_acknowledged: Option<bool>,
 }
 #[derive(Deserialize)]
@@ -419,8 +444,7 @@ pub struct AuthReport {
     reason: String,
 }
 fn trusted_auth_page(url: &tauri::Url) -> bool {
-    trusted_microsoft_origin(url)
-        && (MS_PATHS.contains(&url.path()) || url.path() == "/kmsi")
+    trusted_microsoft_origin(url) && (MS_PATHS.contains(&url.path()) || url.path() == "/kmsi")
 }
 fn trusted_microsoft_origin(url: &tauri::Url) -> bool {
     url.username().is_empty()
@@ -439,14 +463,16 @@ fn passive_microsoft_transit(url: &tauri::Url) -> bool {
         && (url.port().is_none() || url.port() == Some(443))
         && url.origin().ascii_serialization() == "https://device.login.microsoftonline.com";
     (trusted_microsoft_origin(url) || device_transport)
-        && !trusted_auth_page(url) && !trusted_verification_page(url)
+        && !trusted_auth_page(url)
+        && !trusted_verification_page(url)
 }
 fn verification_report_allowed(report: &AuthReport) -> bool {
-    !report.account_match && match report.stage.as_str() {
-        "challenge" => ["CAPTCHA_REQUIRED", "MFA_REQUIRED"].contains(&report.reason.as_str()),
-        "loading" => report.reason == "LOADING",
-        _ => false,
-    }
+    !report.account_match
+        && match report.stage.as_str() {
+            "challenge" => ["CAPTCHA_REQUIRED", "MFA_REQUIRED"].contains(&report.reason.as_str()),
+            "loading" => report.reason == "LOADING",
+            _ => false,
+        }
 }
 fn official_qm_page(url: &tauri::Url) -> bool {
     url.origin().ascii_serialization() == ORIGIN
@@ -663,6 +689,10 @@ impl QmState {
         self.cache_warning.store(false, Ordering::SeqCst);
         self.revision.fetch_add(1, Ordering::SeqCst);
         *self
+            .new_assignment_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Default::default();
+        *self
             .snapshot
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
@@ -724,7 +754,11 @@ impl QmState {
 fn cancel_autofill(app: &tauri::AppHandle) {
     app.state::<QmState>().stop_autofill();
     if let Some(window) = app.get_webview_window("qmplus") {
-        if window.url().ok().is_some_and(|url| trusted_auth_page(&url) || trusted_verification_page(&url)) {
+        if window
+            .url()
+            .ok()
+            .is_some_and(|url| trusted_auth_page(&url) || trusted_verification_page(&url))
+        {
             let _ = window.eval(
                 "if(window.top===window)window.dispatchEvent(new Event('wts-qm-auth-stop'));"
                     .to_string(),
@@ -754,7 +788,12 @@ fn require_manual(app: &tauri::AppHandle, window: &tauri::WebviewWindow, reason:
 
 fn require_challenge(app: &tauri::AppHandle, window: &tauri::WebviewWindow, reason: &'static str) {
     let state = app.state::<QmState>();
-    if let Some(deadline) = state.quiet_deadline.lock().ok().and_then(|mut value| value.take()) {
+    if let Some(deadline) = state
+        .quiet_deadline
+        .lock()
+        .ok()
+        .and_then(|mut value| value.take())
+    {
         deadline.abort();
     }
     record_connection_status(app, "challenge", reason);
@@ -767,7 +806,12 @@ fn require_challenge(app: &tauri::AppHandle, window: &tauri::WebviewWindow, reas
 fn suspend_autofill(app: &tauri::AppHandle) {
     let state = app.state::<QmState>();
     state.auth_suspended.store(true, Ordering::SeqCst);
-    if let Some(deadline) = state.quiet_deadline.lock().ok().and_then(|mut value| value.take()) {
+    if let Some(deadline) = state
+        .quiet_deadline
+        .lock()
+        .ok()
+        .and_then(|mut value| value.take())
+    {
         deadline.abort();
     }
     record_connection_status(app, "checking", "APP_BACKGROUNDED");
@@ -855,6 +899,19 @@ pub async fn load_qmplus(app: tauri::AppHandle) -> Option<serde_json::Value> {
         value.as_object_mut()?.insert(
             "cache_warning".into(),
             serde_json::Value::Bool(state.cache_warning.load(Ordering::SeqCst)),
+        );
+        // A concurrent read of the preceding DTO must not consume IDs from
+        // the newly published snapshot. Only its matching timestamp may take.
+        let mut pending = state.new_assignment_ids.lock().ok()?;
+        let fresh = if value.get("fetched_at").and_then(|v| v.as_str()) == Some(pending.0.as_str())
+        {
+            std::mem::take(&mut pending.1)
+        } else {
+            Vec::new()
+        };
+        value.as_object_mut()?.insert(
+            "new_assignment_ids".into(),
+            serde_json::to_value(fresh).ok()?,
         );
         Some(value)
     })
@@ -997,11 +1054,22 @@ pub fn accept_qmplus_snapshot(
         state.profile_id.lock().ok().and_then(|value| value.clone()),
         state.assessment_snapshot(),
     ) {
-        let stored = crate::course_cache_store::save_qm(&app, &profile, &snapshot, || {
+        let (stored, fresh) = crate::course_cache_store::save_qm(&app, &profile, &snapshot, || {
             revision == state.revision.load(Ordering::SeqCst)
                 && !state.feature_blocked.load(Ordering::SeqCst)
         })
-        .unwrap_or(false);
+        .unwrap_or_default();
+        if let Ok(mut pending) = state.new_assignment_ids.lock() {
+            if revision == state.revision.load(Ordering::SeqCst)
+                && !state.feature_blocked.load(Ordering::SeqCst)
+            {
+                if pending.0 != snapshot.fetched_at {
+                    pending.1.clear();
+                }
+                pending.0 = snapshot.fetched_at.clone();
+                pending.1.extend(fresh);
+            }
+        }
         state.cache_warning.store(!stored, Ordering::SeqCst);
     }
     record_connection_status(
@@ -1074,15 +1142,29 @@ pub fn accept_qmplus_auth(
         if !trusted_auth_page(&url) && !official_qm_page(&url) {
             return Err("QMplus 登录状态已失效。".into());
         }
-        let accepted = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?
-            .ledger.submitted(&report.document, &report.reason, credential_revision);
+        let accepted = state
+            .auth
+            .lock()
+            .map_err(|_| "QMplus 页面不可用。")?
+            .ledger
+            .submitted(&report.document, &report.reason, credential_revision);
         if !accepted {
             // Late or forged ACKs cannot stop an already-running business sync.
             // A failed fill on the still-current document may pause its owner.
-            let current_failure = !["ACCOUNT_SELECTED", "USERNAME_SUBMITTED", "PASSWORD_SUBMITTED", "CONTINUE_SUBMITTED"].contains(&report.reason.as_str())
-                && state.auth.lock().ok().is_some_and(|auth|
-                    auth.document_for_report(&report.document, &url, credential_revision).is_some());
-            if current_failure { require_manual(&app, &window, "MANUAL_REQUIRED"); }
+            let current_failure = ![
+                "ACCOUNT_SELECTED",
+                "USERNAME_SUBMITTED",
+                "PASSWORD_SUBMITTED",
+                "CONTINUE_SUBMITTED",
+            ]
+            .contains(&report.reason.as_str())
+                && state.auth.lock().ok().is_some_and(|auth| {
+                    auth.document_for_report(&report.document, &url, credential_revision)
+                        .is_some()
+                });
+            if current_failure {
+                require_manual(&app, &window, "MANUAL_REQUIRED");
+            }
             return Err("QMplus 登录状态已失效。".into());
         }
         let reason = match report.reason.as_str() {
@@ -1211,12 +1293,17 @@ pub fn accept_qmplus_auth(
     }
     let resumed = state.auth_suspended.swap(false, Ordering::SeqCst);
     let challenge_finished = state.challenge_presented.swap(false, Ordering::SeqCst);
-    if challenge_finished && !state.manual_presented.load(Ordering::SeqCst) { let _ = window.hide(); }
+    if challenge_finished && !state.manual_presented.load(Ordering::SeqCst) {
+        let _ = window.hide();
+    }
     if resumed || challenge_finished {
         drop(auth);
         arm_quiet_deadline(&app, &state, revision)?;
         auth = state.auth.lock().map_err(|_| "QMplus 页面不可用。")?;
-        if auth.document_for_report(&nonce, &url, credential_revision).is_none() {
+        if auth
+            .document_for_report(&nonce, &url, credential_revision)
+            .is_none()
+        {
             return Err("QMplus 登录状态已失效。".into());
         }
     }
@@ -1237,13 +1324,23 @@ pub fn accept_qmplus_auth(
         record_connection_status(&app, "checking", "ACCOUNT_CHOOSER");
         return Ok(true);
     }
-    if auth.ledger.is_awaiting_navigation(&nonce, credential_revision)
+    if auth
+        .ledger
+        .is_awaiting_navigation(&nonce, credential_revision)
         && report.stage == "manual"
-        && ["ALREADY_ATTEMPTED", "FORM_UNTRUSTED", "KNOWN_FORM_ABSENT", "INTERFERENCE"].contains(&report.reason.as_str())
+        && [
+            "ALREADY_ATTEMPTED",
+            "FORM_UNTRUSTED",
+            "KNOWN_FORM_ABSENT",
+            "INTERFERENCE",
+        ]
+        .contains(&report.reason.as_str())
     {
         // The acknowledged submit can leave its old form visible while the
         // official page prepares MFA/KMSI. Observe finitely without new claims.
-        let wait = auth.ledger.claim_submission_settling(&nonce, credential_revision);
+        let wait = auth
+            .ledger
+            .claim_submission_settling(&nonce, credential_revision);
         drop(auth);
         if wait {
             record_connection_status(&app, "checking", "SUBMISSION_SETTLING");
@@ -1309,7 +1406,12 @@ pub fn accept_qmplus_auth(
         return Ok(false);
     };
     let current_identity_verified = current_identity_proof
-        && auth.ledger.verify_current_identity(&report.stage, &nonce, report.account_match, credential_revision);
+        && auth.ledger.verify_current_identity(
+            &report.stage,
+            &nonce,
+            report.account_match,
+            credential_revision,
+        );
     if !auth.ledger.claim(
         &report.stage,
         &nonce,
@@ -1325,7 +1427,9 @@ pub fn accept_qmplus_auth(
         stage: &report.stage,
         account: &credentials.account,
         password: (report.stage == "password").then_some(credentials.password.as_str()),
-        identity_acknowledged: ["password", "continue"].contains(&report.stage.as_str()).then_some(identity_acknowledged || current_identity_verified),
+        identity_acknowledged: ["password", "continue"]
+            .contains(&report.stage.as_str())
+            .then_some(identity_acknowledged || current_identity_verified),
     };
     let encoded =
         Zeroizing::new(serde_json::to_string(&options).map_err(|_| "QMplus 页面不可用。")?);
@@ -1430,7 +1534,12 @@ pub async fn connect_qmplus(
     let owner = app.clone();
     app.run_on_main_thread(move || {
         let state = owner.state::<QmState>();
-        let _ = sent.send(connect_qmplus_on_main(owner.clone(), state, request.background, request.manual));
+        let _ = sent.send(connect_qmplus_on_main(
+            owner.clone(),
+            state,
+            request.background,
+            request.manual,
+        ));
     })
     .map_err(|_| "QMplus 页面不可用。")?;
     received.await.map_err(|_| "QMplus 页面不可用。")?
@@ -1466,7 +1575,10 @@ fn connect_qmplus_on_main(
     *state.profile_id.lock().map_err(|_| "QMplus 页面不可用。")? = Some(profile.id().to_owned());
     state.set_feature_enabled(true);
     if manual {
-        if let Some(window) = app.get_webview_window("qmplus").filter(|_| state.owner_active.load(Ordering::SeqCst)) {
+        if let Some(window) = app
+            .get_webview_window("qmplus")
+            .filter(|_| state.owner_active.load(Ordering::SeqCst))
+        {
             cancel_autofill(&app);
             state.background_owner.store(false, Ordering::SeqCst);
             state.manual_presented.store(true, Ordering::SeqCst);
@@ -1670,7 +1782,9 @@ fn connect_qmplus_on_main(
                         let _ = window.eval("if(typeof WTSQmCancel==='function')WTSQmCancel();");
                     }
                     let _ = window.hide();
-                    if let Ok(blank) = tauri::Url::parse("about:blank") { let _ = window.navigate(blank); }
+                    if let Ok(blank) = tauri::Url::parse("about:blank") {
+                        let _ = window.navigate(blank);
+                    }
                 }
                 record_connection_status(&handle, "cancelled", "WINDOW_CLOSED");
                 return;
@@ -1754,7 +1868,10 @@ mod tests {
         assert!(!state.auth.lock().unwrap().ledger.accepts(7));
         assert_eq!(*state.page_kind.lock().unwrap(), "unknown");
         assert!(state.assessment_snapshot().is_some());
-        assert_eq!(state.profile_id.lock().unwrap().as_deref(), Some("existing-browser-profile"));
+        assert_eq!(
+            state.profile_id.lock().unwrap().as_deref(),
+            Some("existing-browser-profile")
+        );
         assert_eq!(state.window_revision.load(Ordering::SeqCst), 42);
         assert!(state.publish(sample(), 0).is_err());
     }
@@ -1764,18 +1881,38 @@ mod tests {
         let mut ledger = AuthLedger::default();
         ledger.begin(7);
         for index in 0..MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS {
-            let nonce = if index % 2 == 0 { "nonceA123" } else { "nonceB456" };
+            let nonce = if index % 2 == 0 {
+                "nonceA123"
+            } else {
+                "nonceB456"
+            };
             assert!(ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", nonce, 7));
         }
-        assert!(!ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", "nonceC789", 7));
-        assert_eq!(ledger.initial_account_settling_polls, MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS);
-        assert!(!ledger.account_attempted && !ledger.username_attempted && !ledger.password_attempted && !ledger.continue_attempted);
+        assert!(!ledger.claim_initial_account_settling(
+            "manual",
+            "ACCOUNT_CHOOSER",
+            "nonceC789",
+            7
+        ));
+        assert_eq!(
+            ledger.initial_account_settling_polls,
+            MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS
+        );
+        assert!(
+            !ledger.account_attempted
+                && !ledger.username_attempted
+                && !ledger.password_attempted
+                && !ledger.continue_attempted
+        );
         assert!(!ledger.identity_acknowledged(7));
         assert!(!ledger.claim("account", "nonceC789", false, 7));
         assert!(ledger.claim("account", "nonceC789", true, 7));
         assert!(!ledger.claim("account", "nonceC789", true, 7));
         assert!(ledger.submitted("nonceC789", "ACCOUNT_SELECTED", 7));
-        assert_eq!(ledger.initial_account_settling_polls, MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS);
+        assert_eq!(
+            ledger.initial_account_settling_polls,
+            MAXIMUM_INITIAL_ACCOUNT_SETTLING_POLLS
+        );
     }
 
     #[test]
@@ -1793,9 +1930,19 @@ mod tests {
         }
         assert_eq!(ledger.initial_account_settling_polls, 0);
         assert!(ledger.claim("username", "nonceA123", false, 7));
-        assert!(!ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", "nonceA123", 7));
+        assert!(!ledger.claim_initial_account_settling(
+            "manual",
+            "ACCOUNT_CHOOSER",
+            "nonceA123",
+            7
+        ));
         ledger.stop();
-        assert!(!ledger.claim_initial_account_settling("manual", "ACCOUNT_CHOOSER", "nonceA123", 7));
+        assert!(!ledger.claim_initial_account_settling(
+            "manual",
+            "ACCOUNT_CHOOSER",
+            "nonceA123",
+            7
+        ));
     }
 
     #[test]
@@ -2123,15 +2270,35 @@ mod tests {
         state.owner_active.store(true, Ordering::SeqCst);
         state.quiet_owner.store(true, Ordering::SeqCst);
         state.auth.lock().unwrap().ledger.begin(7);
-        assert!(state.auth.lock().unwrap().ledger.claim("username", "nonceA123", false, 7));
-        assert!(state.auth.lock().unwrap().ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 7));
+        assert!(state
+            .auth
+            .lock()
+            .unwrap()
+            .ledger
+            .claim("username", "nonceA123", false, 7));
+        assert!(state
+            .auth
+            .lock()
+            .unwrap()
+            .ledger
+            .submitted("nonceA123", "USERNAME_SUBMITTED", 7));
         state.auth_suspended.store(true, Ordering::SeqCst);
         assert!(!state.quiet_timeout_is_current(0));
         assert!(state.auth.lock().unwrap().ledger.identity_acknowledged(7));
-        assert!(!state.auth.lock().unwrap().ledger.claim("username", "nonceB456", false, 7));
+        assert!(!state
+            .auth
+            .lock()
+            .unwrap()
+            .ledger
+            .claim("username", "nonceB456", false, 7));
         state.auth_suspended.store(false, Ordering::SeqCst);
         assert!(state.quiet_timeout_is_current(0));
-        assert!(state.auth.lock().unwrap().ledger.claim("password", "nonceB456", true, 7));
+        assert!(state
+            .auth
+            .lock()
+            .unwrap()
+            .ledger
+            .claim("password", "nonceB456", true, 7));
         state.challenge_presented.store(true, Ordering::SeqCst);
         assert!(!state.quiet_timeout_is_current(0));
     }
@@ -2454,7 +2621,9 @@ mod tests {
         assert!(!trusted_auth_page(
             &tauri::Url::parse(&format!("{ORIGIN}/login/index.php")).unwrap()
         ));
-        assert!(trusted_auth_page(&tauri::Url::parse(&format!("{MS_ORIGIN}/kmsi")).unwrap()));
+        assert!(trusted_auth_page(
+            &tauri::Url::parse(&format!("{MS_ORIGIN}/kmsi")).unwrap()
+        ));
         for url in [
             "https://login.microsoftonline.com/common/login",
             "https://login.microsoftonline.com/other/saml2",
@@ -2490,12 +2659,17 @@ mod tests {
             "https://login.microsoftonline.com.evil.test/common/DeviceAuthTls/reprocess",
             "https://qmplus.qmul.ac.uk/common/DeviceAuthTls/reprocess",
         ] {
-            assert!(!trusted_verification_page(&tauri::Url::parse(url).unwrap()), "{url}");
+            assert!(
+                !trusted_verification_page(&tauri::Url::parse(url).unwrap()),
+                "{url}"
+            );
         }
     }
     #[test]
     fn microsoft_transit_classification_never_expands_automation_or_verification_paths() {
-        let transit = tauri::Url::parse("https://login.microsoftonline.com/common/transport-fixture").unwrap();
+        let transit =
+            tauri::Url::parse("https://login.microsoftonline.com/common/transport-fixture")
+                .unwrap();
         assert!(passive_microsoft_transit(&transit));
         assert!(!trusted_auth_page(&transit));
         assert!(!trusted_verification_page(&transit));
@@ -2509,13 +2683,17 @@ mod tests {
             "https://login.microsoftonline.com.evil.test/common/transport-fixture",
             "https://qmplus.qmul.ac.uk/common/transport-fixture",
         ] {
-            assert!(!passive_microsoft_transit(&tauri::Url::parse(url).unwrap()), "{url}");
+            assert!(
+                !passive_microsoft_transit(&tauri::Url::parse(url).unwrap()),
+                "{url}"
+            );
         }
     }
     #[test]
     fn device_login_host_is_passive_only_with_exact_https_origin() {
         for path in ["/", "/common/DeviceAuthTls/reprocess", MS_PATHS[1], "/kmsi"] {
-            let url = tauri::Url::parse(&format!("https://device.login.microsoftonline.com{path}")).unwrap();
+            let url = tauri::Url::parse(&format!("https://device.login.microsoftonline.com{path}"))
+                .unwrap();
             assert!(passive_microsoft_transit(&url));
             assert!(!trusted_auth_page(&url));
             assert!(!trusted_verification_page(&url));
@@ -2527,34 +2705,70 @@ mod tests {
             "https://device.login.microsoftonline.com.evil.test/",
             "https://evil-device.login.microsoftonline.com/",
         ] {
-            assert!(!passive_microsoft_transit(&tauri::Url::parse(url).unwrap()), "{url}");
+            assert!(
+                !passive_microsoft_transit(&tauri::Url::parse(url).unwrap()),
+                "{url}"
+            );
         }
     }
     #[test]
     fn verification_metadata_rejects_identity_proofs_submissions_and_business_reports() {
         let report = |stage: &str, reason: &str, account_match: bool| AuthReport {
-            v: 1, stage: stage.into(), document: "nonceA123".into(), account_match, reason: reason.into(),
+            v: 1,
+            stage: stage.into(),
+            document: "nonceA123".into(),
+            account_match,
+            reason: reason.into(),
         };
-        assert!(verification_report_allowed(&report("challenge", "MFA_REQUIRED", false)));
-        assert!(verification_report_allowed(&report("challenge", "CAPTCHA_REQUIRED", false)));
-        assert!(verification_report_allowed(&report("loading", "LOADING", false)));
+        assert!(verification_report_allowed(&report(
+            "challenge",
+            "MFA_REQUIRED",
+            false
+        )));
+        assert!(verification_report_allowed(&report(
+            "challenge",
+            "CAPTCHA_REQUIRED",
+            false
+        )));
+        assert!(verification_report_allowed(&report(
+            "loading", "LOADING", false
+        )));
         for (stage, reason) in [
-            ("account", "READY"), ("username", "READY"), ("password", "READY"), ("continue", "READY"),
-            ("password", "CURRENT_ACCOUNT_VERIFIED"), ("continue", "CURRENT_ACCOUNT_VERIFIED"),
-            ("submitted", "ACCOUNT_SELECTED"), ("submitted", "USERNAME_SUBMITTED"),
-            ("submitted", "PASSWORD_SUBMITTED"), ("submitted", "CONTINUE_SUBMITTED"),
-            ("page", "authenticated"), ("challenge", "READY"), ("loading", "CURRENT_ACCOUNT_VERIFIED"),
+            ("account", "READY"),
+            ("username", "READY"),
+            ("password", "READY"),
+            ("continue", "READY"),
+            ("password", "CURRENT_ACCOUNT_VERIFIED"),
+            ("continue", "CURRENT_ACCOUNT_VERIFIED"),
+            ("submitted", "ACCOUNT_SELECTED"),
+            ("submitted", "USERNAME_SUBMITTED"),
+            ("submitted", "PASSWORD_SUBMITTED"),
+            ("submitted", "CONTINUE_SUBMITTED"),
+            ("page", "authenticated"),
+            ("challenge", "READY"),
+            ("loading", "CURRENT_ACCOUNT_VERIFIED"),
         ] {
-            assert!(!verification_report_allowed(&report(stage, reason, false)), "{stage}: {reason}");
+            assert!(
+                !verification_report_allowed(&report(stage, reason, false)),
+                "{stage}: {reason}"
+            );
         }
-        assert!(!verification_report_allowed(&report("challenge", "MFA_REQUIRED", true)));
+        assert!(!verification_report_allowed(&report(
+            "challenge",
+            "MFA_REQUIRED",
+            true
+        )));
     }
     #[test]
     fn verification_capability_grants_only_auth_metadata_on_the_exact_verified_url() {
-        let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/qmplus-verification.json")).unwrap();
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/qmplus-verification.json")).unwrap();
         assert_eq!(capability["windows"], serde_json::json!(["qmplus"]));
         assert_eq!(capability["local"], false);
-        assert_eq!(capability["permissions"], serde_json::json!(["allow-accept-qmplus-auth"]));
+        assert_eq!(
+            capability["permissions"],
+            serde_json::json!(["allow-accept-qmplus-auth"])
+        );
         let urls = capability["remote"]["urls"].as_array().unwrap();
         assert_eq!(urls.len(), 2);
         for value in urls {

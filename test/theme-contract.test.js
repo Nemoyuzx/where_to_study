@@ -371,7 +371,8 @@ test('calendar chrome is compact and all-day events stay above the timeline', ()
 })
 
 test('desktop calendar supplements are year-preheated, cached, and rendered in every view', () => {
-  assert.match(appSource, /command\('fetch_assignment_calendar'/)
+  assert.match(appSource, /courseDataOwner\.current\.assignmentsForDates\(startDate,endDate\)/)
+  assert.doesNotMatch(appSource, /command\('fetch_assignment_calendar'/)
   assert.match(appSource, /command\('fetch_deadline_calendar'/)
   assert.match(appSource, /const targetYear = target\.getFullYear\(\)/)
   assert.match(appSource, /const startDate = `\$\{targetYear\}-01-01`/)
@@ -380,8 +381,9 @@ test('desktop calendar supplements are year-preheated, cached, and rendered in e
   assert.doesNotMatch(appSource, /useEffect\(\(\) => \{[\s\S]{0,240}activePage !== 'calendar'[\s\S]{0,240}loadCalendarSupplements/)
   assert.match(appSource, /requestedCalendarSupplementRanges/)
   assert.match(tauriAssignmentSource, /fetch_assignment_calendar/)
-  assert.match(tauriAssignmentSource, /ASSIGNMENT_CACHE\.items\(account_scope, request_revision\)/)
-  assert.match(tauriAssignmentSource, /ASSIGNMENT_CACHE\.save\(account_scope, &items, request_revision\)/)
+  assert.match(tauriAssignmentSource, /fetch_assignment_list\(account, password, account_scope, request_revision, false\)/)
+  assert.match(tauriAssignmentSource, /fetch_catalogue\(account, password, account_scope, request_revision, force\)/)
+  assert.match(tauriAssignmentSource, /ASSIGNMENT_CACHE\.ensure_revision\(request_revision\)/)
   assert.match(tauriDeadlineSource, /SOURCE_CACHE_TTL/)
   assert.match(tauriDeadlineSource, /fetch_deadline_calendar/)
   assert.match(appSource, /className="time-all-day-overflow"/)
@@ -554,14 +556,14 @@ test('Apple calendars and settings preserve selected-date, timeline, and categor
     (appleSettingsSource.match(/\.pickerStyle\(\.segmented\)/g) || []).length >= 3,
     'Apple campus, widget count, and preview size must retain segmented controls',
   )
-  assert.match(appleSettingsSource, /private var languageSurface:[\s\S]*?\.pickerStyle\(\.menu\)/,
+  assert.match(appleSettingsSource, /private var languageSurface:[\s\S]*?Menu \{[\s\S]*?ForEach\(AppLanguage\.allCases\)/,
     'The multi-language selector must use an independent native menu rather than a thirteen-item segment')
 
   assert.match(
     appleTimelineSource,
     /for minute in hourMinutes[\s\S]*context\.stroke\(hourLines, with: \.color\(theme\.border\), lineWidth: 1\)/,
   )
-  assert.match(appleTimelineSource, /CalendarTimelineLogic\.bounds\(for: days\.flatMap\(\\\.courses\)\)/)
+  assert.match(appleTimelineSource, /CalendarTimelineLogic\.bounds\(for: days\.flatMap\(\\\.courses\), deadlineMinutes: days\.flatMap \{ \$0\.deadlineMoments\.map\(\\\.minute\) \}\)/)
   assert.match(appleTimelineSource, /hourMinutes:\s*\[Int\]\s*\{\s*Array\(stride\(from: bounds\.lowerBound, through: bounds\.upperBound, by: 60\)\)/)
   assert.match(
     appleTimelineSource,
@@ -870,7 +872,7 @@ test('desktop interface language is persistent and updates the tray without tran
   assert.match(appSource, /<option value="system">\{t\('跟随系统'\)\}<\/option>/)
   assert.match(appSource, /UI_LANGUAGES\.map\(\(\{code, name\}\)/)
   assert.match(appSource, /updateSetting\('uiLanguage', event\.target\.value\)/)
-  assert.match(appSource, /command\('set_interface_language', uiLanguage\)/)
+  assert.match(appSource, /command\('set_interface_language',\s*uiLanguage\)/)
   assert.match(tauriSource, /fn set_interface_language/)
   assert.match(tauriSource, /DESKTOP_INTERFACE_LANGUAGE/)
   assert.match(appSource, /item\.title/)

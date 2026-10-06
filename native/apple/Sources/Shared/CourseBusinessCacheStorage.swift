@@ -54,6 +54,30 @@ final class CourseBusinessCacheStorage: @unchecked Sendable {
     @discardableResult
     func rotateQMplusEpoch() throws -> String { try rotate(domain: "qmplus") }
 
+    /// Separate ID-only history; business DTO validation remains unchanged.
+    func recordAssignmentNoticeIDs(_ ids: [String], scope: CourseBusinessCacheScope,
+                                   kind: CourseBusinessCacheKind, term: String, restored: Bool) throws -> Set<String> {
+        guard enabled, kind == .assignments || kind == .qmplus else { return [] }
+        guard ids.count <= 10_000, term.count <= 32,
+              ids.allSatisfy({ $0.count == 64 && $0.allSatisfy(\.isHexDigit) }) else { return [] }
+        return try lock.withLock {
+            guard try epochLocked(domain: kind.domain) == scope.epoch else { throw CancellationError() }
+            let url = try prepareDirectoryLocked().appendingPathComponent("new-assignments-\(kind.domain).json")
+            var history = NewAssignmentNoticeHistory(scope: scope, terms: [:])
+            if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+               ((attributes[.size] as? NSNumber)?.intValue ?? Int.max) <= 8 * 1024 * 1024,
+               let data = try? Data(contentsOf: url),
+               let saved = try? JSONDecoder().decode(NewAssignmentNoticeHistory.self, from: data),
+               saved.scope == scope, saved.terms.count <= 8,
+               saved.terms.values.allSatisfy({ $0.count <= 5000 && $0.allSatisfy { $0.count == 64 && $0.allSatisfy(\.isHexDigit) } }) {
+                history = saved
+            }
+            let additions = history.accept(ids: ids, term: term, restored: restored)
+            try durableWrite(try JSONEncoder().encode(history), to: url)
+            return additions
+        }
+    }
+
     // Keep epoch publication and the secure-record mutation indivisible to
     // in-process readers. Otherwise a same-account password change could pair
     // the new epoch with the still-old Keychain record in a concurrent worker.
@@ -93,6 +117,8 @@ final class CourseBusinessCacheStorage: @unchecked Sendable {
                 do { try FileManager.default.removeItem(at: root.appendingPathComponent(kind.fileName)) }
                 catch where Self.isMissingFile(error) { continue }
             }
+            do { try FileManager.default.removeItem(at: root.appendingPathComponent("new-assignments-\(domain).json")) }
+            catch where Self.isMissingFile(error) { }
             try synchronizeDirectory(root)
             try afterPurge()
             try durableWrite(try JSONEncoder().encode(Guard(schemaVersion: 1, epoch: epoch, pending: false)), to: url)

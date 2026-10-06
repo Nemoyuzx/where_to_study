@@ -8,6 +8,7 @@ internal class ActivitySessionState(context: Context) {
     private val appContext = context.applicationContext
     val credentials = SecureCredentialStore(appContext)
     val preferences = AppPreferences(appContext)
+    val newAssignments = NewAssignmentNotices(appContext)
     private val scheduleDelegate = lazy { ScheduleRepository(appContext, credentials, preferences) }
     val schedule by scheduleDelegate
     private val classroomsDelegate = lazy { ClassroomRepository(appContext, credentials) }
@@ -18,9 +19,15 @@ internal class ActivitySessionState(context: Context) {
     val shuttles by shuttlesDelegate
     private val gradesDelegate = lazy { AcademicGradesRepository(credentials::load) }
     val grades by gradesDelegate
-    private val dailyInfoDelegate = lazy { CalendarDailyInfoRepository(assignmentClient = UCloudAssignmentClient(credentials), preferences = preferences) }
+    private val dailyInfoDelegate = lazy { CalendarDailyInfoRepository(assignmentClient = UCloudAssignmentClient(credentials,
+        publication = { scope, items, restored -> newAssignments.accept("ucloud", scope,
+            items.map { NewAssignmentNotice("${it.courseID.orEmpty()}:${it.id}", it.title, it.courseName, it.deadline) }, restored) },
+        cleared = { newAssignments.clear("ucloud") }), preferences = preferences) }
     val dailyInfo by dailyInfoDelegate
-    private val qmplusDelegate = lazy { QmplusRepository(appContext) }
+    private val qmplusDelegate = lazy { QmplusRepository(appContext,
+        assignmentPublication = { generation, snapshot, restored ->
+            newAssignments.accept("qmplus", generation.toString(), NewAssignmentNotice.qmplus(snapshot), restored)
+        }, assignmentsCleared = { newAssignments.clear("qmplus") }) }
     val qmplus by qmplusDelegate
     val holidayDelegate = lazy { HolidayRepository(appContext) }
     val holidays by holidayDelegate

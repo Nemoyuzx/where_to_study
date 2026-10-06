@@ -8,7 +8,7 @@ test('Apple language updates preserve tab identity and cannot replace a measured
   const root = read('native/apple/Sources/Shared/RootView.swift')
   const anchor = read('native/apple/Sources/Shared/SettingsLanguageScrollAnchor.swift')
   assert.match(root, /compactTabIdentity\(languageRawValue _: String\)[\s\S]*?"compact-tabs"/)
-  assert.match(root, /\.background\(CompactTabLanguageLayout\(language: model\.appLanguage\)\)/)
+  assert.match(root, /\.background\(CompactTabLanguageLayout\(language: model\.appLanguage, transition: settingsSession\.languageTransition\)\)/)
   assert.match(anchor, /if next\.width > 0 && next\.height > 0 \{ value = next \}/)
   assert.match(anchor, /transaction\.disablesAnimations = true/)
   assert.match(anchor, /self\.revision == requestedRevision/)

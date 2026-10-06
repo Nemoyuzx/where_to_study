@@ -1,4 +1,8 @@
 {
+  "new_assignments_title": {
+    "key": "发现 %1$d 项新作业",
+    "file": "new_assignments.xml"
+  },
   "account_privacy_notice": {
     "key": "保存教务账号前，请先阅读隐私政策，了解凭据用途、传输对象与本地保存方式。",
     "file": "strings.xml"

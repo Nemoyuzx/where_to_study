@@ -1,4 +1,13 @@
 {
+  "鼠尾草": "Adaçayı",
+  "陶土": "Terakota",
+  "梅子": "Erik",
+  "石墨": "Grafit",
+  "夜蓝": "Lacivert",
+  "新作业提醒": "Yeni ödev bildirimi",
+  "未提供截止时间": "Son teslim tarihi belirtilmedi",
+  "发现新作业": "Yeni ödevler bulundu",
+  "发现 %1$d 项新作业": "%1$d yeni ödev bulundu",
   "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Resmî pencerede CAPTCHA veya MFA doğrulamasını tamamlayın. Ardından eşitleme devam eder.",
   "自动登录已暂停，可选择“手动继续”查看官方页面。": "Otomatik oturum açma duraklatıldı. Resmî sayfayı görmek için “Manuel devam et”i seçin.",
   "手动继续": "Manuel devam et",

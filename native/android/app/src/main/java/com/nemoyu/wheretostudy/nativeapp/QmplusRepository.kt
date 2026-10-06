@@ -26,6 +26,8 @@ internal class QmplusRepository(context: Context,
     credentialStoreOverride: QmplusCredentialStore? = null,
     featureStoreOverride: QmplusFeatureStore? = null,
     stopFeatureOwnerOverride: ((String?, Long?) -> Unit)? = null,
+    private val assignmentPublication: ((Long, QmplusSnapshot, Boolean) -> Unit)? = null,
+    private val assignmentsCleared: (() -> Unit)? = null,
 ) {
     private val appContext = context.applicationContext
     private val prefs by lazy { preferencesOverride ?: appContext.getSharedPreferences("qmplus_business_cache", Context.MODE_PRIVATE) }
@@ -91,6 +93,7 @@ internal class QmplusRepository(context: Context,
                     generation = latest
                     cookiesNeedClearing = if (latest == storedGeneration) pendingClear else prefs.getBoolean(COOKIE_CLEAR_PENDING, false)
                     snapshot = cached.takeIf { latest == storedGeneration }
+                    snapshot?.takeUnless { it.partial }?.let { assignmentPublication?.invoke(generation, it, true) }
                     savedLoginStatus = loginStatus
                     if (preferencesOverride == null && featureMutationRevision == readFeatureRevision) {
                         val featureResult = runCatching {
@@ -256,6 +259,7 @@ internal class QmplusRepository(context: Context,
                             cacheWriteFailed = !prefs.edit().putString(SNAPSHOT, canonical).putLong(GENERATION, generation)
                                 .putBoolean(COOKIE_CLEAR_PENDING, false).commit()
                             snapshot = parsed; cookiesNeedClearing = false; manualContinuationRequired = false
+                            if (!parsed.partial) assignmentPublication?.invoke(generation, parsed, false)
                             cancelCookieClearDeadlineLocked()
                         } }
                         if (featureStore != null) featureStore.whileCurrent(checkNotNull(featureRecord), publish)
@@ -354,6 +358,7 @@ internal class QmplusRepository(context: Context,
         savedLoginStatus = loginClear.getOrNull() ?: QmplusCredentialStatus(savedLoginStatus.revision, false)
         generation = maxOf(generation, prefs.getLong(GENERATION, 0)) + 1
         snapshot = null; isLoading = false; error = null; cookiesNeedClearing = true; isClearingSession = true
+        assignmentsCleared?.invoke()
         manualContinuationRequired = false
         armCookieClearDeadlineLocked()
         check(prefs.edit().remove(SNAPSHOT).putLong(GENERATION, generation)

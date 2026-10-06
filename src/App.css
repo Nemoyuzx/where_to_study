@@ -1980,13 +1980,13 @@ button:disabled {
   border-radius: 0;
   display: grid;
   grid-template-columns: 52px 104px repeat(var(--day-count), minmax(118px, 1fr));
-  grid-template-rows: auto 896px;
+  grid-template-rows: auto calc(896px * var(--deadline-timeline-scale, 1));
   min-width: 0;
   overflow: auto;
 }
 
 .time-calendar.has-all-day {
-  grid-template-rows: auto auto 896px;
+  grid-template-rows: auto auto calc(896px * var(--deadline-timeline-scale, 1));
 }
 
 .time-calendar.single-day {
@@ -2189,13 +2189,6 @@ button:disabled {
   color: var(--gold-text-muted);
 }
 
-.time-all-day-cell > .time-all-day-item.assignment {
-  background: color-mix(in srgb, #ef8b36 20%, var(--surface));
-  border: 1px solid color-mix(in srgb, #dc7b23 80%, var(--border));
-  border-radius: 7px;
-  color: var(--busy-text);
-}
-
 .time-all-day-cell > .time-all-day-item.school-notice {
   background: var(--school-notice-surface);
   color: var(--school-notice-text);
@@ -2342,6 +2335,87 @@ button:disabled {
 .time-course-layer {
   inset: 0;
   position: absolute;
+}
+
+.time-deadline-layer {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 6;
+}
+
+.time-deadline-marker {
+  background: transparent;
+  border: 0;
+  height: 0;
+  left: 4px;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  width: 8px;
+}
+
+.time-deadline-marker::before {
+  content: '';
+  height: 24px;
+  left: -2px;
+  position: absolute;
+  top: -12px;
+  width: 12px;
+}
+
+.time-deadline-dot {
+  background: var(--on-primary);
+  border: 2px solid var(--primary-fill);
+  border-radius: 999px;
+  box-sizing: border-box;
+  height: 8px;
+  left: 0;
+  position: absolute;
+  top: -4px;
+  width: 8px;
+}
+
+.time-deadline-marker:focus-visible .time-deadline-dot {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.time-deadline-badge {
+  align-items: center;
+  background: var(--primary-fill);
+  border: 0;
+  border-radius: 5px;
+  color: var(--on-primary);
+  direction: ltr;
+  display: flex;
+  font-size: 10px;
+  gap: 4px;
+  height: 18px;
+  left: 4px;
+  line-height: 16px;
+  padding: 0 4px 0 12px;
+  pointer-events: auto;
+  position: absolute;
+  right: 4px;
+  text-align: left;
+}
+
+.time-deadline-pending {
+  background: var(--current-time);
+  border-radius: 999px;
+  height: 6px;
+  left: 0;
+  position: absolute;
+  top: -3px;
+  width: 6px;
+}
+
+.time-deadline-caption {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .current-time-line {
@@ -3375,12 +3449,12 @@ button:disabled {
 
   .time-calendar:not(.single-day) {
     grid-template-columns: 54px 100px repeat(var(--day-count), minmax(0, 1fr));
-    grid-template-rows: auto 900px;
+    grid-template-rows: auto calc(900px * var(--deadline-timeline-scale, 1));
     overflow-x: hidden;
   }
 
   .time-calendar.has-all-day:not(.single-day) {
-    grid-template-rows: auto auto 900px;
+    grid-template-rows: auto auto calc(900px * var(--deadline-timeline-scale, 1));
   }
 
   .time-course-block {
@@ -3809,14 +3883,14 @@ button:disabled {
   .time-calendar,
   .time-calendar:not(.single-day) {
     grid-template-columns: 42px 76px repeat(var(--day-count), minmax(0, 1fr));
-    grid-template-rows: auto 1200px;
+    grid-template-rows: auto calc(1200px * var(--deadline-timeline-scale, 1));
     overflow-x: hidden;
     overflow-y: auto;
   }
 
   .time-calendar.has-all-day,
   .time-calendar.has-all-day:not(.single-day) {
-    grid-template-rows: auto auto 1200px;
+    grid-template-rows: auto auto calc(1200px * var(--deadline-timeline-scale, 1));
   }
 
   .time-corner,

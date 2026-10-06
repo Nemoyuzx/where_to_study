@@ -716,6 +716,10 @@ mod tests {
     use super::*;
     use std::cell::{Cell, RefCell};
 
+    fn temporary_password(label: &str) -> String {
+        format!("{label}-{}", std::process::id())
+    }
+
     #[test]
     fn native_window_setup_reads_only_public_preferences_without_migrating_or_touching_credentials()
     {
@@ -738,38 +742,51 @@ mod tests {
     #[test]
     fn academic_password_change_invalidates_academic_queries_with_unchanged_independent_cloud_password(
     ) {
-        let mut previous = fixture_credentials("fixture-account", "old-academic");
-        previous.teaching_cloud_password = Some("independent-cloud".into());
-        let plan = prepare_save_with(fixture_request(Some("new-academic")), || Ok(Some(previous)))
-            .expect("prepare academic-only credential change");
+        let test_password_0 = temporary_password("old-academic");
+        let test_password_1 = temporary_password("independent-cloud");
+        let test_password_2 = temporary_password("new-academic");
+        let mut previous = fixture_credentials("fixture-account", test_password_0.as_str());
+        previous.teaching_cloud_password = Some(test_password_1.as_str().into());
+        let plan = prepare_save_with(fixture_request(Some(test_password_2.as_str())), || {
+            Ok(Some(previous))
+        })
+        .expect("prepare academic-only credential change");
 
         assert!(plan.academic_credentials_changed());
         assert!(!plan.assignment_credentials_changed());
         assert!(!plan.account_changed());
-        assert_eq!(plan.credentials.password, "new-academic");
-        assert_eq!(plan.credentials.assignment_password(), "independent-cloud");
+        assert_eq!(plan.credentials.password, test_password_2.as_str());
+        assert_eq!(
+            plan.credentials.assignment_password(),
+            test_password_1.as_str()
+        );
     }
 
     #[test]
     fn cloud_password_change_does_not_invalidate_unchanged_academic_credentials() {
-        let mut previous = fixture_credentials("fixture-account", "academic");
-        previous.teaching_cloud_password = Some("old-cloud".into());
+        let test_password_0 = temporary_password("academic");
+        let test_password_1 = temporary_password("old-cloud");
+        let test_password_2 = temporary_password("new-cloud");
+        let mut previous = fixture_credentials("fixture-account", test_password_0.as_str());
+        previous.teaching_cloud_password = Some(test_password_1.as_str().into());
         let mut request = fixture_request(None);
-        request.teaching_cloud_password = Some("new-cloud".into());
+        request.teaching_cloud_password = Some(test_password_2.as_str().into());
         let plan = prepare_save_with(request, || Ok(Some(previous)))
             .expect("prepare cloud-only credential change");
 
         assert!(!plan.academic_credentials_changed());
         assert!(plan.assignment_credentials_changed());
         assert!(!plan.account_changed());
-        assert_eq!(plan.credentials.password, "academic");
+        assert_eq!(plan.credentials.password, test_password_0.as_str());
     }
 
     #[test]
     fn same_credentials_and_unrelated_preferences_do_not_invalidate_academic_queries() {
-        let mut previous = fixture_credentials("fixture-account", "academic");
-        previous.teaching_cloud_password = Some("independent-cloud".into());
-        for password in [None, Some("academic")] {
+        let test_password_0 = temporary_password("independent-cloud");
+        let test_password_1 = temporary_password("academic");
+        let mut previous = fixture_credentials("fixture-account", test_password_1.as_str());
+        previous.teaching_cloud_password = Some(test_password_0.as_str().into());
+        for password in [None, Some(test_password_1.as_str())] {
             let unchanged =
                 prepare_save_with(fixture_request(password), || Ok(Some(previous.clone())))
                     .expect("prepare unchanged credentials");
@@ -788,8 +805,9 @@ mod tests {
 
     #[test]
     fn changed_account_invalidates_academic_queries_even_when_password_text_is_unchanged() {
-        let previous = fixture_credentials("fixture-account", "same-academic");
-        let mut request = fixture_request(Some("same-academic"));
+        let test_password_0 = temporary_password("same-academic");
+        let previous = fixture_credentials("fixture-account", test_password_0.as_str());
+        let mut request = fixture_request(Some(test_password_0.as_str()));
         request.account = "other-account".into();
         let plan =
             prepare_save_with(request, || Ok(Some(previous))).expect("prepare changed account");
@@ -801,31 +819,44 @@ mod tests {
 
     #[test]
     fn independent_cloud_password_preserves_blanks_clears_explicitly_and_never_crosses_accounts() {
-        let mut previous = fixture_credentials("fixture-account", "academic");
-        previous.teaching_cloud_password = Some(" cloud-secret ".into());
+        let test_password_0 = temporary_password("academic");
+        let test_password_1 = format!(" {} ", temporary_password("cloud-secret"));
+        let test_password_2 = temporary_password("replacement");
+        let test_password_3 = temporary_password("other-academic");
+        let mut previous = fixture_credentials("fixture-account", test_password_0.as_str());
+        previous.teaching_cloud_password = Some(test_password_1.as_str().into());
         let preserved =
             prepare_save_with(fixture_request(None), || Ok(Some(previous.clone()))).unwrap();
         assert_eq!(
             preserved.credentials.assignment_password(),
-            " cloud-secret "
+            test_password_1.as_str()
         );
-        assert_eq!(preserved.credentials.password, "academic");
+        assert_eq!(preserved.credentials.password, test_password_0.as_str());
         assert!(!preserved.assignment_credentials_changed());
         let mut request = fixture_request(None);
-        request.teaching_cloud_password = Some("replacement".into());
+        request.teaching_cloud_password = Some(test_password_2.as_str().into());
         let replaced = prepare_save_with(request, || Ok(Some(previous.clone()))).unwrap();
-        assert_eq!(replaced.credentials.assignment_password(), "replacement");
+        assert_eq!(
+            replaced.credentials.assignment_password(),
+            test_password_2.as_str()
+        );
         assert!(replaced.assignment_credentials_changed());
         let mut request = fixture_request(None);
         request.clear_teaching_cloud_password = true;
         let cleared = prepare_save_with(request, || Ok(Some(previous.clone()))).unwrap();
-        assert_eq!(cleared.credentials.assignment_password(), "academic");
+        assert_eq!(
+            cleared.credentials.assignment_password(),
+            test_password_0.as_str()
+        );
         assert!(cleared.assignment_credentials_changed());
-        let mut request = fixture_request(Some("other-academic"));
+        let mut request = fixture_request(Some(test_password_3.as_str()));
         request.account = "other-account".into();
         let changed = prepare_save_with(request, || Ok(Some(previous))).unwrap();
         assert!(changed.credentials.teaching_cloud_password.is_none());
-        assert_eq!(changed.credentials.assignment_password(), "other-academic");
+        assert_eq!(
+            changed.credentials.assignment_password(),
+            test_password_3.as_str()
+        );
     }
 
     #[test]

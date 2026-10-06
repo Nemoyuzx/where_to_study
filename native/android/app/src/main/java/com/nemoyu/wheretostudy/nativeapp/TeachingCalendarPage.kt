@@ -1020,7 +1020,8 @@ internal class TeachingCalendarPage(
     private fun handleDailyInfoChanged(dateKey: String) {
         refreshSelectedMonthDetailsInPlace(dateKey)
         refreshMonthCellsInPlace(dateKey)
-        refreshDayWeekAgendaInPlace(dateKey)
+        refreshDayWeekAgendaInPlace(if (dateKey == ASSIGNMENTS_CHANGE_KEY || dateKey == COURSES_CHANGE_KEY)
+            contractDate().format(selectedDate.time) else dateKey)
         refreshYearCalendarInPlace(dateKey)
         refreshYearPopoverInPlace(dateKey)
     }
@@ -1106,6 +1107,7 @@ internal class TeachingCalendarPage(
             UiText.localizeTree(replacement)
             parent.removeViewAt(index)
             parent.addView(replacement, index, layoutParams)
+            activePage.findViewWithTag<CalendarTimelineView>("calendar.timeline.grid")?.updateDays(days)
         }
     }
 
@@ -2239,6 +2241,7 @@ internal class TeachingCalendarPage(
                 selectedDate = selectedDate,
                 onDaySelected = onDaySelected,
                 onCourseSelected = ::showCourseDetails,
+                onDeadlinesSelected = ::showTimelineDeadlineDetails,
                 compact = true,
                 showDayHeader = false,
             ),
@@ -2347,6 +2350,7 @@ internal class TeachingCalendarPage(
             days,
             selectedDate,
             onCourseSelected = ::showCourseDetails,
+            onDeadlinesSelected = ::showTimelineDeadlineDetails,
         )
         addView(timeline, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -2374,6 +2378,7 @@ internal class TeachingCalendarPage(
                 selectedDate = selectedDate,
                 onDaySelected = selectDay,
                 onCourseSelected = ::showCourseDetails,
+                onDeadlinesSelected = ::showTimelineDeadlineDetails,
             ),
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -4309,7 +4314,25 @@ internal class TeachingCalendarPage(
         date = date.clone() as Calendar,
         courses = coursesOn(date),
         holidays = holidaysOn(date),
+        deadlines = CalendarCourseworkProjection.onDate(timelineDeadlines(), contractDate().format(date.time)),
     )
+
+    private fun timelineDeadlines(): List<TimelineDeadline> =
+        CalendarCourseworkProjection.cloud(dailyInfoRepository.allAssignments().orEmpty(),
+            dailyInfoRepository.currentTeachingCloudCourses().orEmpty()) +
+            activity.qmplusState().takeIf { it.isFeatureEnabled }?.snapshot?.let {
+                CalendarCourseworkProjection.qmplus(it, activity.calendarShowsOtherQMplusCourses())
+            }.orEmpty()
+
+    private fun showTimelineDeadlineDetails(day: Calendar, items: List<TimelineDeadline>) {
+        val single = items.singleOrNull()
+        if (single?.courseDetailKey?.let(activity::showCachedCourseDetails) == true) return
+        showCenteredAgendaDialog(activity.uiText("作业 DDL") + activity.uiText("（北京时间）") + " · " + displayMonthDayWithWeekday(day),
+            items.map { item -> CenteredAgendaRow(item.title,
+                listOfNotNull(item.courseName, "%02d:%02d".format(Locale.ROOT, item.minute / 60, item.minute % 60),
+                    activity.uiText("未提交").takeIf { item.clearlyPending }).joinToString(" · "),
+                Palette.primaryText, courseDetailKey = item.courseDetailKey) }, activity.uiText("作业 DDL"))
+    }
 
     private fun visibleYears(): Set<Int> = when (selectedMode) {
         Mode.DAY -> setOf(selectedDate.get(Calendar.YEAR))

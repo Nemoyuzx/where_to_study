@@ -14,7 +14,13 @@ import { AssignmentDeadlineItem, AssignmentDeadlineResponseParser } from './Cale
 import { SJDFormURLEncoder } from './SjdEncoding';
 import { AuthenticatedSession, AuthenticationExpiredError, AuthenticationFailure, SessionLease } from './AuthenticatedSession';
 
+export type AssignmentCatalogPublicationSink = (items: AssignmentDeadlineItem[], complete: boolean,
+  cached: boolean, current: () => boolean) => void;
+
 export interface AssignmentDeadlineFetching {
+  observeCatalogPublications?(observer: (credentials: Credentials) => AssignmentCatalogPublicationSink): void;
+  networkCatalogRevision?(): number;
+  networkCatalogComplete?(): boolean;
   fetch(credentials: Credentials, date: string): Promise<AssignmentDeadlineItem[]>;
   fetchCatalog(credentials: Credentials, refresh?: boolean): Promise<AssignmentDeadlineItem[]>;
   fetchCourseDirectory?(credentials: Credentials, refresh?: boolean): Promise<UCloudCourse[]>;
@@ -82,6 +88,14 @@ class UCloudCourseCache {
 }
 
 export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
+  private catalogObserver: ((credentials: Credentials) => AssignmentCatalogPublicationSink) | null = null;
+  observeCatalogPublications(observer: (credentials: Credentials) => AssignmentCatalogPublicationSink): void {
+    this.catalogObserver = observer;
+  }
+  private catalogNetworkRevision: number = 0;
+  networkCatalogRevision(): number { return this.catalogNetworkRevision; }
+  private catalogComplete: boolean = false;
+  networkCatalogComplete(): boolean { return this.catalogComplete; }
   private static readonly casLoginURL: string =
     'https://auth.bupt.edu.cn/authserver/login?service=https%3A%2F%2Fucloud.bupt.edu.cn';
   private static readonly serviceOrigin: string = 'https://ucloud.bupt.edu.cn';
@@ -134,6 +148,11 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
     }
     if (assignments !== null && this.cache === null && this.inFlight === null) {
       this.cache = new UCloudAssignmentCache(account, assignmentsFetchedAt, assignments);
+      const revision: number = this.revision;
+      this.catalogObserver?.(credentials)(assignments,
+        assignments.length < UCloudAssignmentClient.maximumAssignments &&
+          (courses === null || courses.length < UCloudAssignmentClient.maximumCourses), true,
+        (): boolean => revision === this.revision && this.activeAccount === account && this.activePassword === password);
     }
   }
 
@@ -166,6 +185,7 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
       allItems = await this.inFlight;
     } else {
       const requestRevision: number = this.revision;
+      const publication: AssignmentCatalogPublicationSink | undefined = this.catalogObserver?.(credentials);
       const normalized: Credentials = new Credentials(account, password);
       const work: Promise<AssignmentDeadlineItem[]> = this.fetchAllProvider === null ?
         this.sessions.run(account, password, (): Promise<SessionLease<UCloudSession>> => this.authenticate(normalized),
@@ -177,6 +197,11 @@ export class UCloudAssignmentClient implements AssignmentDeadlineFetching {
         allItems = await work;
         if (requestRevision === this.revision) {
           this.cache = new UCloudAssignmentCache(account, Date.now(), allItems);
+          this.catalogNetworkRevision++;
+          this.catalogComplete = allItems.length < UCloudAssignmentClient.maximumAssignments &&
+            (this.courseCache === null || this.courseCache.items.length < UCloudAssignmentClient.maximumCourses);
+          publication?.(allItems, this.catalogComplete, false,
+            (): boolean => requestRevision === this.revision && this.activeAccount === account && this.activePassword === password);
         }
       } finally {
         if (this.inFlight === work) {

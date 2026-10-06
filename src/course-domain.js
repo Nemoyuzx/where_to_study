@@ -30,6 +30,78 @@ export function qmplusActivitiesForCourse(snapshot, course) {
     .filter(item => item.course_id === course.id && isQmplusAssessmentActivity(item))
 }
 
+const shanghaiDeadlineClock=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',calendar:'gregory',numberingSystem:'latn',hourCycle:'h23',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'})
+// A deadline is a point, never a made-up lesson duration. Date-only and raw
+// human-readable QM time text cannot authorize a timed marker.
+export function deadlineMoment(value,source='ucloud') {
+  if(typeof value!=='string')return null
+  const match=value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?$/)
+  if(!match||(source==='qmplus'&&!match[7]))return null
+  const [year,month,day,hour,minute,second]=match.slice(1,7).map(part=>Number(part||0))
+  if(month<1||month>12||day<1||hour>23||minute>59||second>59)return null
+  const civil=new Date(0);civil.setUTCFullYear(year,month-1,day);civil.setUTCHours(hour,minute,second,0)
+  if(civil.getUTCFullYear()!==year||civil.getUTCMonth()!==month-1||civil.getUTCDate()!==day)return null
+  const timestamp=courseTimestamp(value.replace(' ','T')+(match[7]?'':'+08:00'))
+  if(!Number.isFinite(timestamp))return null
+  const date=new Date(timestamp),parts=Object.fromEntries(shanghaiDeadlineClock.formatToParts(date).map(part=>[part.type,part.value]))
+  const minutes=Number(parts.hour)*60+Number(parts.minute)+Number(parts.second)/60+date.getUTCMilliseconds()/60000
+  return {date:`${parts.year}-${parts.month}-${parts.day}`,minute:minutes,clock:`${parts.hour}:${parts.minute}${Number(parts.second)?`:${parts.second}`:''}`,timestamp}
+}
+
+export function courseDeadlineMomentGroups(data) {
+  const groups=new Map(),seen=new Set()
+  const add=(item,source,value,courseName='')=>{
+    const moment=deadlineMoment(value,source)
+    if(!moment)return
+    const key=JSON.stringify([source,item.course_id??null,item.kind||'assignment',item.id,moment.timestamp])
+    if(seen.has(key))return
+    seen.add(key)
+    const groupKey=JSON.stringify([moment.date,moment.minute])
+    if(!groups.has(groupKey))groups.set(groupKey,{...moment,key:groupKey,items:[]})
+    groups.get(groupKey).items.push({key,source,label:item.title,clock:moment.clock,assignmentItem:{...item,source,course_name:item.course_name||courseName,deadline:value}})
+  }
+  for(const item of data?.assignments||[])add(item,'ucloud',item.deadline)
+  for(const course of data?.qm?.courses||[])for(const item of qmplusActivitiesForCourse(data.qm,course)) {
+    if(item.kind==='assignment'||item.kind==='quiz')add(item,'qmplus',item.kind==='quiz'?item.closes_at:item.due_at,course.name)
+  }
+  return [...groups.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.minute-b.minute)
+}
+
+export function timelineForDeadlineMoments(courseHours,groups) {
+  const start=Math.min(courseHours.start,...groups.map(group=>Math.floor(group.minute/60)))
+  const end=Math.max(courseHours.end,...groups.map(group=>Math.floor(group.minute/60)+1))
+  return {start,end,scale:(end-start)/(courseHours.end-courseHours.start)}
+}
+
+// Move only the small clock label away from a lesson title; the dot retains
+// its exact minute coordinate, including when the label must sit above it.
+export function deadlineMomentLabelOffset(minute,courses,start,end,pixelsPerMinute) {
+  const y=(minute-start)*pixelsPerMinute,height=(end-start)*pixelsPerMinute,labelHeight=18
+  // Centre an ordinary thin bar on the real moment. The existing terminal
+  // hour label supplies scrollable overflow at the day end; do not pull a
+  // 23:59 bar up to an earlier apparent time merely to fit its text box.
+  let top=Math.max(0,y-labelHeight/2)
+  for(const course of courses.filter(course=>course.timed)) {
+    const header=(course.startMinutes-start)*pixelsPerMinute
+    if(top+labelHeight>header&&top<header+26)top=header+28<=height-labelHeight?header+28:Math.max(0,header-labelHeight-2)
+  }
+  return top-y
+}
+
+export function deadlineMomentBadges(groups,courses,start,end,pixelsPerMinute) {
+  const labels=groups.map(group=>({groups:[group],top:(group.minute-start)*pixelsPerMinute+deadlineMomentLabelOffset(group.minute,courses,start,end,pixelsPerMinute)})).sort((a,b)=>a.top-b.top)
+  const badges=[]
+  for(const label of labels) {
+    const previous=badges.at(-1)
+    if(previous&&label.top<previous.top+20)previous.groups.push(...label.groups)
+    else badges.push(label)
+  }
+  return badges.map(badge=>{
+    const groups=badge.groups.sort((a,b)=>a.minute-b.minute)
+    return {...groups[0],key:`badge:${groups.map(group=>group.key).join('|')}`,keys:groups.map(group=>group.key),items:groups.flatMap(group=>group.items),labelTop:badge.top}
+  })
+}
+
 // The Teaching Cloud directory comes from /site/list/student/current. Group
 // only this current-term view; source records, IDs and cached DTOs stay intact.
 export function groupTeachingCloudCourses(directory) {

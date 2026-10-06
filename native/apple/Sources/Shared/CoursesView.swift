@@ -249,7 +249,7 @@ private struct QMplusCourseSection: View {
                 .font(.caption).foregroundStyle(theme.secondaryText)
             if let snapshot = store.snapshot {
                 let selected = QMplusCourseSelection(snapshot: snapshot, showsOtherTerms: session.showsOtherQMplusTerms)
-                Text((CourseListEvidence.qmplusShanghaiTime(snapshot.fetchedAt) ?? snapshot.fetchedAt) + " · Asia/Shanghai")
+                Text((CourseListEvidence.qmplusShanghaiTime(snapshot.fetchedAt) ?? snapshot.fetchedAt) + model.localized("（北京时间）"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
                 if snapshot.courses.contains(where: { QMplusCourseSelection.includesCourse($0) && $0.currentTermStatus == .other }) {
                     Toggle(model.localized("显示其他学期／历史课程"), isOn: $session.showsOtherQMplusTerms)

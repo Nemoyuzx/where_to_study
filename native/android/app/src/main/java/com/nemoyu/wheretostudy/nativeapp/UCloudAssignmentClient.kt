@@ -28,6 +28,8 @@ internal class UCloudAssignmentClient internal constructor(
     private val apiRequestOverride: ((String, AuthenticatedSession) -> JSONObject)? = null,
     private val scopeProvider: (() -> String?)? = null,
     private val dtoCache: CourseDTOCacheStore? = null,
+    private val assignmentPublication: ((String, List<AssignmentDeadlineItem>, Boolean) -> Unit)? = null,
+    private val assignmentsCleared: (() -> Unit)? = null,
 ) {
     private data class CachedAssignments(
         val credentialKey: String,
@@ -58,10 +60,14 @@ internal class UCloudAssignmentClient internal constructor(
         val startedAtElapsed: Long,
     )
 
-    constructor(credentialStore: SecureCredentialStore) : this(
+    constructor(credentialStore: SecureCredentialStore,
+        publication: ((String, List<AssignmentDeadlineItem>, Boolean) -> Unit)? = null,
+        cleared: (() -> Unit)? = null) : this(
         loadCredentials = credentialStore::load,
         scopeProvider = credentialStore::cachedScope,
         dtoCache = credentialStore.courseDTOCache,
+        assignmentPublication = publication,
+        assignmentsCleared = cleared,
     )
 
     private val stateLock = Any()
@@ -140,6 +146,7 @@ internal class UCloudAssignmentClient internal constructor(
             cached?.assignments?.let { items -> if (cachedAssignments == null && inFlightFetches.isEmpty()) {
                 cachedAssignments = CachedAssignments(key, elapsedRealtime() - (System.currentTimeMillis() - cached.assignmentsFetchedAt).coerceAtLeast(0),
                     items, cached.assignmentsFetchedAt)
+                assignmentPublication?.invoke(scope, items, true)
             } }
         }
     }
@@ -178,6 +185,7 @@ internal class UCloudAssignmentClient internal constructor(
         val invalidated = synchronized(stateLock) {
             revision.incrementAndGet()
             cachedAssignments = null
+            assignmentsCleared?.invoke()
             cachedCourseRecords = null
             hydratedScope = null; hydratedCredentialKey = null; cachePersistenceWarning = null
             courseFlight?.result?.completeExceptionally(DailyInfoClientException("课程请求已失效。"))
@@ -226,6 +234,7 @@ internal class UCloudAssignmentClient internal constructor(
                             elapsedRealtime(),
                             items,
                         )
+                        credentials.cacheScope?.let { assignmentPublication?.invoke(it, items, false) }
                     }
                     if (inFlightFetches[credentialKey]?.result === flight.result) {
                         inFlightFetches.remove(credentialKey)

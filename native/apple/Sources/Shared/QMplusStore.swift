@@ -201,6 +201,10 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         cachedSnapshotPartial = value.partial
         isPartial = value.partial
         isRetainingPreviousSnapshot = true
+        if !value.partial {
+            NewAssignmentNoticeCenter.publish(NewAssignmentNotice.qmplus(value.payload), scope: current, kind: .qmplus,
+                storage: businessCache, restored: true)
+        }
     }
 
     /// A proven identity mismatch retires only business data. Keep the visible
@@ -648,6 +652,10 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 ? (hasPrevious ? "QMplus 同步不完整，保留上次快照并请重试" : "QMplus 同步不完整，部分信息尚未获取，请重试")
                 : "QMplus 同步完成"
             finish(request: request)
+            if !isPartial {
+                NewAssignmentNoticeCenter.publish(NewAssignmentNotice.qmplus(next), scope: scope, kind: .qmplus,
+                    storage: businessCache, restored: false)
+            }
             if replacesSnapshot {
                 do {
                     try businessCache.save(CourseBusinessCachedValue(schemaVersion: 1, scope: scope,

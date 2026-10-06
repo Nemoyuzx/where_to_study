@@ -9,13 +9,16 @@ import org.junit.Test
 
 class AppLocaleLogicTest {
     @Test fun knownChromeCatalogUsesDistinctCompiledResourceIDs() {
-        assertEquals(1422, NativeUiTextCatalog.resources.size)
+        assertEquals(1430, NativeUiTextCatalog.resources.size)
         assertEquals(NativeUiTextCatalog.resources.size, NativeUiTextCatalog.resources.values.toSet().size)
         assertTrue(NativeUiTextCatalog.resources.values.all { it != 0 })
         assertTrue("设置" in NativeUiTextCatalog.resources)
         assertTrue("打开教学云平台" in NativeUiTextCatalog.resources)
         assertTrue("启用 QMplus" in NativeUiTextCatalog.resources)
         assertTrue("仅适用国院" in NativeUiTextCatalog.resources)
+        listOf("鼠尾草", "陶土", "梅子", "石墨", "夜蓝").forEach {
+            assertTrue(it in NativeUiTextCatalog.resources)
+        }
         assertFalse("EBU5303 Synthetic course" in NativeUiTextCatalog.resources)
     }
 

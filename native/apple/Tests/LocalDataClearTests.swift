@@ -18,6 +18,9 @@ final class LocalDataClearTests: XCTestCase {
                              holidayStore: InMemoryHolidayStore(snapshot: nil),
                              dailyCourseNotificationScheduler: NoopNotificationScheduler(),
                              now: { Self.scheduleNow }, defaults: defaults)
+        // QMplus now defaults off for a fresh user. This test exercises the
+        // explicitly enabled independent identity, not bypassing that gate.
+        model.setQMplusEnabled(true)
         let request = try XCTUnwrap(model.qmplus.beginSynchronization())
         model.qmplus.receive(Data("""
             {"schema_version":1,"source":"qmplus","fetched_at":"2026-10-03T12:00:00Z",

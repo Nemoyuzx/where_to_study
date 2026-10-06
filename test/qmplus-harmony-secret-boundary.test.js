@@ -23,10 +23,13 @@ test('Harmony QM saved login is a separate ASSET secret gated by a matching non-
 })
 
 test('Harmony review demo is isolated and only a verified official owner can request a login secret', () => {
-  assert.match(settings, /if \(!this\.model\.isSampleMode\(\)\) \{ void this\.qmPlusSession\.restoreSavedLoginStatus\(\); \}/)
-  assert.match(settings, /onQMPlusRuntimeScopeChanged\(\): void \{[\s\S]*?this\.qmPlusPasswordDraft = ''/)
-  assert.match(settings, /\.id\('settings\.qmplus\.logout'\)\s*\.enabled\(!this\.model\.isSampleMode\(\)\)/)
-  assert.match(web, /if \(!this\.model\.isSampleMode\(\)\) \{ void this\.session\.restoreSavedLoginStatus\(\); \}/)
+  assert.match(settings, /if \(!this\.model\.isSampleMode\(\)\) \{\s*void this\.session\.restoreQMPlusSaveSelection\(\);\s*void this\.qmPlusSession\.restoreSavedLoginStatus\(\);\s*\}/)
+  assert.match(settings, /onQMPlusRuntimeScopeChanged\(\): void \{[\s\S]*?this\.session\.qmPlusPasswordDraft = ''/)
+  assert.doesNotMatch(settings, /\.id\('settings\.qmplus\.logout'\)/)
+  assert.match(session, /await this\.savedLoginStore\.clear\(\)/)
+  assert.match(session, /private clearConnection\(\): boolean/)
+  assert.match(web, /private async maybeStartSAML[\s\S]*?if \(this\.model\.isSampleMode\(\) \|\|[\s\S]*?return;[\s\S]*?await this\.session\.restoreSavedLoginStatus\(\)/)
+  assert.match(web, /private async startMicrosoftAuthAfterRestore[\s\S]*?this\.model\.isSampleMode\(\) \|\| this\.authNonce\.length > 0\) \{ return; \}/)
   assert.match(web, /sameAuthPage\(owner: number, page: number, url: string, nonce: string\): boolean/)
   assert.match(web, /QMPlusAuthNavigationPolicy\.isKnownMicrosoftPage\(url\)/)
   assert.match(web, /installed !== 'AUTH_INSTALLED'/)
@@ -45,7 +48,7 @@ test('Harmony review demo is isolated and only a verified official owner can req
 test('Harmony QM auth consumer owns one official document and clears every old async owner', () => {
   assert.match(web, /qmLoginPage: string = 'https:\/\/qmplus\.qmul\.ac\.uk\/login\/index\.php'/)
   assert.match(web, /qmSAMLStart: string = 'https:\/\/qmplus\.qmul\.ac\.uk\/auth\/saml2\/login\.php'/)
-  assert.match(web, /this\.authSAMLStarted = true;[\s\S]*?this\.controller\.loadUrl\(QMPlusAuthNavigationPolicy\.qmSAMLStart\)/)
+  assert.match(web, /approved === 'saml'[\s\S]*?this\.authSAMLStarted = true;[\s\S]*?this\.controller\.loadUrl\(approved === 'saml' \? QMPlusAuthNavigationPolicy\.qmSAMLStart : QMPlusAuthNavigationPolicy\.qmLoginPage\)/)
   assert.match(web, /url !== this\.authURL/)
   assert.match(web, /page === this\.pageRevision && url === this\.safeCurrentURL\(\)/)
   assert.match(web, /owner === this\.authPresentationRevision &&[\s\S]*?page === this\.pageRevision/)
@@ -65,10 +68,10 @@ test('Harmony retires same-document ACKs on navigation while preserving presenta
   assert.ok(invalidate)
   assert.match(invalidate, /this\.authLedger\.beginDocument\(\)/)
   assert.doesNotMatch(invalidate, /this\.authLedger\.begin\(\)|usernameClaimed = false|passwordClaimed = false/)
-  const newDocument = web.match(/beginDocument\(\): void \{([\s\S]*?)\n  \}/)?.[1]
+  const newDocument = web.match(/beginDocument\([^)]*\): void \{([\s\S]*?)\n  \}/)?.[1]
   assert.ok(newDocument)
   assert.match(newDocument, /submittedUsernameDocument = ''/)
   assert.doesNotMatch(newDocument, /active = true|usernameClaimed = false|passwordClaimed = false/)
-  assert.match(web, /this\.authLedger\.stop\(\);[\s\S]*?this\.invalidateAuth\(\);[\s\S]*?this\.session\.presentLogin\(\)/)
+  assert.match(web, /this\.authLedger\.stop\(\);[\s\S]*?this\.invalidateAuth\(\);[\s\S]*?this\.session\.deferManualLogin\(\)/)
   assert.match(web, /afterPassword = true;[\s\S]*?await this\.waitForAuthStep\(\);[\s\S]*?continue/)
 })

@@ -75,11 +75,16 @@ struct MobileCalendarTimelineView: View {
     let showsWeekColumns: Bool
     var isScrollEnabled = true
     var bottomContentInset = MobileCalendarTimelineLayout.bottomContentInset
+    var pendingStatusLabel = ""
     var onSelectDay: ((Date) -> Void)?
     var onSelectCourse: ((Date, Course) -> Void)?
+    var onSelectDeadline: ((Date, CalendarAllDayEvent) -> Void)?
+    var onSelectDeadlineOverflow: ((Date, [CalendarAllDayEvent]) -> Void)?
 
     private let calendar = Calendar.shanghai
-    private var bounds: ClosedRange<Int> { CalendarTimelineLogic.bounds(for: days.flatMap(\.courses)) }
+    private var bounds: ClosedRange<Int> {
+        CalendarTimelineLogic.bounds(for: days.flatMap(\.courses), deadlineMinutes: days.flatMap { $0.deadlineMoments.map(\.minute) })
+    }
     private var hourRange: ClosedRange<Int> { bounds.lowerBound / 60 ... bounds.upperBound / 60 }
     private var timelineHeight: CGFloat { CGFloat(bounds.upperBound - bounds.lowerBound) / 60 * MobileCalendarTimelineLayout.hourHeight }
     private func yPosition(minute: Int) -> CGFloat {
@@ -199,6 +204,7 @@ struct MobileCalendarTimelineView: View {
                 slotGuides(width: width)
             }
             courseBlocks(dayWidth: dayWidth)
+            deadlineMarkers(dayWidth: dayWidth)
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 ZStack(alignment: .topLeading) {
                     currentTimeIndicator(width: width, dayWidth: dayWidth, now: context.date)
@@ -304,6 +310,36 @@ struct MobileCalendarTimelineView: View {
                 }
             }
         }
+    }
+
+    private func deadlineMarkers(dayWidth: CGFloat) -> some View {
+        ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+            let positions = deadlineBadgePositions(for: day)
+            ForEach(CalendarDeadlineMomentLogic.displayMoments(day.deadlineMoments, hourHeight: MobileCalendarTimelineLayout.hourHeight)) { moment in
+                let markerWidth = CalendarDeadlineMomentLogic.markerWidth(dayWidth: dayWidth)
+                CalendarDeadlineMomentMarker(moment: moment, width: markerWidth, height: timelineHeight,
+                    anchorY: yPosition(minute: moment.minute), badgeY: positions[moment.minute] ?? yPosition(minute: moment.minute),
+                    anchorYs: moment.anchorMinutes.map { yPosition(minute: $0) },
+                    pendingStatusLabel: pendingStatusLabel,
+                    onSelect: {
+                        if moment.events.count > 1, let onSelectDeadlineOverflow { onSelectDeadlineOverflow(day.date, moment.events) }
+                        else if let event = moment.events.first { onSelectDeadline?(day.date, event) }
+                    })
+                    .offset(x: CGFloat(index) * dayWidth + 4)
+                    .accessibilityIdentifier("calendar.mobile.deadline.\(StrictContractDateParser.string(from: day.date)).\(moment.minute)")
+            }
+        }
+    }
+
+    private func deadlineBadgePositions(for day: CalendarTimelineDay) -> [Int: CGFloat] {
+        var positions = [Int: CGFloat](), previous: CGFloat?
+        for moment in CalendarDeadlineMomentLogic.displayMoments(day.deadlineMoments, hourHeight: MobileCalendarTimelineLayout.hourHeight) {
+            let center = CalendarDeadlineMomentLogic.badgeCenter(anchor: yPosition(minute: moment.minute),
+                lower: 0, upper: timelineHeight, courseTitleStarts: [], previous: previous)
+            positions[moment.minute] = center
+            previous = center
+        }
+        return positions
     }
 
     private func courseBlock(

@@ -74,6 +74,19 @@ test('calendar course details reject ambiguous names, duplicate IDs and mismatch
   assert.equal(calendarCourseForAssignment({},[first]),null)
 })
 
+test('QM calendar point opens the complete cached QM course without a cloud refresh or network request',()=>{
+  const course={id:'ebu',name:'EBU Fixture',current_term_status:'current'}
+  const activities=[{id:'a',course_id:'ebu',kind:'assignment',title:'Assignment'},{id:'q',course_id:'ebu',kind:'quiz',title:'Quiz'}]
+  const {CalendarAssignmentCourseDetail}=load(courseSource,{'./use-course-data.js':{useCourseData:()=>({courses:[],assignments:[],qm:{courses:[course],activities}})}})
+  const internals=React.__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE,previous=internals.H
+  internals.H={useMemo:work=>work(),useEffect:()=>{}}
+  let tree
+  try{tree=CalendarAssignmentCourseDetail({item:{...activities[1],source:'qmplus'},language:'en',hasAcademicAccount:true,courseDataOwner:{refresh:()=>{throw Error('unexpected cloud request')},syncQM:()=>{throw Error('unexpected sync')}},onClose:()=>{}})}finally{internals.H=previous}
+  assert.equal(tree.props.source,'qmplus');assert.equal(tree.props.course,course)
+  assert.deepEqual(tree.props.items.map(item=>item.id),['a','q'])
+  assert.equal(tree.props.onRefresh,undefined)
+})
+
 test('calendar details resolve any original teaching class ID to the complete current course group',()=>{
   const first={id:'a',name:'Same',teacher_names:['First']},second={id:'b',name:' Same ',teacher_names:['Second']}
   const groups=courseDomain.groupTeachingCloudCourses([first,second])

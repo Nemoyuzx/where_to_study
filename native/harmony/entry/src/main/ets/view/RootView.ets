@@ -21,6 +21,7 @@ import { QuerySession } from './QuerySession';
 import { CourseView } from './CourseView';
 import { CourseSession } from './CourseSession';
 import { QMPlusSession } from './QMPlusSession';
+import { NewAssignmentNotice, NewAssignmentNoticeQueue, NewAssignmentNoticeTicket } from '../common/NewAssignmentNotice';
 import { QMPlusConnectionView } from './QMPlusConnectionView';
 import { LanguagePickerView } from './LanguagePickerView';
 
@@ -58,6 +59,9 @@ export struct RootView {
   @Local qmPlusSession: QMPlusSession = new QMPlusSession();
   @Local phoneNavigationBottomMargin: number = PhoneNavigationLayout.minimumBottomClearanceVp;
   private deadlineRefreshTimer: number = -1;
+  private readonly assignmentNotices: NewAssignmentNoticeQueue = new NewAssignmentNoticeQueue();
+  private assignmentModelEpoch: number = 0;
+  private assignmentQMEpoch: number = 0;
   private navigationWindow: window.Window | null = null;
   private navigationAvoidAreaListener: ((options: window.AvoidAreaOptions) => void) | null = null;
   private navigationAvoidanceActive: boolean = false;
@@ -101,12 +105,69 @@ export struct RootView {
     }
   }
 
+  @Monitor('model.termID')
+  onAssignmentTermChanged(monitor: IMonitor): void {
+    this.qmPlusSession.cancelSync();
+    this.qmPlusSession.termID = this.model.termID;
+    this.qmPlusSession.newAssignmentNotice = null;
+    this.model.newAssignmentNotice = null;
+    this.assignmentNotices.retire('ucloud');
+    this.assignmentNotices.retire('qmplus');
+  }
+
+  @Monitor('model.assignmentNoticeEpoch', 'qmPlusSession.assignmentNoticeEpoch')
+  onAssignmentIdentityRetired(monitor: IMonitor): void {
+    if (this.assignmentModelEpoch !== this.model.assignmentNoticeEpoch) {
+      this.assignmentModelEpoch = this.model.assignmentNoticeEpoch;
+      this.model.newAssignmentNotice = null;
+      this.assignmentNotices.retire('ucloud');
+    }
+    if (this.assignmentQMEpoch !== this.qmPlusSession.assignmentNoticeEpoch) {
+      this.assignmentQMEpoch = this.qmPlusSession.assignmentNoticeEpoch;
+      this.qmPlusSession.newAssignmentNotice = null;
+      this.assignmentNotices.retire('qmplus');
+    }
+  }
+
+  @Monitor('model.newAssignmentNotice', 'qmPlusSession.newAssignmentNotice')
+  onNewAssignments(monitor: IMonitor): void {
+    this.collectAssignmentNotices();
+  }
+
+  private collectAssignmentNotices(): void {
+    if (!this.navigationAvoidanceActive) { return; }
+    const cloud: NewAssignmentNotice | null = this.model.newAssignmentNotice;
+    const qm: NewAssignmentNotice | null = this.qmPlusSession.newAssignmentNotice;
+    this.model.newAssignmentNotice = null;
+    this.qmPlusSession.newAssignmentNotice = null;
+    if (cloud !== null && cloud.term === this.model.termID) { this.assignmentNotices.enqueue(cloud); }
+    if (qm !== null && qm.term === this.model.termID) { this.assignmentNotices.enqueue(qm); }
+    this.showNextAssignmentDialog();
+  }
+
+  private showNextAssignmentDialog(): void {
+    if (!this.navigationAvoidanceActive) { return; }
+    const ticket: NewAssignmentNoticeTicket | null = this.assignmentNotices.begin();
+    if (ticket === null) { return; }
+    const finish: () => void = (): void => {
+      if (this.assignmentNotices.finish(ticket.id)) { this.showNextAssignmentDialog(); }
+    };
+    this.getUIContext().showAlertDialog({ title: this.model.text('发现新作业'),
+      message: ticket.notice.message(this.model.text('发现新作业')),
+      autoCancel: false, confirm: { value: this.model.text('确定'), action: finish } });
+  }
+
   aboutToAppear(): void {
+    this.assignmentModelEpoch = this.model.assignmentNoticeEpoch;
+    this.assignmentQMEpoch = this.qmPlusSession.assignmentNoticeEpoch;
+    this.qmPlusSession.assignmentText = (source: string): string => this.model.text(source);
+    this.qmPlusSession.termID = this.model.termID;
     this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled && !this.model.isSampleMode());
     if (AppLaunchConfiguration.consumeSettingsPresentationSeedForTesting()) {
       this.settingsSession.seedReviewPresentationDraftsOnce();
     }
     this.navigationAvoidanceActive = true;
+    this.collectAssignmentNotices();
     this.attachPhoneNavigationAvoidance();
     // 与 iOS 端 AppModel.init + RootView.onAppear 对应：引导加载后按需刷新当天教室。
     this.model.launch().then((): void => {
@@ -123,6 +184,7 @@ export struct RootView {
   }
 
   aboutToDisappear(): void {
+    this.assignmentNotices.clear();
     this.settingsSession.clearTransientPasswords();
     this.cancelLanguageTransition(true);
     this.navigationAvoidanceActive = false;

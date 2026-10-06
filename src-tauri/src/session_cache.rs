@@ -248,10 +248,14 @@ pub fn token_ttl(token: &str, declared: Option<u64>) -> Duration {
 
 #[cfg(test)]
 mod tests {
+    fn temporary_password(label: &str) -> String {
+        format!("{label}-{}", std::process::id())
+    }
     use super::*;
     use std::sync::atomic::AtomicUsize;
     #[tokio::test]
     async fn reuses_and_refreshes_only_auth_expiry() {
+        let password = temporary_password("session");
         let cache = SessionCache::new();
         let logins = AtomicUsize::new(0);
         for _ in 0..3 {
@@ -259,7 +263,7 @@ mod tests {
                 cache
                     .run(
                         "u",
-                        "p",
+                        &password,
                         || async {
                             Ok((
                                 logins.fetch_add(1, Ordering::SeqCst),
@@ -278,7 +282,7 @@ mod tests {
         cache
             .run(
                 "u",
-                "p",
+                &password,
                 || async {
                     Ok((
                         logins.fetch_add(1, Ordering::SeqCst),
@@ -299,7 +303,7 @@ mod tests {
         let result: ServiceResult<()> = cache
             .run(
                 "u",
-                "p",
+                &password,
                 || async { panic!("must reuse") },
                 |_| async { Err(ServiceError::new("network")) },
             )
@@ -308,7 +312,7 @@ mod tests {
         cache
             .run(
                 "u",
-                "changed",
+                &temporary_password("changed"),
                 || async {
                     Ok((
                         logins.fetch_add(1, Ordering::SeqCst),
@@ -323,12 +327,13 @@ mod tests {
     }
     #[tokio::test]
     async fn concurrent_login_and_stale_clear() {
+        let password = temporary_password("session");
         let cache = SessionCache::new();
         let count = AtomicUsize::new(0);
         let fetch = || {
             cache.run(
                 "u",
-                "p",
+                &password,
                 || async {
                     tokio::task::yield_now().await;
                     Ok((
@@ -346,7 +351,7 @@ mod tests {
         let result = cache
             .run(
                 "u",
-                "p",
+                &password,
                 || async {
                     cache.clear();
                     Ok((5, Duration::from_secs(60)))
@@ -380,12 +385,13 @@ mod tests {
 
     #[tokio::test]
     async fn retry_is_bounded_and_stale_failure_keeps_newer_session() {
+        let password = temporary_password("session");
         let cache = SessionCache::new();
         let count = AtomicUsize::new(0);
         let result: ServiceResult<()> = cache
             .run(
                 "u",
-                "p",
+                &password,
                 || async {
                     Ok((
                         count.fetch_add(1, Ordering::SeqCst),
@@ -401,7 +407,7 @@ mod tests {
         cache
             .run(
                 "u",
-                "p",
+                &password,
                 || async { Ok((3, Duration::from_secs(60))) },
                 |v| async move { Ok(v) },
             )
@@ -413,7 +419,7 @@ mod tests {
         let result = cache
             .run(
                 "u",
-                "p",
+                &password,
                 || async { panic!("still valid") },
                 |v| {
                     cache.clear();
@@ -426,11 +432,12 @@ mod tests {
 
     #[tokio::test]
     async fn unpolled_future_cannot_adopt_epoch_after_clear() {
+        let password = temporary_password("session");
         let cache = SessionCache::new();
         let logins = AtomicUsize::new(0);
         let old = cache.run(
             "old-account",
-            "fixture-password",
+            &password,
             || async {
                 logins.fetch_add(1, Ordering::SeqCst);
                 Ok(("old-token", Duration::from_secs(60)))
@@ -445,6 +452,7 @@ mod tests {
 
     #[tokio::test]
     async fn credential_snapshot_epoch_is_not_recaptured_at_request_creation() {
+        let password = temporary_password("session");
         let cache = SessionCache::new();
         let captured_with_credentials = cache.epoch();
         cache.clear();
@@ -452,7 +460,7 @@ mod tests {
             .run_at(
                 captured_with_credentials,
                 "old",
-                "fixture",
+                &password,
                 || async { panic!("revoked credentials must never log in") },
                 |token: usize| async move { Ok(token) },
             )
@@ -464,7 +472,7 @@ mod tests {
                 .run_at(
                     cache.epoch(),
                     "new",
-                    "fixture",
+                    &password,
                     || async { Ok((7, Duration::from_secs(60))) },
                     |token| async move { Ok(token) }
                 )
@@ -476,6 +484,7 @@ mod tests {
 
     #[tokio::test]
     async fn cleared_login_and_queued_request_cannot_repopulate_new_epoch() {
+        let password = temporary_password("session");
         let cache = SessionCache::new();
         let epoch = cache.epoch();
         let started = tokio::sync::Notify::new();
@@ -484,7 +493,7 @@ mod tests {
         let old = cache.run_at(
             epoch,
             "old",
-            "fixture",
+            &password,
             || async {
                 logins.fetch_add(1, Ordering::SeqCst);
                 started.notify_one();
@@ -496,7 +505,7 @@ mod tests {
         let queued = cache.run_at(
             epoch,
             "old",
-            "fixture",
+            &password,
             || async { panic!("queued revoked login must not run") },
             |token| async move { Ok(token) },
         );
@@ -508,7 +517,7 @@ mod tests {
                 .run_at(
                     cache.epoch(),
                     "new",
-                    "fixture",
+                    &password,
                     || async {
                         logins.fetch_add(1, Ordering::SeqCst);
                         Ok((2, Duration::from_secs(60)))
@@ -527,13 +536,14 @@ mod tests {
 
     #[tokio::test]
     async fn second_stage_expiry_after_clear_cannot_reauthenticate() {
+        let password = temporary_password("session");
         let cache = SessionCache::new();
         let logins = AtomicUsize::new(0);
         let result: ServiceResult<()> = cache
             .run_at(
                 cache.epoch(),
                 "old",
-                "fixture",
+                &password,
                 || async {
                     logins.fetch_add(1, Ordering::SeqCst);
                     Ok((1, Duration::from_secs(60)))

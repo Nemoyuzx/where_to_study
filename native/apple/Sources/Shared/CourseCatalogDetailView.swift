@@ -123,7 +123,7 @@ private struct CourseCatalogDetailView: View {
             if let shortName = course.shortName, !shortName.isEmpty { Text(shortName) }
             Text("QMplus · ID: \(course.id)").font(.caption).foregroundStyle(theme.secondaryText)
             Text(model.localized(termKey(course.currentTermStatus))).font(.caption).foregroundStyle(theme.secondaryText)
-            Text(model.localized("时间按上海时区显示；原网页的伦敦时间说明保留。"))
+            Text(model.localized("以下换算为北京时间；原网页伦敦时间说明保持原文。"))
                 .font(.caption).foregroundStyle(theme.secondaryText)
             if let start = CourseListEvidence.qmplusShanghaiTime(course.startAt) { Text(model.localized("课程开始") + ": " + start).font(.caption) }
             if let end = CourseListEvidence.qmplusShanghaiTime(course.endAt) { Text(model.localized("课程结束") + ": " + end).font(.caption) }

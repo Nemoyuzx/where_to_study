@@ -66,7 +66,19 @@ pub static PRESETS: LazyLock<Vec<Preset>> = LazyLock::new(|| {
         .expect("valid bundled color theme contract")
         .presets
 });
-pub const IDS: [&str; 11] = ["default", "ocean", "violet", "amber", "rose", "sage", "terracotta", "plum", "graphite", "navy", "custom"];
+pub const IDS: [&str; 11] = [
+    "default",
+    "ocean",
+    "violet",
+    "amber",
+    "rose",
+    "sage",
+    "terracotta",
+    "plum",
+    "graphite",
+    "navy",
+    "custom",
+];
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

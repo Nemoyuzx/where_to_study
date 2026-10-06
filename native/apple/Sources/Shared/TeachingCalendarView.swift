@@ -1463,6 +1463,14 @@ struct TeachingCalendarView: View {
                 onSelectAllDayOverflow: { date in
                     presentedTimelineAgenda = CalendarAgendaSelection(date: date,
                         events: timelineAllDayEvents(on: date).map(calendarAgendaDisplayItem))
+                },
+                onSelectDeadline: { date, event in
+                    if !presentCourseDeadline(event) {
+                        presentedTimelineAgenda = CalendarAgendaSelection(date: date, events: [calendarAgendaDisplayItem(event)])
+                    }
+                },
+                onSelectDeadlineOverflow: { date, events in
+                    presentedTimelineAgenda = CalendarAgendaSelection(date: date, events: events.map(calendarAgendaDisplayItem))
                 }
             )
             .environment(\.layoutDirection, .leftToRight)
@@ -1508,6 +1516,16 @@ struct TeachingCalendarView: View {
                     selectedDate = date
                     presentedTimelineAgenda = CalendarAgendaSelection(date: date,
                         events: timelineAllDayEvents(on: date).map(calendarAgendaDisplayItem))
+                },
+                onSelectDeadline: { date, event in
+                    selectedDate = date
+                    if !presentCourseDeadline(event) {
+                        presentedTimelineAgenda = CalendarAgendaSelection(date: date, events: [calendarAgendaDisplayItem(event)])
+                    }
+                },
+                onSelectDeadlineOverflow: { date, events in
+                    selectedDate = date
+                    presentedTimelineAgenda = CalendarAgendaSelection(date: date, events: events.map(calendarAgendaDisplayItem))
                 }
             )
             .environment(\.layoutDirection, .leftToRight)
@@ -1955,8 +1973,10 @@ struct TeachingCalendarView: View {
         let inMonth = snapshot.month == monthNumber
         #if os(macOS)
         let showsDetails = true
+        let minimumCellHeight: CGFloat = 94
         #else
         let showsDetails = isMonthExpanded
+        let minimumCellHeight: CGFloat = isMonthExpanded ? 94 : 46
         #endif
         let detail: String
         let detailTint: Color
@@ -2035,7 +2055,7 @@ struct TeachingCalendarView: View {
         .padding(6)
         .frame(
             maxWidth: .infinity,
-            minHeight: showsDetails ? 94 : 46,
+            minHeight: minimumCellHeight,
             alignment: .topLeading
         )
         .background(monthCellColor(selected: isSelected, inMonth: inMonth, courseCount: dayCourses.count))
@@ -3281,6 +3301,8 @@ struct TeachingCalendarView: View {
         dismiss: @escaping () -> Void
     ) -> some View {
         GeometryReader { proxy in
+            let bounds = CGRect(origin: .zero, size: proxy.size)
+            let pane = calendarDialogPane(proxy)
             ZStack {
                 Color.black.opacity(0.28)
                     .ignoresSafeArea()
@@ -3349,7 +3371,9 @@ struct TeachingCalendarView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .frame(maxHeight: min(360, max(proxy.size.height - 180, 140)))
+                    .frame(maxHeight: pane == bounds
+                           ? min(360, max(proxy.size.height - 180, 140))
+                           : min(360, max(pane.height - 180, 0)))
                 }
                 .padding(16)
                 .frame(maxWidth: 400)
@@ -3365,10 +3389,29 @@ struct TeachingCalendarView: View {
                 .onTapGesture { }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier(accessibilityIdentifier)
+                .frame(width: pane.width, height: pane.height)
+                .position(x: pane.midX, y: pane.midY)
             }
             .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
         }
         .zIndex(40)
+    }
+
+    private func calendarDialogPane(_ proxy: GeometryProxy) -> CGRect {
+        let bounds = CGRect(origin: .zero, size: proxy.size)
+        // Verified: Xcode 27.1 RC uses Swift 6.4; the older SDK/compiler is 6.3.3.
+        // Old SDK builds must not type-check names absent from SwiftUICore.
+        #if os(iOS) && compiler(>=6.4)
+        if #available(iOS 27.1, *) {
+            let regions = proxy.reservedRegions(kind: .division) + proxy.reservedRegions(kind: .occlusion)
+            return ReservedDialogPlacement.pane(in: bounds, regions: regions.map {
+                DialogReservedArea(frame: $0.frame, top: $0.margins.top, leading: $0.margins.leading,
+                                   bottom: $0.margins.bottom, trailing: $0.margins.trailing,
+                                   isActive: $0.isActive)
+            })
+        }
+        #endif
+        return bounds
     }
 
     private func calendarAgendaRowContent(_ event: CalendarAgendaDisplayItem) -> some View {
@@ -3408,7 +3451,9 @@ struct TeachingCalendarView: View {
         let key = "\(firstDate)|\(days.count)"
         let cached = timelineSnapshotCache.value(for: key) { days.map(timelineDay) }
         return CourseDeadlineCalendarProjection.applying(to: cached, snapshot: qmplus.snapshot,
-            enabled: model.qmplusEnabled, showsOtherTerms: courseSession.showsOtherQMplusTerms)
+            enabled: model.qmplusEnabled, showsOtherTerms: courseSession.showsOtherQMplusTerms,
+            assignments: CourseListEvidence.cachedAssignments(query: calendarDeadlines.assignmentQueryItems,
+                byDate: calendarDeadlines.assignmentsByDate))
     }
 
     private func timelineAllDayEvents(on date: Date) -> [CalendarAllDayEvent] {

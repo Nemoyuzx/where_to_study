@@ -653,7 +653,9 @@ struct MobileTeachingCalendarView: View {
         let key = snapshotCacheKey(for: days, scope: "timeline")
         let cached = snapshotCache.timelineValues(for: key) { days.map(timelineDay) }
         let timelineDays = CourseDeadlineCalendarProjection.applying(to: cached, snapshot: qmplus.snapshot,
-            enabled: model.qmplusEnabled, showsOtherTerms: courseSession.showsOtherQMplusTerms)
+            enabled: model.qmplusEnabled, showsOtherTerms: courseSession.showsOtherQMplusTerms,
+            assignments: CourseListEvidence.cachedAssignments(query: calendarDeadlines.assignmentQueryItems,
+                byDate: calendarDeadlines.assignmentsByDate))
         return VStack(spacing: 0) {
             selectedDateSummary
                 .contentShape(Rectangle())
@@ -667,12 +669,23 @@ struct MobileTeachingCalendarView: View {
                 bottomContentInset: MobileCalendarTimelineLayout.contentBottomInset(
                     isLandscape: usesLandscapeMonthStops
                 ),
+                pendingStatusLabel: model.localized("未提交"),
                 onSelectDay: { date in
                     guard !suppressesEventSelection else { return }
                     navigate(to: date)
                 },
                 onSelectCourse: { date, course in
                     presentCourse(course, on: date)
+                },
+                onSelectDeadline: { date, event in
+                    guard !suppressesEventSelection else { return }
+                    if !presentCourseDeadline(event) {
+                        presentedWeekAgenda = MobileWeekAgendaSelection(date: date, events: [event])
+                    }
+                },
+                onSelectDeadlineOverflow: { date, events in
+                    guard !suppressesEventSelection else { return }
+                    presentedWeekAgenda = MobileWeekAgendaSelection(date: date, events: events)
                 }
             )
             .accessibilityElement(children: .contain)
@@ -763,11 +776,7 @@ struct MobileTeachingCalendarView: View {
                                 .foregroundStyle(allDayEventTint(item.kind))
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 5)
-                                .background {
-                                    if item.kind == .assignment {
-                                        RoundedRectangle(cornerRadius: 6).fill(allDayEventTint(item.kind).opacity(0.10))
-                                    } else { Capsule().fill(allDayEventTint(item.kind).opacity(0.10)) }
-                                }
+                                .background(allDayEventTint(item.kind).opacity(0.10), in: Capsule())
                         }
                         .buttonStyle(.plain)
                     }

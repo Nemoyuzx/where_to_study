@@ -111,7 +111,9 @@ test('reported all-day, year, slot and course labels retain their non-PC font re
     ['MobileCalendarTimelineView', 'courseBlockForWeek', {}, [9, 10, 8, 10, 10, 10]],
     ['MobileTeachingCalendarView', 'weekDateStrip', {}, [9.5, 9.5]],
     ['MobileTeachingCalendarView', 'dateStripButton', {}, [11, 11, 8]],
-    ['MobileTeachingCalendarView', 'weekAllDayItems', {}, [11, 9.5]],
+    // The additional overflow +N label preserves the 9.5fp mobile size and
+    // must pass through the same PC minimum as the existing all-day labels.
+    ['MobileTeachingCalendarView', 'weekAllDayItems', {}, [11, 9.5, 9.5]],
     ['MobileTeachingCalendarView', 'miniMonth', {}, [17, 8]],
     ['MobileTeachingCalendarView', 'yearDayButton', {}, [8]],
   ]

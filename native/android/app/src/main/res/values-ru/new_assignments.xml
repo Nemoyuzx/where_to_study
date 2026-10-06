@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="new_assignments_title">"Обнаружено новых заданий: %1$d"</string>
+</resources>

@@ -1,5 +1,9 @@
 // 本地测试聚合入口（模板默认入口），串行运行全部测试套件。
 import strictDatesTest from './StrictDates.test';
+import newAssignmentTrackerTest from './NewAssignmentTracker.test';
+import newAssignmentNoticeTest from './NewAssignmentNotice.test';
+import calendarDeadlineMomentsTest from './CalendarDeadlineMoments.test';
+import assignmentPublicationTest from './AssignmentPublication.test';
 import semesterLogicTest from './SemesterLogic.test';
 import scheduleLogicTest from './ScheduleLogic.test';
 import sjdEncodingTest from './SjdEncoding.test';
@@ -73,4 +77,8 @@ export default function testsuite() {
   widgetFileQueueTest();
   academicQueryTest();
   authenticatedSessionTest();
+  newAssignmentTrackerTest();
+  newAssignmentNoticeTest();
+  calendarDeadlineMomentsTest();
+  assignmentPublicationTest();
 }

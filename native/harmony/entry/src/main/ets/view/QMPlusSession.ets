@@ -2,8 +2,11 @@
 // 合法业务 DTO 可进入独立作用域缓存；只有用户显式选择保存时，Microsoft 登录资料才进入独立
 // ASSET 资产，授权nonce进入非敏感偏好；Cookie/sesskey永不跨业务桥。
 import { webview } from '@kit.ArkWeb';
-import { QMPlusSnapshot, QMPlusSnapshotParser, QMPlusURLPolicy } from '../net/QMPlusSnapshot';
+import { QMPlusActivity, QMPlusCourse, QMPlusSnapshot, QMPlusSnapshotParser, QMPlusURLPolicy } from '../net/QMPlusSnapshot';
 import { PreferencesStore } from '../store/PreferencesStore';
+import { NewAssignmentStore } from '../store/NewAssignmentStore';
+import { NewAssignmentNotice } from '../common/NewAssignmentNotice';
+import { CourseQMPlusScope } from '../common/CourseLogic';
 import { QMPlusWebProfileStore, QMPlusWebProfileStoring } from '../store/QMPlusWebProfileStore';
 import { CourseDTOCacheStore } from '../store/CourseDTOCacheStore';
 import { AssetQMPlusSavedLoginStore, newQMPlusRecordID, QMPlusSavedLogin,
@@ -42,6 +45,36 @@ export class QMPlusLoginAuthorization {
 
 @ObservedV2
 export class QMPlusSession {
+  @Trace newAssignmentNotice: NewAssignmentNotice | null = null;
+  @Trace assignmentNoticeEpoch: number = 0;
+  termID: string = '';
+  assignmentText: (source: string) => string = (source: string): string => source;
+  private syncTermID: string = '';
+  private readonly newAssignmentStore: NewAssignmentStore = new NewAssignmentStore('qmplus');
+
+  private rememberAssignments(snapshot: QMPlusSnapshot, cached: boolean): void {
+    const scope: string = this.webProfile?.businessScope?.() ?? '';
+    const revision: number = this.cacheRevision;
+    const term: string = this.termID;
+    const current: () => boolean = (): boolean => revision === this.cacheRevision && term === this.termID &&
+      this.webProfile?.businessScope?.() === scope;
+    const activities: QMPlusActivity[] = CourseQMPlusScope.currentActivities(snapshot);
+    this.newAssignmentStore.accept(scope, term, activities.map((item: QMPlusActivity): string => item.courseID + '|' + item.kind + '|' + item.id),
+      !snapshot.partial, cached, current, (ids: string[]): void => {
+        const fresh: Set<string> = new Set<string>(ids);
+        const preview: string[] = [];
+        for (const item of activities) {
+          if (!fresh.has(item.courseID + '|' + item.kind + '|' + item.id)) { continue; }
+          preview.push(item.title + '\n' +
+            (snapshot.courses.find((course: QMPlusCourse): boolean => course.id === item.courseID)?.name ?? item.courseID) +
+            '\n' + (item.dueAt ?? item.closesAt ?? item.cutoffAt ??
+              (item.rawTimeText.length > 0 ? item.rawTimeText : this.assignmentText('截止时间未公布'))));
+          if (preview.length >= NewAssignmentNotice.previewLimit) { break; }
+        }
+        this.newAssignmentNotice = NewAssignmentNotice.merge(this.newAssignmentNotice,
+          new NewAssignmentNotice('qmplus', scope + '|' + revision.toString(), term, ids.length, preview));
+      }).catch(() => {});
+  }
   static readonly autoFillAuthorizationKey: string = 'qmplusAutoFillAuthorizedRecordID';
   // ArkWeb 文档要求先加载 Web 组件再调用 WebStorage；Root Session 重建不代表
   // 本进程的 incognito profile 未被使用过。
@@ -132,13 +165,15 @@ export class QMPlusSession {
   async restoreBusinessCache(): Promise<void> {
     if (this.cacheRestore !== null) { return await this.cacheRestore; }
     const revision: number = this.cacheRevision;
+    const term: string = this.termID;
     const scope: string = this.webProfile?.businessScope?.() ?? '';
     const work: Promise<void> = (async (): Promise<void> => {
       if (!/^[0-9a-f]{32}$/.test(scope) || this.webProfile === null || !this.webProfile.isReady()) { return; }
       const cached: QMPlusSnapshot | null = await this.businessCache.loadQM(scope);
-      if (cached !== null && revision === this.cacheRevision && this.snapshot === null &&
+      if (cached !== null && revision === this.cacheRevision && term === this.termID && this.snapshot === null &&
         this.webProfile.isReady() && this.webProfile.businessScope?.() === scope) {
         this.snapshot = cached;
+        this.rememberAssignments(cached, true);
       }
     })();
     this.cacheRestore = work;
@@ -576,6 +611,7 @@ export class QMPlusSession {
   beginSync(): number {
     if (!this.isFeatureEnabled || this.syncing || (this.webProfile !== null && !this.isOfficialWebReady(this.loginOwner()))) { return -1; }
     const generation: number = ++this.generation;
+    this.syncTermID = this.termID;
     this.syncing = true;
     if (!this.explicitDetailRequest) { this.loginPresented = false; }
     this.cancelQuietDeadline();
@@ -585,7 +621,7 @@ export class QMPlusSession {
   }
 
   isCurrent(generation: number): boolean {
-    return this.isFeatureEnabled && generation === this.generation && this.syncing && this.loginVisible &&
+    return this.syncTermID === this.termID && this.isFeatureEnabled && generation === this.generation && this.syncing && this.loginVisible &&
       (this.webProfile === null || this.isOfficialWebReady(this.loginOwner()));
   }
 
@@ -598,6 +634,7 @@ export class QMPlusSession {
         this.showingStalePartial = true;
       } else {
         this.snapshot = next;
+        this.rememberAssignments(next, false);
         this.showingStalePartial = false;
         const scope: string = this.webProfile?.businessScope?.() ?? '';
         const revision: number = this.cacheRevision;
@@ -664,9 +701,12 @@ export class QMPlusSession {
   }
 
   private clearConnection(): boolean {
+    this.assignmentNoticeEpoch++;
     // Persist the fence before changing identity or touching engine storage.
     const pendingSaved: boolean = this.webProfile === null || this.webProfile.markClearPending();
     this.cacheRevision++;
+    this.newAssignmentNotice = null;
+    this.newAssignmentStore.clear();
     this.cacheRestore = null;
     this.businessCache.clear().catch(() => {});
     const webStopped: boolean = this.stopOwnedLoginWeb();

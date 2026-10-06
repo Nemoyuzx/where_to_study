@@ -17,7 +17,7 @@ final class SettingsPresentationUITests: XCTestCase {
         replace(primary, with: "#123456\n")
         for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
             XCUIDevice.shared.orientation = orientation
-            if orientation != .portrait { collapseLandscapeSidebar(app) }
+            assertStablePhoneTabs(app)
             assertSettingsLayout(app, columns: orientation == .portrait ? 1 : 2)
             assertDrafts(app)
         }
@@ -77,18 +77,19 @@ final class SettingsPresentationUITests: XCTestCase {
         app.tabBars.buttons["设置"].tap()
         assertSettingsLayout(app, columns: 1)
         XCUIDevice.shared.orientation = .landscapeLeft
-        collapseLandscapeSidebar(app)
+        assertStablePhoneTabs(app)
         assertSettingsLayout(app, columns: 2)
         XCUIDevice.shared.orientation = .portrait
         assertSettingsLayout(app, columns: 1)
         return app
     }
 
-    private func collapseLandscapeSidebar(_ app: XCUIApplication) {
-        let toggle = app.buttons["navigation.sidebar-toggle"].firstMatch
-        XCTAssertTrue(toggle.waitForExistence(timeout: 5), "The wide iPhone must enter the real root sidebar branch")
-        if toggle.label == "收起侧栏" { toggle.tap() }
-        XCTAssertEqual(toggle.label, "展开侧栏")
+    private func assertStablePhoneTabs(_ app: XCUIApplication,
+                                       file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertTrue(app.tabBars.buttons["设置"].waitForExistence(timeout: 5),
+                      "The phone keeps the same TabView on its outer and expanded displays", file: file, line: line)
+        XCTAssertFalse(app.buttons["navigation.sidebar-toggle"].exists,
+                       "Available width must not replace phone tabs with a sidebar", file: file, line: line)
     }
 
     private func assertSettingsLayout(_ app: XCUIApplication, columns: Int,

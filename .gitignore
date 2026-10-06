@@ -10,6 +10,11 @@ release-artifacts/
 output/
 /docs/screenshots/
 
+# Local promotional media and build cache; keep out of Git and worktree snapshots.
+/promo-video/
+/source-picture/
+/.hvigor/
+
 # Local environment files. Keep documented examples available to contributors.
 .env
 .env.*

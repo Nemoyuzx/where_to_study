@@ -149,6 +149,11 @@ struct RootView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var navigation: PrimaryNavigationState
     @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var newAssignmentNotices = NewAssignmentNoticeCenter.shared
+    @State private var presentedAssignmentNotice: NewAssignmentNoticeCenter.Batch?
+    @State private var dismissingAssignmentNotice = false
+    @State private var assignmentNoticePresenterID = UUID()
+    @State private var assignmentNoticePresenterVisible = false
     @StateObject private var teachingCalendarSession = TeachingCalendarSessionState()
     @StateObject private var calendarServices = CalendarDataServices()
     @State private var settingsSession = SettingsViewSession()
@@ -209,6 +214,41 @@ struct RootView: View {
             model.startDailyClassroomRefresh()
             #endif
             calendarServices.prewarmInformationQueries(sampleMode: model.isSampleMode)
+        }
+        .alert(model.localized("新作业提醒") + " (\(presentedAssignmentNotice?.totalCount ?? 0))", isPresented: Binding(
+            get: { presentedAssignmentNotice != nil },
+            set: { showing in
+                if !showing {
+                    dismissingAssignmentNotice = true
+                    let id = presentedAssignmentNotice?.id
+                    presentedAssignmentNotice = nil
+                    newAssignmentNotices.acknowledge(owner: assignmentNoticePresenterID, batchID: id)
+                    DispatchQueue.main.async {
+                        dismissingAssignmentNotice = false
+                        presentNextAssignmentNotice()
+                    }
+                }
+            }
+        ), presenting: presentedAssignmentNotice) { batch in
+            let destination = NewAssignmentNotice.destination(for: batch.kind)
+            Button(model.localized(destination.titleKey)) {
+                coursesSession.selectedMode = destination
+                selectSection(.courses)
+            }
+            Button(model.localized("确定"), role: .cancel) { }
+        } message: { batch in
+            Text(NewAssignmentNotice.preview(batch.items).map { item in
+                [item.title, item.course, item.deadline ?? model.localized("未提供截止时间")]
+                    .compactMap { $0 }.joined(separator: "\n")
+            }.joined(separator: "\n\n") + (batch.totalCount > 8 ? "\n\n… +\(batch.totalCount - 8)" : ""))
+        }
+        .onReceive(newAssignmentNotices.$batches) { _ in requestAssignmentNoticeClaim() }
+        .onReceive(newAssignmentNotices.$presentationRevision) { _ in requestAssignmentNoticeClaim() }
+        .onReceive(model.qmplus.objectWillChange) { _ in requestAssignmentNoticeClaim() }
+        .onAppear { assignmentNoticePresenterVisible = true; requestAssignmentNoticeClaim() }
+        .onDisappear { assignmentNoticePresenterVisible = false; releaseAssignmentNoticeClaim() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { requestAssignmentNoticeClaim() } else { releaseAssignmentNoticeClaim() }
         }
         .task(id: PublicDeadlinePrewarmID(
             publicDeadlinesEnabled: model.hasEnabledBuiltInPublicDeadlines,
@@ -370,19 +410,23 @@ struct RootView: View {
             }
         }
         .onChange(of: model.account) { _ in
+            requestAssignmentNoticeClaim()
             calendarDeadlines.clearAssignments()
             modeServices.teachingCloudCourses.invalidate()
         }
         .onChange(of: model.assignmentCredentialRevision) { _ in
+            requestAssignmentNoticeClaim()
             calendarDeadlines.clearAssignments()
             modeServices.teachingCloudCourses.invalidate()
         }
         .onChange(of: model.courseDataClearRevision) { _ in
+            requestAssignmentNoticeClaim()
             calendarDeadlines.clearAssignments()
             modeServices.teachingCloudCourses.invalidate()
             coursesSession.reset()
         }
         .onChange(of: model.isSampleMode) { sampleMode in
+            if sampleMode { releaseAssignmentNoticeClaim() } else { requestAssignmentNoticeClaim() }
             coursesSession.dismissDetails()
             // Live and built-in sample data use separate stores so an in-flight
             // live request can never overwrite the sample-mode query page (or
@@ -437,6 +481,28 @@ struct RootView: View {
         .toolbarBackground(theme.configuration.preset == .default ? .automatic : .visible,
                            for: .navigationBar, .tabBar)
         #endif
+    }
+
+    private func requestAssignmentNoticeClaim() {
+        // Published sends before its value is stored. Claim after that write;
+        // all windows then arbitrate against the same MainActor-owned queue.
+        DispatchQueue.main.async { presentNextAssignmentNotice() }
+    }
+
+    private func releaseAssignmentNoticeClaim() {
+        presentedAssignmentNotice = nil
+        newAssignmentNotices.release(owner: assignmentNoticePresenterID)
+    }
+
+    private func presentNextAssignmentNotice() {
+        if let presented = presentedAssignmentNotice,
+           !newAssignmentNotices.isClaimCurrent(owner: assignmentNoticePresenterID, batchID: presented.id) {
+            presentedAssignmentNotice = nil
+            newAssignmentNotices.release(owner: assignmentNoticePresenterID, batchID: presented.id)
+        }
+        guard assignmentNoticePresenterVisible, scenePhase == .active, !model.isSampleMode, !dismissingAssignmentNotice,
+              presentedAssignmentNotice == nil else { return }
+        presentedAssignmentNotice = newAssignmentNotices.claim(owner: assignmentNoticePresenterID)
     }
 
     private var sampleModeBanner: some View {

@@ -1,12 +1,13 @@
 pub mod academic;
+mod assignment_seen;
 pub mod assignments;
 pub mod auth;
 mod calendar_export;
 pub mod classrooms;
 mod classrooms_store;
 pub mod config;
-pub mod course_deletions;
 mod course_cache_store;
+pub mod course_deletions;
 #[cfg(not(mobile))]
 mod course_reminders;
 pub mod credential_store;
@@ -413,6 +414,9 @@ fn set_desktop_notification_preferences(
 
 #[cfg(test)]
 mod local_data_coordination_tests {
+    fn temporary_password(label: &str) -> String {
+        format!("{label}-{}", std::process::id())
+    }
     use super::*;
     use std::fs;
     use std::sync::atomic::AtomicUsize;
@@ -426,7 +430,11 @@ mod local_data_coordination_tests {
         let generation = coordinator.begin();
         let (account, password, epoch) = coordinator
             .with_current_account(generation, || {
-                Ok(("synthetic-account", "old-fixture", sessions.epoch()))
+                Ok((
+                    "synthetic-account",
+                    temporary_password("old-fixture"),
+                    sessions.epoch(),
+                ))
             })
             .unwrap();
         // A same-account password change does not change LOCAL_DATA generation.
@@ -442,7 +450,7 @@ mod local_data_coordination_tests {
             .run_at(
                 epoch,
                 account,
-                password,
+                &password,
                 || async { panic!("old credentials must not be sent after settings save") },
                 |token| async move { Ok(token) },
             )
@@ -456,7 +464,7 @@ mod local_data_coordination_tests {
                 .run_at(
                     replacement_epoch,
                     account,
-                    "new-fixture",
+                    &temporary_password("new-fixture"),
                     || async { Ok((42, std::time::Duration::from_secs(60))) },
                     |token| async move { Ok(token) }
                 )
@@ -491,7 +499,7 @@ mod local_data_coordination_tests {
             .run_at(
                 epoch,
                 "old",
-                "fixture",
+                &temporary_password("fixture"),
                 || async { panic!("cleared account must not restore its session") },
                 |token| async move { Ok(token) }
             )
@@ -1166,7 +1174,9 @@ async fn clear_local_data(app: tauri::AppHandle) -> Result<bool, String> {
     qmplus_feature::set(&app, false)?;
     let clearing = qmplus::disconnect_qmplus(app.clone()).await;
     if let Err(error) = clearing.as_ref() {
-        if error != qmplus_profile::RESTART_REQUIRED { return Err(error.clone()); }
+        if error != qmplus_profile::RESTART_REQUIRED {
+            return Err(error.clone());
+        }
     }
     let result = tauri::async_runtime::spawn_blocking(move || clear_local_data_sync(app))
         .await
@@ -1762,37 +1772,78 @@ enum CourseQueryResult {
     Catalogue(Option<course_cache_store::CloudCatalogue>),
 }
 
-async fn read_or_fetch_cloud_catalogue(app: &tauri::AppHandle, force: bool, cache_only: bool)
-    -> Result<Option<course_cache_store::CloudCatalogue>, String> {
-    let generation=LOCAL_DATA.begin();
-    let (credentials,revision,epoch)=LOCAL_DATA.with_current_account(generation,|| {
-        let credentials=load_saved_credentials_with_scope()?.ok_or("请先在设置中保存教务账号和密码。")?;
-        Ok((credentials,assignments::credential_revision(),course_cache_store::cloud_owner(app).ok()))
-    }).map_err(LocalDataAccessError::message)?;
-    if let Some(epoch)=epoch.as_ref().filter(|_| assignments::cached_catalogue(&credentials.account_scope,revision).is_none()) {
-        LOCAL_DATA.with_current_account(generation,|| {
-            assignments::ensure_credential_revision(revision)?;
-            if let Some(value)=course_cache_store::load_cloud(app,&credentials.account_scope,epoch)? {
-                assignments::restore_catalogue(&credentials.account_scope,revision,value).map_err(|error| error.message)?;
-            }
-            Ok(())
-        }).map_err(LocalDataAccessError::message)?;
+async fn read_or_fetch_cloud_catalogue(
+    app: &tauri::AppHandle,
+    force: bool,
+    cache_only: bool,
+) -> Result<Option<course_cache_store::CloudCatalogue>, String> {
+    let generation = LOCAL_DATA.begin();
+    let (credentials, revision, epoch) = LOCAL_DATA
+        .with_current_account(generation, || {
+            let credentials =
+                load_saved_credentials_with_scope()?.ok_or("请先在设置中保存教务账号和密码。")?;
+            Ok((
+                credentials,
+                assignments::credential_revision(),
+                course_cache_store::cloud_owner(app).ok(),
+            ))
+        })
+        .map_err(LocalDataAccessError::message)?;
+    if let Some(epoch) = epoch
+        .as_ref()
+        .filter(|_| assignments::cached_catalogue(&credentials.account_scope, revision).is_none())
+    {
+        LOCAL_DATA
+            .with_current_account(generation, || {
+                assignments::ensure_credential_revision(revision)?;
+                if let Some(value) =
+                    course_cache_store::load_cloud(app, &credentials.account_scope, epoch)?
+                {
+                    assignments::restore_catalogue(&credentials.account_scope, revision, value)
+                        .map_err(|error| error.message)?;
+                }
+                Ok(())
+            })
+            .map_err(LocalDataAccessError::message)?;
     }
     if cache_only {
-        return LOCAL_DATA.with_current_account(generation,|| {
-            assignments::ensure_credential_revision(revision)?;
-            Ok(assignments::cached_catalogue(&credentials.account_scope,revision))
-        }).map_err(LocalDataAccessError::message);
+        return LOCAL_DATA
+            .with_current_account(generation, || {
+                assignments::ensure_credential_revision(revision)?;
+                Ok(assignments::cached_catalogue(
+                    &credentials.account_scope,
+                    revision,
+                ))
+            })
+            .map_err(LocalDataAccessError::message);
     }
-    let mut value=assignments::fetch_catalogue(&credentials.account,&credentials.assignment_password(),
-        &credentials.account_scope,revision,force).await.map_err(|error| error.message)?;
-    LOCAL_DATA.with_current_account(generation,|| {
-        assignments::ensure_credential_revision(revision)?;
-        value.cache_warning=epoch.as_ref().is_none_or(|epoch| {
-            !course_cache_store::save_cloud(app,&credentials.account_scope,epoch,&value).unwrap_or(false)
-        });
-        Ok(Some(value))
-    }).map_err(LocalDataAccessError::message)
+    let mut value = assignments::fetch_catalogue(
+        &credentials.account,
+        credentials.assignment_password(),
+        &credentials.account_scope,
+        revision,
+        force,
+    )
+    .await
+    .map_err(|error| error.message)?;
+    LOCAL_DATA
+        .with_current_account(generation, || {
+            assignments::ensure_credential_revision(revision)?;
+            value.cache_warning = epoch.as_ref().is_none_or(|epoch| {
+                value.new_assignment_ids = course_cache_store::observe_cloud(
+                    app,
+                    &credentials.account_scope,
+                    epoch,
+                    &value,
+                    false,
+                )
+                .unwrap_or_default();
+                !course_cache_store::save_cloud(app, &credentials.account_scope, epoch, &value)
+                    .unwrap_or(false)
+            });
+            Ok(Some(value))
+        })
+        .map_err(LocalDataAccessError::message)
 }
 
 #[tauri::command]
@@ -1800,7 +1851,10 @@ async fn fetch_assignment_list(
     app: tauri::AppHandle,
     payload: AssignmentQueryRequest,
 ) -> Result<Vec<AssignmentDeadlineItem>, String> {
-    Ok(read_or_fetch_cloud_catalogue(&app,payload.force,false).await?.map(|value| value.assignments).unwrap_or_default())
+    Ok(read_or_fetch_cloud_catalogue(&app, payload.force, false)
+        .await?
+        .map(|value| value.assignments)
+        .unwrap_or_default())
 }
 
 #[tauri::command]
@@ -1808,9 +1862,14 @@ async fn fetch_course_list(
     app: tauri::AppHandle,
     payload: AssignmentQueryRequest,
 ) -> Result<CourseQueryResult, String> {
-    let value=read_or_fetch_cloud_catalogue(&app,payload.force,payload.cache_only).await?;
-    if payload.catalogue || payload.cache_only { Ok(CourseQueryResult::Catalogue(value)) }
-    else { Ok(CourseQueryResult::Directory(value.map(|value| value.courses).unwrap_or_default())) }
+    let value = read_or_fetch_cloud_catalogue(&app, payload.force, payload.cache_only).await?;
+    if payload.catalogue || payload.cache_only {
+        Ok(CourseQueryResult::Catalogue(value))
+    } else {
+        Ok(CourseQueryResult::Directory(
+            value.map(|value| value.courses).unwrap_or_default(),
+        ))
+    }
 }
 
 #[tauri::command]
@@ -2705,7 +2764,10 @@ fn refresh_tray_courses(app: tauri::AppHandle, local_only: bool) {
 }
 
 #[cfg(not(mobile))]
-async fn refresh_tray_courses_tracked(app: tauri::AppHandle, local_only: bool) -> Result<(), String> {
+async fn refresh_tray_courses_tracked(
+    app: tauri::AppHandle,
+    local_only: bool,
+) -> Result<(), String> {
     let generation = LOCAL_DATA.begin();
     let refresh_revision = TRAY_REFRESH_REVISION.fetch_add(1, Ordering::SeqCst) + 1;
     let course_revision = COURSE_EDITS_REVISION.load(Ordering::SeqCst);
@@ -2713,21 +2775,24 @@ async fn refresh_tray_courses_tracked(app: tauri::AppHandle, local_only: bool) -
         set_tray_menu(&app, TrayCourseContent::Loading).map_err(|error| error.to_string())
     }) {
         if error == LocalDataAccessError::AccountAccessRevoked {
-            return LOCAL_DATA.with_current(generation, || {
-                set_tray_menu(
-                    &app,
-                    TrayCourseContent::Message(
-                        "暂无本地课表，请先在设置中重新保存账号。".to_string(),
-                    ),
-                )
-                .map_err(|error| error.to_string())
-            }).map_err(LocalDataAccessError::message);
+            return LOCAL_DATA
+                .with_current(generation, || {
+                    set_tray_menu(
+                        &app,
+                        TrayCourseContent::Message(
+                            "暂无本地课表，请先在设置中重新保存账号。".to_string(),
+                        ),
+                    )
+                    .map_err(|error| error.to_string())
+                })
+                .map_err(LocalDataAccessError::message);
         }
         return Err(error.message());
     }
     let content =
         load_today_course_content(app.clone(), generation, local_only, refresh_revision).await;
-    LOCAL_DATA.with_current_account(generation, || {
+    LOCAL_DATA
+        .with_current_account(generation, || {
             // A delayed refresh must not replace the newer locale/date menu.
             if TRAY_REFRESH_REVISION.load(Ordering::SeqCst) != refresh_revision {
                 return Err(STALE_LOCAL_DATA_MESSAGE.to_owned());
@@ -2741,7 +2806,8 @@ async fn refresh_tray_courses_tracked(app: tauri::AppHandle, local_only: bool) -
                 content
             };
             set_tray_menu(&app, content).map_err(|error| error.to_string())
-    }).map_err(LocalDataAccessError::message)
+        })
+        .map_err(LocalDataAccessError::message)
 }
 
 #[cfg(not(mobile))]

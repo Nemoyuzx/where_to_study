@@ -56,7 +56,7 @@ objc2-foundation = "0.3.2"
 objc2-user-notifications = { version = "0.3.2", features = ["block2", "UNNotificationContent", "UNNotificationRequest", "UNNotificationSettings", "UNNotificationTrigger", "UNUserNotificationCenter"] }
 # The named WK data-store completion API is public in Wry, not re-exported
 # by Tauri on macOS. Reuse the exact Wry version already locked by Tauri.
-wry = { version = "=0.55.1", default-features = false, features = ["os-webview"] }
+wry = { version = "=0.57.0", default-features = false, features = ["os-webview"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3.6", features = ["linux-native-sync-persistent", "crypto-rust"] }

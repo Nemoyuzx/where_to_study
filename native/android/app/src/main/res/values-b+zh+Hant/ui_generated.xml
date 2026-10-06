@@ -884,6 +884,14 @@
     <string name="ui_generated_fee09598ad7872">"正在讀取後勤部最新通知與目前生效時刻表。"</string>
     <string name="ui_generated_ff89a1a38ca3a7">"自定義日程頂層必須是對象。"</string>
     <string name="ui_generated_ff93bd2c081d35">"在瀏覽器中打開教學雲平台作業列表"</string>
+    <string name="ui_generated_50cbb376ac478a">"鼠尾草"</string>
+    <string name="ui_generated_0752623ccdcc9c">"陶土"</string>
+    <string name="ui_generated_b0bdaefbc2002d">"梅子"</string>
+    <string name="ui_generated_708c97df7becc4">"石墨"</string>
+    <string name="ui_generated_d31e5281d95e2e">"夜藍"</string>
+    <string name="ui_generated_6632a0c5ee0620">"新作業提醒"</string>
+    <string name="ui_generated_2fefd87ed8a29b">"未提供截止時間"</string>
+    <string name="ui_generated_4878bab52d3083">"發現新作業"</string>
     <string name="ui_generated_b63c257717353e">"請在官方視窗完成驗證碼或 MFA，完成後將繼續同步。"</string>
     <string name="ui_generated_81a90adf66f769">"自動登入已暫停，可選擇「手動繼續」查看官方頁面。"</string>
     <string name="ui_generated_2042efadd2c35a">"手動繼續"</string>

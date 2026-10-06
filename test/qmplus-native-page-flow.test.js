@@ -21,7 +21,15 @@ function load(path,injected={},component=false){
 }
 const pure={...load('common/JsonUtil.ets'),...load('common/Utf8.ets')}
 const snapshots=load('net/QMPlusSnapshot.ets',pure),records=load('store/QMPlusSavedLoginStore.ets')
-const sessions=load('view/QMPlusSession.ets',{...snapshots,...records,PreferencesStore:class{}})
+const courseLogic=load('common/CourseLogic.ets',snapshots)
+const assignmentNotices=load('common/NewAssignmentNotice.ets')
+const sessions=load('view/QMPlusSession.ets',{...snapshots,...records,...courseLogic,...assignmentNotices,PreferencesStore:class{},
+  // These local business stores do no network/SSO work. The navigation tests
+  // still assert every official GET and secret request independently.
+  NewAssignmentStore:class{async accept(){} clear(){}},
+  CourseDTOCacheStore:class{async loadQM(){return null} async clear(){} async saveQM(){return true}},
+  QMPlusWebProfileStore:class{},
+})
 const views=load('view/QMPlusConnectionView.ets',{...snapshots,...records,...sessions,
   AppModel:class{},webview:{WebviewController:class{}}},true)
 async function fixture(url,{links=[],kind='guest'}={}){
@@ -72,14 +80,15 @@ test('Harmony production guest handler rejects unsafe destinations and post-cred
     f.view.authLedger.beginDocument()
     await f.view.handleQMPage(f.view.authPresentationRevision,f.view.pageRevision,f.renderer.url)
     assert.equal(f.trace.gets.length,0)
-    assert.equal(f.session.loginPresented,true)
+    assert.equal(f.session.loginPresented,false, 'an unverified fallback must not automatically reveal the login Web')
+    assert.equal(f.session.manualContinuationRequired,true)
   }finally{f.close()}
 })
 test('Harmony production error classification defeats a stale menu and prevents sync before begin',async()=>{
   const f=await fixture('https://qmplus.qmul.ac.uk/my/',{kind:'error'})
   try{
     await f.view.handleQMPage(f.view.authPresentationRevision,f.view.pageRevision,f.renderer.url)
-    assert.equal(f.view.officialPageAuthenticated,false)
+    assert.equal(await f.view.inspectQMPage(f.view.authPresentationRevision,f.view.pageRevision,f.renderer.url),'error')
     assert.equal(f.session.errorCode,'QM_ERROR_PAGE')
     await f.view.runSync()
     assert.equal(f.session.syncing,false)
@@ -94,19 +103,21 @@ test('Harmony production authenticated dashboard starts business handoff once wi
     await f.view.handleQMPage(f.view.authPresentationRevision,f.view.pageRevision,f.renderer.url)
     await f.view.handleQMPage(f.view.authPresentationRevision,f.view.pageRevision,f.renderer.url)
     assert.equal(f.trace.syncs,1)
-    assert.equal(f.view.officialPageAuthenticated,true)
+    assert.equal(await f.view.inspectQMPage(f.view.authPresentationRevision,f.view.pageRevision,f.renderer.url),'authenticated')
     assert.equal(f.trace.gets.length,0)
   }finally{f.close()}
 })
-test('Harmony explicit error reconnect adopts a fresh owner and fixed GET without clearing saved state',async()=>{
+test('Harmony explicit manual continuation keeps its official owner without replaying GETs or clearing saved state',async()=>{
   const f=await fixture('https://qmplus.qmul.ac.uk/my/',{kind:'error'})
   try{
     const previous=f.view.loginOwner,saved=f.store.login,clears=f.trace.cookieClears
     await f.view.handleQMPage(f.view.authPresentationRevision,f.view.pageRevision,f.renderer.url)
     f.session.openLogin()
-    assert.equal(f.session.isLoginOwnerCurrent(previous),false)
+    assert.equal(f.session.isLoginOwnerCurrent(previous),true)
     assert.equal(f.session.isLoginOwnerCurrent(f.view.loginOwner),true)
-    assert.deepEqual(f.trace.gets,['https://qmplus.qmul.ac.uk/my/'])
+    assert.deepEqual(f.trace.gets,[])
+    assert.equal(f.session.loginPresented,true)
+    assert.equal(f.session.manualContinuationRequired,false)
     assert.equal(f.trace.stops,1)
     assert.equal(f.trace.cookieClears,clears)
     assert.equal(f.store.login,saved)

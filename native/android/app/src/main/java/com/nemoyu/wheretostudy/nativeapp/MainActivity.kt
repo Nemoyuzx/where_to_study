@@ -131,6 +131,8 @@ class MainActivity : Activity() {
         set(value) { activitySession.automaticRefreshKey = value }
     private var applicationContentStarted = false
     private var privacyConsentDialog: AlertDialog? = null
+    private var newAssignmentsDialog: AlertDialog? = null
+    private var newAssignmentsDialogBatchID: Long? = null
     private var windowLayoutListenerRegistered = false
     private val windowInfoTracker by lazy {
         WindowInfoTrackerCallbackAdapter(WindowInfoTracker.getOrCreate(this))
@@ -153,6 +155,9 @@ class MainActivity : Activity() {
         DailyCourseNotificationRuntimeMode.activateFrom(intent)
         super.onCreate(savedInstanceState)
         activitySession.uiOwner.attach(this)
+        activitySession.newAssignments.onPending = {
+            activitySession.uiOwner.current()?.let { owner -> owner.runOnUiThread { owner.showNewAssignmentNotices() } }
+        }
         restoringUiState = lastNonConfigurationInstance is ActivitySessionState
         skipFirstResumeResourceLoads = restoringUiState
         Palette.configure(this)
@@ -281,6 +286,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (!applicationContentStarted) return
+        showNewAssignmentNotices()
         qmWarmRefreshForeground = true
         activitySession.qmplus.addObserver(this) { maybeStartWarmQMplusRefresh() }
         window.decorView.post { maybeStartWarmQMplusRefresh() }
@@ -1605,6 +1611,10 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        newAssignmentsDialog?.setOnDismissListener(null)
+        newAssignmentsDialog?.dismiss()
+        newAssignmentsDialog = null
+        newAssignmentsDialogBatchID = null
         qmWarmRefreshForeground = false
         if (applicationContentStarted) activitySession.qmplus.removeObserver(this)
         languageTransition.close()
@@ -1623,6 +1633,42 @@ class MainActivity : Activity() {
             systemCalendarImporter.close()
         }
         super.onDestroy()
+    }
+
+    private fun showNewAssignmentNotices() {
+        val batch = activitySession.newAssignments.current()
+        if (newAssignmentsDialog != null) {
+            if (newAssignmentsDialogBatchID == batch?.id) return
+            newAssignmentsDialog?.setOnDismissListener(null)
+            newAssignmentsDialog?.dismiss()
+            newAssignmentsDialog = null
+            newAssignmentsDialogBatchID = null
+        }
+        if (!applicationContentStarted || isFinishing || isDestroyed ||
+            privacyConsentDialog?.isShowing == true) return
+        if (batch == null) return
+        val items = batch.items
+        newAssignmentsDialogBatchID = batch.id
+        newAssignmentsDialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.new_assignments_title, items.size))
+            .setMessage(NewAssignmentNotice.preview(items).joinToString("\n\n") { item ->
+                listOfNotNull(item.title, item.course, item.deadline).joinToString("\n")
+            } + if (items.size > 8) "\n\n… +${items.size - 8}" else "")
+            .setPositiveButton(android.R.string.ok, null)
+            .setNeutralButton(if (batch.destination == InformationQueryMode.COURSES) uiText(batch.destination.label)
+                else getString(R.string.course_open_assignments_query)) { _, _ ->
+                courseSessionState.selectedMode = batch.destination
+                navigate(Destination.COURSES)
+            }
+            .create().also { dialog ->
+                dialog.setOnDismissListener {
+                    newAssignmentsDialog = null
+                    newAssignmentsDialogBatchID = null
+                    activitySession.newAssignments.acknowledge(batch.id)
+                    if (!isDestroyed && !isFinishing) showNewAssignmentNotices()
+                }
+                dialog.show()
+            }
     }
 
     private fun hasCalendarPermissions(): Boolean = CALENDAR_PERMISSIONS.all { permission ->

@@ -126,6 +126,7 @@ export class LocalizationValues {
 
 export class AppLocalization {
   private static readonly english: Record<string, string> = {
+    '发现新作业': 'New assignments',
     '请在官方窗口完成验证码或 MFA，完成后将继续同步。': 'Complete CAPTCHA or MFA in the official window. Sync will continue afterward.',
     '自动登录已暂停，可选择“手动继续”查看官方页面。': 'Automatic sign-in paused. Choose “Continue manually” to view the official page.',
     '手动继续': 'Continue manually',

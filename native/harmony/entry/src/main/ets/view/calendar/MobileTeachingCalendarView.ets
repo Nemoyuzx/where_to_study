@@ -4,7 +4,7 @@
 // 详情卡片）四种视图，支持左右滑动翻页与月视图上下滑动展开/收起。
 import { AppModel } from '../../model/AppModel';
 import { QMPlusSession } from '../QMPlusSession';
-import { CalendarCourseworkItem, CalendarCourseworkProjection } from './CalendarCourseworkProjection';
+import { CalendarCourseworkItem, CalendarCourseworkProjection, CalendarDeadlineMoments } from './CalendarCourseworkProjection';
 import { Course, HolidayItem } from '../../common/Models';
 import { CourseRemovalButton } from '../CourseRemovalButton';
 import { ScheduleLogic } from '../../common/ScheduleLogic';
@@ -72,6 +72,7 @@ export struct MobileTeachingCalendarView {
   @Local presentedDay: DateParts | null = null;
   @Local presentedDayOpacity: number = 0;
   @Local allDayDialogDay: DateParts | null = null;
+  @Local momentDialogItems: CalendarCourseworkItem[] = [];
   @Local allDayDialogModeRawValue: string = CalendarMode.week;
   @Local showingActions: boolean = false;
   @Local contentWidth: number = 350;
@@ -1049,12 +1050,23 @@ export struct MobileTeachingCalendarView {
             days: this.timelineDays(renderMode, renderDate),
             placements: MobileCalendarTimelineView.placementsFor(
               this.timelineDays(renderMode, renderDate)),
+            coursework: this.timelineCoursework(renderMode, renderDate),
             selectedDate: renderDate,
             showsWeekColumns: renderMode === CalendarMode.week,
             onSelectDay: (day: DateParts): void => {
               if (interactive) {
                 this.navigateTo(day);
               }
+            },
+            onOpenCoursework: (item: CalendarCourseworkItem, day: DateParts): void => {
+              if (!interactive) { return; }
+              if (item.courseID === null || !this.onOpenCourse(item.source, item.courseID)) {
+                this.presentAllDayDialog(day, renderMode, false);
+                this.momentDialogItems = [item];
+              }
+            },
+            onMoreCoursework: (items: CalendarCourseworkItem[], day: DateParts): void => {
+              if (interactive) { this.presentAllDayDialog(day, renderMode, false); this.momentDialogItems = items; }
             }
           })
           Column()
@@ -1084,6 +1096,22 @@ export struct MobileTeachingCalendarView {
           }
         })
     )
+  }
+
+  private timelineCoursework(renderMode: CalendarMode, renderDate: DateParts): Map<string, CalendarCourseworkItem[]> {
+    const result: Map<string, CalendarCourseworkItem[]> = new Map<string, CalendarCourseworkItem[]>();
+    for (const day of this.timelineDays(renderMode, renderDate)) {
+      const items: CalendarCourseworkItem[] = [];
+      if (this.model.isSampleMode()) {
+        for (const item of this.allDayItemsOn(day.date)) { if (item.coursework !== null) { items.push(item.coursework); } }
+      } else {
+        const date: string = StrictDates.formatDateParts(day.date);
+        items.push(...CalendarDeadlineMoments.cloudOn(date, this.model.assignmentMomentCatalog, this.model.cloudCourses));
+        if (this.model.qmplusEnabled) { items.push(...CalendarCourseworkProjection.qm(date, this.qmPlusSession.snapshot)); }
+      }
+      result.set(StrictDates.formatDateParts(day.date), items);
+    }
+    return result;
   }
 
   private timelineDays(renderMode: CalendarMode = this.mode(),
@@ -1256,7 +1284,7 @@ export struct MobileTeachingCalendarView {
             }, (item: CalendarAllDayItem) => item.id + AppTheme.colorKey())
             if (MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(this.allDayItemsOn(day).length) > 0) {
               Text('+' + MobileCalendarTimelineLayout.expandedHiddenAllDayEventCount(this.allDayItemsOn(day).length).toString())
-                .fontSize(9.5).fontColor(AppTheme.secondaryText()).width('100%').height(26)
+                .fontSize(CalendarTypography.fontSize(9.5, this.isPc)).fontColor(AppTheme.secondaryText()).width('100%').height(26)
                 .textAlign(TextAlign.Center).borderRadius(6).backgroundColor(AppTheme.surfaceVariant())
                 .onClick(() => { if (interactive) { this.presentAllDayDialog(day, CalendarMode.week); } })
             }
@@ -2035,16 +2063,25 @@ export struct MobileTeachingCalendarView {
 
   // ---------- 日/周全天日程弹窗 ----------
 
-  private presentAllDayDialog(day: DateParts, mode: CalendarMode): void {
+  private presentAllDayDialog(day: DateParts, mode: CalendarMode, load: boolean = true): void {
+    this.momentDialogItems = [];
     if (!TeachingCalendarLogic.supportsAllDayDialog(mode)) {
       return;
     }
     if (TeachingCalendarLogic.agendaDialogChangesSelectedDate(mode)) {
       this.setSelectedDate(day);
     }
-    this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(day));
+    if (load) { this.model.loadCalendarDailyInfo(StrictDates.formatDateParts(day)); }
     this.allDayDialogModeRawValue = mode;
     this.allDayDialogDay = day;
+  }
+
+  private dialogItemsOn(day: DateParts): CalendarAllDayItem[] {
+    if (this.momentDialogItems.length === 0) { return this.allDayItemsOn(day); }
+    return this.momentDialogItems.map((item: CalendarCourseworkItem): CalendarAllDayItem =>
+      new CalendarAllDayItem(item.key, item.title + ' · ' + item.deadline.substring(11, 16),
+        AppTheme.assignment(), AppTheme.assignmentSurface(),
+        TeachingCalendarLogic.timelineAgendaSortOrder('assignment'), null, item));
   }
 
   @Builder
@@ -2087,7 +2124,7 @@ export struct MobileTeachingCalendarView {
 
         Scroll() {
           Column({ space: 8 }) {
-            ForEach(this.allDayItemsOn(this.allDayDialogDay as DateParts),
+            ForEach(this.dialogItemsOn(this.allDayDialogDay as DateParts),
               (item: CalendarAllDayItem) => {
                 Row({ space: 6 }) {
                   Text(item.title)

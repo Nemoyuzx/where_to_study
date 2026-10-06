@@ -884,6 +884,14 @@
     <string name="ui_generated_fee09598ad7872">"Reading the latest Logistics Department notice and currently active timetable."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"The custom schedule root must be an object."</string>
     <string name="ui_generated_ff93bd2c081d35">"Open the Teaching Cloud Platform assignment list in your browser."</string>
+    <string name="ui_generated_50cbb376ac478a">"Sage"</string>
+    <string name="ui_generated_0752623ccdcc9c">"Terracotta"</string>
+    <string name="ui_generated_b0bdaefbc2002d">"Plum"</string>
+    <string name="ui_generated_708c97df7becc4">"Graphite"</string>
+    <string name="ui_generated_d31e5281d95e2e">"Navy"</string>
+    <string name="ui_generated_6632a0c5ee0620">"New assignment alert"</string>
+    <string name="ui_generated_2fefd87ed8a29b">"Deadline not provided"</string>
+    <string name="ui_generated_4878bab52d3083">"New assignments"</string>
     <string name="ui_generated_b63c257717353e">"Complete CAPTCHA or MFA in the official window. Sync will continue afterward."</string>
     <string name="ui_generated_81a90adf66f769">"Automatic sign-in paused. Choose “Continue manually” to view the official page."</string>
     <string name="ui_generated_2042efadd2c35a">"Continue manually"</string>

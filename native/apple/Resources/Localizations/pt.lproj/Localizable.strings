@@ -299,6 +299,7 @@
 "数据：UAPI" = "Dados: UAPI";
 "整点" = "Hora";
 "断开 QMplus 并清除会话" = "Desconectar QMplus e limpar sessão";
+"新作业提醒" = "Aviso de novas tarefas";
 "无法保存 QMplus 登录信息，自动填写未启用。" = "Não foi possível salvar os dados de login do QMplus. O preenchimento automático não foi ativado.";
 "无法保存本地偏好。" = "Não foi possível guardar as preferências locais.";
 "无法同步公开活动或校内通知，请稍后重试。" = "Não foi possível sincronizar atividades públicas ou avisos do campus. Tente novamente mais tarde.";
@@ -350,6 +351,7 @@
 "未公布" = "Não publicado";
 "未同意隐私政策，无法使用应用" = "É necessário aceitar a Política de Privacidade para usar o aplicativo";
 "未提交" = "Não entregue";
+"未提供截止时间" = "Prazo não informado";
 "未来时段" = "Períodos futuros";
 "未标注" = "Não informado";
 "未选择" = "Não selecionado";

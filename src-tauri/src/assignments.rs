@@ -22,6 +22,19 @@ use crate::models::{
 };
 use crate::session_cache::{check_auth_payload, token_ttl, SessionCache};
 
+/// Shared business DTO; persistence and desktop runtime policy stay in the app.
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CloudCatalogue {
+    pub fetched_at: String,
+    pub courses: Vec<CourseRef>,
+    pub assignments: Vec<AssignmentDeadlineItem>,
+    #[serde(default)]
+    pub cache_warning: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub new_assignment_ids: Vec<String>,
+}
+
 const SOURCE_URL: &str = "https://ucloud.bupt.edu.cn/uclass/";
 const UCLOUD_ORIGIN: &str = "https://apiucloud.bupt.edu.cn";
 const UCLOUD_HOST: &str = "apiucloud.bupt.edu.cn";
@@ -247,14 +260,14 @@ struct CachedCatalogue {
     scope: String,
     revision: u64,
     at: Instant,
-    value: crate::course_cache_store::CloudCatalogue,
+    value: CloudCatalogue,
 }
 static CATALOGUE: Mutex<Option<CachedCatalogue>> = Mutex::new(None);
 static CATALOGUE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 struct CatalogueAttempt {
     scope: String,
     revision: u64,
-    result: ServiceResult<crate::course_cache_store::CloudCatalogue>,
+    result: ServiceResult<CloudCatalogue>,
 }
 static CATALOGUE_ATTEMPT: Mutex<Option<CatalogueAttempt>> = Mutex::new(None);
 
@@ -277,11 +290,7 @@ pub fn clear_cache() {
     ASSIGNMENT_SESSION.clear();
 }
 
-pub fn restore_catalogue(
-    scope: &str,
-    revision: u64,
-    value: crate::course_cache_store::CloudCatalogue,
-) -> ServiceResult<()> {
+pub fn restore_catalogue(scope: &str, revision: u64, value: CloudCatalogue) -> ServiceResult<()> {
     let mut cached = CATALOGUE
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -304,10 +313,7 @@ pub fn restore_catalogue(
     Ok(())
 }
 
-pub fn cached_catalogue(
-    scope: &str,
-    revision: u64,
-) -> Option<crate::course_cache_store::CloudCatalogue> {
+pub fn cached_catalogue(scope: &str, revision: u64) -> Option<CloudCatalogue> {
     let cached = CATALOGUE.lock().ok()?;
     if ASSIGNMENT_CACHE.ensure_revision(revision).is_err() {
         return None;
@@ -324,7 +330,7 @@ pub async fn fetch_catalogue(
     scope: &str,
     revision: u64,
     force: bool,
-) -> ServiceResult<crate::course_cache_store::CloudCatalogue> {
+) -> ServiceResult<CloudCatalogue> {
     // Capture before waiting: simultaneous forced callers join the successful
     // publication they waited for, rather than making serial duplicate GETs.
     let sequence = CATALOGUE_SEQUENCE.load(Ordering::SeqCst);
@@ -351,7 +357,18 @@ pub async fn fetch_catalogue(
                 && current.at.elapsed() < CACHE_TTL
                 && (!force || CATALOGUE_SEQUENCE.load(Ordering::SeqCst) != sequence)
         }) {
-            return Ok(current.value.clone());
+            // A catalogue cache hit must share the same credential scope and
+            // freshness as both validated component caches. Their accessors
+            // fence late credential changes before the shared DTO is reused.
+            if let (Some(courses), Some(items)) = (
+                COURSE_CACHE.courses(&ASSIGNMENT_CACHE, scope, revision)?,
+                ASSIGNMENT_CACHE.items(scope, revision)?,
+            ) {
+                let mut value = current.value.clone();
+                value.courses = courses;
+                value.assignments = items;
+                return Ok(value);
+            }
         }
     }
     let result = tokio::time::timeout(
@@ -377,11 +394,12 @@ pub async fn fetch_catalogue(
         }
     };
     ASSIGNMENT_CACHE.ensure_revision(revision)?;
-    let value = crate::course_cache_store::CloudCatalogue {
+    let value = CloudCatalogue {
         fetched_at: chrono::Utc::now().to_rfc3339(),
         courses,
         assignments: items,
         cache_warning: false,
+        new_assignment_ids: Vec::new(),
     };
     COURSE_CACHE.save(&ASSIGNMENT_CACHE, scope, &value.courses, revision)?;
     ASSIGNMENT_CACHE.save(scope, &value.assignments, revision)?;
@@ -1072,6 +1090,7 @@ async fn fetch_all_assignments(
     fetch_all_assignments_at(account, password, credential_revision()).await
 }
 
+#[cfg(all(test, feature = "tauri-runtime"))]
 async fn fetch_all_assignments_at(
     account: &str,
     password: &str,
@@ -1269,6 +1288,25 @@ pub async fn fetch_assignment_calendar(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shared_catalogue_round_trips_without_a_desktop_runtime() {
+        let value = CloudCatalogue {
+            fetched_at: "2026-10-06T12:00:00Z".into(),
+            courses: Vec::new(),
+            assignments: Vec::new(),
+            cache_warning: false,
+            new_assignment_ids: vec!["new-item".into()],
+        };
+        let encoded = serde_json::to_value(&value).unwrap();
+        let decoded: CloudCatalogue = serde_json::from_value(encoded.clone()).unwrap();
+        assert_eq!(decoded.new_assignment_ids, value.new_assignment_ids);
+        assert_eq!(decoded.fetched_at, value.fetched_at);
+        assert!(!decoded.cache_warning);
+        let mut invalid = encoded;
+        invalid["unexpected"] = serde_json::json!(true);
+        assert!(serde_json::from_value::<CloudCatalogue>(invalid).is_err());
+    }
+
     #[test]
     fn course_ids_are_preserved_without_guessing_from_names_and_old_snapshots_remain_readable() {
         let payload = json!({"data":{"records":[{"id":"assignment-a","assignmentTitle":"Fixture",

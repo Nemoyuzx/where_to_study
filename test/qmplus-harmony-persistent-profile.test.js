@@ -16,6 +16,7 @@ function processFixture(persisted=new Map(),{usage=0,clearFails=false,flushFails
   const module={exports:{}}
   const code=transformSync(source.replace(/^import[^\n]+\n/gm,''),{loader:'ts',format:'cjs',target:'es2022'}).code
   vm.runInNewContext(code,{module,exports:module.exports,preferences:{getPreferencesSync:()=>prefs},AppContext:{get:()=>({})},
+    newQMPlusRecordID:()=> 'a'.repeat(32),
     webview:{WebCookieManager:{clearAllCookies:async()=>{events.push('cookie-clear-ack');if(clearFails)throw Error('synthetic clear failure')},
       saveCookieAsync:async()=>events.push('cookie-save-ack'),existCookie:()=>false},
     WebStorage:{deleteAllData:()=>events.push('storage-request'),getOrigins:async()=>[{usage}]}}})

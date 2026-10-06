@@ -10,6 +10,7 @@ import { AppLanguage } from '../../common/AppLocalization';
 import { AppModel } from '../../model/AppModel';
 import { DeviceState, PhoneNavigationLayout } from '../../common/DeviceState';
 import { CalendarFormatters, CalendarTimelineDay, CalendarTimelineLogic } from './CalendarLogic';
+import { CalendarCourseworkItem, CalendarDeadlineMoment, CalendarDeadlineBadge, CalendarDeadlineMoments } from './CalendarCourseworkProjection';
 
 export class MobileCalendarTimelineLayout {
   static readonly startMinute: number = 8 * 60;
@@ -214,6 +215,9 @@ export struct MobileCalendarTimelineView {
   @Param fixedDayAreaWidth: number = 0;
   // 各天课程布局缓存（BUG-046 修复）：由父组件在构造 days 时一次算好。
   @Param placements: Map<string, CoursePlacement[]> = new Map<string, CoursePlacement[]>();
+  @Param coursework: Map<string, CalendarCourseworkItem[]> = new Map<string, CalendarCourseworkItem[]>();
+  @Event onOpenCoursework: (item: CalendarCourseworkItem, day: DateParts) => void = () => {};
+  @Event onMoreCoursework: (items: CalendarCourseworkItem[], day: DateParts) => void = () => {};
   @Event onSelectDay: (day: DateParts) => void = () => {
   };
   @Local nowEpochMs: number = Date.now();
@@ -223,11 +227,27 @@ export struct MobileCalendarTimelineView {
   private timerId: number = -1;
   private viewVisible: boolean = true;
   private axisStartMinute(): number {
-    return MobileCalendarTimelineLayout.timeBounds(this.days)[0];
+    return this.timeBounds()[0];
   }
 
   private axisEndMinute(): number {
-    return MobileCalendarTimelineLayout.timeBounds(this.days)[1];
+    return this.timeBounds()[1];
+  }
+
+  private moments(day: CalendarTimelineDay): CalendarDeadlineMoment[] {
+    return CalendarDeadlineMoments.groups(this.dayKey(day), this.coursework.get(this.dayKey(day)) ?? []);
+  }
+
+  private timeBounds(): number[] {
+    let bounds: number[] = MobileCalendarTimelineLayout.timeBounds(this.days);
+    for (const day of this.days) { bounds = CalendarDeadlineMoments.bounds(bounds, this.moments(day)); }
+    return bounds;
+  }
+
+  private badges(day: CalendarTimelineDay): CalendarDeadlineBadge[] {
+    return CalendarDeadlineMoments.badges(this.moments(day), this.axisStartMinute(), this.bodyHeight(), this.hourHeight(),
+      this.placementsOf(day).map((placement: CoursePlacement): number =>
+        this.yPos(ScheduleLogic.startMinute(placement.course) ?? this.axisStartMinute())));
   }
 
   private hours(): number[] {
@@ -540,6 +560,39 @@ export struct MobileCalendarTimelineView {
           }, (day: CalendarTimelineDay) => 'day-blocks.' + this.dayKey(day))
 
           // 当前时间指示
+          ForEach(this.days, (day: CalendarTimelineDay, dayIndex: number) => {
+            ForEach(this.moments(day), (moment: CalendarDeadlineMoment) => {
+              Column().width(CalendarDeadlineMoments.barWidth(this.dayWidthValue())).height(1)
+                .backgroundColor(AppTheme.primary()).hitTestBehavior(HitTestMode.None)
+                .zIndex(4)
+                .position({ x: CalendarDeadlineMoments.barX(this.dayWidthValue(), dayIndex), y: this.yPos(moment.minute) })
+            }, (moment: CalendarDeadlineMoment) => this.dayKey(day) + '.deadline-anchor.' + moment.minute.toString())
+            ForEach(this.badges(day), (moment: CalendarDeadlineBadge) => {
+              Row({ space: 3 }) {
+                Circle().width(4).height(4).fill(AppTheme.onPrimary())
+                Text(moment.clock() + ' · ' + moment.items[0].title)
+                  .fontSize(CalendarTypography.fontSize(9, this.isPc)).fontColor(AppTheme.onPrimary())
+                  .maxLines(1).textOverflow({ overflow: TextOverflow.Ellipsis }).layoutWeight(1)
+                  .onClick(() => this.onOpenCoursework(moment.items[0], day.date))
+                if (moment.items.length > 1) {
+                  Text('+')
+                    .fontSize(CalendarTypography.fontSize(9, this.isPc)).fontColor(AppTheme.onPrimary())
+                    .accessibilityText(moment.items.length.toString())
+                    .onClick(() => this.onMoreCoursework(moment.items, day.date))
+                }
+              }
+              .height(18).width(CalendarDeadlineMoments.barWidth(this.dayWidthValue()))
+              .padding({ left: 4, right: 4 }).borderRadius(4).backgroundColor(AppTheme.primary())
+              .position({ x: CalendarDeadlineMoments.barX(this.dayWidthValue(), dayIndex), y: moment.top })
+              .zIndex(4).id('calendar.deadline-moment.' + this.dayKey(day) + '.' + moment.minute.toString())
+              if (CalendarDeadlineMoments.showsPending(moment.items)) {
+                Circle().width(6).height(6).fill(AppTheme.danger())
+                  .position({ x: CalendarDeadlineMoments.barX(this.dayWidthValue(), dayIndex), y: Math.max(0, moment.top - 3) })
+                  .hitTestBehavior(HitTestMode.None).zIndex(5)
+              }
+            }, (moment: CalendarDeadlineBadge) => this.dayKey(day) + '.deadline.' + moment.minute.toString())
+          }, (day: CalendarTimelineDay) => 'deadline-moments.' + this.dayKey(day))
+
           if (this.isNowVisible()) {
             this.currentTimeIndicator()
           }

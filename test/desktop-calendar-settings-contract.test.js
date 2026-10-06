@@ -142,7 +142,7 @@ test('desktop month geometry and typography mirror the native macOS grid', () =>
 test('desktop week all-day row stays in each date column and opens the whole event card', () => {
   assert.match(
     appCss,
-    /@media \(max-width: 1100px\)[\s\S]*\.time-calendar\.has-all-day:not\(\.single-day\)\s*\{[^}]*grid-template-rows:\s*auto auto 900px;/s,
+    /@media \(max-width: 1100px\)[\s\S]*\.time-calendar\.has-all-day:not\(\.single-day\)\s*\{[^}]*grid-template-rows:\s*auto auto calc\(900px \* var\(--deadline-timeline-scale, 1\)\);/s,
   )
   assert.match(appSource, /style=\{\{ gridColumn: dayIndex \+ 3, gridRow: 2 \}\}/)
   assert.match(appSource, /style=\{\{ gridColumn: dayIndex \+ 3, gridRow: visibleAllDayItems \? 3 : 2 \}\}/)

@@ -29,6 +29,7 @@ data class TimelineDay(
     val date: Calendar,
     val courses: List<Course>,
     val holidays: List<HolidayItem>,
+    val deadlines: List<TimelineDeadline> = emptyList(),
 )
 
 enum class CalendarTimelineGridLayer {
@@ -87,10 +88,12 @@ object CalendarTimelineLogic {
     fun totalHeightDp(compact: Boolean, showDayHeader: Boolean): Int =
         (if (showDayHeader) 72 else 0) + hourHeightDp(compact) * 14 + 2
 
-    fun hourBounds(courses: List<Course>): IntRange {
+    fun hourBounds(courses: List<Course>, deadlineMinutes: List<Int> = emptyList()): IntRange {
         val intervals = courses.mapNotNull(AcademicScheduleLogic::interval)
-        return minOf(8, (intervals.minOfOrNull { it.first } ?: startMinute) / 60)..
-            maxOf(22, ((intervals.maxOfOrNull { it.second } ?: endMinute) + 59) / 60)
+        return minOf(8, (intervals.minOfOrNull { it.first } ?: startMinute) / 60,
+            (deadlineMinutes.minOrNull() ?: startMinute) / 60)..
+            maxOf(22, ((intervals.maxOfOrNull { it.second } ?: endMinute) + 59) / 60,
+                ((deadlineMinutes.maxOrNull() ?: endMinute) + 59) / 60)
     }
 
     fun courseSlotBoundaryMinutes(): List<Int> = AppMetadata.slots
@@ -128,21 +131,30 @@ object CalendarTimelineLogic {
 class CalendarTimelineView(
     context: Context,
     days: List<TimelineDay>,
-    selectedDate: Calendar,
-    onDaySelected: ((Calendar) -> Unit)? = null,
-    onCourseSelected: ((Calendar, Course) -> Unit)? = null,
-    compact: Boolean = false,
-    showDayHeader: Boolean = true,
+    private val selectedDate: Calendar,
+    private val onDaySelected: ((Calendar) -> Unit)? = null,
+    private val onCourseSelected: ((Calendar, Course) -> Unit)? = null,
+    private val compact: Boolean = false,
+    private val showDayHeader: Boolean = true,
+    private val onDeadlinesSelected: ((Calendar, List<TimelineDeadline>) -> Unit)? = null,
 ) : LinearLayout(context) {
     init {
         layoutDirection = View.LAYOUT_DIRECTION_LTR
         orientation = HORIZONTAL
         isBaselineAligned = false
         setThemeBackgroundColor { Palette.surface }
+        tag = "calendar.timeline.grid"
+        populate(days)
+    }
 
-        val hours = CalendarTimelineLogic.hourBounds(days.flatMap(TimelineDay::courses))
+    fun updateDays(days: List<TimelineDay>) { removeAllViews(); populate(days) }
+
+    private fun populate(days: List<TimelineDay>) {
+
+        val deadlines = days.flatMap(TimelineDay::deadlines)
+        val hours = CalendarTimelineLogic.hourBounds(days.flatMap(TimelineDay::courses), deadlines.map { it.minute })
         val totalHeight = context.dp(CalendarTimelineLogic.totalHeightDp(compact, showDayHeader) +
-            (hours.last - hours.first - 14) * CalendarTimelineLogic.hourHeightDp(compact))
+            (hours.last - hours.first - 14) * CalendarTimelineLogic.hourHeightDp(compact) + if (deadlines.isEmpty()) 0 else 24)
         val showCourseSlots = !compact || days.size == 1
         val showCourseSlotsInAxis = showCourseSlots && !compact
         addView(
@@ -168,6 +180,7 @@ class CalendarTimelineView(
             selectedDate = selectedDate,
             onDaySelected = onDaySelected,
             onCourseSelected = onCourseSelected,
+            onDeadlinesSelected = onDeadlinesSelected,
             compact = compact,
             showDayHeader = showDayHeader,
             showCourseSlots = true,
@@ -209,6 +222,7 @@ private class CalendarTimelineCanvas(
     private val selectedDate: Calendar,
     private val onDaySelected: ((Calendar) -> Unit)? = null,
     private val onCourseSelected: ((Calendar, Course) -> Unit)? = null,
+    private val onDeadlinesSelected: ((Calendar, List<TimelineDeadline>) -> Unit)? = null,
     private val compact: Boolean,
     private val showDayHeader: Boolean,
     private val showCourseSlots: Boolean,
@@ -248,9 +262,11 @@ private class CalendarTimelineCanvas(
     private val axisWidth = hourAxisWidth + slotAxisWidth
     private val headerHeight = dp(if (showDayHeader) 72 else 0).toFloat()
     private val hourHeight = dp(CalendarTimelineLogic.hourHeightDp(compact)).toFloat()
-    private val hourBounds = CalendarTimelineLogic.hourBounds(days.flatMap(TimelineDay::courses))
+    private val deadlineMinutes = days.flatMap(TimelineDay::deadlines).map { it.minute }
+    private val pointInset = if (deadlineMinutes.isEmpty()) 0f else dp(12).toFloat()
+    private val hourBounds = CalendarTimelineLogic.hourBounds(days.flatMap(TimelineDay::courses), deadlineMinutes)
     private val timelineHeight = hourHeight * (hourBounds.last - hourBounds.first)
-    private val totalHeight = headerHeight + timelineHeight + dp(2)
+    private val totalHeight = headerHeight + timelineHeight + pointInset * 2 + dp(2)
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private var touchDownX = 0f
     private var touchDownY = 0f
@@ -265,7 +281,7 @@ private class CalendarTimelineCanvas(
     init {
         isFocusable = true
         isClickable = layer == TimelineLayer.DAYS &&
-            (onDaySelected != null || onCourseSelected != null)
+            (onDaySelected != null || onCourseSelected != null || onDeadlinesSelected != null)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         contentDescription = if (layer == TimelineLayer.AXIS) {
             buildAxisContentDescription()
@@ -332,6 +348,12 @@ private class CalendarTimelineCanvas(
             }
             MotionEvent.ACTION_UP -> {
                 if (!touchMoved) {
+                    val deadlineHit = deadlineAt(event.x, event.y)
+                    if (deadlineHit != null) {
+                        onDeadlinesSelected?.invoke(deadlineHit.first.date.clone() as Calendar, deadlineHit.second)
+                        performClick()
+                        return true
+                    }
                     val courseHit = courseAt(event.x, event.y)
                     if (courseHit != null) {
                         onCourseSelected?.invoke(
@@ -452,6 +474,7 @@ private class CalendarTimelineCanvas(
             drawCompactCourseSlotLabels(canvas)
         }
         drawCourseBlocks(canvas, dayWidth)
+        drawDeadlinePoints(canvas, dayWidth)
         drawCurrentTimeLine(canvas, dayWidth)
     }
 
@@ -583,20 +606,17 @@ private class CalendarTimelineCanvas(
             val placements = placeCourses(day.courses)
             val tracks = placements.maxOfOrNull { it.track + 1 } ?: 1
             placements.forEach { placement ->
-                val trackWidth = dayWidth / tracks
-                val outerInset = dp(if (days.size == 1) 3 else 1)
-                val contentInset = dp(if (days.size == 1) 6 else 5)
-                val left = dayLeft + trackWidth * placement.track + outerInset
-                val right = left + trackWidth - outerInset * 2
                 val start = AcademicScheduleLogic.start(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@forEach
                 val end = AcademicScheduleLogic.end(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@forEach
                 val top = yForMinute(start) + dp(2)
-                val bottom = max(
-                    top + dp(CalendarTimelineLogic.courseMinimumHeightDp),
-                    yForMinute(end) - dp(2),
-                )
+                val bottom = max(top + dp(CalendarTimelineLogic.courseMinimumHeightDp), yForMinute(end) - dp(2))
+                val trackWidth = dayWidth / tracks
+                val outerInset = dp(if (days.size == 1) 3 else 1)
+                val contentInset = dp(if (days.size == 1) 6 else 5)
+                val left = dayLeft + trackWidth * placement.track + outerInset
+                val right = left + trackWidth - outerInset * 2
                 val blockBounds = RectF(left, top, right, bottom)
                 val cornerRadius = dp(6).toFloat()
                 fillPaint.color = Palette.primaryFill
@@ -694,6 +714,65 @@ private class CalendarTimelineCanvas(
         }
     }
 
+    private fun drawDeadlinePoints(canvas: Canvas, dayWidth: Float) {
+        days.forEachIndexed { index, day ->
+            val groups = deadlineBadges(day)
+            val (localLeft, localRight) = CalendarCourseworkProjection.markerHorizontalBounds(dayWidth, dp(4).toFloat())
+            val left = dayWidth * index + localLeft
+            val right = dayWidth * index + localRight
+            groups.forEach { items ->
+                val anchor = yForMinute(items.first().minute)
+                val height = dp(18).toFloat()
+                val bounds = RectF(left, anchor - height / 2, right, anchor + height / 2)
+                fillPaint.color = Palette.primaryFill
+                canvas.drawRoundRect(bounds, dp(5).toFloat(), dp(5).toFloat(), fillPaint)
+                canvas.drawRoundRect(bounds, dp(5).toFloat(), dp(5).toFloat(), slotLabelStrokePaint)
+                canvas.drawCircle(left, anchor, dp(3).toFloat(), fillPaint)
+                // The line's Y is the true deadline. The pill has no duration.
+                items.map { it.minute }.distinct().forEach { minute ->
+                    val realAnchor = yForMinute(minute)
+                    val halfLine = resources.displayMetrics.density / 2
+                    canvas.drawRect(left, realAnchor - halfLine, right, realAnchor + halfLine, fillPaint)
+                }
+                if (height >= dp(12)) {
+                    boldPaint.color = Palette.onPrimary
+                    boldPaint.textAlign = Paint.Align.CENTER
+                    boldPaint.textSize = sp(if (days.size == 1) 10f else 8f)
+                    val item = items.first()
+                    val label = "%02d:%02d".format(Locale.ROOT, item.minute / 60, item.minute % 60) + " · ${item.title}" +
+                        if (items.size > 1) " +${items.size - 1}" else ""
+                    boldPaint.textAlign = Paint.Align.LEFT
+                    val baseline = anchor - (boldPaint.ascent() + boldPaint.descent()) / 2
+                    canvas.drawText(ellipsize(label, right - left - dp(6), boldPaint), left + dp(3), baseline, boldPaint)
+                }
+                if (items.any { it.clearlyPending }) {
+                    fillPaint.color = Palette.nowIndicator
+                    canvas.drawCircle(left + dp(3), bounds.top, dp(3).toFloat(), fillPaint)
+                    val border = slotLabelStrokePaint.color
+                    slotLabelStrokePaint.color = Palette.onPrimary
+                    canvas.drawCircle(left + dp(3), bounds.top, dp(3).toFloat(), slotLabelStrokePaint)
+                    slotLabelStrokePaint.color = border
+                }
+            }
+        }
+    }
+
+    private fun deadlineBadges(day: TimelineDay): List<List<TimelineDeadline>> = CalendarCourseworkProjection.badges(day.deadlines,
+        kotlin.math.ceil(24.0 * 60 / CalendarTimelineLogic.hourHeightDp(compact)).toInt())
+
+    private fun deadlineAt(x: Float, y: Float): Pair<TimelineDay, List<TimelineDeadline>>? {
+        if (y < headerHeight || days.isEmpty()) return null
+        val dayWidth = width.toFloat() / days.size
+        val index = (x / dayWidth).toInt().takeIf { it in days.indices } ?: return null
+        val day = days[index]
+        val (left, right) = CalendarCourseworkProjection.markerHorizontalBounds(dayWidth, dp(4).toFloat())
+        val localX = x - dayWidth * index
+        val group = deadlineBadges(day).firstOrNull { items ->
+            CalendarCourseworkProjection.markerHit(localX, y, left, right, yForMinute(items.first().minute), dp(18).toFloat())
+        } ?: return null
+        return day to group
+    }
+
     private fun courseAt(x: Float, y: Float): CourseHit? {
         if (y < headerHeight) return null
         val dayWidth = width.toFloat() / days.size.coerceAtLeast(1)
@@ -702,19 +781,16 @@ private class CalendarTimelineCanvas(
             val placements = placeCourses(day.courses)
             val tracks = placements.maxOfOrNull { it.track + 1 } ?: 1
             placements.forEach placementLoop@{ placement ->
-                val trackWidth = dayWidth / tracks
-                val outerInset = dp(if (days.size == 1) 3 else 1)
-                val left = dayLeft + trackWidth * placement.track + outerInset
-                val right = left + trackWidth - outerInset * 2
                 val start = AcademicScheduleLogic.start(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@placementLoop
                 val end = AcademicScheduleLogic.end(placement.course)
                     ?.let(CalendarTimelineLogic::minuteOfDay) ?: return@placementLoop
                 val top = yForMinute(start) + dp(2)
-                val bottom = max(
-                    top + dp(CalendarTimelineLogic.courseMinimumHeightDp),
-                    yForMinute(end) - dp(2),
-                )
+                val bottom = max(top + dp(CalendarTimelineLogic.courseMinimumHeightDp), yForMinute(end) - dp(2))
+                val trackWidth = dayWidth / tracks
+                val outerInset = dp(if (days.size == 1) 3 else 1)
+                val left = dayLeft + trackWidth * placement.track + outerInset
+                val right = left + trackWidth - outerInset * 2
                 if (x in left..right && y in top..bottom) {
                     return CourseHit(day.date, placement.course)
                 }
@@ -772,7 +848,7 @@ private class CalendarTimelineCanvas(
     }
 
     private fun yForMinute(minute: Int): Float =
-        headerHeight + timelineHeight * ((minute - hourBounds.first * 60).toFloat() /
+        headerHeight + pointInset + timelineHeight * ((minute - hourBounds.first * 60).toFloat() /
             ((hourBounds.last - hourBounds.first) * 60)).coerceIn(0f, 1f)
 
     private fun holidayBadge(items: List<HolidayItem>): String = items.joinToString(" · ") {
@@ -820,6 +896,9 @@ private class CalendarTimelineCanvas(
             context.uiText(date),
             holidays,
             courses.ifEmpty { context.uiText("无课") },
+            day.deadlines.joinToString("，") { "%02d:%02d".format(Locale.ROOT, it.minute / 60, it.minute % 60) + " ${it.title}" +
+                if (it.clearlyPending) " · " + context.uiText("未提交") else "" },
+            if (day.deadlines.isNotEmpty()) context.uiText("（北京时间）") else "",
         ).filter(String::isNotEmpty).joinToString(if (AppLocale.isEnglish(context)) ", " else "，")
     }
 

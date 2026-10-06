@@ -12,7 +12,7 @@ test('course taps disclose cached work while separate info controls retain origi
   assert.match(view,/courses.qmplus.info.[\s\S]*?\.onClick\(\(\) => this.openCourse\('qmplus'/)
   assert.doesNotMatch(view,/stopPropagation/)
   for(const [start,end,kind] of [['  cloudCourseRow(', '  private currentQMPlusCourses(', 'ucloud'],
-    ['  qmPlusCourseRow(', '  @Builder\n  qmPlusCourseCard(', 'qmplus']]){
+    ['  qmPlusCourseRow(', '  @Builder\n  courseDisclosureButton(', 'qmplus']]){
     const row=view.slice(view.indexOf(start),view.indexOf(end))
     const disclosure=row.indexOf(`.onClick(() => this.toggleCourseInline('${kind}'`)
     const info=row.indexOf("Button() { SymbolGlyph($r('sys.symbol.info_circle'))")
@@ -26,7 +26,7 @@ test('course taps disclose cached work while separate info controls retain origi
 })
 test('QM Off is initially folded but management can expand without enabling connect or losing drafts',()=>{
   const view=read('view/SettingsView.ets'),session=read('view/SettingsSession.ets')
-  assert.match(view,/if \(this.session.qmplusDetailsExpanded\)/)
+  assert.match(view,/DisclosureClip\(\{ expanded: this.session.qmplusDetailsExpanded \}\)/)
   assert.match(view,/this.session.qmplusDetailsExpanded = !this.session.qmplusDetailsExpanded/)
   assert.match(view,/enabled\(!this.model.isSampleMode\(\) && this.model.qmplusEnabled\)/)
   assert.match(session,/updateQMplusDisclosure\(enabled: boolean\)[\s\S]*?qmplusDetailsExpanded = enabled/)

@@ -299,6 +299,7 @@
 "数据：UAPI" = "Data: UAPI";
 "整点" = "Tepat jam";
 "断开 QMplus 并清除会话" = "Putuskan QMplus dan hapus sesi";
+"新作业提醒" = "Pemberitahuan tugas baru";
 "无法保存 QMplus 登录信息，自动填写未启用。" = "Detail masuk QMplus tidak dapat disimpan; isi otomatis belum diaktifkan.";
 "无法保存本地偏好。" = "Tidak dapat menyimpan preferensi lokal.";
 "无法同步公开活动或校内通知，请稍后重试。" = "Acara publik atau pengumuman kampus tidak dapat disinkronkan. Coba lagi nanti.";
@@ -350,6 +351,7 @@
 "未公布" = "Belum diumumkan";
 "未同意隐私政策，无法使用应用" = "Kebijakan Privasi belum disetujui; aplikasi tidak dapat digunakan";
 "未提交" = "Belum dikumpulkan";
+"未提供截止时间" = "Batas waktu tidak diberikan";
 "未来时段" = "Periode mendatang";
 "未标注" = "Tidak dicantumkan";
 "未选择" = "Belum dipilih";

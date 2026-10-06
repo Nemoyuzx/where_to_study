@@ -1,5 +1,7 @@
 //! Bounded, app-private business DTOs only. No cookie, token, account or password.
-use crate::{assignments::CourseRef, models::AssignmentDeadlineItem, qmplus::Snapshot};
+use crate::qmplus::Snapshot;
+#[cfg(test)]
+use crate::{assignments::CourseRef, models::AssignmentDeadlineItem};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
@@ -18,15 +20,7 @@ const ERROR: &str = "无法保存本地偏好。";
 static WRITES: Mutex<()> = Mutex::new(());
 static CLOUD_OWNER_BLOCKED: AtomicBool = AtomicBool::new(false);
 
-#[derive(Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct CloudCatalogue {
-    pub fetched_at: String,
-    pub courses: Vec<CourseRef>,
-    pub assignments: Vec<AssignmentDeadlineItem>,
-    #[serde(default)]
-    pub cache_warning: bool,
-}
+pub use crate::assignments::CloudCatalogue;
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CloudOwner {
@@ -152,6 +146,7 @@ pub fn rotate_cloud_owner(app: &tauri::AppHandle) -> Result<(), String> {
         &serde_json::to_vec(&owner).map_err(|_| ERROR)?,
     )?;
     clear_file(&root(app)?.join("cloud.json"))?;
+    clear_file(&root(app)?.join("cloud-seen.json"))?;
     CLOUD_OWNER_BLOCKED.store(false, Ordering::SeqCst);
     Ok(())
 }
@@ -261,11 +256,89 @@ pub fn load_cloud(
         Ok(value) => value,
         Err(_) => return Ok(None),
     };
-    Ok((envelope.schema_version == 1
+    let restored = (envelope.schema_version == 1
         && envelope.account_scope == scope
         && envelope.owner_epoch == epoch
         && valid_cloud(&envelope.payload))
-    .then_some(envelope.payload))
+    .then_some(envelope.payload);
+    if let Some(value) = restored.as_ref() {
+        let _ = observe_at(
+            &root(app)?.join("cloud-seen.json"),
+            &format!("{scope}:{epoch}"),
+            &value
+                .assignments
+                .iter()
+                .map(|item| item.id.clone())
+                .collect::<Vec<_>>(),
+            true,
+        );
+    }
+    Ok(restored)
+}
+fn observe_at(
+    path: &Path,
+    owner: &str,
+    ids: &[String],
+    restore: bool,
+) -> Result<Vec<String>, String> {
+    let mut seen: crate::assignment_seen::Seen = match read(path, 24 * 1024 * 1024)? {
+        Some(bytes) => serde_json::from_slice(&bytes).map_err(|_| ERROR)?,
+        None => Default::default(),
+    };
+    if !seen.valid() {
+        return Err(ERROR.into());
+    }
+    let today = chrono::Utc::now()
+        .with_timezone(&chrono::FixedOffset::east_opt(8 * 3600).unwrap())
+        .date_naive();
+    let term = crate::config::suggested_term_for_date(today).0;
+    let fresh = seen.observe(owner, &term, ids, restore);
+    write(path, &serde_json::to_vec(&seen).map_err(|_| ERROR)?)?;
+    Ok(fresh)
+}
+pub fn observe_cloud(
+    app: &tauri::AppHandle,
+    scope: &str,
+    epoch: &str,
+    value: &CloudCatalogue,
+    restore: bool,
+) -> Result<Vec<String>, String> {
+    let _guard = WRITES.lock().map_err(|_| ERROR)?;
+    if CLOUD_OWNER_BLOCKED.load(Ordering::SeqCst)
+        || owner_at(&root(app)?.join("cloud-owner.json"))? != epoch
+        || !valid_cloud(value)
+    {
+        return Err(ERROR.into());
+    }
+    observe_at(
+        &root(app)?.join("cloud-seen.json"),
+        &format!("{scope}:{epoch}"),
+        &value
+            .assignments
+            .iter()
+            .map(|item| item.id.clone())
+            .collect::<Vec<_>>(),
+        restore,
+    )
+}
+fn qm_ids(value: &Snapshot) -> Vec<String> {
+    value
+        .activities
+        .iter()
+        .filter(|item| ["assignment", "quiz"].contains(&item.kind.as_str()) && item.is_assessment())
+        .filter_map(|item| {
+            let course = value.courses.iter().find(|course| {
+                course.id == item.course_id
+                    && course.current_term_status == "current"
+                    && course
+                        .name
+                        .trim()
+                        .get(..3)
+                        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("EBU"))
+            })?;
+            Some(format!("{}:{}:{}", course.id, item.kind, item.id))
+        })
+        .collect()
 }
 /// Oversize/write failure keeps last-good disk data without rejecting a legal
 /// fresh catalogue. The caller rechecks account/revision before invoking this.
@@ -284,11 +357,13 @@ pub fn save_cloud(
     if !crate::scoped_cache::is_valid_account_scope(scope) || !valid_cloud(value) {
         return Ok(false);
     }
+    let mut payload = value.clone();
+    payload.new_assignment_ids.clear();
     let envelope = CloudEnvelope {
         schema_version: 1,
         account_scope: scope.into(),
         owner_epoch: epoch.into(),
-        payload: value.clone(),
+        payload,
     };
     let bytes = serde_json::to_vec(&envelope).map_err(|_| ERROR)?;
     if bytes.len() > LIMIT {
@@ -315,6 +390,14 @@ pub fn load_qm(app: &tauri::AppHandle, profile: &str) -> Result<Option<Snapshot>
     {
         return Ok(None);
     }
+    if !envelope.payload.partial {
+        let _ = observe_at(
+            &root(app)?.join("qmplus-seen.json"),
+            profile,
+            &qm_ids(&envelope.payload),
+            true,
+        );
+    }
     Ok(Some(envelope.payload))
 }
 pub fn save_qm(
@@ -322,12 +405,23 @@ pub fn save_qm(
     profile: &str,
     value: &Snapshot,
     current: impl FnOnce() -> bool,
-) -> Result<bool, String> {
+) -> Result<(bool, Vec<String>), String> {
     let _guard = WRITES.lock().map_err(|_| ERROR)?;
     if !current() || !crate::qmplus_profile::current(app, Some(profile)) {
         return Err(ERROR.into());
     }
     value.validate()?;
+    let fresh = if value.partial {
+        Vec::new()
+    } else {
+        observe_at(
+            &root(app)?.join("qmplus-seen.json"),
+            profile,
+            &qm_ids(value),
+            false,
+        )
+        .unwrap_or_default()
+    };
     let bytes = serde_json::to_vec(&QmEnvelope {
         schema_version: 1,
         profile_id: profile.into(),
@@ -335,13 +429,17 @@ pub fn save_qm(
     })
     .map_err(|_| ERROR)?;
     if bytes.len() > LIMIT {
-        return Ok(false);
+        return Ok((false, fresh));
     }
-    Ok(write(&root(app)?.join("qmplus.json"), &bytes).is_ok())
+    Ok((
+        write(&root(app)?.join("qmplus.json"), &bytes).is_ok(),
+        fresh,
+    ))
 }
 pub fn clear_qm(app: &tauri::AppHandle) -> Result<(), String> {
     let _guard = WRITES.lock().map_err(|_| ERROR)?;
-    clear_file(&root(app)?.join("qmplus.json"))
+    clear_file(&root(app)?.join("qmplus.json"))?;
+    clear_file(&root(app)?.join("qmplus-seen.json"))
 }
 
 #[cfg(test)]
@@ -351,6 +449,7 @@ mod tests {
         CloudCatalogue {
             fetched_at: "2026-10-05T00:00:00Z".into(),
             cache_warning: false,
+            new_assignment_ids: Vec::new(),
             courses: vec![CourseRef {
                 id: "course-fixture".into(),
                 name: Some("Fixture course".into()),

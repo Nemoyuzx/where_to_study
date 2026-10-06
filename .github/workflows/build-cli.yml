@@ -111,8 +111,14 @@ jobs:
           set -euo pipefail
           mkdir -p release-artifacts
           archive="where-to-study-cli-linux-${{ matrix.arch }}.tar.gz"
-          tar -C wts-cli/target/release -czf "release-artifacts/$archive" where-to-study-cli
-          tar -tzf "release-artifacts/$archive" | grep -qx 'where-to-study-cli'
+          package_dir="$(mktemp -d)"
+          trap 'rm -rf "$package_dir"' EXIT
+          install -m 0755 wts-cli/target/release/where-to-study-cli "$package_dir/"
+          install -m 0644 LICENSE THIRD_PARTY_LICENSES.html THIRD_PARTY_NOTICES.md "$package_dir/"
+          tar -C "$package_dir" -czf "release-artifacts/$archive" where-to-study-cli LICENSE THIRD_PARTY_LICENSES.html THIRD_PARTY_NOTICES.md
+          for required in where-to-study-cli LICENSE THIRD_PARTY_LICENSES.html THIRD_PARTY_NOTICES.md; do
+            tar -tzf "release-artifacts/$archive" | grep -qx "$required"
+          done
           (cd release-artifacts && sha256sum "$archive" > "$archive.sha256")
 
       - name: Upload Linux CLI archive

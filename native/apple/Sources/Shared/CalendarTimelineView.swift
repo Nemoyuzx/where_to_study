@@ -22,6 +22,13 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
     let deadlineItem: PublicDeadlineItem?
     let courseSelection: CourseCatalogSelection?
     let assignmentItem: AssignmentDeadlineItem?
+    let pendingSubmission: Bool
+
+    var hasPendingSubmission: Bool {
+        kind == .assignment && (pendingSubmission || assignmentItem.map {
+            CourseListEvidence.submissionCounts(statuses: [$0.status]).pending > 0
+        } == true)
+    }
 
     init(
         id: String,
@@ -31,7 +38,8 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
         destinationURL: URL? = nil,
         deadlineItem: PublicDeadlineItem? = nil,
         courseSelection: CourseCatalogSelection? = nil,
-        assignmentItem: AssignmentDeadlineItem? = nil
+        assignmentItem: AssignmentDeadlineItem? = nil,
+        pendingSubmission: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -41,6 +49,7 @@ struct CalendarAllDayEvent: Identifiable, Equatable, Sendable {
         self.deadlineItem = deadlineItem
         self.courseSelection = courseSelection
         self.assignmentItem = assignmentItem
+        self.pendingSubmission = pendingSubmission
     }
 }
 
@@ -159,6 +168,7 @@ struct CalendarTimelineDay: Identifiable {
     let courses: [Course]
     let holidays: [HolidayItem]
     let allDayEvents: [CalendarAllDayEvent]
+    let deadlineMoments: [CalendarDeadlineMoment]
     let coursePlacements: [CalendarCoursePlacement]
     let courseTrackCount: Int
 
@@ -183,14 +193,16 @@ struct CalendarTimelineDay: Identifiable {
         }) + courses.filter { $0.isExam && $0.minuteInterval == nil }.map {
             CalendarAllDayEvent(id: $0.id, title: $0.name, time: "考试 · 时间待定", kind: .exam)
         }
+        deadlineMoments = CalendarDeadlineMomentLogic.moments(on: date, events: self.allDayEvents)
     }
 
     var id: Date { date }
 
-    init(copying day: CalendarTimelineDay, allDayEvents: [CalendarAllDayEvent]) {
+    init(copying day: CalendarTimelineDay, allDayEvents: [CalendarAllDayEvent], deadlineMoments: [CalendarDeadlineMoment]? = nil) {
         date = day.date; courses = day.courses; holidays = day.holidays
         coursePlacements = day.coursePlacements; courseTrackCount = day.courseTrackCount
         self.allDayEvents = allDayEvents
+        self.deadlineMoments = deadlineMoments ?? CalendarDeadlineMomentLogic.moments(on: day.date, events: allDayEvents)
     }
 }
 
@@ -306,10 +318,13 @@ enum CalendarTimelineLogic {
             .joined(separator: " · ")
     }
 
-    static func bounds(for courses: [Course]) -> ClosedRange<Int> {
+    static func bounds(for courses: [Course], deadlineMinutes: [Int] = []) -> ClosedRange<Int> {
         let intervals = courses.compactMap(\.minuteInterval)
-        let start = min(startMinute, (intervals.map(\.lowerBound).min() ?? startMinute) / 60 * 60)
-        let end = max(endMinute, ((intervals.map(\.upperBound).max() ?? endMinute) + 59) / 60 * 60)
+        let points = deadlineMinutes.filter { (0 ..< 1440).contains($0) }
+        let start = min(startMinute, min(intervals.map(\.lowerBound).min() ?? startMinute,
+                                       points.min() ?? startMinute) / 60 * 60)
+        let end = max(endMinute, (max(intervals.map(\.upperBound).max() ?? endMinute,
+                                     points.max().map { $0 + 1 } ?? endMinute) + 59) / 60 * 60)
         return start ... end
     }
 }
@@ -323,6 +338,8 @@ struct CalendarTimelineView: View {
     var onSelectDay: ((Date) -> Void)?
     var onSelectAllDayEvent: ((Date, CalendarAllDayEvent) -> Void)?
     var onSelectAllDayOverflow: ((Date) -> Void)?
+    var onSelectDeadline: ((Date, CalendarAllDayEvent) -> Void)?
+    var onSelectDeadlineOverflow: ((Date, [CalendarAllDayEvent]) -> Void)?
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -337,7 +354,9 @@ struct CalendarTimelineView: View {
     private let maximumVisibleAllDayRows = 3
     private let hourHeight: CGFloat = 64
 
-    private var bounds: ClosedRange<Int> { CalendarTimelineLogic.bounds(for: days.flatMap(\.courses)) }
+    private var bounds: ClosedRange<Int> {
+        CalendarTimelineLogic.bounds(for: days.flatMap(\.courses), deadlineMinutes: days.flatMap { $0.deadlineMoments.map(\.minute) })
+    }
     private var hourMinutes: [Int] { Array(stride(from: bounds.lowerBound, through: bounds.upperBound, by: 60)) }
     private var timelineHeight: CGFloat { hourHeight * CGFloat(bounds.upperBound - bounds.lowerBound) / 60 }
     private var visibleAllDayRowCount: Int {
@@ -449,6 +468,7 @@ struct CalendarTimelineView: View {
             allDayHeaderRows(dayWidth: dayWidth)
             #endif
             courseBlocks(dayWidth: dayWidth)
+            deadlineMarkers(dayWidth: dayWidth)
             TimelineView(.periodic(from: .now, by: 60)) { timeline in
                 ZStack(alignment: .topLeading) {
                     #if !os(macOS)
@@ -771,14 +791,46 @@ struct CalendarTimelineView: View {
         .foregroundStyle(allDayTint(event.kind))
         .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, minHeight: allDayRowHeight, alignment: .leading)
-        .background(allDayTint(event.kind).opacity(0.10),
-                    in: RoundedRectangle(cornerRadius: event.kind == .assignment ? 5 : 0))
+        .background(allDayTint(event.kind).opacity(0.10))
         .contentShape(Rectangle())
         .accessibilityLabel("\(event.time ?? model.localized("全天"))，\(event.title)")
     }
 
     private func allDayTint(_ kind: CalendarAllDayEventKind) -> Color {
         theme.deadlineTint(for: kind)
+    }
+
+    private func deadlineMarkers(dayWidth: CGFloat) -> some View {
+        ForEach(Array(days.enumerated()), id: \.element.id) { index, day in
+            let positions = deadlineBadgePositions(for: day)
+            ForEach(CalendarDeadlineMomentLogic.displayMoments(day.deadlineMoments, hourHeight: hourHeight)) { moment in
+                let left = CGFloat(index) * dayWidth
+                let markerWidth = CalendarDeadlineMomentLogic.markerWidth(dayWidth: dayWidth)
+                CalendarDeadlineMomentMarker(moment: moment, width: markerWidth, height: totalHeight,
+                    anchorY: yPosition(minute: moment.minute), badgeY: positions[moment.minute] ?? yPosition(minute: moment.minute),
+                    anchorYs: moment.anchorMinutes.map { yPosition(minute: $0) },
+                    pendingStatusLabel: model.localized("未提交"),
+                    onSelect: {
+                        if moment.events.count > 1, let onSelectDeadlineOverflow { onSelectDeadlineOverflow(day.date, moment.events) }
+                        else if let event = moment.events.first {
+                            (onSelectDeadline ?? onSelectAllDayEvent)?(day.date, event)
+                        }
+                    })
+                    .offset(x: left + 4)
+                    .accessibilityIdentifier("calendar.timeline.deadline.\(StrictContractDateParser.string(from: day.date)).\(moment.minute)")
+            }
+        }
+    }
+
+    private func deadlineBadgePositions(for day: CalendarTimelineDay) -> [Int: CGFloat] {
+        var positions = [Int: CGFloat](), previous: CGFloat?
+        for moment in CalendarDeadlineMomentLogic.displayMoments(day.deadlineMoments, hourHeight: hourHeight) {
+            let center = CalendarDeadlineMomentLogic.badgeCenter(anchor: yPosition(minute: moment.minute),
+                lower: headerHeight, upper: headerHeight + timelineHeight, courseTitleStarts: [], previous: previous)
+            positions[moment.minute] = center
+            previous = center
+        }
+        return positions
     }
 
     private func courseBlocks(dayWidth: CGFloat) -> some View {
@@ -795,7 +847,7 @@ struct CalendarTimelineView: View {
                     courseBlock(
                         placement: placement,
                         date: day.date,
-                        trackWidth: trackWidth,
+                        blockWidth: max(trackWidth - 6, 20),
                         x: x,
                         top: top,
                         bottom: bottom
@@ -808,12 +860,11 @@ struct CalendarTimelineView: View {
     private func courseBlock(
         placement: CalendarCoursePlacement,
         date: Date,
-        trackWidth: CGFloat,
+        blockWidth: CGFloat,
         x: CGFloat,
         top: CGFloat,
         bottom: CGFloat
     ) -> some View {
-        let blockWidth = max(trackWidth - 6, 20)
         let blockHeight = bottom - top
         let isSingleDay = days.count == 1
         let metadata = CalendarTimelineLogic.courseMetadata(placement.course)

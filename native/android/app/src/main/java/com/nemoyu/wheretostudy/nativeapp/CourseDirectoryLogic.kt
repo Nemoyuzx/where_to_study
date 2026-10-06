@@ -11,6 +11,15 @@ internal object CourseDirectoryLogic {
     private val pending = setOf("未提交", "not submitted", "nothing submitted", "no submissions have been made yet")
     private val submitted = setOf("已提交", "submitted", "submitted for grading")
 
+    private fun submission(status: String?): Submission? = when (status?.trim()?.lowercase(Locale.ROOT)) {
+        in pending -> Submission.PENDING
+        in submitted -> Submission.SUBMITTED
+        else -> null
+    }
+
+    fun isClearlyPending(statuses: List<String?>): Boolean =
+        statuses.mapNotNull(::submission).distinct() == listOf(Submission.PENDING)
+
     // Input is the current-term directory. This projection never changes source IDs or cached DTOs.
     fun teachingCloudGroups(courses: List<TeachingCloudCourse>): List<TeachingCloudCourseGroup> =
         courses.groupBy { course -> course.name?.trim()?.takeIf { it.isNotEmpty() }?.let { "name:$it" } ?: "id:${course.id}" }
@@ -43,14 +52,7 @@ internal object CourseDirectoryLogic {
     private fun <Key> counts(items: List<Pair<Key, String?>>?): CourseSubmissionCounts {
         var pendingCount = 0; var submittedCount = 0
         items.orEmpty().groupBy { it.first }.values.forEach { versions ->
-            val evidence = versions.mapNotNull { (_, status) ->
-                val normalized = status?.trim()?.lowercase(Locale.ROOT) ?: return@mapNotNull null
-                when (normalized) {
-                    in pending -> Submission.PENDING
-                    in submitted -> Submission.SUBMITTED
-                    else -> null
-                }
-            }.distinct()
+            val evidence = versions.mapNotNull { (_, status) -> submission(status) }.distinct()
             if (evidence.size == 1) when (evidence.single()) {
                 Submission.PENDING -> pendingCount++
                 Submission.SUBMITTED -> submittedCount++

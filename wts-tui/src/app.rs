@@ -1249,6 +1249,7 @@ mod tests {
     fn private_query_results_survive_failure_but_clear_on_credential_changes() {
         let mut app = App::new(false);
         let item = AssignmentDeadlineItem {
+            course_id: None,
             id: "synthetic".into(),
             title: "课程作业示例".into(),
             course_name: Some("示例课程".into()),
@@ -1276,6 +1277,7 @@ mod tests {
     fn successful_empty_assignments_replace_previous_results() {
         let mut app = App::new(false);
         app.query_assignments = Some(vec![AssignmentDeadlineItem {
+            course_id: None,
             id: "old".into(),
             title: "old".into(),
             course_name: None,

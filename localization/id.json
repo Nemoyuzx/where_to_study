@@ -1,4 +1,13 @@
 {
+  "鼠尾草": "Hijau sage",
+  "陶土": "Terakota",
+  "梅子": "Plum",
+  "石墨": "Grafit",
+  "夜蓝": "Biru dongker",
+  "新作业提醒": "Pemberitahuan tugas baru",
+  "未提供截止时间": "Batas waktu tidak diberikan",
+  "发现新作业": "Tugas baru ditemukan",
+  "发现 %1$d 项新作业": "Ditemukan %1$d tugas baru",
   "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Selesaikan CAPTCHA atau MFA di jendela resmi. Sinkronisasi akan dilanjutkan setelahnya.",
   "自动登录已暂停，可选择“手动继续”查看官方页面。": "Login otomatis dijeda. Pilih “Lanjutkan secara manual” untuk melihat halaman resmi.",
   "手动继续": "Lanjutkan secara manual",

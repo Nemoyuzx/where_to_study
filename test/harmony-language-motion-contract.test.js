@@ -12,7 +12,7 @@ const sessionSource = readFileSync(new URL('../native/harmony/entry/src/main/ets
 
 function transitionFixture({reducedMotion = false} = {}) {
   const start = root.indexOf('  private reduceLanguageMotion(')
-  const end = root.indexOf('  private visibleBottomInsetVp(')
+  const end = root.indexOf('  @Builder\n  languageCompletionMark(')
   assert.ok(start >= 0 && end > start, 'load the production transition coordinator')
   const callbackStart = root.indexOf('class LanguageLayoutFrameCallback extends FrameCallback')
   const callbackEnd = root.indexOf('@ComponentV2', callbackStart)
@@ -29,12 +29,17 @@ function transitionFixture({reducedMotion = false} = {}) {
   let language = 'zh'
   const card = {x: 20, y: 100, width: 360, height: 100}
   const target = {x: 36, y: 142, width: 280, height: 18}
+  const otherCard = {x: 20, y: 250, width: 360, height: 200}
   let targetPresent = true
+  let acknowledged = true
   const node = geometry => ({
     getPositionToWindow: () => ({x: geometry.x, y: geometry.y}),
     getMeasuredSize: () => ({width: geometry.width, height: geometry.height}),
+    getChildrenCount: () => 0,
+    getChild: () => null,
   })
   const context = {
+    PreferencesStore:class{},
     FrameCallback: class {},
     AppSection: {settings: 'settings'},
     AppLanguageInfo: {normalize: value => value, systemLanguage: () => 'synthetic-system', all: ['zh', 'en', 'ar']},
@@ -50,22 +55,26 @@ function transitionFixture({reducedMotion = false} = {}) {
     currentSection: 'settings', languageTransitionEpoch: 0, languageAppliedRequestEpoch: 0,
     languageTransitionTarget: null, languageTransitionTimer: -1,
     languageOverlayVisible: false, languageOverlayOpacity: 0, languageOverlayFading: false,
+    navigationAvoidanceActive: true, qmPlusSession: {loginForeground: true},
     settingsSession: new context.SettingsSession(),
     model: {systemLanguageID: 'synthetic-system', languageSetting: () => language,
+      languageChangeReady: target => acknowledged && language === target,
       setLanguageSetting: value => {writes.push(value); language = value; return Promise.resolve()}},
     getUIContext: () => ({
       getHostContext: () => ({}),
       postFrameCallback: callback => frames.push(callback),
       animateTo: (options, work) => {animations.push(options); work()},
       getAttachedFrameNodeById: id => id === 'settings_language_surface' ? node(card) :
-        targetPresent && id === 'settings.language.current.target.' + language ? node(target) : null,
+        targetPresent && id === 'settings.language.current.target.' + language ? node(target) :
+        id === 'language.main.ui.' + language ? {...node(card), getChildrenCount:()=>2, getChild:index=>node(index===0?target:otherCard)} : null,
     }),
   })
   owner.resetLanguageLayoutSamples()
   return {
-    owner, card, target, timers, frames, animations, writes,
+    owner, card, target, otherCard, timers, frames, animations, writes,
     get language() {return language},
     setTargetPresent: value => {targetPresent = value},
+    setAcknowledged: value => {acknowledged = value},
     nextFrame: () => {assert.ok(frames.length > 0); frames.shift().onFrame(0)},
     finish: duration => {
       const animation = animations.find(item => item.duration === duration && !item.finished)
@@ -82,6 +91,13 @@ function transitionFixture({reducedMotion = false} = {}) {
       assert.ok(entry, 'production deadline exists: ' + delay)
       timers.delete(entry[0])
       entry[1].work()
+    },
+    completeMark() {
+      this.nextFrame()
+      this.finish(reducedMotion ? 0 : 210)
+      this.finish(reducedMotion ? 0 : 150)
+      this.deadline(100)
+      this.finish(reducedMotion ? 0 : 190)
     },
   }
 }
@@ -161,32 +177,48 @@ test('Harmony production sampler waits through label and card height changes bef
     fixture.card.height = cardHeight
     fixture.target.height = targetHeight
     fixture.nextFrame()
-    assert.equal(fixture.owner.languageStableFrames, 0)
+    assert.equal(fixture.owner.languageStableFrames, 1)
     assert.equal(fixture.animations.some(item => item.duration === 190), false)
   }
   fixture.nextFrame()
-  assert.equal(fixture.owner.languageStableFrames, 1)
+  assert.equal(fixture.owner.languageStableFrames, 2)
   fixture.nextFrame()
   assert.equal(fixture.owner.languageOverlayFading, true)
-  assert.equal(fixture.animations.filter(item => item.duration === 190).length, 1)
-  fixture.finish(190)
+  assert.equal(fixture.animations.filter(item => item.duration === 190).length, 0, 'mark completes before the ready cover fades')
+  fixture.completeMark()
   assert.equal(fixture.owner.languageOverlayVisible, false)
   assert.equal(fixture.timers.size, 0)
 })
 
 test('Harmony production sampler checks every card and target coordinate and size', () => {
-  for (const part of ['card', 'target']) {
+  for (const part of ['card', 'target', 'otherCard']) {
     for (const field of ['x', 'y', 'width', 'height']) {
       const fixture = transitionFixture()
       applyCoveredSelection(fixture)
       fixture.nextFrame()
       fixture[part][field] += 10
       fixture.nextFrame()
-      assert.equal(fixture.owner.languageStableFrames, 0, `${part}.${field} still changing`)
+      assert.equal(fixture.owner.languageStableFrames, 1, `${part}.${field} starts a fresh geometry baseline`)
       assert.equal(fixture.owner.languageOverlayFading, false)
       fixture.owner.cancelLanguageTransition(false)
     }
   }
+})
+
+test('Harmony stable geometry cannot claim language completion before native side-effect acknowledgements',()=>{
+  const fixture=transitionFixture()
+  fixture.setAcknowledged(false)
+  applyCoveredSelection(fixture)
+  for(let index=0;index<8;index++)fixture.nextFrame()
+  assert.equal(fixture.owner.languageStableFrames,0)
+  assert.equal(fixture.owner.languageOverlayCompleted,false)
+  fixture.setAcknowledged(true)
+  fixture.nextFrame();fixture.nextFrame()
+  assert.equal(fixture.owner.languageOverlayCompleted,false)
+  fixture.nextFrame()
+  assert.equal(fixture.owner.languageOverlayCompleted,true)
+  fixture.completeMark()
+  assert.equal(fixture.owner.languageOverlayVisible,false)
 })
 
 test('Harmony missing or invalid target measurements interrupt consecutive stability samples', () => {
@@ -194,7 +226,7 @@ test('Harmony missing or invalid target measurements interrupt consecutive stabi
   applyCoveredSelection(fixture)
   fixture.nextFrame()
   fixture.nextFrame()
-  assert.equal(fixture.owner.languageStableFrames, 1)
+  assert.equal(fixture.owner.languageStableFrames, 2)
   fixture.setTargetPresent(false)
   fixture.nextFrame()
   assert.equal(fixture.owner.languageStableFrames, 0)
@@ -204,9 +236,9 @@ test('Harmony missing or invalid target measurements interrupt consecutive stabi
   assert.equal(fixture.owner.languageStableFrames, 0)
   fixture.target.height = 18
   fixture.nextFrame()
-  assert.equal(fixture.owner.languageStableFrames, 0, 'a restored target needs a new baseline')
+  assert.equal(fixture.owner.languageStableFrames, 1, 'a restored target needs a new baseline')
   fixture.nextFrame()
-  assert.equal(fixture.owner.languageStableFrames, 1)
+  assert.equal(fixture.owner.languageStableFrames, 2)
   assert.equal(fixture.owner.languageOverlayFading, false)
   fixture.owner.cancelLanguageTransition(false)
 })
@@ -222,7 +254,7 @@ test('Harmony no-target and unapplied-language deadlines clean the cover without
       fixture.nextFrame()
     }
     assert.equal(fixture.owner.languageOverlayFading, false)
-    fixture.deadline(1600)
+    fixture.deadline(5000)
     assert.equal(fixture.animations.some(item => item.duration === 190), false)
     assert.equal(fixture.owner.languageOverlayVisible, false)
     assert.equal(fixture.owner.languageTransitionTarget, null)
@@ -273,14 +305,18 @@ test('Harmony cancellation preserves the last accepted choice and retires frame,
   assert.equal(fixture.timers.size, 0)
 })
 
-test('Harmony reduced motion passes the choice without an overlay, animation, frame, or timer', () => {
+test('Harmony reduced motion retains acknowledgements and completion while every animation has zero duration', () => {
   const fixture = transitionFixture({reducedMotion: true})
   fixture.owner.beginLanguageTransition('en')
+  fixture.nextFrame()
+  fixture.finish(0)
   fixture.applyRequest()
+  fixture.nextFrame(); fixture.nextFrame(); fixture.nextFrame()
+  assert.equal(fixture.owner.languageOverlayCompleted,true)
+  fixture.completeMark()
   assert.equal(fixture.language, 'en')
   assert.equal(fixture.owner.languageOverlayVisible, false)
-  assert.equal(fixture.animations.length, 0)
-  assert.equal(fixture.frames.length, 0)
+  assert.ok(fixture.animations.every(animation=>animation.duration===0))
   assert.equal(fixture.timers.size, 0)
 })
 
@@ -309,11 +345,11 @@ test('Harmony a lost fade completion is bounded and its late completion cannot r
   fixture.nextFrame()
   fixture.nextFrame()
   assert.equal(fixture.owner.languageOverlayFading, true)
-  fixture.deadline(340)
+  fixture.deadline(1100)
   assert.equal(fixture.owner.languageOverlayVisible, false)
   assert.equal(fixture.timers.size, 0)
   assert.deepEqual(fixture.writes, ['en'])
-  fixture.finish(190)
+  fixture.nextFrame() // the retired completion callback cannot revive the cover
   assert.equal(fixture.owner.languageOverlayVisible, false)
   assert.equal(fixture.timers.size, 0)
   assert.deepEqual(fixture.writes, ['en'])

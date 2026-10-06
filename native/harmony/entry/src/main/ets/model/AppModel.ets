@@ -20,6 +20,8 @@ import {
 import { FileClassroomStore, ClassroomStoring } from '../store/ClassroomStore';
 import { FileHolidayStore, HolidayStoring } from '../store/HolidayStore';
 import { PreferencesStore } from '../store/PreferencesStore';
+import { NewAssignmentStore } from '../store/NewAssignmentStore';
+import { NewAssignmentNotice } from '../common/NewAssignmentNotice';
 import { ColorThemeStore } from '../store/ColorThemeStore';
 import { ColorThemes, ColorThemeSelection, ColorThemeState } from '../common/ColorThemes';
 import { AppTheme } from '../common/AppTheme';
@@ -34,7 +36,7 @@ import {
   PublicDeadlineResponseParser, PublicDeadlineSnapshot, PublicDeadlineSource
 } from '../net/CalendarDailyInfoClient';
 import {
-  AssignmentDeadlineFetching, UCloudAssignmentClient, UCloudCourse
+  AssignmentDeadlineFetching, AssignmentCatalogPublicationSink, UCloudAssignmentClient, UCloudCourse
 } from '../net/UCloudAssignmentClient';
 import { HolidayOfflineFallback } from '../net/parsers/HolidaySourceParser';
 import { CalendarImporting, HarmonyCalendarImporter } from '../calendar/CalendarImporter';
@@ -184,6 +186,10 @@ class HolidayLoadState {
 
 @ObservedV2
 export class AppModel implements CalendarViewportPreloadTarget {
+  @Trace newAssignmentNotice: NewAssignmentNotice | null = null;
+  @Trace assignmentMomentCatalog: AssignmentDeadlineItem[] = [];
+  @Trace assignmentNoticeEpoch: number = 0;
+  private readonly newAssignmentStore: NewAssignmentStore = new NewAssignmentStore('ucloud');
   static readonly favoriteDeadlineLimitMessage: string = '收藏已达 500 条上限，请先取消部分收藏。';
   @Trace colorTheme: ColorThemeState = AppTheme.state;
   private readonly colorThemeStore: ColorThemeStore;
@@ -404,6 +410,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.holidayClient = holidayClient;
     this.weatherClient = weatherClient;
     this.assignmentClient = assignmentClient;
+    this.assignmentClient.observeCatalogPublications?.((credentials: Credentials): AssignmentCatalogPublicationSink =>
+      this.assignmentPublicationSink(credentials));
     this.calendarImporter = calendarImporter;
     this.dailyCourseNotificationScheduler = dailyCourseNotificationScheduler;
     this.dailyCourseNotificationAuthorizationTimeoutMs = 8000;
@@ -1009,6 +1017,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
         CredentialSettingsLogic.normalizedAccount(nextCredentialAccount ?? '');
       const academicPasswordChanged: boolean = storedCredentials?.password !== nextCredentials?.password;
       if (accountChanged || academicPasswordChanged || cloudIdentityChanged) {
+        this.assignmentNoticeEpoch++;
+        this.newAssignmentStore.clear();
         this.invalidateCourseDTOCache();
         await this.courseDTOStore.clear();
       }
@@ -1848,6 +1858,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   async clearLocalData(): Promise<void> {
+    this.assignmentNoticeEpoch++;
+    this.newAssignmentStore.clear();
     if (this.isSampleMode()) {
       this.statusMessage = '示例模式不读写真实本地数据';
       return;
@@ -2079,6 +2091,37 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
   }
 
+  private assignmentPublicationSink(credentials: Credentials): AssignmentCatalogPublicationSink {
+    // Capture the owner's scope before the shared request starts. Every calendar,
+    // day and assignment-list consumer receives the same single publication.
+    const term: string = this.termID;
+    const generation: number = this.localDataGeneration;
+    const noticeEpoch: number = this.assignmentNoticeEpoch;
+    const scope: string = credentials.cacheScope;
+    const account: string = credentials.account.trim();
+    return (items: AssignmentDeadlineItem[], complete: boolean, cached: boolean,
+      networkCurrent: () => boolean): void => {
+      const current: () => boolean = (): boolean => networkCurrent() && !this.isSampleMode() &&
+        generation === this.localDataGeneration && noticeEpoch === this.assignmentNoticeEpoch &&
+        term === this.termID && account === this.account.trim() && scope === this.courseDTOScope;
+      if (!current()) { return; }
+      this.assignmentMomentCatalog = items;
+      this.newAssignmentStore.accept(scope, term,
+        items.map((item: AssignmentDeadlineItem): string => (item.courseID ?? '') + '|' + item.id),
+        complete, cached, current, (ids: string[]): void => {
+          const fresh: Set<string> = new Set<string>(ids);
+          const preview: string[] = [];
+          for (const item of items) {
+            if (!fresh.has((item.courseID ?? '') + '|' + item.id)) { continue; }
+            preview.push(item.title + '\n' + (item.courseName ?? this.text('课程')) + '\n' + item.deadline);
+            if (preview.length >= NewAssignmentNotice.previewLimit) { break; }
+          }
+          this.newAssignmentNotice = NewAssignmentNotice.merge(this.newAssignmentNotice,
+            new NewAssignmentNotice('ucloud', scope + '|' + noticeEpoch.toString(), term, ids.length, preview));
+        }).catch(() => {});
+    };
+  }
+
   async loadAssignmentCatalog(refresh: boolean = false): Promise<void> {
     if (this.assignmentCatalogLoading || (!refresh && this.assignmentCatalogFetchedAt.length > 0)) { return; }
     if (this.isSampleMode()) { this.assignmentCatalogError = '示例模式不查询真实作业。'; return; }
@@ -2087,9 +2130,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
     const account: string = this.account.trim();
     const password: string = this.password;
     const cloudPassword: string = this.cloudPassword;
+    const term: string = this.termID;
     const current: () => boolean = (): boolean => revision === this.assignmentCatalogRevision &&
       generation === this.localDataGeneration && account === this.account.trim() &&
-      password === this.password && cloudPassword === this.cloudPassword;
+      password === this.password && cloudPassword === this.cloudPassword && term === this.termID;
     this.assignmentCatalogLoading = true;
     this.assignmentCatalogError = '';
     try {
@@ -2583,6 +2627,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
   // ---------- 月视图日期详情（作业 / 黄历 / DDL） ----------
 
   private resetCalendarDailyInfoState(): void {
+    this.newAssignmentNotice = null;
+    this.assignmentMomentCatalog = [];
     this.calendarDailyInfoRevision++;
     this.assignmentCatalogRevision++;
     this.cloudCoursesRevision++;
@@ -3170,6 +3216,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   private async clearAccountScopedData(): Promise<void> {
+    this.assignmentNoticeEpoch++;
+    this.newAssignmentStore.clear();
     this.invalidatePendingAccountRequests();
     await this.courseDTOStore.clear();
     const cancelWork: Promise<void> = this.cancelDailyCourseNotifications();

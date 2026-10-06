@@ -1,10 +1,13 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import QmplusLoginSettings from './QmplusLoginSettings.jsx'
-import {uiFormat} from './ui-text.js'
+import {uiFormat,uiText} from './ui-text.js'
 import {useLanguageTransition} from './use-language-transition.js'
 import {CourseDataOwner} from './course-data-owner.js'
+import {courseDeadlineMomentGroups,timelineForDeadlineMoments} from './course-domain.js'
+import CalendarDeadlineMarkers from './CalendarDeadlineMarkers.jsx'
+import {useCourseData} from './use-course-data.js'
 import LanguageCompletionMark from './LanguageCompletionMark.jsx'
 import {
   AlertTriangle,
@@ -1482,6 +1485,7 @@ async function command(name, payload) {
 }
 
 function CourseManagementDialog({ title, busy, onClose, children, t }) {
+  const titleId=useId()
   const dialogRef = useRef(null)
   const closeRef = useRef(null)
   const controlsRef = useRef({ busy, onClose })
@@ -1524,9 +1528,9 @@ function CourseManagementDialog({ title, busy, onClose, children, t }) {
     <div className="calendar-agenda-backdrop course-management-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy) onClose()
     }}>
-      <section ref={dialogRef} className="calendar-agenda-dialog course-management-dialog" role="dialog" aria-modal="true" aria-labelledby="course-management-title" aria-busy={busy}>
+      <section ref={dialogRef} className="calendar-agenda-dialog course-management-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy}>
         <header>
-          <h2 id="course-management-title">{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           <button ref={closeRef} type="button" onClick={onClose} disabled={busy} aria-label={t('关闭课程详情')}><X size={19} /></button>
         </header>
         <div className="course-management-body">{children}</div>
@@ -1596,7 +1600,9 @@ function App() {
   })
   const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS }))
   const courseDataOwner=useRef(null)
-  if(!courseDataOwner.current)courseDataOwner.current=new CourseDataOwner(command)
+  if(!courseDataOwner.current)courseDataOwner.current=new CourseDataOwner(command,{nativeNotices:hasTauriRuntime()})
+  const sharedCourseData=useCourseData(courseDataOwner.current)
+  const {newAssignments=[],newAssignmentCount=0}=sharedCourseData
   const appShellRef = useRef(null)
   const languageReadinessRef = useRef({target:null,ready:false})
   const uiLanguage = resolvedUiLanguage(settings.uiLanguage, navigator.languages || [navigator.language])
@@ -1616,6 +1622,7 @@ function App() {
   const [desktopMonthEventRows, setDesktopMonthEventRows] = useState(4)
   const [calendarAgendaDialog, setCalendarAgendaDialog] = useState(null)
   const [calendarAssignmentDetail, setCalendarAssignmentDetail] = useState(null)
+  const [calendarDeadlineGroup, setCalendarDeadlineGroup] = useState(null)
   const [compactCalendarLayout, setCompactCalendarLayout] = useState(
     () => window.matchMedia('(max-width: 720px)').matches,
   )
@@ -1780,12 +1787,13 @@ function App() {
       cloudKey:`${localDataClearRevision.current}:${assignmentCredentialRevisionRef.current}`,
       cloudEnabled:settingsLoaded&&!clearing&&(!hasTauriRuntime()||settings.hasSavedPassword),
       qmKey:localDataClearRevision.current,qmEnabled:settingsLoaded&&!clearing&&settings.qmplusEnabled,
+      term:schedule?.term_id||settings.termId,
     })
-  },[settingsLoaded,settings.hasSavedPassword,settings.qmplusEnabled,calendarSupplementRevision,loading])
+  },[settingsLoaded,settings.hasSavedPassword,settings.qmplusEnabled,settings.termId,schedule?.term_id,calendarSupplementRevision,loading])
 
   useEffect(()=>{
     let release,live=true
-    if(hasTauriRuntime())listen('qmplus:changed',()=>{void courseDataOwner.current.reloadQM().catch(()=>{})})
+    if(hasTauriRuntime())listen('qmplus:changed',()=>{void courseDataOwner.current.reloadQM(true).catch(()=>{})})
       .then(value=>{if(live)release=value;else value()}).catch(()=>{})
     return()=>{live=false;release?.();courseDataOwner.current.dispose()}
   },[])
@@ -2494,8 +2502,16 @@ function App() {
     if (calendarView === 'month') return buildMonthDays(calendarDate)
     return []
   }, [calendarDate, calendarView])
-  const timelineHours = useMemo(() => academicTimelineHours(courses, visibleCalendarDays, slotMeta, activeTermStartDate),
+  const deadlineMomentGroups=useMemo(()=>courseDeadlineMomentGroups(sharedCourseData),[sharedCourseData.assignments,sharedCourseData.qm])
+  const visibleDeadlineMoments=useMemo(()=>deadlineMomentGroups.filter(group=>visibleCalendarDays.includes(group.date)),[deadlineMomentGroups,visibleCalendarDays])
+  const selectedDeadlineGroup=useMemo(()=>{
+    if(!calendarDeadlineGroup)return null
+    const groups=deadlineMomentGroups.filter(group=>calendarDeadlineGroup.keys.includes(group.key))
+    return groups.length?{...groups[0],items:groups.flatMap(group=>group.items)}:null
+  },[calendarDeadlineGroup,deadlineMomentGroups])
+  const courseTimelineHours = useMemo(() => academicTimelineHours(courses, visibleCalendarDays, slotMeta, activeTermStartDate),
     [courses, visibleCalendarDays, slotMeta, activeTermStartDate])
+  const timelineHours=useMemo(()=>timelineForDeadlineMoments(courseTimelineHours,visibleDeadlineMoments),[courseTimelineHours,visibleDeadlineMoments])
   const calendarHours = useMemo(() => Array.from({ length: timelineHours.end - timelineHours.start + 1 }, (_, i) => timelineHours.start + i), [timelineHours])
   const calendarSlotBoundaryMinutes = useMemo(() => nonHourlyCourseBoundaryMinutes(slotMeta, timelineHours.start * 60, timelineHours.end * 60), [slotMeta, timelineHours])
   const calendarYearMonths = useMemo(() => {
@@ -2967,7 +2983,7 @@ function App() {
       monthExpanded,
       scrollTop: pageContentRef.current?.scrollTop || 0,
       scrollLocked: false,
-      blocked: Boolean(event.target.closest('input, select, textarea, a, .time-all-day-overflow')),
+      blocked: Boolean(event.target.closest('input, select, textarea, a, .time-all-day-overflow, .time-deadline-marker, .time-deadline-badge')),
     }
   }
 
@@ -2979,6 +2995,7 @@ function App() {
     if (event.target.closest('input, select, textarea, a')) return
     if (event.target.closest('.time-all-day-overflow')) return
     if (event.target.closest('.time-course-block')) return
+    if (event.target.closest('.time-deadline-marker, .time-deadline-badge')) return
 
     calendarGestureRef.current = {
       x: event.clientX,
@@ -3674,7 +3691,7 @@ function App() {
     setAssignmentsLoadingDate(date)
     setAssignmentsErrorByDate((current) => ({ ...current, [date]: '' }))
     try {
-      const data = await courseDataOwner.current.assignmentsForDates(date)
+      const data = await courseDataOwner.current.assignmentsForDates(date,date,{force})
       if (revision !== assignmentsRevisionRef.current) return
       setAssignmentsByDate((current) => ({ ...current, [date]: data }))
     } catch (assignmentError) {
@@ -3905,6 +3922,7 @@ function App() {
     setClassroomsCache(null)
     setAssignmentsByDate({})
     setCalendarAssignmentDetail(null)
+    setCalendarDeadlineGroup(null)
     setAssignmentsErrorByDate({})
     setAssignmentsLoadingDate('')
     setSelectedSlots([])
@@ -3921,6 +3939,7 @@ function App() {
     requestedCalendarSupplementRanges.current.clear()
     setAssignmentsByDate({})
     setCalendarAssignmentDetail(null)
+    setCalendarDeadlineGroup(null)
     setAssignmentsErrorByDate({})
     setAssignmentsLoadingDate('')
     setCalendarSupplementRevision((value) => value + 1)
@@ -4386,7 +4405,7 @@ function App() {
                     ref={calendarAnimatedSurfaceRef}
                     key={calendarSurfaceKey(calendarView, calendarDate)}
                     className={`time-calendar calendar-swipe-surface ${calendarView === 'day' ? 'single-day' : 'week-calendar'} ${visibleAllDayItems ? 'has-all-day' : ''} ${calendarMotion ? `calendar-motion-${calendarMotion}` : ''}`}
-                    style={{ '--day-count': visibleCalendarDays.length }}
+                    style={{ '--day-count': visibleCalendarDays.length,'--deadline-timeline-scale':timelineHours.scale }}
                     onTouchStart={beginCalendarSwipe}
                     onTouchEnd={finishCalendarSwipe}
                     onTouchCancel={cancelCalendarSwipe}
@@ -4537,7 +4556,7 @@ function App() {
                           tabIndex={0}
                           aria-label={formatUiCourseDate(dateString, uiLanguage)}
                           onClick={(event) => {
-                            if (event.target instanceof Element && event.target.closest('.time-course-block')) return
+                            if (event.target instanceof Element && event.target.closest('.time-course-block, .time-deadline-marker, .time-deadline-badge')) return
                             chooseCalendarDate(dateString)
                           }}
                           onKeyDown={(event) => {
@@ -4594,6 +4613,14 @@ function App() {
                               )
                             })}
                           </div>
+                          <CalendarDeadlineMarkers groups={visibleDeadlineMoments.filter(group=>group.date===dateString)}
+                            start={visibleStart} end={visibleEnd} language={uiLanguage}
+                            courses={dayState.dayCourses.map(course=>courseTimeBounds(course,slotMeta))}
+                            pixelsPerMinute={(compactCalendarLayout?1200:896)/((courseTimelineHours.end-courseTimelineHours.start)*60)}
+                            onOpen={group=>{
+                              if(group.items.length===1)setCalendarAssignmentDetail(group.items[0].assignmentItem)
+                              else setCalendarDeadlineGroup({keys:group.keys||[group.key],limit:8})
+                            }}/>
                         </div>
                       )
                     })}
@@ -5390,11 +5417,33 @@ function App() {
         courseDataOwner={courseDataOwner.current}
         hasAcademicAccount={!hasTauriRuntime() || settings.hasSavedPassword}
         onClose={()=>setCalendarAssignmentDetail(null)}/> : null}
+      {selectedDeadlineGroup ? <CourseManagementDialog title={`${selectedDeadlineGroup.clock}${uiText(uiLanguage,'（北京时间）',' (Beijing time)')} · ${t('课程作业')}`} busy={false}
+        onClose={()=>setCalendarDeadlineGroup(null)} t={t}>
+        {selectedDeadlineGroup.items.slice(0,calendarDeadlineGroup.limit).map(point=><button key={point.key} type="button" className="query-action-button"
+          onClick={()=>{setCalendarDeadlineGroup(null);setCalendarAssignmentDetail(point.assignmentItem)}}>
+          {point.clock} · {point.label} · {point.assignmentItem.course_name||''} · {point.source==='qmplus'?'QMplus':'UCloud'}
+        </button>)}
+        {selectedDeadlineGroup.items.length>calendarDeadlineGroup.limit ? <button type="button" className="query-action-button"
+          onClick={()=>setCalendarDeadlineGroup(value=>({...value,limit:value.limit+8}))}>{t('显示更多')} +{selectedDeadlineGroup.items.length-calendarDeadlineGroup.limit}</button> : null}
+      </CourseManagementDialog> : null}
       {privacyPolicyOpen ? (
         <PrivacyPolicyDialog onClose={() => {
           setPrivacyPolicyOpen(false)
           privacyTriggerRef.current?.focus()
         }} />
+      ) : null}
+      {newAssignmentCount>0 ? (
+        <CourseManagementDialog title={uiFormat(uiLanguage,'发现 %1$d 项新作业',[newAssignmentCount])} busy={false} onClose={()=>courseDataOwner.current.dismissNewAssignments()} t={t}>
+          <ul>{newAssignments.slice(0,8).map(item=><li key={`${item.source}:${item.course_id||''}:${item.id}`}>
+            <strong>{item.title}</strong><p>{item.course_name} · {item.source==='qmplus'?'QMplus':'UCloud'}</p>
+            <p>{item.deadline||uiText(uiLanguage,'未公布','Not announced')}</p>
+          </li>)}</ul>
+          {newAssignmentCount>newAssignments.length ? <p className="course-edit-note">… +{newAssignmentCount-newAssignments.length}</p> : null}
+          <button type="button" className="query-action-button" onClick={()=>{
+            courseDataOwner.current.dismissNewAssignments()
+            setActivePage('courses')
+          }}><BookOpen size={16}/>{t('课程')}</button>
+        </CourseManagementDialog>
       ) : null}
       {courseEditDialog ? (
         <CourseEditDialog key={`${courseEditDialog.course.id}:${courseEditDialog.date}`}

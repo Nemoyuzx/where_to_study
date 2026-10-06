@@ -1,4 +1,13 @@
 {
+  "鼠尾草": "Salvia",
+  "陶土": "Terracota",
+  "梅子": "Ciruela",
+  "石墨": "Grafito",
+  "夜蓝": "Azul marino",
+  "新作业提醒": "Aviso de nuevas tareas",
+  "未提供截止时间": "Fecha límite no indicada",
+  "发现新作业": "Nuevas tareas encontradas",
+  "发现 %1$d 项新作业": "Se encontraron %1$d tareas nuevas",
   "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Completa el CAPTCHA o la MFA en la ventana oficial. La sincronización continuará después.",
   "自动登录已暂停，可选择“手动继续”查看官方页面。": "El inicio de sesión automático está en pausa. Elige «Continuar manualmente» para ver la página oficial.",
   "手动继续": "Continuar manualmente",

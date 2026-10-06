@@ -884,6 +884,14 @@
     <string name="ui_generated_fee09598ad7872">"Son İdari İşler duyurusu ve geçerli çizelge okunuyor."</string>
     <string name="ui_generated_ff89a1a38ca3a7">"Özel takvimin kökü nesne olmalıdır."</string>
     <string name="ui_generated_ff93bd2c081d35">"Teaching Cloud Platform ödev listesini tarayıcıda aç."</string>
+    <string name="ui_generated_50cbb376ac478a">"Adaçayı"</string>
+    <string name="ui_generated_0752623ccdcc9c">"Terakota"</string>
+    <string name="ui_generated_b0bdaefbc2002d">"Erik"</string>
+    <string name="ui_generated_708c97df7becc4">"Grafit"</string>
+    <string name="ui_generated_d31e5281d95e2e">"Lacivert"</string>
+    <string name="ui_generated_6632a0c5ee0620">"Yeni ödev bildirimi"</string>
+    <string name="ui_generated_2fefd87ed8a29b">"Son teslim tarihi belirtilmedi"</string>
+    <string name="ui_generated_4878bab52d3083">"Yeni ödevler bulundu"</string>
     <string name="ui_generated_b63c257717353e">"Resmî pencerede CAPTCHA veya MFA doğrulamasını tamamlayın. Ardından eşitleme devam eder."</string>
     <string name="ui_generated_81a90adf66f769">"Otomatik oturum açma duraklatıldı. Resmî sayfayı görmek için “Manuel devam et”i seçin."</string>
     <string name="ui_generated_2042efadd2c35a">"Manuel devam et"</string>

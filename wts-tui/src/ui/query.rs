@@ -684,6 +684,7 @@ mod tests {
         let mut app = App::new(false);
         app.query_section = QuerySection::Assignments;
         app.query_assignments = Some(vec![where_to_study_lib::models::AssignmentDeadlineItem {
+            course_id: None,
             id: "synthetic".into(),
             title: "合成作业".into(),
             course_name: Some("合成课程".into()),

@@ -299,6 +299,7 @@
 "数据：UAPI" = "Data: UAPI";
 "整点" = "Hour";
 "断开 QMplus 并清除会话" = "Disconnect QMplus and clear session";
+"新作业提醒" = "New assignment alert";
 "无法保存 QMplus 登录信息，自动填写未启用。" = "Could not save QMplus sign-in details. Autofill is not enabled.";
 "无法保存本地偏好。" = "Unable to save local preferences.";
 "无法同步公开活动或校内通知，请稍后重试。" = "Unable to sync public events or on-campus notices. Try again later.";
@@ -350,6 +351,7 @@
 "未公布" = "Not published";
 "未同意隐私政策，无法使用应用" = "Privacy Policy Not Accepted";
 "未提交" = "Not submitted";
+"未提供截止时间" = "Deadline not provided";
 "未来时段" = "Upcoming period";
 "未标注" = "Not specified";
 "未选择" = "Not selected";

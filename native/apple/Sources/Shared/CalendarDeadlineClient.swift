@@ -1096,6 +1096,10 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
            isAssignmentScopeCurrent(scope) {
             cache = .init(account: activeCredentials?.account ?? "", fetchedAt: date, items: value.payload, partial: value.partial)
             assignmentPartial = value.partial; assignmentRetainingPrevious = true
+            if !value.partial {
+                NewAssignmentNoticeCenter.publish(NewAssignmentNotice.cloud(value.payload), scope: scope, kind: .assignments,
+                    storage: businessCache, restored: true)
+            }
         }
     }
 
@@ -1300,6 +1304,8 @@ actor UCloudAssignmentClient: AssignmentDeadlineFetching, TeachingCloudCourseFet
                     }
                 }
                 inFlightFetches.removeValue(forKey: account)
+                NewAssignmentNoticeCenter.publish(NewAssignmentNotice.cloud(allItems), scope: scope, kind: .assignments,
+                    storage: businessCache, restored: false)
             }
         }
         return allItems

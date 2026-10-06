@@ -299,6 +299,7 @@
 "数据：UAPI" = "Veri: UAPI";
 "整点" = "Saat";
 "断开 QMplus 并清除会话" = "QMplus bağlantısını kes ve oturumu temizle";
+"新作业提醒" = "Yeni ödev bildirimi";
 "无法保存 QMplus 登录信息，自动填写未启用。" = "QMplus giriş bilgileri kaydedilemedi. Otomatik doldurma açık değil.";
 "无法保存本地偏好。" = "Yerel tercihler kaydedilemedi.";
 "无法同步公开活动或校内通知，请稍后重试。" = "Herkese açık etkinlikler veya kampüs duyuruları eşitlenemedi. Daha sonra deneyin.";
@@ -350,6 +351,7 @@
 "未公布" = "Yayımlanmadı";
 "未同意隐私政策，无法使用应用" = "Gizlilik Politikası kabul edilmedi";
 "未提交" = "Teslim edilmedi";
+"未提供截止时间" = "Son teslim tarihi belirtilmedi";
 "未来时段" = "Gelecek zaman aralığı";
 "未标注" = "Belirtilmemiş";
 "未选择" = "Seçilmedi";

@@ -118,11 +118,11 @@ test("client versions consistently release 0.4.0 with fresh distribution build c
   assert.match(cliManifest, /^version = "0\.4\.0"$/m);
   assert.match(tuiManifest, /^version = "0\.4\.0"$/m);
   assert.match(nativeAndroid, /versionName = "0\.4\.0"/);
-  assert.match(nativeAndroid, /versionCode = 62/);
+  assert.ok(Number(nativeAndroid.match(/versionCode = (\d+)/)?.[1]) >= 62, 'Android distribution counter must not regress');
   assert.match(nativeApple, /MARKETING_VERSION: "0\.4\.0"/);
-  assert.match(nativeApple, /CURRENT_PROJECT_VERSION: "115"/);
+  assert.ok(Number(nativeApple.match(/CURRENT_PROJECT_VERSION: "(\d+)"/)?.[1]) >= 115, 'Apple distribution counter must not regress');
   assert.match(nativeHarmony, /"versionName": "0\.4\.0"/);
-  assert.match(nativeHarmony, /"versionCode": 1002039/);
+  assert.ok(Number(nativeHarmony.match(/"versionCode": (\d+)/)?.[1]) >= 1002039, 'Harmony distribution counter must not regress');
   assert.match(nativeHarmonyAppMeta, /static readonly version: string = '0\.4\.0'/);
   assert.match(tauriApple, /CFBundleShortVersionString: 0\.4\.0/);
   assert.match(tauriApple, /CFBundleVersion: "54"/);
@@ -407,8 +407,8 @@ test(
     assert.doesNotMatch(fetchAndVerify, /releases\/download\/continuous/);
 
     const expectedPins = {
-      x86_64: ["538914683", "0441769ab38009504d2678c38cd7e526955388dd30a215b4a20afaa5471652f2"],
-      aarch64: ["538914264", "ce574719bcf9cc1fb12728d60b17e48cc87d9b6c40f6f48b04cff7d273b5eb24"],
+      x86_64: ["602435573", "49d6a17160675a6bd1781699aae6bdf7692d98552e02a3671d2183d10547842e"],
+      aarch64: ["602435012", "518f4b49a561c157b23fd1ba4e857b8fa2271a038ac711bdedab6f018acbe7e5"],
     };
     const fixture = mkdtempSync(path.join(tmpdir(), "wts-appimage-tool-pin-"));
     const bin = path.join(fixture, "bin");

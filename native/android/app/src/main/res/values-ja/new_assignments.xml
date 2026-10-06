@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="new_assignments_title">"新しい課題が %1$d 件見つかりました"</string>
+</resources>

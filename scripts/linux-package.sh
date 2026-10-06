@@ -122,18 +122,19 @@ validate_extracted_bundle() {
 DEB_PATH="${LINUX_DEB_PATH:-$(require_single_artifact "$BUNDLE_DIR/deb" '*.deb' 'Debian package')}"
 APPIMAGE_PATH="${LINUX_APPIMAGE_PATH:-$(require_single_artifact "$BUNDLE_DIR/appimage" '*.AppImage' 'AppImage')}"
 
-# Official release assets verified against GitHub's SHA-256 metadata and downloaded bytes
-# on 2026-09-09. Asset IDs stay fixed when the upstream continuous release is replaced.
+# Official release asset IDs and SHA-256 metadata checked on 2026-10-06.
+# Upstream continuous assets can be replaced; every downloaded or cached tool
+# must still match its pinned digest before execution.
 case "$RELEASE_ARCHITECTURE" in
   x86_64)
     APPIMAGE_TOOL_ARCH="x86_64"
-    APPIMAGE_TOOL_ASSET_ID="538914683"
-    APPIMAGE_TOOL_SHA256="0441769ab38009504d2678c38cd7e526955388dd30a215b4a20afaa5471652f2"
+    APPIMAGE_TOOL_ASSET_ID="602435573"
+    APPIMAGE_TOOL_SHA256="49d6a17160675a6bd1781699aae6bdf7692d98552e02a3671d2183d10547842e"
     ;;
   aarch64)
     APPIMAGE_TOOL_ARCH="aarch64"
-    APPIMAGE_TOOL_ASSET_ID="538914264"
-    APPIMAGE_TOOL_SHA256="ce574719bcf9cc1fb12728d60b17e48cc87d9b6c40f6f48b04cff7d273b5eb24"
+    APPIMAGE_TOOL_ASSET_ID="602435012"
+    APPIMAGE_TOOL_SHA256="518f4b49a561c157b23fd1ba4e857b8fa2271a038ac711bdedab6f018acbe7e5"
     ;;
 esac
 

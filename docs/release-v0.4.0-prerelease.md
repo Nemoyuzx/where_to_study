@@ -2,6 +2,63 @@
 
 更新说明遵循[按平台分组规范](release-notes-guidelines.md)。已保留用户提交的语言校对，以下区分源码／资源校验、模拟器实测和商店上传，不把词典覆盖当作所有设备的视觉验证。
 
+## 本轮追加：新作业提醒、日／周截止时刻、新主题与质量修复（2026-10-06）
+
+0.4.0 仍为预发布，不提交正式审核。0.3.2 的所有商店正式送审及 GitHub 草稿交付另见[同步回执](store-sync-v032-v040-2026-10-06.md)，不重复上传，也不将 0.4.0 包选入 0.3.2 审核。
+
+### iOS / iPadOS
+
+- 每次完整同步发现以前没有的教学云作业或 QMplus Assignment / Quiz 时弹窗提醒；首次建立基线、缓存恢复、重复回调及部分失败不误报。检测复用现有数据 owner，没有另一次作业请求。
+- 保留原全天 DDL 区，在日／周时间轴内额外增加截止时刻标记，不伪造课程时长。北京时间分桶支持 UTC 跨日、午夜和 23:59；无明确时间不编造位置。密集时刻共用小标签，但保留各自真实定位线和课程详情入口。
+- 截止标记按最终参考图使用主题色18pt横向细条、左侧定位点及“时间 · 作业名”，左右各留4pt；原课程块的宽、高和位置不变，不再使用半列侧栏。明确未交的作业在左端上方显示6pt红点，已交或未知不误标。可见文案统一“北京时间”，内部 IANA `Asia/Shanghai` 不变。
+- 保留用户主题提交 `2878b0a`：新增鼠尾草、陶土、梅子、石墨、夜蓝，默认配色不变，主题名接入现有13语言资源。
+- Duo 保持稳定的五项导航、课程展开、未保存草稿及所选日期；仅在新 iOS SDK 使用保留区域 API，自绘日历弹窗避让当前折叠分区。
+
+验证：真实 Duo 27.1 模拟器的隔离示例模式手动检查了展开／合拢后的周视图，原全天条和新 23:59 标记同时存在，点击时间点进入缓存中的课程详情。早期截图为小标签，不冒充最终主题条；没有使用真实账号或 XCTest UI 自动化。直接手势、月／年切换、活跃相机等仍无本轮视觉证据。最终 Apple 全量单元630项、1项既有条件跳过、0失败，含新主题和明确未交状态回归；iOS最终编译／签名上传回执另录。
+
+渠道：本轮 Apple121 尚待最终签名上传；成功回执会独立补录，不以模拟器编译当作 TestFlight 上传。
+
+### macOS
+
+同步新作业提醒、额外截止时刻层和北京时间名称。原固定日期／全天表头、课程位置及常用控件尺寸保留；新增提示队列按来源合并，最多三批待显示，每批只持有八项预览及总数。多窗口采用单一显示租约，不重复弹窗。主程序、Widget 的既有签名配置和用户修改不变。
+
+渠道：本轮 Apple121 尚待签名上传，仅 TestFlight，不正式送审。
+
+### Android
+
+同步 owner 层的新作业提醒，旋转或重建不会丢失当前提示批次。手机及展开日／周布局共用截止点投影；原全天区域及所有课程宽高位置不变，主题色横条显示时刻和短标题，明确未交红点、左侧定位点、密集标记的真实锚点及多项详情保留。新增五套主题及13语言名称。时间计算兼容API24，不抬高最低版本。
+
+验证／渠道：最终 APK67 已生成，417项JVM通过，Lint0错误／79警告／1提示，固定证书、签名、16KB对齐、法律文件与HTTPS门禁通过。AAB仅本地保留，不上传GitHub，0.3.2的审核版本不覆盖。新CLI同步原图生成资产，八张PNG像素不变、hdpi两张由49px修正为72px，不改变应用内按钮尺寸。
+
+### HarmonyOS
+
+同步新作业提醒及有界的八项预览／总数提示，旧身份、学期和延迟回调不能混入新批次。日／周时间轴额外展示主题色真实截止点及明确未交红点，使用全量owner缓存解决UTC跨北京时间日期，不改旧全天分桶；密集横条合并显示，真实定位线和各任务详情保留。修正官方QMplus合法 `.000Z` 截止时间在投影层遗漏，保留全局日期契约；新增五套主题。
+
+验证／渠道：最终1002044已通过374/374 Hypium及签名Release/版本/HTTPS/ZIP门禁。沿用现有DevEco签名／注册配置，上传回执另录，仅测试，鸿蒙包不放GitHub。
+
+### Windows / Linux / Ubuntu
+
+共享Tauri owner提供跨重启已见记录与新作业提示，强制刷新透传到同一单飞入口，切换课程／作业／日历不另发重复请求。原全天列表保留，新主题色时间点层取全量共享缓存并按北京时间投影，明确截止时分、QMplus Quiz关闭时间及缓存课程详情统一处理；未交状态有明确证据才标红。新五主题及非默认主题柔和画布渐变保留用户提交。
+
+Edge Dev隔离示例QA实测周／日主题细条约18px、左右4px、未交红点6px；23:59锚和缓存来源详情可用。QMplus、凌晨及密集场景只有纯回归证据，没有冒称浏览器实测。最终Node480项、479通过／1Windows宿主条件跳过／0失败；Tauri292通过／3条件忽略，strict clippy零警告。
+
+渠道：0.3.2 的独立构建账号已实跑成功；0.4.0 须使用本轮最终源码另构建，不拿 0.3.2 文件代替，不在用户服务器安装依赖。
+
+### CLI / TUI 与工程
+
+终端没有原生日历时间轴，不宣称包含移动界面的截止标记；共享缓存／来源边界随核心同步。真实共享DTO从桌面存储边界移到共享服务，core不引入Tauri；CLI24、TUI50、core107项完整测试及四包strict clippy/fmt通过。TUI三处旧测试结构补齐 `course_id: None`，不削弱断言。后续Linux终端归档已补法律文件；新增五套TUI主题。
+
+PR72/73已真正合并：API/CLI2.12.1、Vite8.3.2、Cargo40更新；当前0.4 direct Wry对齐0.57.0，glib原补丁保持。npm audit0，法律清单更新并校验。26个旧CodeQL open结果对应的测试形态已修正（25合成测试凭据改动态、1HTML转义测试补大小写），未忽略规则或dismiss告警；远端仍需新的成功扫描，不能写成告警已关闭。保留用户 `f9f26a4` 校对，实际共享源／英文均1554键，资源／占位符严格通过，不回扫覆盖词典。以下旧构建号与状态是历史记录。
+
+### English — this round by platform
+
+- iOS / iPadOS: new-assignment notices reuse data owners. Additional theme-colored deadline strips preserve all-day content and original course sizes, use Beijing time, and show a red dot only for explicit pending submissions. Five user-designed presets and localized names are included; 630 native tests have no failures, with one conditional skip. Upload receipts are separate.
+- macOS: the same notices and additional time layer, with fixed headers, bounded previews and a single multi-window presentation lease. Existing signing and user changes preserved; TestFlight only.
+- Android: shared day/week projection, rotation-safe notices, theme-colored strips and pending dots without resizing courses. APK67 passed 417 tests and package gates, including API24 compatibility; no public AAB or 0.3.2 review replacement.
+- HarmonyOS: owner-wide Beijing-date projection, fractional QMplus timestamp support, theme strips and pending dots. Build1002044 passed 374 tests and package gates; testing-only, no GitHub Harmony package.
+- Windows / Linux / Ubuntu: centralized single-flight refresh, persistent seen history and the additional timed layer. Fresh 0.4.0 builds are required from the final source; 0.3.2 files are not substitutes.
+- CLI / TUI: the shared DTO boundary, five TUI themes and legal files, not native calendar UI features. Core107, CLI24 and TUI50 tests passed; all four Rust packages passed strict clippy/fmt. PR72/73 are merged, old CodeQL test patterns repaired but remote alert closure awaits a fresh analysis. All 0.4.0 channels remain pre-release.
+
 ## 首个课程基线构建（语言扩展之前，2026-10-04）
 
 功能源码 `e5b5f907a4fc31b1c113ba9b41e7508892dd5462`，版本 0.4.0，Apple **104**、Android **62**、HarmonyOS **1002039**。用户要求先上传一次构建再增加语言：Apple 两端的成功回执均早于语言改动，不能用后续未完成资源覆盖此基线。

@@ -120,13 +120,15 @@ export function CalendarAssignmentCourseDetail({item,language,courseDataOwner,ha
   const text=(zh,english)=>uiText(language,zh,english)
   const data=useCourseData(courseDataOwner)
   const directory=useMemo(()=>groupTeachingCloudCourses(data.courses||[]),[data.courses])
-  const course=calendarCourseForAssignment(item,directory)
-  const items=course&&data.assignments!==null?assignmentsForCourse(data.assignments,course,data.courses||[]):[item]
+  const source=item.source==='qmplus'?'qmplus':'ucloud'
+  const course=source==='qmplus'?(data.qm?.courses||[]).find(course=>course.id===item.course_id&&course.current_term_status==='current'&&isEbuCourse(course)):calendarCourseForAssignment(item,directory)
+  const items=source==='qmplus'?(course?qmplusActivitiesForCourse(data.qm,course):[item]):course&&data.assignments!==null?assignmentsForCourse(data.assignments,course,data.courses||[]):[item]
+  useEffect(()=>{if(source==='qmplus'&&!data.qm)onClose()},[source,data.qm,onClose])
   async function refresh() {
     if(!data.cloudBusy&&hasAcademicAccount)await courseDataOwner?.refresh(true).catch(()=>{})
   }
-  return <CourseDetail course={course||{id:item.course_id,name:item.course_name||text('课程作业','Assignments')}} source="ucloud" items={items} language={language}
-    busy={data.cloudBusy||!hasAcademicAccount} error={data.cloudError} onRefresh={refresh} onClose={onClose}/>
+  return <CourseDetail course={course||{id:item.course_id,name:item.course_name||text('课程作业','Assignments')}} source={source} items={items} language={language}
+    busy={source==='ucloud'&&(data.cloudBusy||!hasAcademicAccount)} error={source==='ucloud'?data.cloudError:''} onRefresh={source==='ucloud'?refresh:undefined} onClose={onClose}/>
 }
 
 export default function CourseHub({command,language,hasAcademicAccount,onOpenAccount,examSnapshot,qmplusEnabled = false,courseDataOwner}) {
