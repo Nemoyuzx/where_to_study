@@ -79,7 +79,7 @@ class CoursesNavigationUiTest {
                         "Microsoft" in labels || "QMplus" in labels
                     })
                     assertNotNull(activity.findViewById<View?>(R.id.settings_qmplus_connect))
-                    assertNotNull(activity.findViewById<View?>(R.id.settings_qmplus_disconnect))
+                    assertNull(activity.findViewById<View?>(R.id.settings_qmplus_disconnect))
                     assertSame(page, activity.findViewById(R.id.page_settings))
                     assertEquals("synthetic unsaved only", password.text.toString())
                 }

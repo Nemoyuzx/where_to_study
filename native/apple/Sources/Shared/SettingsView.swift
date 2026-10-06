@@ -1278,8 +1278,6 @@ private struct QMplusSettingsSurface: View {
     @ViewBuilder private var connectionActions: some View {
         Button(model.localized("连接 QMplus")) { store.connect(sampleMode: model.isSampleMode) }
             .disabled(model.isSampleMode || !model.qmplusEnabled).accessibilityIdentifier("settings.qmplus.connect")
-        Button(model.localized("断开 QMplus 并清除会话")) { store.disconnect() }
-            .disabled(model.isSampleMode).accessibilityIdentifier("settings.qmplus.disconnect")
     }
 }
 

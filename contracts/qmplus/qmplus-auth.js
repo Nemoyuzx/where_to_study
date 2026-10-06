@@ -131,12 +131,19 @@
       ['text', 'tel', 'number'].includes(node.type) && visible(node, 40, 16))) return reasons.mfa;
     const headings = document.querySelectorAll('h1, h2, [role="heading"]');
     // The official MSAL UI handler identifies this title on its MFA method
-    // picker. It may be a plain DIV without a semantic heading role.
+    // picker by ID. Nested text and translations may vary; this only reveals
+    // a read-only challenge and never authorizes selecting or sending a code.
     const methodTitle = exactlyOne('#idDiv_SAOTCS_Title');
+    const methodText = methodTitle?.textContent;
+    if (['ms', 'verification'].includes(context()) && methodTitle &&
+      !(methodTitle instanceof HTMLInputElement) && !['INPUT', 'TEXTAREA'].includes(methodTitle.tagName) &&
+      !methodTitle.isContentEditable &&
+      typeof methodText === 'string' && methodText.length <= 128 && methodText.trim() &&
+      visible(methodTitle)) return reasons.mfa;
     const approvalTitles = new Set(['approve sign in request', 'approve sign-in request',
       'check your authenticator app', 'open your authenticator app', '批准登录请求', '核准登入要求',
       'verify your identity', '验证您的身份', '驗證您的身分', '驗證您的身份']);
-    return [...Array.from(headings).slice(0, 32), ...(methodTitle ? [methodTitle] : [])].some(node => {
+    return Array.from(headings).slice(0, 32).some(node => {
       const title = node.textContent;
       return typeof title === 'string' && title.length <= 128 && visible(node) &&
         approvalTitles.has(title.trim().toLowerCase());
@@ -179,10 +186,10 @@
       field.disabled || field.readOnly || !visible(field, 80, 20)) return null;
     if (!visible(field, 80, 20, true)) {
       // Verified live Microsoft markup overlays its own hint DIV on an empty
-      // input. Its hint can remain until the first keystroke; it is part of the
-      // same known field, not an arbitrary overlay or a hidden password control.
-      if (!ownedPlaceholderHit(field) || typeof field.focus !== 'function') return null;
-      field.focus({preventScroll: true});
+      // input. Accept only that field's own hint without focusing the control:
+      // focus can open the native keyboard during background autofill. The
+      // native setter and input/change events update the page's field state.
+      if (!ownedPlaceholderHit(field)) return null;
       const refreshed = formAndSubmit();
       if (exactlyOne(selector) !== field || !form.contains(field) || context() !== 'ms' ||
         field.disabled || field.readOnly || !visible(field, 80, 20) ||

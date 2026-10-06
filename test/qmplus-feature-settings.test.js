@@ -119,3 +119,16 @@ test('Harmony failed off remains off through later preference restoration', asyn
   assert.equal(model.qmplusEnabled, false)
   assert.equal(model.statusMessage, '无法保存本地偏好。')
 })
+
+test('settings remove the standalone QMplus disconnect control without removing destructive cleanup boundaries', () => {
+  const apple = readFileSync(new URL('../native/apple/Sources/Shared/SettingsView.swift', import.meta.url), 'utf8')
+  const android = readFileSync(new URL('../native/android/app/src/main/java/com/nemoyu/wheretostudy/nativeapp/SettingsPage.kt', import.meta.url), 'utf8')
+  const harmony = readFileSync(new URL('../native/harmony/entry/src/main/ets/view/SettingsView.ets', import.meta.url), 'utf8')
+  assert.doesNotMatch(apple, /settings\.qmplus\.disconnect/)
+  assert.doesNotMatch(android, /\.id\s*=\s*R\.id\.settings_qmplus_disconnect/)
+  assert.doesNotMatch(harmony, /\.onClick\([^\n]*qmplusSession\.logout/)
+  const store = readFileSync(new URL('../native/apple/Sources/Shared/QMplusStore.swift', import.meta.url), 'utf8')
+  assert.match(store, /func disconnect\(\)/)
+  assert.match(store, /func disableCredentialAutofill\(\)/)
+  assert.match(store, /clearOfficialSession\(\)/)
+})

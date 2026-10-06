@@ -495,3 +495,39 @@ Apple 117 仅 TestFlight 测试上传，成功回执另记；不提交正式审�
 包源码 `54f5ef70` 已推送 `codex/v040-localization`。macOS **0.4.0（118）** 于 **2026-10-06 10:56:32 +0800**、iOS／iPadOS **0.4.0（118）** 于 **10:58:50 +0800** 分别取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`，上传进程正常退出。两端归档主程序与 Widget 均为 118，包内认证脚本与提交源码一致。
 
 沿用原有 `scripts/native-apple-app-store.sh upload <平台>` 路径：macOS Manual 主程序／Widget 与现有 Installer 身份，iOS Automatic 和 Apple Distribution 导出验证；签名标识仅从本机已安装证书派生，没有提交签名资料。实际回执为本轮目录内 `macos-upload.log`、`ios-upload.log`。完成相关测试后仅关闭本轮 QA 模拟器，未关闭用户其它模拟器。上传成功后停止，没有检查后续 App Store Connect 处理状态或提交正式审核。
+
+## 静默填写与验证方式选择：Apple 119（2026-10-06）
+
+### iOS / iPadOS
+
+用户确认 118 的 `ACCOUNT_HINT_UNAVAILABLE` 来自保存了不含邮箱后缀的用户名；此次不继续将其归因于账号选择或 Keychain 故障。
+
+修正后台填写主动唤起输入法：移除登录识别中为移开官方提示层而调用的 `focus()`。仍只接受原先经过核验的输入框和自有提示层结构，通过原生 setter 与 `input/change` 更新；填写前后均核验域名、表单、字段、文档及干扰条件，保留单次提交限制。
+
+短信／电话验证方式选择页改用可信 Microsoft 主文档中唯一可见、不可编辑的官方 `idDiv_SAOTCS_Title` 与有界非空标题识别，不再依赖标题的翻译或嵌套文本完整匹配。依据是已固定提交的官方 MSAL 测试定位，详见 `contracts/qmplus/AUTH.md`。识别后调用现有只读 MFA 显露路径，使用同一个官方 WebView；不自动选择短信／电话、不填手机号或验证码、不发送验证请求。普通未知标题及重复／隐藏／可编辑节点仍不能授权操作。
+
+去掉设置的“断开 QMplus 并清除会话”按钮；更换登录资料、删除自动填写资料和清除本地数据的底层清理保留，不修改已有账号、授权或缓存。
+
+最终相关原生规格 **138/138** 通过，包含新增真实 WebKit 的 **2/2** 内联合成页面回归：账号／密码的 `focusin` 为 0，UIKit 键盘弹出通知为 0；不同语言／嵌套的验证方式标题被判为 MFA，手机号未填、按钮未点。这些不使用网络、真实密码或持久网页区，不能写成已在官方服务器完成手机验证。共享认证／协议／设置／过滤／页面规格 **74/74**，脚本镜像、语言资源检查及严格编译通过。
+
+119 在实际 iPhone QA 模拟器保留已保存资料，自动选择账号、继续密码步骤并同步当前 EBU 课程；界面确认保存状态仍在，无“手动继续”或键盘，独立断开按钮已消失。这次有效官方会话没有再次要求 MFA，因此真实短信／电话方式选择与物理手机仍待用户复核。
+
+### macOS
+
+共享同样的不聚焦填写与只读验证方式识别，移除设置的独立断开按钮，保留用户其它 Apple／本地化修改。最终严格并发／警告编译通过；不能用 iPhone 的现场运行结果代替新的 macOS 真实登录验证。
+
+### Android / HarmonyOS
+
+共用认证脚本同步不聚焦填写和 MFA 只读识别；两端设置同样移除独立断开／退出清会话按钮。底层更换身份、删除资料及清本地数据逻辑保留；Android 仪器规格改为断言该按钮不存在，但本轮未运行 Android 仪器测试或上传新包。
+
+共享设置及静态入口检查通过。额外 Harmony 旧 Node 页面规格仍有 `CourseDTOCacheStore is not defined` 的 fixture 问题和旧断言失配；不把 74 项目标规格写成 Harmony 全量测试通过，也没有扩大本轮修复或上传 AppGallery。
+
+### Windows / Linux（Tauri）
+
+共用 canonical 认证脚本同步上述只读识别与无聚焦填写；设置本来没有该独立断开按钮，不新增其它入口。宿主包仍等待用户通知构建环境恢复，本轮没有触发工作流或更改服务器。
+
+### 分发边界
+
+119 仅更新 iOS／iPadOS 和 macOS TestFlight，不提交正式审核、不改 GitHub Release、0.3.2 预发布草稿或其它平台的安装包。成功回执另记。
+
+日志目录：`release-artifacts/v0.4.0-build119-silent-mfa/`。`ios-unit-tests-final.log` 保存 138 项结果；`ios-webkit-tests.log` 保存单独的真实 WebKit 合成回归；`shared-tests.log` 保存 74 项共享检查；`sim-final-open.log` 为最终普通账号／密码自动同步现场记录。

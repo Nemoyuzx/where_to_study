@@ -665,20 +665,6 @@ export struct SettingsView {
         .id('settings.qmplus.connect')
         .enabled(!this.model.isSampleMode() && this.model.qmplusEnabled)
         .onClick(() => this.qmPlusSession.openLogin())
-      Button(this.model.text('退出并清除 QMplus 会话及已保存登录资料'))
-        .type(ButtonType.Normal)
-        .height(ControlMetrics.height)
-        .width('100%')
-        .borderRadius(6)
-        .backgroundColor(AppTheme.surfaceVariant())
-        .fontColor(AppTheme.danger())
-        .id('settings.qmplus.logout')
-        .enabled(!this.model.isSampleMode())
-        .onClick(() => {
-          this.session.qmPlusAccountDraft = '';
-          this.session.qmPlusPasswordDraft = '';
-          void this.qmPlusSession.disconnectAndDeleteSavedLogin();
-        })
       }
     }
     .padding(16)

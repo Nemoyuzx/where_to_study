@@ -346,8 +346,6 @@ class SettingsPage internal constructor(
         val stateText = TextView(activity).apply { textSize = 13f; setThemeTextColor { Palette.muted } }
         val connect = settingsActionButton(activity.getString(R.string.qmplus_connect), false) { activity.connectQmplus() }
             .apply { id = R.id.settings_qmplus_connect }
-        val disconnect = settingsActionButton(activity.getString(R.string.qmplus_disconnect), false) { activity.disconnectQmplus() }
-            .apply { id = R.id.settings_qmplus_disconnect }
         val savedLogin = settingsActionButton(activity.getString(R.string.qmplus_saved_login_title), false) {
             QmplusSavedLoginDialog.show(activity, this)
         }.apply { id = R.id.settings_qmplus_saved_login }
@@ -355,7 +353,6 @@ class SettingsPage internal constructor(
         val details = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             addView(notice); addView(stateText); addView(spacer(activity, 8)); addView(connect)
-            addView(spacer(activity, 8)); addView(disconnect)
             addView(spacer(activity, 8)); addView(savedLoginStatus); addView(savedLogin)
         }
         val detailViewport = NaturalDisclosureViewport(activity).apply {
@@ -396,7 +393,6 @@ class SettingsPage internal constructor(
             })
             connect.isEnabled = repository.isFeatureEnabled && !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession && repository.connection == null
             connect.text = if (repository.manualContinuationRequired) activity.uiText("手动继续") else activity.getString(R.string.qmplus_connect)
-            disconnect.isEnabled = !repository.isClearingSession
             savedLogin.isEnabled = !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession && repository.connection == null
             savedLoginStatus.text = activity.uiText(if (repository.savedLoginStatus.enabled)
                 "已在本机安全保存 QMplus 登录资料。" else "尚未保存 QMplus 登录资料。")

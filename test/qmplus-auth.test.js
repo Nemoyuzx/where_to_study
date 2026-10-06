@@ -517,7 +517,7 @@ test('desktop challenge polling stays read-only and can observe the next ordinar
   assert.doesNotMatch(JSON.stringify(bridge.reports),/student@|synthetic-password|SAMLRequest/)
 })
 
-test('only the observed official sibling placeholder may be focused before strict hit revalidation',()=>{
+test('only the observed official sibling placeholder permits quiet filling without focus',()=>{
   const f=fixture()
   const container=new FakeElement()
   container.classList={contains:name=>name==='placeholderContainer'};container.parentElement=f.form
@@ -530,13 +530,14 @@ test('only the observed official sibling placeholder may be focused before stric
   // Submit and input occupy different hit points; only the input has a hint.
   const hit=f.document.elementFromPoint.bind(f.document)
   f.document.elementFromPoint=(x,y)=>y>=160?f.submit:hit(x,y)
-  f.user.onFocus=()=>{f.state.occluder=null}
   assert.equal(inspect(f).stage,'username')
-  assert.equal(f.user.focused,1)
+  assert.equal(f.user.focused??0,0)
   assert.equal(f.user.value,'')
   assert.equal(f.submit.clicked,0)
   assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'USERNAME_SUBMITTED')
-  // Microsoft may keep a hint visible even after focus until text changes.
+  assert.equal(f.user.focused??0,0)
+  assert.deepEqual(f.user.events,['input','change'])
+  // Microsoft may keep its hint visible until its input binding updates.
   const persistent=fixture()
   const pContainer=new FakeElement();pContainer.classList={contains:n=>n==='placeholderContainer'};pContainer.parentElement=persistent.form
   persistent.user.parentElement=pContainer
@@ -548,16 +549,19 @@ test('only the observed official sibling placeholder may be focused before stric
   assert.equal(inspect(persistent).stage,'username')
   assert.equal(persistent.auth.fillAndSubmit({document:nonce,stage:'username',account}),'USERNAME_SUBMITTED')
   assert.equal(persistent.submit.clicked,1)
+  assert.equal(persistent.user.focused??0,0)
   const bad=fixture()
   bad.state.occluder=new FakeElement()
   const original=bad.document.elementFromPoint.bind(bad.document)
   bad.document.elementFromPoint=(x,y)=>y>=160?bad.submit:original(x,y)
   assert.equal(inspect(bad).stage,'manual')
+  assert.equal(bad.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED')
   assert.equal(bad.user.focused,undefined)
   assert.equal(bad.user.value,'')
+  assert.equal(bad.submit.clicked,0)
 })
 
-test('focusing an owned hint cannot authorize a field that becomes uneditable, invisible or changes form action',()=>{
+test('quiet filling through an owned hint revalidates editability, visibility and form action before submit',()=>{
   for(const change of ['disabled','readOnly','invisible','action']){
     const f=fixture()
     const container=new FakeElement();container.classList={contains:n=>n==='placeholderContainer'};container.parentElement=f.form
@@ -566,16 +570,35 @@ test('focusing an owned hint cannot authorize a field that becomes uneditable, i
     const hint=new FakeElement();hint.classList={contains:n=>n==='placeholder'};hint.attrs['aria-hidden']='true';hint.parentElement=parent
     const hit=f.document.elementFromPoint.bind(f.document)
     f.state.occluder=hint;f.document.elementFromPoint=(x,y)=>y>=160?f.submit:hit(x,y)
-    f.user.onFocus=()=>{
+    f.user.dispatchEvent=event=>{
+      f.user.events.push(event.type)
       if(change==='invisible')f.user.style.opacity='0'
       else if(change==='action')f.form.action='https://evil.test/login'
       else f.user[change]=true
     }
-    assert.equal(inspect(f).stage,'manual',change)
+    assert.equal(inspect(f).stage,'username',change)
     assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED',change)
-    assert.equal(f.user.value,'',change)
+    assert.equal(f.user.focused??0,0,change)
     assert.equal(f.submit.clicked,0,change)
   }
+})
+
+test('an owned password placeholder permits native setter events and submission without focus',()=>{
+  const f=fixture()
+  assert.equal(inspect(f).stage,'username')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'USERNAME_SUBMITTED')
+  const container=new FakeElement({classes:['placeholderContainer']});container.parentElement=f.form
+  f.pass.parentElement=container
+  const parent=new FakeElement({classes:['placeholderInnerContainer']});parent.parentElement=container
+  const hint=new FakeElement({classes:['placeholder']});hint.attrs['aria-hidden']='true';hint.parentElement=parent
+  const hit=f.document.elementFromPoint.bind(f.document)
+  f.document.elementFromPoint=(x,y)=>y>=100&&y<136?hint:hit(x,y)
+  assert.equal(inspect(f).stage,'password')
+  assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'PASSWORD_SUBMITTED')
+  assert.deepEqual(f.pass.events,['input','change'])
+  assert.equal(f.pass.value,secret)
+  assert.equal(f.submit.clicked,2)
+  assert.equal(f.user.focused??0,0);assert.equal(f.pass.focused??0,0)
 })
 
 test('confirmed username then matching password may submit once per stage without exporting secrets',()=>{
@@ -589,6 +612,7 @@ test('confirmed username then matching password may submit once per stage withou
   assertFixed(second);assert.equal(second.stage,'password');assert.equal(second.accountMatch,true)
   assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'PASSWORD_SUBMITTED')
   assert.equal(f.pass.value,secret);assert.equal(f.submit.clicked,2)
+  assert.equal(f.user.focused??0,0);assert.equal(f.pass.focused??0,0)
   assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'MANUAL_REQUIRED')
   assert.equal(f.submit.clicked,2)
 })
@@ -846,21 +870,53 @@ test('the confirmed MFA method-selection heading requests user interaction witho
   assert.equal(inspect(unknown).stage,'manual')
 })
 
-test('the official MSAL MFA title ID is read-only evidence when it is unique, visible and has the exact confirmed title',()=>{
-  for(const title of ['Verify your identity','验证您的身份','驗證您的身分']){
+// Primary evidence: https://github.com/AzureAD/microsoft-authentication-library-common-for-android/blob/f0aa6a9c55575e26380d526ab97126b2cb2e5e01/uiautomationutilities/src/main/java/com/microsoft/identity/client/ui/automation/interaction/microsoftsts/AadLoginComponentHandler.java#L319
+// handleVerifyYourIdentity identifies the method picker by idDiv_SAOTCS_Title.
+test('the official MSAL MFA title ID recognizes bounded localized and nested text without touching phone methods',()=>{
+  for(const title of ['Verify your identity','验证您的身份','Vérifiez votre identité','任意语言标题']){
     const f=fixture({readyState:'loading'})
     const marker=new FakeElement({id:'idDiv_SAOTCS_Title',textContent:title,rect:{left:500,top:100,width:280,height:32}})
     marker.parentElement=f.form;f.state.extra.push(marker)
+    marker.appendChild(new FakeElement({textContent:' — synthetic nested description'}))
+    const phone=new FakeInput({type:'tel',name:'syntheticPhone'})
+    const sms=new FakeElement({tagName:'BUTTON',textContent:'Synthetic SMS'})
+    const call=new FakeElement({tagName:'BUTTON',textContent:'Synthetic Call'})
+    for(const node of [phone,sms,call]){node.parentElement=f.form;f.state.extra.push(node)}
     assert.equal(marker.tagName,'DIV');assert.equal(marker.getAttribute('role'),null)
     const state=inspect(f);assertFixed(state)
     assert.equal(state.stage,'challenge');assert.equal(state.reason,'MFA_REQUIRED')
-    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'MANUAL_REQUIRED')
+    for(const stage of ['account','username','password','continue']){
+      const options={document:nonce,stage,account,...(stage==='password'?{password:secret}:{} )}
+      assert.equal(f.auth.fillAndSubmit(options),'MANUAL_REQUIRED')
+    }
     assert.equal(marker.clicked,0);assert.equal(f.user.value,'');assert.equal(f.submit.clicked,0)
+    assert.equal(f.pass.value,'');assert.equal(phone.value,'');assert.equal(phone.clicked,0)
+    assert.equal(sms.clicked,0);assert.equal(call.clicked,0)
+    assert.doesNotMatch(JSON.stringify(state),/student@|synthetic-password|syntheticPhone/)
     marker.hidden=true;assert.equal(inspect(f).stage,'loading')
-    marker.hidden=false;marker.textContent='Accept additional permissions'
+    marker.hidden=false;marker.textContent=' '
     assert.equal(inspect(f).stage,'loading')
     marker.textContent=title;f.state.extra.push(marker)
     assert.equal(inspect(f).stage,'loading','A duplicated nonsemantic marker is not sufficient challenge evidence')
+  }
+})
+
+test('MSAL method-title recognition rejects duplicate, hidden, invisible, unbounded, editable and untrusted markers',()=>{
+  for(const variant of ['duplicate','hidden','invisible','empty','long','input','textarea','editable','foreign','frame']){
+    const f=fixture({readyState:'loading'})
+    const marker=variant==='input'?new FakeInput({id:'idDiv_SAOTCS_Title',type:'text',textContent:'Synthetic title'}):
+      new FakeElement({id:'idDiv_SAOTCS_Title',tagName:variant==='textarea'?'TEXTAREA':'DIV',textContent:'Synthetic title'})
+    marker.parentElement=f.form;f.state.extra.push(marker)
+    if(variant==='duplicate')f.state.extra.push(marker)
+    if(variant==='hidden')marker.hidden=true
+    if(variant==='invisible')marker.style.opacity='0'
+    if(variant==='empty')marker.textContent=' '
+    if(variant==='long')marker.textContent='x'.repeat(129)
+    if(variant==='editable')marker.isContentEditable=true
+    if(variant==='foreign')f.setURL('https://evil.invalid/login')
+    if(variant==='frame')f.window.top={}
+    assert.notEqual(inspect(f).stage,'challenge',variant)
+    assert.equal(marker.clicked,0);assert.equal(f.user.value,'');assert.equal(f.pass.value,'');assert.equal(f.submit.clicked,0)
   }
 })
 
