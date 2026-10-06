@@ -491,3 +491,7 @@ Apple 117 仅 TestFlight 测试上传，成功回执另记；不提交正式审�
 118 仅上传 iOS／iPadOS 和 macOS TestFlight，实际成功回执完成后另记。不重复上传 117，不提交正式审核，不更改 GitHub Release 或 0.3.2 预发布草稿。
 
 日志目录：`release-artifacts/v0.4.0-build118-account-choice/`；`sim-final-first.log`、`sim-final-restart.log` 保存最终启动与重开流程，`ios-unit-tests-final.log` 保存 136 项规格结果，`macos-build-final.log` 保存严格编译结果。
+
+包源码 `54f5ef70` 已推送 `codex/v040-localization`。macOS **0.4.0（118）** 于 **2026-10-06 10:56:32 +0800**、iOS／iPadOS **0.4.0（118）** 于 **10:58:50 +0800** 分别取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`，上传进程正常退出。两端归档主程序与 Widget 均为 118，包内认证脚本与提交源码一致。
+
+沿用原有 `scripts/native-apple-app-store.sh upload <平台>` 路径：macOS Manual 主程序／Widget 与现有 Installer 身份，iOS Automatic 和 Apple Distribution 导出验证；签名标识仅从本机已安装证书派生，没有提交签名资料。实际回执为本轮目录内 `macos-upload.log`、`ios-upload.log`。完成相关测试后仅关闭本轮 QA 模拟器，未关闭用户其它模拟器。上传成功后停止，没有检查后续 App Store Connect 处理状态或提交正式审核。
