@@ -407,8 +407,8 @@ test(
     assert.doesNotMatch(fetchAndVerify, /releases\/download\/continuous/);
 
     const expectedPins = {
-      x86_64: ["538914683", "0441769ab38009504d2678c38cd7e526955388dd30a215b4a20afaa5471652f2"],
-      aarch64: ["538914264", "ce574719bcf9cc1fb12728d60b17e48cc87d9b6c40f6f48b04cff7d273b5eb24"],
+      x86_64: ["602435573", "49d6a17160675a6bd1781699aae6bdf7692d98552e02a3671d2183d10547842e"],
+      aarch64: ["602435012", "518f4b49a561c157b23fd1ba4e857b8fa2271a038ac711bdedab6f018acbe7e5"],
     };
     const fixture = mkdtempSync(path.join(tmpdir(), "wts-appimage-tool-pin-"));
     const bin = path.join(fixture, "bin");
