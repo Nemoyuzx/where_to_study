@@ -9,7 +9,7 @@ import org.junit.Test
 
 class AppLocaleLogicTest {
     @Test fun knownChromeCatalogUsesDistinctCompiledResourceIDs() {
-        assertEquals(1409, NativeUiTextCatalog.resources.size)
+        assertEquals(1422, NativeUiTextCatalog.resources.size)
         assertEquals(NativeUiTextCatalog.resources.size, NativeUiTextCatalog.resources.values.toSet().size)
         assertTrue(NativeUiTextCatalog.resources.values.all { it != 0 })
         assertTrue("设置" in NativeUiTextCatalog.resources)

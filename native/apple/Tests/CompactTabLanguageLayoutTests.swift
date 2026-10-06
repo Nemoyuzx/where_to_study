@@ -176,6 +176,20 @@ final class CompactTabLanguageLayoutTests: XCTestCase {
         XCTAssertEqual(CompactTabHeightPolicy.preferredBarHeightClass(for: .unspecified), .unspecified)
     }
 
+    func testTabTraitOverrideIsLimitedToHorizontalBottomBar() {
+        let container = CGRect(x: 0, y: 0, width: 800, height: 600)
+        XCTAssertTrue(CompactTabHeightPolicy.isHorizontalBottomBar(
+            frame: CGRect(x: 0, y: 550, width: 800, height: 50), containerBounds: container))
+        for frame in [CGRect(x: 0, y: 0, width: 60, height: 600),
+                      CGRect(x: 0, y: 0, width: 800, height: 50), .zero] {
+            XCTAssertFalse(CompactTabHeightPolicy.isHorizontalBottomBar(frame: frame, containerBounds: container))
+        }
+        for heightClass in [UIUserInterfaceSizeClass.compact, .regular, .unspecified] {
+            XCTAssertEqual(CompactTabHeightPolicy.preferredBarHeightClass(
+                for: heightClass, isHorizontalBottomBar: false), .unspecified)
+        }
+    }
+
     private func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<100 {
             if condition() { return }

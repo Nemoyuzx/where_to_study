@@ -797,6 +797,16 @@ final class ScheduleLogicTests: XCTestCase {
         )
     }
 
+    func testPhoneNavigationRetainsTabsAcrossAvailableWidthsAndSizeClasses() {
+        for width: CGFloat in [320, 699, 700, 760, 1_024] {
+            for horizontalClass in [AdaptiveHorizontalClass.compact, .regular] {
+                XCTAssertEqual(AdaptiveLayoutPolicy.primaryNavigation(
+                    width: width, horizontalClass: horizontalClass, keepsPhoneTabs: true
+                ), .tabs)
+            }
+        }
+    }
+
     func testAdaptiveCalendarAndContentColumnsFollowAvailableDetailWidth() {
         XCTAssertEqual(
             AdaptiveLayoutPolicy.calendarPresentation(width: 900, horizontalClass: .compact),

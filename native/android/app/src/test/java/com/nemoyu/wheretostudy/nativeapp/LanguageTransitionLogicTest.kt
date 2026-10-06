@@ -26,12 +26,13 @@ class LanguageTransitionLogicTest {
         }
     }
 
-    @Test fun revealRequiresTargetLocaleRestoredViewportAndTwoStablePreDrawFrames() {
+    @Test fun revealRequiresTargetLocaleRestoredViewportAndThreeStablePreDrawFrames() {
         val gate = LanguageLayoutReadiness()
         val bounds = listOf(1080, 2400, 1080, 2200)
         assertFalse(gate.observe(false, true, false, false, bounds))
         assertFalse(gate.observe(true, true, true, false, bounds))
         assertFalse(gate.observe(true, true, false, true, bounds))
+        assertFalse(gate.observe(true, true, false, false, bounds))
         assertFalse(gate.observe(true, true, false, false, bounds))
         assertTrue(gate.observe(true, true, false, false, bounds))
         assertFalse(gate.observe(true, true, false, false, listOf(1080, 2200, 1080, 2000)))

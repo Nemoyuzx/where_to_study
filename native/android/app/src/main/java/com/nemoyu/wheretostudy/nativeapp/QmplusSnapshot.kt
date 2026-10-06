@@ -175,14 +175,20 @@ internal object QmplusSnapshotCodec {
     }
     private fun optional(root: JSONObject, key: String, maximum: Int): String? =
         if (root.isNull(key)) null else root.getString(key).also { require(it.length <= maximum && '\u0000' !in it) }
-    private fun date(root: JSONObject, key: String): String? = optional(root, key, 40)?.also { value ->
-        require(Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$").matches(value))
+    fun parseUTCDate(value: String): java.util.Date? {
+        if (!Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$").matches(value)) return null
         val seconds = value.substringBefore('.').removeSuffix("Z") + "Z"
         val position = ParsePosition(0)
-        require(SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+        val date = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
             isLenient = false; timeZone = TimeZone.getTimeZone("UTC")
-        }
-            .parse(seconds, position) != null && position.index == seconds.length)
+        }.parse(seconds, position) ?: return null
+        if (position.index != seconds.length) return null
+        val fraction = value.substringAfter('.', "").removeSuffix("Z")
+        val milliseconds = if (fraction.isEmpty()) 0 else fraction.take(3).padEnd(3, '0').toInt()
+        return java.util.Date(date.time + milliseconds)
+    }
+    private fun date(root: JSONObject, key: String): String? = optional(root, key, 40)?.also { value ->
+        require(parseUTCDate(value) != null)
     }
     private fun validateNesting(text: String) {
         var depth = 0; var quoted = false; var escaped = false

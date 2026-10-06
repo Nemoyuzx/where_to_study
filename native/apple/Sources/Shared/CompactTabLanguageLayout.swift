@@ -20,8 +20,15 @@ enum CompactTabTitlePolicy {
 }
 
 enum CompactTabHeightPolicy {
-    static func preferredBarHeightClass(for heightClass: UIUserInterfaceSizeClass) -> UIUserInterfaceSizeClass {
-        heightClass == .compact ? .regular : heightClass
+    static func isHorizontalBottomBar(frame: CGRect, containerBounds: CGRect) -> Bool {
+        frame.width > frame.height && frame.height > 0 && containerBounds.height > 0
+            && abs(frame.maxY - containerBounds.maxY) <= 1
+    }
+
+    static func preferredBarHeightClass(for heightClass: UIUserInterfaceSizeClass,
+                                       isHorizontalBottomBar: Bool = true) -> UIUserInterfaceSizeClass {
+        guard isHorizontalBottomBar else { return .unspecified }
+        return heightClass == .compact ? .regular : heightClass
     }
 }
 
@@ -61,6 +68,7 @@ final class CompactTabLanguageLayoutView: UIView {
     private var appliedTitles: [String] = []
     private var appliedAccessibilityLabels: [String] = []
     private var appliedViewSize: CGSize?
+    private var appliedHorizontalBottomBar: Bool?
     private weak var appliedController: UITabBarController?
     private var pendingUpdate: DispatchWorkItem?
     private var remainingLookups = 0
@@ -134,8 +142,12 @@ final class CompactTabLanguageLayoutView: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard window != nil, appliedController != nil, !titles.isEmpty,
-              appliedViewSize != bounds.size, pendingUpdate == nil else { return }
+        guard let window, let bar = appliedController?.tabBar, !titles.isEmpty,
+              pendingUpdate == nil else { return }
+        let horizontalBottomBar = CompactTabHeightPolicy.isHorizontalBottomBar(
+            frame: bar.convert(bar.bounds, to: window), containerBounds: window.bounds
+        )
+        guard appliedViewSize != bounds.size || appliedHorizontalBottomBar != horizontalBottomBar else { return }
         // Rotation can rebuild UIKit's inline appearance without changing any
         // labels. Refresh once for the new window geometry, never each frame.
         scheduleUpdate()
@@ -171,14 +183,18 @@ final class CompactTabLanguageLayoutView: UIView {
             }
             return
         }
+        let bar = controller.tabBar
+        let isHorizontalBottomBar = CompactTabHeightPolicy.isHorizontalBottomBar(
+            frame: bar.convert(bar.bounds, to: window), containerBounds: window.bounds
+        )
         guard controller !== appliedController || appliedTitles != titles || appliedAccessibilityLabels != accessibilityLabels
-                || appliedViewSize != bounds.size else { return }
+                || appliedViewSize != bounds.size || appliedHorizontalBottomBar != isHorizontalBottomBar else { return }
         appliedController = controller
         appliedTitles = titles
         appliedAccessibilityLabels = accessibilityLabels
         appliedViewSize = bounds.size
+        appliedHorizontalBottomBar = isHorizontalBottomBar
         refreshCount += 1
-        let bar = controller.tabBar
         let selected = bar.selectedItem
         #if DEBUG
         logPositioning("before", bar: bar)
@@ -188,15 +204,19 @@ final class CompactTabLanguageLayoutView: UIView {
             // Override the bar only: page/controller traits remain adaptive.
             if #available(iOS 17.0, *) {
                 let heightClass = bar.traitCollection.verticalSizeClass
-                let preferred = CompactTabHeightPolicy.preferredBarHeightClass(for: heightClass)
+                let preferred = CompactTabHeightPolicy.preferredBarHeightClass(
+                    for: heightClass, isHorizontalBottomBar: isHorizontalBottomBar
+                )
+                // Clear our old override when the system moves the bar to a
+                // side or another placement; its own traits then apply again.
                 if preferred != heightClass { bar.traitOverrides.verticalSizeClass = preferred }
             }
-            bar.itemPositioning = .fill
+            bar.itemPositioning = isHorizontalBottomBar ? .fill : .automatic
             let appearance = bar.standardAppearance.copy()
-            appearance.stackedItemPositioning = .fill
+            appearance.stackedItemPositioning = isHorizontalBottomBar ? .fill : .automatic
             bar.standardAppearance = appearance
             if let edgeAppearance = bar.scrollEdgeAppearance?.copy() {
-                edgeAppearance.stackedItemPositioning = .fill
+                edgeAppearance.stackedItemPositioning = isHorizontalBottomBar ? .fill : .automatic
                 bar.scrollEdgeAppearance = edgeAppearance
             }
             for (index, item) in items.enumerated() {

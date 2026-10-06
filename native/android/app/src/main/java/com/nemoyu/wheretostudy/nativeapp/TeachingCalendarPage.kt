@@ -4371,12 +4371,12 @@ internal class TeachingCalendarPage(
                 .map { it.id }.toSet()
             snapshot.activities.filter { it.courseID in courseIDs }.forEach { item ->
                 val deadline = if (item.kind == "quiz") item.closesAt else item.dueAt
-                val instant = deadline?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() }
-                if (instant != null && contractDate().format(java.util.Date.from(instant)) == contractDate().format(date.time)) {
+                val dueDate = deadline?.let(QmplusSnapshotCodec::parseUTCDate)
+                if (dueDate != null && contractDate().format(dueDate) == contractDate().format(date.time)) {
                     add(CalendarSupplementaryItem(CalendarSupplementaryKind.ASSIGNMENT,
                         activity.uiText(if (item.kind == "quiz") "测验" else "作业 DDL") + " · " + item.title,
                         java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).apply { timeZone = TimeZone.getTimeZone("Asia/Shanghai") }
-                            .format(java.util.Date.from(instant)), courseDetailKey = "qmplus.course.${item.courseID}"))
+                            .format(dueDate), courseDetailKey = "qmplus.course.${item.courseID}"))
                 }
             }
         }

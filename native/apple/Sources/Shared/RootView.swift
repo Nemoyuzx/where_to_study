@@ -71,9 +71,11 @@ enum AdaptiveLayoutPolicy {
 
     static func primaryNavigation(
         width: CGFloat,
-        horizontalClass: AdaptiveHorizontalClass
+        horizontalClass: AdaptiveHorizontalClass,
+        keepsPhoneTabs: Bool = false
     ) -> PrimaryNavigationLayout {
-        horizontalClass == .regular && width >= minimumSidebarWidth ? .sidebar : .tabs
+        if keepsPhoneTabs { return .tabs }
+        return horizontalClass == .regular && width >= minimumSidebarWidth ? .sidebar : .tabs
     }
 
     static func calendarPresentation(
@@ -185,7 +187,8 @@ struct RootView: View {
                 )
                 switch AdaptiveLayoutPolicy.primaryNavigation(
                     width: proxy.size.width,
-                    horizontalClass: horizontalClass
+                    horizontalClass: horizontalClass,
+                    keepsPhoneTabs: UIDevice.current.userInterfaceIdiom == .phone
                 ) {
                 case .sidebar:
                     regularNavigation
@@ -694,25 +697,18 @@ private struct AdaptiveTeachingCalendarView: View {
 
     @ViewBuilder
     var body: some View {
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            MobileTeachingCalendarView(
-                calendarDeadlines: calendarDeadlines,
-                session: session
-            )
-        } else {
-            GeometryReader { proxy in
-                switch AdaptiveLayoutPolicy.calendarPresentation(
-                    width: proxy.size.width,
-                    horizontalClass: AdaptiveHorizontalClass(horizontalSizeClass: horizontalSizeClass)
-                ) {
-                case .compact:
-                    MobileTeachingCalendarView(
-                        calendarDeadlines: calendarDeadlines,
-                        session: session
-                    )
-                case .expanded:
-                    TeachingCalendarView(session: session)
-                }
+        GeometryReader { proxy in
+            switch AdaptiveLayoutPolicy.calendarPresentation(
+                width: proxy.size.width,
+                horizontalClass: AdaptiveHorizontalClass(horizontalSizeClass: horizontalSizeClass)
+            ) {
+            case .compact:
+                MobileTeachingCalendarView(
+                    calendarDeadlines: calendarDeadlines,
+                    session: session
+                )
+            case .expanded:
+                TeachingCalendarView(session: session)
             }
         }
     }

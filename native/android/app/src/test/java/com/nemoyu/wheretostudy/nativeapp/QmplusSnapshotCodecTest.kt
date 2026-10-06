@@ -7,6 +7,35 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QmplusSnapshotCodecTest {
+    @Test fun api24UTCParserPreservesFractionsAndShanghaiDayBoundary() {
+        val previousZone = TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+            val base = QmplusSnapshotCodec.parseUTCDate("2024-02-29T16:00:00Z")!!
+            assertEquals(100L, QmplusSnapshotCodec.parseUTCDate("2024-02-29T16:00:00.1Z")!!.time - base.time)
+            assertEquals(123L, QmplusSnapshotCodec.parseUTCDate("2024-02-29T16:00:00.123456789Z")!!.time - base.time)
+            val display = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+            }
+            assertEquals("2024-03-01 00:00", display.format(base))
+        } finally { TimeZone.setDefault(previousZone) }
+    }
+
+    @Test fun api24UTCParserRejectsInvalidDatesTimesOffsetsAndTrailingText() {
+        listOf("2023-02-29T12:00:00Z", "2024-02-30T12:00:00Z", "2024-02-29T24:00:00Z",
+            "2024-02-29T12:60:00Z", "2024-02-29T12:00:00+08:00", "2024-02-29T12:00:00",
+            "2024-02-29T12:00:00.1234567890Z", "2024-02-29T12:00:00Z trailing").forEach {
+            assertNull(it, QmplusSnapshotCodec.parseUTCDate(it))
+        }
+    }
+
+    @Test fun api24CacheDateValidationPreservesExistingDeadlineFormsAndRejectsInvalidLeapDays() {
+        listOf("2024-02-29 12:34", "2024-02-29T12:34:56.123Z", "2024-02-29T12:34:56+08:00")
+            .forEach { assertTrue(it, CourseDTOCacheStore.validDeadlineDate(it)) }
+        listOf("2023-02-29 12:34", "2024-02-30 12:34", "2024-02-29 24:00", "2024-02-29 12:34 trailing")
+            .forEach { assertFalse(it, CourseDTOCacheStore.validDeadlineDate(it)) }
+    }
+
     @Test fun injectionIsLimitedToExactHTTPSBusinessPagesAndSnapshotLinksCannotCarrySessionFields() {
         assertTrue(QmplusPolicy.isBusinessPage(QmplusPolicy.START_URL))
         assertTrue(QmplusPolicy.isBusinessPage("https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=7"))

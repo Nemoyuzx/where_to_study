@@ -56,8 +56,9 @@ class TeachingCloudCourseReuseTest {
 
     @Test fun currentCoursesComeFromTheExistingAssignmentFlightWithoutAnotherLoginOrRequest() {
         var auth = 0; var courseRequests = 0; var workRequests = 0
+        var elapsed = 0L
         val credentials = Credentials("synthetic", "synthetic", "synthetic-cloud")
-        val client = UCloudAssignmentClient({ credentials }, elapsedRealtime = { 0 }, sleep = {},
+        val client = UCloudAssignmentClient({ credentials }, elapsedRealtime = { elapsed }, sleep = {},
             authenticateOverride = { auth++; UCloudAssignmentClient.AuthenticatedSession("synthetic", "student", 100_000) },
             apiRequestOverride = { path, _ -> when {
                 path.endsWith("/current") -> { courseRequests++; JSONObject("""{"data":{"records":[{"id":"one","siteName":"设置","teacherName":"Raw teacher"}]}}""") }
@@ -69,6 +70,7 @@ class TeachingCloudCourseReuseTest {
         repeat(5) { assertEquals(TeachingCloudCourse("one", "设置", "Raw teacher"), client.cachedCourses()!!.single()) }
         client.fetchAll()
         assertEquals(1, auth); assertEquals(1, courseRequests); assertEquals(1, workRequests)
+        elapsed++
         client.fetchAll(force = true)
         assertEquals(1, auth); assertEquals(2, courseRequests); assertEquals(2, workRequests)
         client.reset()

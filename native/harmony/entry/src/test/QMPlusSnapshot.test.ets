@@ -89,7 +89,7 @@ export default function qmPlusSnapshotTest() {
 
     it('close_and_logout_generation_reject_late_web_callbacks_without_erasing_last_good_on_error', 0, () => {
       QMPlusSession.resetOwnedWebLoadedForTesting();
-      const session: QMPlusSession = new QMPlusSession();
+      const session: QMPlusSession = new QMPlusSession((): void => {});
       session.openLogin();
       const first: number = session.beginSync();
       session.closeLogin();
@@ -145,12 +145,16 @@ export default function qmPlusSnapshotTest() {
     });
 
     it('web_failures_never_publish_raw_urls_or_session_markers_to_the_ui', 0, () => {
-      const session: QMPlusSession = new QMPlusSession();
+      QMPlusSession.resetOwnedWebLoadedForTesting();
+      const session: QMPlusSession = new QMPlusSession((): void => {});
       session.openLogin();
       const first: number = session.beginSync();
       session.failSync(first, 'https://qmplus.qmul.ac.uk/lib/ajax/service.php?sesskey=synthetic-secret');
       expect(session.error).assertEqual('QMplus 同步失败。');
-      expect(session.errorCode).assertEqual('');
+      // Pausing now emits this fixed local continuation reason, never the upstream URL.
+      expect(session.errorCode).assertEqual('QM_LOGIN_REQUIRED');
+      expect((session.error + session.errorCode).includes('sesskey')).assertFalse();
+      expect((session.error + session.errorCode).includes('synthetic-secret')).assertFalse();
       const second: number = session.beginSync();
       session.failSync(second, 'QMplus 同步已超时，请稍后重试。');
       expect(session.error).assertEqual('QMplus 同步已超时，请稍后重试。');
@@ -163,7 +167,8 @@ export default function qmPlusSnapshotTest() {
     });
 
     it('partial_sync_preserves_prior_complete_snapshot_and_its_timestamp', 0, () => {
-      const session: QMPlusSession = new QMPlusSession();
+      QMPlusSession.resetOwnedWebLoadedForTesting();
+      const session: QMPlusSession = new QMPlusSession((): void => {});
       session.openLogin();
       const first: number = session.beginSync();
       session.completeSync(first, syntheticSnapshot());
@@ -183,7 +188,7 @@ export default function qmPlusSnapshotTest() {
       expect(session.showingStalePartial).assertTrue();
       session.logout();
       expect(session.showingStalePartial).assertFalse();
-      const firstConnect: QMPlusSession = new QMPlusSession();
+      const firstConnect: QMPlusSession = new QMPlusSession((): void => {});
       firstConnect.openLogin();
       firstConnect.completeSync(firstConnect.beginSync(), JSON.stringify(partial));
       expect(firstConnect.snapshot?.partial).assertTrue();

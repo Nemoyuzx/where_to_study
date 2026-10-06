@@ -13,6 +13,7 @@ import { ScheduleStoring } from '../main/ets/store/ScheduleStore';
 import { ClassroomStoring } from '../main/ets/store/ClassroomStore';
 import { HolidayStoring } from '../main/ets/store/HolidayStore';
 import { CourseRemovalStoring } from '../main/ets/store/CourseRemovalStore';
+import { CourseDTOCache, CourseDTOCacheStore } from '../main/ets/store/CourseDTOCacheStore';
 import { ScheduleFetching } from '../main/ets/net/SjdScheduleClient';
 import { HolidayFetching } from '../main/ets/net/HolidayClient';
 import { HarmonyReminderSchedulerRequest } from '../main/ets/notify/DailyCourseNotifications';
@@ -161,12 +162,18 @@ function upcomingSchedule(): ScheduleSnapshot {
   return new ScheduleSnapshot('2026-2027-1', StrictDates.formatDateParts(StrictDates.addDays(tomorrow, 1 - weekday)),
     'synthetic', [oneCourse('upcoming', weekday)]);
 }
+class ReminderCourseDTOStore extends CourseDTOCacheStore {
+  async load(scope: string): Promise<CourseDTOCache | null> { return null; }
+  async save(cache: CourseDTOCache, current: () => boolean): Promise<boolean> { return current(); }
+  async clear(): Promise<void> {}
+}
 function reminderModel(scheduler: ReminderScheduler, preferences: ReminderPreferences = new ReminderPreferences(),
   client: ReminderScheduleClient = new ReminderScheduleClient(),
   credentials: ReminderCredentials = new ReminderCredentials()): AppModel {
   const model = new AppModel(AppRuntimeMode.live(), credentials, new ReminderScheduleStore(), client,
     new ReminderClassroomStore(), undefined, new ReminderHolidayStore(), new ReminderHolidayClient(), undefined, scheduler,
-    'pre-class-unit-tests', undefined, undefined, preferences, new ReminderRemovalStore());
+    'pre-class-unit-tests', undefined, undefined, preferences, new ReminderRemovalStore(), undefined, undefined,
+    new ReminderCourseDTOStore());
   model.account = 'synthetic-account';
   model.hasSavedPassword = true;
   model.automaticTermDetection = false;

@@ -96,7 +96,7 @@ internal class CourseDTOCacheStore(context: Context) {
                 val row = rows.getJSONObject(index); keys(row, setOf("id", "title", "course_name", "course_id", "deadline", "status"))
                 val id = text(row, "id", 256)!!; require(id.isNotEmpty() && ids.add(id))
                 val deadline = text(row, "deadline", 64)!!
-                require(deadlinePattern.matches(deadline)); java.time.LocalDate.parse(deadline.take(10))
+                require(validDeadlineDate(deadline))
                 AssignmentDeadlineItem(id, text(row, "title")!!, text(row, "course_name", nullable = true), deadline,
                     text(row, "status", nullable = true), text(row, "course_id", 128, true))
             }
@@ -118,6 +118,14 @@ internal class CourseDTOCacheStore(context: Context) {
         require(row.keys().asSequence().toSet() == allowed)
     }
     companion object {
+        fun validDeadlineDate(deadline: String): Boolean {
+            if (!deadlinePattern.matches(deadline)) return false
+            val day = deadline.take(10)
+            val position = java.text.ParsePosition(0)
+            return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).apply {
+                isLenient = false; timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.parse(day, position) != null && position.index == day.length
+        }
         private const val MAXIMUM_BYTES = 2 * 1024 * 1024
         private val locks = ConcurrentHashMap<String, Any>()
         private val scopePattern = Regex("^[0-9a-f]{32}$")

@@ -305,7 +305,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private readonly weatherClient: WeatherFetching;
   private readonly calendarDailyInfoClient: CalendarDailyInfoFetching = new CalendarDailyInfoClient();
   private readonly assignmentClient: AssignmentDeadlineFetching;
-  private readonly courseDTOStore: CourseDTOCacheStore = new CourseDTOCacheStore();
+  private readonly courseDTOStore: CourseDTOCacheStore;
   private courseDTOHydration: Promise<void> | null = null;
   private courseDTOScope: string = '';
   private courseDTOGeneration: number = 0;
@@ -385,7 +385,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     preferencesStore: PreferencesStore | null = null,
     courseRemovalStore: CourseRemovalStoring = new FileCourseRemovalStore(),
     gradeClient: GradeFetching = new SJDGradeClient(),
-    examClient: ExamFetching = new SJDExamClient()
+    examClient: ExamFetching = new SJDExamClient(),
+    courseDTOStore: CourseDTOCacheStore = new CourseDTOCacheStore()
   ) {
     this.runtimeMode = runtimeMode;
     this.supportsRuntimeModeSwitching = !runtimeMode.isSample;
@@ -396,6 +397,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.scheduleClient = scheduleClient;
     this.gradeClient = gradeClient;
     this.examClient = examClient;
+    this.courseDTOStore = courseDTOStore;
     this.classroomStore = classroomStore;
     this.classroomClient = classroomClient;
     this.holidayStore = holidayStore;
