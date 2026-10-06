@@ -115,7 +115,7 @@ fn new_profile(backend: Backend) -> Result<Profile, String> {
 fn backend() -> Backend {
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     {
-        return Backend::Directory;
+        Backend::Directory
     }
     #[cfg(target_os = "macos")]
     {
@@ -124,10 +124,15 @@ fn backend() -> Backend {
             .majorVersion
             >= 14
         {
-            return Backend::Webkit;
+            Backend::Webkit
+        } else {
+            Backend::Ephemeral
         }
     }
-    Backend::Ephemeral
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    {
+        Backend::Ephemeral
+    }
 }
 fn private_directory(path: &Path) -> Result<(), String> {
     std::fs::create_dir_all(path).map_err(|_| ERROR)?;
@@ -409,6 +414,11 @@ pub async fn recover_pending(app: &tauri::AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[test]
+    fn desktop_backend_uses_owned_directory() {
+        assert!(backend() == Backend::Directory);
+    }
     #[test]
     fn pending_profiles_are_never_active_and_private_metadata_has_no_session_values() {
         let directory = tempfile::tempdir().unwrap();

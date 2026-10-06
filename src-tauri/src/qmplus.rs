@@ -1444,7 +1444,7 @@ pub fn accept_qmplus_auth(
       const code=WTSQmAuth.fillAndSubmit({});window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'submitted',document:{},accountMatch:false,reason:code}}}}).catch(()=>{{}});}})()"#,
         serde_json::to_string(url.as_str()).map_err(|_| "QMplus 页面不可用。")?,
         serde_json::to_string(&nonce).map_err(|_| "QMplus 页面不可用。")?,
-        &*encoded,
+        encoded.as_str(),
         serde_json::to_string(&nonce).map_err(|_| "QMplus 页面不可用。")?
     ));
     let result = window.eval(&*script);

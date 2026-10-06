@@ -25,18 +25,28 @@ impl SessionPreference {
         self.state.load(Ordering::SeqCst) & 1 != 0
     }
     fn begin(&self, enabled: bool) -> u64 {
-        let previous = self
-            .state
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |value| {
-                Some(value.wrapping_add(2) | if enabled { value & 1 } else { 1 })
-            })
-            .expect("feature state update always produces a value");
-        previous.wrapping_add(2) | if enabled { previous & 1 } else { 1 }
+        let mut previous = self.state.load(Ordering::SeqCst);
+        loop {
+            // Exhaustion freezes Off instead of reusing an older generation.
+            let next = previous.checked_add(2).map_or(u64::MAX, |value| {
+                value | if enabled { previous & 1 } else { 1 }
+            });
+            match self
+                .state
+                .compare_exchange(previous, next, Ordering::SeqCst, Ordering::SeqCst)
+            {
+                Ok(_) => return next,
+                Err(current) => previous = current,
+            }
+        }
     }
     fn current(&self, request: u64) -> bool {
-        self.state.load(Ordering::SeqCst) == request
+        request != u64::MAX && self.state.load(Ordering::SeqCst) == request
     }
     fn complete_enable(&self, request: u64) -> Result<(), String> {
+        if request == u64::MAX {
+            return Err("无法保存本地偏好。".into());
+        }
         self.state
             .compare_exchange(request, request & !1, Ordering::SeqCst, Ordering::SeqCst)
             .map(|_| ())
@@ -134,6 +144,23 @@ fn set_at(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exhausted_generation_freezes_off_without_reusing_requests_or_enabling() {
+        for initial in [u64::MAX - 2, u64::MAX - 1, u64::MAX] {
+            let session = SessionPreference {
+                state: AtomicU64::new(initial),
+            };
+            let expired = session.begin(true);
+            assert_eq!(expired, u64::MAX);
+            assert!(session.disabled());
+            assert!(!session.current(expired));
+            assert!(session.complete_enable(expired).is_err());
+            assert_eq!(session.begin(false), u64::MAX);
+            assert_eq!(session.begin(true), u64::MAX);
+            assert!(session.disabled());
+        }
+    }
 
     #[test]
     fn old_enable_completion_cannot_clear_a_newer_immediate_off_fence() {
