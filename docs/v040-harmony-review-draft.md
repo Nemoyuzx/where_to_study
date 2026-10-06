@@ -1,28 +1,30 @@
 # 鸿蒙 0.4.0 审核资料草稿（未在线保存、未提交）
 
-本文是待填写的本地审核资料。平台限制已经核验；准备本文时未再次操作后台或 DevEco Studio。
+本文区分本地文稿、DevEco测试上传和商店审核。2026-10-07，DevEco仅测试上传已完成、云测试通过；AGC网页会话需重新登录，公共测试备注尚未在线保存，未提交正式审核。
 
 ## 当前平台状态
 
 - 应用：Where To Study；AppGallery Connect 应用编号 `6917614417184645579`。
 - 当前 `0.3.2`、版本号 `1002042` 正在审核。
 - “正式版本／升级”入口处于 `is-disabled` 状态。本稿不把本地资料准备完成记为在线草稿保存成功。
-- 本地 `0.4.0`、版本号 `1002044` 的最终签名包已经核验，尚未通过本任务上传或提交到商店。
-- DevEco 的测试发布确认仍待用户点击。测试发布与商店草稿、审核提交是不同流程，不能互相替代；本轮不操作该确认窗口。
+- `0.4.0 / 1002044 / build1`已通过DevEco仅测试上传，并返回“云测试结果：通过”。原签名、注册包名和Release配置保持；不提交正式审核，符号表未上传。
+- 上一次曾返回网络上传失败，且第一项“测试和发布”仍被选中。之后明确改选第二项仅测试并重试，保留失败与成功的不同记录，不把早先点击确认当成功。范围证据 `proof/deveco-v040-test-only-retry.jpg`，最终回执 `proof/deveco-v040-test-only-cloud-passed.jpg`。
+- 同日刷新 Edge 浏览器清单，未发现可复用的鸿蒙应用标签页；新建独立只读页面访问此前已观察的 AGC 应用版本 URL 后，被重定向到华为登录页。未输入账号、密码或短信验证码。当前无法读取测试版本列表，不能判断 `1002044` 已存在或不存在，也不能保存在线测试说明。
+  - 非敏感阻碍截图仅截登录标题：`release-artifacts/store-sync-2026-10-06/v0.4.0-build121/review-draft-proofs/harmony-agc-login-required-2026-10-07.jpg`。
 - 未撤回或覆盖当前审核版本，没有更改主体、资质、ICP备案或联系人资料，也没有填写私人登录账号或密码。
 
-## 待上传版本资料
+## 已上传测试版本资料
 
 - 版本名称：`0.4.0`；版本号：`1002044`。
 - Bundle Name：`com.nemoyu.wheretostudy`。
 - 模块声明设备类型：手机、平板、二合一；入口支持全屏、分屏和浮动窗口。
-- 商店分发 APP：`release-artifacts/store-sync-2026-10-06/v0.4.0-build121/harmony-final-theme/harmony-default-signed.app`。
-  - 大小：`1,743,711 bytes`。
-  - SHA-256：`1c5799de562ce317455804580218b73834b1adc9f88f26b4e440ed6c008b000b`。
-- 本地安装测试 HAP：`release-artifacts/store-sync-2026-10-06/v0.4.0-build121/harmony-final-theme/entry-default-signed.hap`。
-  - 大小：`3,042,649 bytes`。
-  - SHA-256：`4ee7ae3270fe9457bb30202ec41d88efd12b38408fb5ddd7b30a00671fa83c56`。
-- 两个文件的身份与哈希已对照本地最终构建清单。此处只记录产物，不表示已安装、已发布测试版本或已提交商店审核。
+- 实际DevEco APP：`release-artifacts/store-sync-2026-10-06/v0.4.0-build121/harmony-deveco-final/harmony-default-signed.app`。
+  - 大小：`1,743,871 bytes`。
+  - SHA-256：`d11a8da95dc9a6fc0a318fde90a70e99253e02462cd276d37b9d7c3b936fd5f5`。
+- 同次HAP：`release-artifacts/store-sync-2026-10-06/v0.4.0-build121/harmony-deveco-final/entry-default-signed.hap`。
+  - 大小：`3,042,594 bytes`。
+  - SHA-256：`0092f4efd10d254ffb08686e9b3e28b178cde1e3ad86a3e9cc55cd238afbc301`。
+- 封存实际post-DevEco字节，APP的`pack.info`确认0.4.0/1002044/build1，两文件Release包门禁通过。早期CLI副本留作追溯，不能混称为实际上传字节；鸿蒙包不上传GitHub。
 
 ## 更新说明（可粘贴）
 
@@ -39,6 +41,12 @@ Where To Study 是免费、开源、非盈利的学习与日程工具，由项�
 在设置页点击“浏览内置示例数据”，可以体验虚构课表、空教室和教学日历，再查看语言、主题及手机／展开布局。示例模式不连接真实教务服务，不展示或连接真实 QMplus 数据；它不能用来证明官方账户已经登录，也不能代替真实账户权限。本次不提供私人账号或密码。
 
 需要查看本人真实课表、成绩、考试或教学云作业时，由用户保存自己的有效机构账户；QMplus 使用独立的官方账户。课程删除只影响本机展示，可恢复，不修改机构数据、作业截止时间或已经导出的系统日历事件。
+
+## 独立测试版本备注（待 AGC 登录恢复、确认 1002044 独立测试记录后保存）
+
+0.4.0／1002044 仅测试资料，未提交商店审核。新增鼠尾草、陶土、梅子、石墨、夜蓝五款主题，预设共十款；支持十三种语言和自定义配色。教学云与 QMplus 共用缓存课程展示。QMplus 可选安全自动填写，仅用户主动保存并授权后启用，验证码及 MFA 人工完成；网页会话按官方策略跨重启保留。成功刷新发现新作业时应用内提醒，首次完整快照静默建立基线。日／周格增加主题色北京时间截止时刻细条，仅明确未交作业显示红点，保留原全天展示。开源、非盈利，无广告或付费功能；可用内置示例数据免登录体验，不提供私人审核账号。
+
+保存前确认页面实际是独立 `0.4.0 / 1002044` 测试记录。若只出现正式 `0.3.2 / 1002042` 审核中记录，或上传／保存可能修改该记录，保持只读。测试备注、测试发布、商店草稿及商店送审是不同状态，分别按实际回执记录。
 
 ## 登录、隐私与缓存说明（可粘贴）
 
@@ -73,6 +81,6 @@ QMplus 仅只读获取用户已获授权的 EBU 课程和已发布 Assignment／
 
 ## 资料来源与后续边界
 
-功能与存储说明已对照 `AppScope/app.json5`、`entry/src/main/module.json5`、`CredentialStore.ets`、`QMPlusSavedLoginStore.ets`、`QMPlusSession.ets`、`SettingsSession.ets`、`SettingsView.ets`、`PrivacyPolicyView.ets` 及最终构建清单。平台锁定状态已经核验，准备本文时没有再次操作网页。
+功能与存储说明已对照 `AppScope/app.json5`、`entry/src/main/module.json5`、`CredentialStore.ets`、`QMPlusSavedLoginStore.ets`、`QMPlusSession.ets`、`SettingsSession.ets`、`SettingsView.ets`、`PrivacyPolicyView.ets` 及最终构建清单。正式升级锁定状态来自此前已核验页面，本次没有重新探索锁定入口。2026-10-07 的只读网页核查止于登录失效；`1002044` 测试记录及其状态／备注尚未得到在线验证。
 
 等当前审核结束，或平台明确开放独立版本草稿入口后，才能把上述资料用于 `0.4.0 / 1002044` 的独立草稿。保存后需读取实际版本号及保存结果，再留存证明；在此之前，状态保持“本地资料已准备，在线未保存、未提交”。不覆盖正在审核的 `0.3.2 / 1002042`，不代用户点击 DevEco 的测试发布确认，也不点击商店提交、立即发布或法律协议。

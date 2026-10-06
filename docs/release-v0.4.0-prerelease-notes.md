@@ -1,6 +1,17 @@
 # Where To Study v0.4.0（预发布）
 
-本页为待发布更新说明。安装包交付状态以[同步记录](store-sync-v032-v040-2026-10-06.md)为准；0.4.0尚未提交商店正式审核，0.3.2仍保持独立的审核与GitHub草稿。
+这是0.4.0预发布测试版，不是正式稳定版。Android67、Apple121、HarmonyOS1002044；0.4.0未提交商店正式审核，0.3.2的审核及GitHub草稿保持独立。
+
+## 下载哪个文件？
+
+- 安卓：选择 `native-android-universal.apk`。
+- Mac：选择 `native-macos-universal.dmg`，适用于Intel和Apple Silicon。Apple测试用户也可使用TestFlight。
+- Windows：选择 `windows-x64-setup.exe`，适用于Intel／AMD64位电脑。
+- Ubuntu／Debian：普通Intel／AMD电脑选 `linux-x86_64.deb`；ARM64设备选 `linux-aarch64.deb`。在下载目录执行 `sudo apt install ./下载的文件名.deb`。
+- 其它Linux：可选择相应架构的AppImage，赋予执行权限后打开。`x86_64`代表Intel／AMD64位，`aarch64`代表ARM64。
+- CLI／TUI压缩包是Linux终端工具，不是图形安装程序；解压后先运行相应程序的 `--help`。`Source code`是源码，也不是安装包。
+
+公开附件共11个，不含Android AAB、鸿蒙APP/HAP或iOS IPA。Windows目前没有平台信任的Authenticode签名，公共macOS DMG为ad-hoc签名且未公证；哈希和CI记录不能替代平台签名。遇到系统安全提示请核对来源，不建议关闭系统保护。
 
 ## iOS / iPadOS
 
@@ -37,7 +48,7 @@
 - 在原全天和课程布局之外增加主题色截止细条及明确未交红点，修复带小数秒的官方截止时间遗漏。
 - 同步十三种语言、十款主题、按时段／方向折叠的完整班车时刻表及可选只读移动网络备用。
 
-签名测试包为0.4.0（1002044），通过DevEco仅测试渠道上传；实际上传回执仍待确认。鸿蒙安装包不放GitHub，未提交正式审核。
+签名测试包0.4.0（1002044，build1）已通过DevEco仅测试渠道上传，云测试通过。鸿蒙安装包不放GitHub，未提交正式审核。
 
 ## Windows
 
@@ -46,14 +57,14 @@
 - 十款主题及自定义颜色，非默认主题增加柔和渐变背景；十三种语言保留用户校对。
 - 修复跨平台CRLF测试及较新Rust编译告警，保留严格质量检查。
 
-独立构建成功；安装包下载与本地完整性校验未完成，当前不能作为已发布文件。
+独立构建及安装包交付校验通过；安装程序版本、GUI子系统、法律文件和SHA-256已核对。
 
 ## Linux / Ubuntu
 
 - 同步桌面课程、QMplus、共享缓存、新作业提示、截止细条、十三种语言及主题。
 - 保留x86_64、aarch64的DEB和AppImage构建及Ubuntu安装门禁。
 
-独立构建成功；安装包下载与本地完整性校验未完成，不使用旧版本包替代。
+独立构建及DEB／AppImage交付校验通过；两种架构、版本、安全路径、法律文件和SHA-256已核对，没有使用旧版本包替代。
 
 ## CLI / TUI 与工程
 
@@ -67,7 +78,7 @@
 - **iOS / iPadOS:** Courses centralizes coursework, grades and exams. Authorized QMplus autofill and persistent sessions retain user-controlled MFA. Shared caches and newly discovered coursework notices avoid duplicate queries and first-sync alerts. Theme-colored deadline strips preserve all-day content and course geometry. Thirteen languages, ten themes and custom colors; iPhone Duo layout continuity. Build121 uploaded for testing only.
 - **macOS:** Courses, official QMplus sessions, shared caches and bounded new-task notices. Fixed headers and course geometry retained. Additional deadline strips, thirteen languages and ten themes. Build121 uploaded for testing only; the public DMG is ad-hoc signed, not Developer ID notarized.
 - **Android:** Courses and expanded tasks, secure optional QMplus autofill, shared data and new-task notices. Additional deadline strips and explicit pending dots preserve course sizes. API24 retained. Thirteen languages, ten themes, timetable disclosures and optional read-only cellular fallback. Signed APK67, no public AAB or replacement of the0.3.2 review.
-- **HarmonyOS:** Equivalent course/task features, official QMplus sessions, shared caches and notices. Theme deadline strips also accept fractional official timestamps. Thirteen languages, ten themes, timetable disclosures and optional read-only cellular fallback. Build1002044 is testing-only; upload confirmation is pending, with no GitHub Harmony package.
-- **Windows:** Shared course queries, official QMplus sessions, persistent caches, notices and Beijing-time deadline strips. Ten themes with ambient gradients and thirteen languages. Build succeeded; local installer delivery verification is pending.
-- **Linux / Ubuntu:** Equivalent desktop features and x86_64/aarch64 DEB/AppImage builds. Build succeeded; local package delivery verification is pending.
+- **HarmonyOS:** Equivalent course/task features, official QMplus sessions, shared caches and notices. Theme deadline strips also accept fractional official timestamps. Thirteen languages, ten themes, timetable disclosures and optional read-only cellular fallback. Build1002044 was uploaded testing-only through DevEco and passed cloud testing; no GitHub Harmony package.
+- **Windows:** Shared course queries, official QMplus sessions, persistent caches, notices and Beijing-time deadline strips. Ten themes with ambient gradients and thirteen languages. Installer delivery verification passed, including version, GUI subsystem, legal files and SHA-256.
+- **Linux / Ubuntu:** Equivalent desktop features and x86_64/aarch64 DEB/AppImage builds. Package delivery verification passed, including architecture, version, safe paths, legal files and SHA-256.
 - **CLI / TUI:** Shared data boundaries and legal files; five new TUI themes, not native calendar UI. Dependency PRs merged and tar packaging repaired. Four Linux terminal archives verified; remote CodeQL closure is not yet confirmed.
