@@ -531,3 +531,9 @@ Apple 117 仅 TestFlight 测试上传，成功回执另记；不提交正式审�
 119 仅更新 iOS／iPadOS 和 macOS TestFlight，不提交正式审核、不改 GitHub Release、0.3.2 预发布草稿或其它平台的安装包。成功回执另记。
 
 日志目录：`release-artifacts/v0.4.0-build119-silent-mfa/`。`ios-unit-tests-final.log` 保存 138 项结果；`ios-webkit-tests.log` 保存单独的真实 WebKit 合成回归；`shared-tests.log` 保存 74 项共享检查；`sim-final-open.log` 为最终普通账号／密码自动同步现场记录。
+
+完整终止应用后重开也记录了自动选择账号、密码步骤和同步完成（`sim-final-restart.log`），没有手动操作官方登录页；现场界面未出现“手动继续”、键盘或诊断码。这并非再次进行真实 MFA，不能据此声称所有物理手机的验证方式弹窗已实测。
+
+包源码 `ffcb088f` 已推送 `codex/v040-localization`。macOS **0.4.0（119）** 于 **2026-10-06 11:34:02 +0800**、iOS／iPadOS **0.4.0（119）** 于 **11:37:28 +0800** 分别取得 `Upload succeeded` 和 `EXPORT SUCCEEDED`，上传进程正常退出。两端本地归档主程序／Widget 均为 119，认证脚本与提交源码逐字节一致。
+
+仍沿用原 `scripts/native-apple-app-store.sh upload <平台>`：macOS Manual 主程序／Widget 与现有 Installer 身份，iOS Automatic 与 Apple Distribution 导出；证书标识仅本机派生，没有提交签名资料。回执为本轮目录的 `macos-upload.log`、`ios-upload.log`。成功后停止，不检查后续 App Store Connect 处理状态、不提交正式审核或重复上传 118。QA 模拟器的本地版本已更新为 119，便于用户继续复核。
