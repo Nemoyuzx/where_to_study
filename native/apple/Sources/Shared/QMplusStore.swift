@@ -37,6 +37,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     private var businessCacheRestoreTask: Task<Void, Never>?
     @Published var isShowingConnection = false
     @Published private(set) var requiresManualContinuation = false
+    @Published private(set) var automaticLoginDiagnostic: String?
     private var manualContinuationRequested = false
     @Published private(set) var snapshot: QMplusSnapshot?
     @Published private(set) var isSyncing = false
@@ -81,6 +82,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     private var authenticationProbeTask: Task<Void, Never>?
     private var quietPreflightTimeoutTask: Task<Void, Never>?
     private var connectionPreparationTask: Task<Void, Never>?
+    private var foregroundReadinessTask: Task<Void, Never>?
     private var urlObservation: NSKeyValueObservation?
     private var loadingObservation: NSKeyValueObservation?
     private var activeNavigation: WKNavigation?
@@ -118,13 +120,13 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             presentation: loginGate.presentation, credentialRevision: credentialAuthorization.credentialRevision)
     }
     private var isQuietConnection: Bool { loginGate.ownerKind == .quiet }
-    var quietBrowser: WKWebView? { isQuietConnection ? (popupWebView ?? webView) : nil }
+    var quietBrowser: WKWebView? { isQuietConnection && !requiresManualContinuation ? (popupWebView ?? webView) : nil }
 
     func browserMountLease(for browser: WKWebView, role: QMplusBrowserMountLease.Role) -> QMplusBrowserMountLease? {
         guard hasActiveConnection else { return nil }
         switch role {
         case .quiet:
-            guard isQuietConnection, browser === (popupWebView ?? webView) else { return nil }
+            guard isQuietConnection, !requiresManualContinuation, browser === (popupWebView ?? webView) else { return nil }
         case .visible:
             guard loginGate.isPresented, isShowingConnection, browser === (popupWebView ?? webView) else { return nil }
         }
@@ -344,6 +346,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         if quiet { loginGate.beginQuietConnection() } else { loginGate.beginPresentation() }
         automaticLoginSuspended = false
         authenticationRecognitionSuspended = false
+        automaticLoginDiagnostic = nil
         pausedAutofillDocument = nil
         pausedAutofillNavigation = nil
         autofillCommittedNavigation = nil
@@ -472,6 +475,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     func stopAutomaticLoginForInactiveScene() {
+        foregroundReadinessTask?.cancel(); foregroundReadinessTask = nil
         // Preparation has no login owner yet, but still belongs to this scene.
         // Cancel it even when another window keeps the application active.
         connectionPreparationTask?.cancel(); connectionPreparationTask = nil
@@ -495,13 +499,37 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     // Keep prior stage claims; never reload or resubmit the MFA page.
     func resumeAuthenticationRecognitionForActiveScene() {
         guard hasActiveConnection, authenticationRecognitionSuspended else { return }
+        if let browser = popupWebView ?? webView, isAutofillApplicationInactive(browser) {
+            waitForForegroundReadiness(); return
+        }
+        foregroundReadinessTask?.cancel(); foregroundReadinessTask = nil
         authenticationRecognitionSuspended = false
         automaticLoginSuspended = false
         guard let browser = popupWebView ?? webView else { return }
-        if isAutofillApplicationInactive(browser) { stopAutomaticLoginForInactiveScene(); return }
         if isQuietConnection { scheduleQuietPreflightTimeout() }
         if browser === popupWebView { reviewAuthenticationPopup(browser) }
         else { reviewCurrentDocument(in: browser) }
+    }
+
+    private func waitForForegroundReadiness() {
+        guard foregroundReadinessTask == nil else { return }
+        let presentation = loginGate.presentation
+        foregroundReadinessTask = Task { [weak self] in
+            for _ in 0..<20 {
+                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                guard let self, self.hasActiveConnection, self.loginGate.presentation == presentation,
+                      self.featureEnabled, self.authenticationRecognitionSuspended else { return }
+                guard let browser = self.popupWebView ?? self.webView else { return }
+                if !self.isAutofillApplicationInactive(browser), self.isApplicationReadyForConnection {
+                    self.foregroundReadinessTask = nil
+                    self.resumeAuthenticationRecognitionForActiveScene()
+                    return
+                }
+            }
+            guard let self, !Task.isCancelled, self.loginGate.presentation == presentation else { return }
+            self.foregroundReadinessTask = nil
+            self.automaticLoginDiagnostic = "FOREGROUND_WINDOW_NOT_READY"
+        }
     }
 
     func reloadOfficialPage() {
@@ -700,6 +728,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     func endPresentation() {
+        foregroundReadinessTask?.cancel(); foregroundReadinessTask = nil
+        automaticLoginDiagnostic = nil
         connectionPreparationTask?.cancel(); connectionPreparationTask = nil
         backgroundOnly = false
         requiresManualContinuation = false
@@ -1044,6 +1074,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 guard let self, let browser, self.ownsAutofillDocument(document, browser: browser) else { return }
                 if self.isAutofillApplicationInactive(browser) { self.stopAutomaticLoginForInactiveScene(); return }
                 self.statusKey = "自动登录已暂停，可选择“手动继续”查看官方页面。"
+                self.automaticLoginDiagnostic = "VIEWPORT_WAIT_EXHAUSTED"
                 self.presentExistingConnection()
             }
             return
@@ -1052,6 +1083,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         guard let resource = Bundle.main.url(forResource: "qmplus-auth", withExtension: "js"),
               let source = try? String(contentsOf: resource, encoding: .utf8), source.utf8.count <= 65_536 else {
             statusKey = "QMplus 自动填写组件不可用，请手动登录。"
+            automaticLoginDiagnostic = "RESOURCE_UNAVAILABLE"
             presentExistingConnection(); return
         }
         autofillDocument = document
@@ -1086,6 +1118,9 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                 _ = self.invalidateBusinessCacheForIdentityChange()
                 self.autofillLedger.stop()
                 self.pausedAutofillDocument = nil
+            }, onFailure: { [weak self, weak browser] failure in
+                guard let self, let browser, self.ownsAutofillDocument(document, browser: browser) else { return }
+                self.automaticLoginDiagnostic = failure.diagnosticCode
             }, progress: { [weak self, weak browser] state in
                 guard let self, let browser, self.acceptsAutofillDocument(document, browser: browser) else { return }
                 // These are once-only, validated login steps. A slow

@@ -1208,6 +1208,11 @@ private struct QMplusSettingsSurface: View {
                 Text(model.localized("登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。"))
                     .font(.callout).foregroundStyle(theme.secondaryText)
                 Text(model.localized(store.statusKey)).font(.caption).foregroundStyle(theme.secondaryText)
+                if let code = store.automaticLoginDiagnostic {
+                    Text(verbatim: "QMplus · \(code)").font(.caption2.monospaced())
+                        .foregroundStyle(theme.secondaryText).textSelection(.enabled)
+                        .accessibilityIdentifier("settings.qmplus.diagnostic")
+                }
                 ViewThatFits(in: .horizontal) {
                     HStack { connectionActions }.fixedSize(horizontal: true, vertical: false)
                     VStack(alignment: .leading) { connectionActions }

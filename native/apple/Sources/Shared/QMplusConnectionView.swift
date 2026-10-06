@@ -11,7 +11,7 @@ struct QMplusConnectionPresentationHost: View {
             if let browser = store.quietBrowser,
                let lease = store.browserMountLease(for: browser, role: .quiet) {
                 QMplusOfficialWebView(browser: browser, lease: lease, store: store)
-                    .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+                    .allowsHitTesting(false).accessibilityHidden(true)
             }
         }
         .sheet(isPresented: $store.isShowingConnection, onDismiss: store.connectionSheetDidDismiss) {
@@ -139,6 +139,7 @@ struct QMplusToolbarUITestFixture: View {
 
 #if os(iOS)
 private struct QMplusOfficialWebView: UIViewRepresentable {
+    @Environment(\.appTheme) private var theme
     let browser: WKWebView
     let lease: QMplusBrowserMountLease
     let store: QMplusStore
@@ -148,7 +149,9 @@ private struct QMplusOfficialWebView: UIViewRepresentable {
     func updateUIView(_ view: QMplusWebViewContainer, context _: Context) { configure(view) }
     static func dismantleUIView(_ view: QMplusWebViewContainer, coordinator _: ()) { view.detachIfOwned() }
     private func configure(_ view: QMplusWebViewContainer) {
-        view.configure(browser, lease: lease) { store.acceptsBrowserMountLease(lease, for: browser) }
+        view.configure(browser, lease: lease, shieldColor: UIColor(theme.background).withAlphaComponent(1)) {
+            store.acceptsBrowserMountLease(lease, for: browser)
+        }
     }
 }
 
@@ -156,19 +159,36 @@ private struct QMplusOfficialWebView: UIViewRepresentable {
 final class QMplusWebViewContainer: UIView {
     private weak var browser: WKWebView?
     private var quiet = false
-    func configure(_ browser: WKWebView, lease: QMplusBrowserMountLease, isCurrent: @MainActor () -> Bool) {
+    private let shield = UIView()
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        shield.backgroundColor = UIColor.systemBackground.withAlphaComponent(1)
+        shield.isOpaque = true; shield.isUserInteractionEnabled = false; shield.accessibilityElementsHidden = true
+        shield.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(shield)
+    }
+    required init?(coder: NSCoder) { fatalError("QMplus containers are constructed programmatically") }
+    func configure(_ browser: WKWebView, lease: QMplusBrowserMountLease, shieldColor: UIColor? = nil,
+                   isCurrent: @MainActor () -> Bool) {
         guard lease.browser == ObjectIdentifier(browser), isCurrent() else { return }
         let quiet = lease.role == .quiet
         self.browser = browser; self.quiet = quiet
         isUserInteractionEnabled = !quiet; accessibilityElementsHidden = quiet
         browser.accessibilityElementsHidden = quiet
+        shield.backgroundColor = (shieldColor ?? .systemBackground).withAlphaComponent(1)
+        shield.isHidden = !quiet
         if browser.superview !== self { browser.removeFromSuperview(); addSubview(browser) }
+        // Keep WebKit normally rendered beneath a native opaque shield instead
+        // of changing its rendering visibility to hide the official page.
+        browser.alpha = 1
         browser.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         browser.frame = bounds
+        shield.frame = bounds; bringSubviewToFront(shield)
     }
     override func layoutSubviews() {
         super.layoutSubviews()
         if let browser, browser.superview === self { browser.frame = bounds }
+        shield.frame = bounds; bringSubviewToFront(shield)
     }
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         quiet ? nil : super.hitTest(point, with: event)
@@ -180,6 +200,7 @@ final class QMplusWebViewContainer: UIView {
 }
 #else
 private struct QMplusOfficialWebView: NSViewRepresentable {
+    @Environment(\.appTheme) private var theme
     let browser: WKWebView
     let lease: QMplusBrowserMountLease
     let store: QMplusStore
@@ -189,7 +210,9 @@ private struct QMplusOfficialWebView: NSViewRepresentable {
     func updateNSView(_ view: QMplusWebViewContainer, context _: Context) { configure(view) }
     static func dismantleNSView(_ view: QMplusWebViewContainer, coordinator _: ()) { view.detachIfOwned() }
     private func configure(_ view: QMplusWebViewContainer) {
-        view.configure(browser, lease: lease) { store.acceptsBrowserMountLease(lease, for: browser) }
+        view.configure(browser, lease: lease, shieldColor: NSColor(theme.background).withAlphaComponent(1)) {
+            store.acceptsBrowserMountLease(lease, for: browser)
+        }
     }
 }
 
@@ -197,18 +220,34 @@ private struct QMplusOfficialWebView: NSViewRepresentable {
 final class QMplusWebViewContainer: NSView {
     private weak var browser: WKWebView?
     private var quiet = false
-    func configure(_ browser: WKWebView, lease: QMplusBrowserMountLease, isCurrent: @MainActor () -> Bool) {
+    private let shield = NSView()
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        shield.wantsLayer = true
+        shield.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(1).cgColor
+        shield.setAccessibilityHidden(true)
+        shield.autoresizingMask = [.width, .height]
+        addSubview(shield)
+    }
+    required init?(coder: NSCoder) { fatalError("QMplus containers are constructed programmatically") }
+    func configure(_ browser: WKWebView, lease: QMplusBrowserMountLease, shieldColor: NSColor? = nil,
+                   isCurrent: @MainActor () -> Bool) {
         guard lease.browser == ObjectIdentifier(browser), isCurrent() else { return }
         let quiet = lease.role == .quiet
         self.browser = browser; self.quiet = quiet
         setAccessibilityHidden(quiet); browser.setAccessibilityHidden(quiet)
+        shield.layer?.backgroundColor = (shieldColor ?? .windowBackgroundColor).withAlphaComponent(1).cgColor
+        shield.isHidden = !quiet
         if browser.superview !== self { browser.removeFromSuperview(); addSubview(browser) }
+        browser.alphaValue = 1
         browser.autoresizingMask = [.width, .height]
         browser.frame = bounds
+        shield.frame = bounds; addSubview(shield, positioned: .above, relativeTo: nil)
     }
     override func layout() {
         super.layout()
         if let browser, browser.superview === self { browser.frame = bounds }
+        shield.frame = bounds; addSubview(shield, positioned: .above, relativeTo: nil)
     }
     override func hitTest(_ point: NSPoint) -> NSView? { quiet ? nil : super.hitTest(point) }
     func detachIfOwned() {

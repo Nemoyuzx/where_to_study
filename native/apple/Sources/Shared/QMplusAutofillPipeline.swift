@@ -33,7 +33,7 @@ struct QMplusAuthInspection: Equatable, Sendable {
     }
 }
 
-enum QMplusAuthInstallResult: Equatable, Sendable { case installed, conflict, unavailable }
+enum QMplusAuthInstallResult: Equatable, Sendable { case installed, notReady, conflict, unavailable }
 enum QMplusAuthSubmissionResult: String, Sendable {
     case accountSelected = "ACCOUNT_SELECTED"
     case usernameSubmitted = "USERNAME_SUBMITTED", passwordSubmitted = "PASSWORD_SUBMITTED"
@@ -45,6 +45,42 @@ enum QMplusAuthSubmission: Sendable {
     case username(document: String, account: String)
     case password(document: String, account: String, password: String, identityAcknowledged: Bool = false)
     case continuation(document: String, account: String, identityAcknowledged: Bool)
+}
+
+enum QMplusAutofillFailureCode: String, CaseIterable, Sendable {
+    case installConflict = "INSTALL_CONFLICT"
+    case installUnavailable = "INSTALL_UNAVAILABLE"
+    case documentWaitExhausted = "DOCUMENT_WAIT_EXHAUSTED"
+    case inspectionUnavailable = "INSPECTION_UNAVAILABLE"
+    case inspectionStale = "INSPECTION_STALE"
+    case verificationStageRejected = "VERIFICATION_STAGE_REJECTED"
+    case missingAccountHint = "ACCOUNT_HINT_UNAVAILABLE"
+    case identityEvidenceRejected = "IDENTITY_EVIDENCE_REJECTED"
+    case pageRejected = "PAGE_REJECTED"
+    case claimRejected = "CLAIM_REJECTED"
+    case credentialsUnavailable = "CREDENTIALS_UNAVAILABLE"
+    case credentialsRejected = "CREDENTIALS_REJECTED"
+    case pageWaitExhausted = "PAGE_WAIT_EXHAUSTED"
+    case viewportWaitExhausted = "VIEWPORT_WAIT_EXHAUSTED"
+    case viewportLostAfterClaim = "VIEWPORT_LOST_AFTER_CLAIM"
+    case accountSelectionNoAdvance = "ACCOUNT_CLICK_NO_ADVANCE"
+    case submissionUnavailable = "SUBMISSION_UNAVAILABLE"
+    case submissionRejected = "SUBMISSION_REJECTED"
+    case submissionStale = "SUBMISSION_STALE"
+    case submissionManual = "SUBMISSION_MANUAL_REQUIRED"
+    case unexpectedSubmissionACK = "SUBMISSION_ACK_UNEXPECTED"
+}
+
+// Only native enum values can enter this production-visible diagnostic. Never
+// retain or interpolate an account, nonce, URL, DOM text or evaluator error.
+struct QMplusAutofillFailure: Equatable, Sendable {
+    let code: QMplusAutofillFailureCode
+    let stage: QMplusAuthStage?
+    let reason: QMplusAuthReason?
+
+    var diagnosticCode: String {
+        [code.rawValue, stage?.rawValue, reason?.rawValue].compactMap { $0 }.joined(separator: ":")
+    }
 }
 
 enum QMplusAutofillPolicy {
@@ -256,11 +292,42 @@ final class QMplusWebKitAutofillEvaluator: QMplusAutofillEvaluating {
     private let world = WKContentWorld.world(name: "com.nemoyu.wheretostudy.qmplus-auth.\(UUID().uuidString)")
     init(browser: WKWebView) { self.browser = browser }
     func install(_ source: String, completion: @escaping @MainActor @Sendable (QMplusAuthInstallResult) -> Void) {
-        guard let browser else { completion(.unavailable); return }
-        browser.evaluateJavaScript(source, in: nil, in: world) { result in
-            guard case let .success(value) = result, let code = value as? String else { completion(.unavailable); return }
-            completion(code == "AUTH_INSTALLED" ? .installed : code == "AUTH_CONFLICT" ? .conflict : .unavailable)
+        guard let browser, let url = browser.url, let call = Self.installationCall(source, url: url) else {
+            completion(.unavailable); return
         }
+        browser.callAsyncJavaScript(call.function, arguments: call.arguments, in: nil, in: world) { [weak browser] result in
+            guard let browser, browser.url == url, QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url) else {
+                completion(.unavailable); return
+            }
+            guard case let .success(value) = result, let code = value as? String else { completion(.unavailable); return }
+            switch code {
+            case "AUTH_INSTALLED": completion(.installed)
+            case "AUTH_NOT_READY": completion(.notReady)
+            case "AUTH_CONFLICT": completion(.conflict)
+            default: completion(.unavailable)
+            }
+        }
+    }
+    static func installationCall(_ source: String, url: URL?) -> (function: String, arguments: [String: Any])? {
+        guard QMplusAutofillPolicy.isInspectableMicrosoftDocument(url), let url,
+              let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath else { return nil }
+        // Readiness and installation are one call in the same private world.
+        // The guarded branch reads no account, nonce, storage or cookie. A
+        // loading DOM is observed again; a ready but untrusted one fails closed.
+        let function = """
+            if (document.readyState === 'loading') return 'AUTH_NOT_READY';
+            if (window.top !== window || document.defaultView !== window) return 'AUTH_UNAVAILABLE';
+            let current;
+            try { current = new URL(location.href); } catch { return 'AUTH_UNAVAILABLE'; }
+            if (current.protocol !== 'https:' || current.username || current.password ||
+                (current.port && current.port !== '443') || current.origin !== location.origin) return 'AUTH_UNAVAILABLE';
+            const path = expectedPath === '/common/deviceauthtls/reprocess' ? current.pathname.toLowerCase() : current.pathname;
+            if (current.origin !== expectedOrigin || path !== expectedPath) return 'AUTH_UNAVAILABLE';
+            const installed = \(source)
+            return installed;
+            """
+        let expectedPath = QMplusAutofillPolicy.isMicrosoftVerificationDocument(url) ? path.lowercased() : path
+        return (function, ["expectedOrigin": "https://login.microsoftonline.com", "expectedPath": expectedPath])
     }
     func inspect(nonce: String, accountHint: String, completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
         inspect(nonce: nonce, accountHint: accountHint, identityAcknowledged: false, completion: completion)
@@ -368,6 +435,7 @@ final class QMplusAutofillPipeline {
     private let manual: @MainActor () -> Void
     private let challenge: @MainActor () -> Void
     private let identityMismatch: @MainActor () -> Void
+    private let onFailure: @MainActor (QMplusAutofillFailure) -> Void
     private let progress: @MainActor (Progress) -> Void
     private var waitTask: Task<Void, Never>?
     private var cancelled = false
@@ -375,6 +443,9 @@ final class QMplusAutofillPipeline {
     private var accountHint: String?
     private var awaitingChallenge = false
     private var viewportWaitCount = 0
+    private var documentWaitCount = 0
+    private var lastStage: QMplusAuthStage?
+    private var lastReason: QMplusAuthReason?
     private var completedSubmissionStages = Set<QMplusAuthStage>()
     private let wait: @MainActor (Duration) async throws -> Void
 
@@ -385,6 +456,7 @@ final class QMplusAutofillPipeline {
          credentials: @escaping @MainActor () -> QMplusSavedCredentials?, manual: @escaping @MainActor () -> Void,
          challenge: @escaping @MainActor () -> Void = {},
          identityMismatch: @escaping @MainActor () -> Void = {},
+         onFailure: @escaping @MainActor (QMplusAutofillFailure) -> Void = { _ in },
          progress: @escaping @MainActor (Progress) -> Void = { _ in },
          wait: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.evaluator = evaluator; self.ledger = ledger; self.presentation = presentation
@@ -393,6 +465,7 @@ final class QMplusAutofillPipeline {
         self.verificationOnly = verificationOnly
         self.credentials = credentials; self.manual = manual; self.identityMismatch = identityMismatch
         self.challenge = challenge
+        self.onFailure = onFailure
         self.progress = progress; self.wait = wait
     }
 
@@ -402,18 +475,39 @@ final class QMplusAutofillPipeline {
     func cancel() { cancelled = true; waitTask?.cancel(); waitTask = nil; accountHint = nil }
     func start(source: String) {
         guard !started, accepts, QMplusAutofillPolicy.isValidNonce(nonce) else { return }
-        guard viewportReady() else { requireManual(resumable: true); return }
         started = true
+        installWhenReady(source: source)
+    }
+    private func installWhenReady(source: String) {
+        guard accepts else { return }
+        guard viewportReady() else { waitForViewport(attempt: 0, beforeInstall: source); return }
         evaluator.install(source) { [weak self] result in
             guard let self, self.accepts else { return }
-            guard result == .installed else { self.requireManual(); return }
+            if result == .notReady { self.waitForDocument(source: source); return }
+            guard result == .installed else {
+                self.requireManual(code: result == .conflict ? .installConflict : .installUnavailable); return
+            }
             self.inspect(attempt: 0)
+        }
+    }
+    private func waitForDocument(source: String) {
+        guard accepts else { return }
+        guard documentWaitCount < QMplusAutofillPolicy.maximumPageWaits else {
+            requireManual(code: .documentWaitExhausted, resumable: true); return
+        }
+        let delay = documentWaitCount == 0 ? 250 : 500
+        documentWaitCount += 1
+        waitTask?.cancel()
+        waitTask = Task { [weak self] in
+            guard let self else { return }
+            do { try await self.wait(.milliseconds(delay)) } catch { return }
+            guard self.accepts else { return }
+            self.installWhenReady(source: source)
         }
     }
     private func inspect(attempt: Int) {
         guard accepts else { return }
         guard viewportReady() else { waitForViewport(attempt: attempt); return }
-        viewportWaitCount = 0
         if !verificationOnly && accountHint == nil {
             if let saved = credentials(), accepts { accountHint = QMplusAutofillPolicy.accountKey(saved.account) }
         }
@@ -421,8 +515,12 @@ final class QMplusAutofillPipeline {
         evaluator.inspect(nonce: nonce, accountHint: accountHint ?? "",
                           identityAcknowledged: ledger.hasIdentityAcknowledgement(for: nonce)) { [weak self] state in
             guard let self, self.accepts else { return }
+            if let state, state.document == self.nonce {
+                self.lastStage = state.stage; self.lastReason = state.reason
+            }
             guard self.viewportReady() else { self.waitForViewport(attempt: attempt); return }
-            guard let state, state.document == self.nonce else { self.requireManual(); return }
+            guard let state else { self.requireManual(code: .inspectionUnavailable); return }
+            guard state.document == self.nonce else { self.requireManual(code: .inspectionStale); return }
             if state.stage == .challenge && [.captchaRequired, .mfaRequired].contains(state.reason) {
                 if !self.awaitingChallenge { self.awaitingChallenge = true; self.challenge() }
                 self.waitForChallenge(); return
@@ -433,11 +531,11 @@ final class QMplusAutofillPipeline {
                 // saved identity must not stop read-only challenge detection.
                 self.scheduleInspection(attempt: attempt); return
             }
-            guard !self.verificationOnly else { self.requireManual(); return }
-            guard self.accountHint != nil else { self.requireManual(); return }
+            guard !self.verificationOnly else { self.requireManual(code: .verificationStageRejected); return }
+            guard self.accountHint != nil else { self.requireManual(code: .missingAccountHint); return }
             if state.reason == .currentAccountVerified {
                 guard self.ledger.recordVerifiedIdentity(state, presentation: self.presentation,
-                    credentialRevision: self.credentialRevision) else { self.requireManual(); return }
+                    credentialRevision: self.credentialRevision) else { self.requireManual(code: .identityEvidenceRejected); return }
                 self.scheduleInspection(attempt: attempt); return
             }
             if self.ledger.isAwaitingNavigation(from: self.nonce), state.stage == .manual,
@@ -467,18 +565,25 @@ final class QMplusAutofillPipeline {
                 // after selection. Wait finitely without selecting or filling.
                 self.scheduleInspection(attempt: attempt); return
             }
-            guard self.ledger.canClaim(state, presentation: self.presentation, credentialRevision: self.credentialRevision),
-                  self.accepts, let saved = self.credentials(), self.accepts,
-                  QMplusAutofillPolicy.accountKey(saved.account) == self.accountHint,
-                  saved.password.utf16.count <= 2048 else {
+            guard self.ledger.canClaim(state, presentation: self.presentation, credentialRevision: self.credentialRevision) else {
                 if state.reason == .mismatch { self.identityMismatch() }
-                self.requireManual(); return
+                self.requireManual(code: state.stage == .manual ? .pageRejected : .claimRejected); return
+            }
+            guard self.accepts else { return }
+            let saved = self.credentials()
+            guard self.accepts else { return }
+            guard self.viewportReady() else { self.waitForViewport(attempt: attempt); return }
+            guard let saved else { self.requireManual(code: .credentialsUnavailable); return }
+            guard QMplusAutofillPolicy.accountKey(saved.account) == self.accountHint,
+                  saved.password.utf16.count <= 2048 else {
+                self.requireManual(code: .credentialsRejected); return
             }
             // Do not consume a stage merely because a later secure-store read
-            // or viewport check is not ready. Claims precede the actual submit.
-            guard self.viewportReady(),
-                  self.ledger.claim(state, presentation: self.presentation, credentialRevision: self.credentialRevision) else {
-                self.requireManual(); return
+            // or viewport check is not ready. A resumed wait re-inspects the
+            // page and reads credentials afresh instead of retaining a password.
+            guard self.viewportReady() else { self.waitForViewport(attempt: attempt); return }
+            guard self.ledger.claim(state, presentation: self.presentation, credentialRevision: self.credentialRevision) else {
+                self.requireManual(code: .claimRejected); return
             }
             let submission: QMplusAuthSubmission
             switch state.stage {
@@ -495,10 +600,10 @@ final class QMplusAutofillPipeline {
                 self.progress(.continuation)
                 submission = .continuation(document: self.nonce, account: saved.account,
                     identityAcknowledged: self.ledger.hasIdentityAcknowledgement(for: self.nonce))
-            default: self.requireManual(); return
+            default: self.requireManual(code: .claimRejected); return
             }
             guard self.accepts else { return }
-            guard self.viewportReady() else { self.requireManual(); return }
+            guard self.viewportReady() else { self.requireManual(code: .viewportLostAfterClaim); return }
             let ledger = self.ledger, presentation = self.presentation, credentialRevision = self.credentialRevision, nonce = self.nonce
             self.evaluator.submit(submission) { [weak self, ledger] result in
                 // A successful click may navigate before its ACK arrives.
@@ -530,7 +635,17 @@ final class QMplusAutofillPipeline {
                 } else if state.stage == .continuation && result == .continuationSubmitted {
                     self.progress(.waiting)
                     self.scheduleInspection(attempt: 0)
-                } else { self.requireManual() }
+                } else {
+                    let code: QMplusAutofillFailureCode
+                    switch result {
+                    case .none: code = .submissionUnavailable
+                    case .some(.manual): code = .submissionManual
+                    case .some(.rejected): code = .submissionRejected
+                    case .some(.stale): code = .submissionStale
+                    default: code = .unexpectedSubmissionACK
+                    }
+                    self.requireManual(code: code)
+                }
             }
         }
     }
@@ -544,21 +659,29 @@ final class QMplusAutofillPipeline {
             self.inspect(attempt: 0)
         }
     }
-    private func waitForViewport(attempt: Int) {
+    private func waitForViewport(attempt: Int, beforeInstall source: String? = nil) {
         guard accepts else { return }
-        guard viewportWaitCount < QMplusAutofillPolicy.maximumViewportWaits else { requireManual(resumable: true); return }
+        guard viewportWaitCount < QMplusAutofillPolicy.maximumViewportWaits else {
+            requireManual(code: .viewportWaitExhausted, resumable: true); return
+        }
         viewportWaitCount += 1
         waitTask?.cancel()
         waitTask = Task { [weak self] in
             guard let self else { return }
             do { try await self.wait(.milliseconds(250)) } catch { return }
             guard self.accepts else { return }
-            self.inspect(attempt: attempt)
+            if let source { self.installWhenReady(source: source) }
+            else { self.inspect(attempt: attempt) }
         }
     }
     private func scheduleInspection(attempt: Int, maximumAttempts: Int = QMplusAutofillPolicy.maximumPageWaits) {
         guard accepts else { return }
-        guard attempt < maximumAttempts else { requireManual(resumable: true); return }
+        guard attempt < maximumAttempts else {
+            let accountDidNotAdvance = ledger.accountSelectedDocument == nonce && !ledger.passwordAttempted &&
+                lastStage == .manual && (lastReason == .attempted || lastReason == .chooser)
+            requireManual(code: accountDidNotAdvance ? .accountSelectionNoAdvance : .pageWaitExhausted, resumable: true)
+            return
+        }
         waitTask?.cancel()
         waitTask = Task { [weak self] in
             guard let self else { return }
@@ -567,10 +690,12 @@ final class QMplusAutofillPipeline {
             self.inspect(attempt: attempt + 1)
         }
     }
-    private func requireManual(resumable: Bool = false) {
+    private func requireManual(code: QMplusAutofillFailureCode, resumable: Bool = false) {
         guard !cancelled else { return }
+        let failure = QMplusAutofillFailure(code: code, stage: lastStage, reason: lastReason)
         cancel()
         if resumable { ledger.suspend() } else { ledger.stop() }
+        onFailure(failure)
         manual()
     }
 }

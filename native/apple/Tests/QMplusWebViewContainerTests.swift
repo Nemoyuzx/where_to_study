@@ -10,6 +10,42 @@ import UIKit
 
 @MainActor
 final class QMplusWebViewContainerTests: XCTestCase {
+    func testQuietBrowserKeepsNormalRenderingUnderAnOpaqueFullSizeShield() {
+        let browser = makeBrowser()
+        let container = QMplusWebViewContainer(frame: CGRect(x: 0, y: 0, width: 320, height: 500))
+        let lease = QMplusBrowserMountLease(presentation: 1, role: .quiet, browser: ObjectIdentifier(browser))
+        container.configure(browser, lease: lease) { true }
+        XCTAssertTrue(browser.superview === container)
+        XCTAssertEqual(browser.frame, container.bounds)
+        let cover = container.subviews.last!
+        XCTAssertFalse(cover === browser)
+        XCTAssertFalse(cover.isHidden)
+        XCTAssertEqual(cover.frame, container.bounds)
+        #if os(iOS)
+        XCTAssertEqual(browser.alpha, 1)
+        XCTAssertTrue(cover.isOpaque)
+        XCTAssertEqual(cover.backgroundColor?.cgColor.alpha, 1)
+        XCTAssertFalse(container.isUserInteractionEnabled)
+        XCTAssertTrue(browser.accessibilityElementsHidden)
+        XCTAssertNil(container.hitTest(CGPoint(x: 100, y: 100), with: nil))
+        container.bounds = CGRect(x: 0, y: 0, width: 500, height: 320)
+        container.setNeedsLayout(); container.layoutIfNeeded()
+        #else
+        XCTAssertEqual(browser.alphaValue, 1)
+        XCTAssertEqual(cover.layer?.backgroundColor?.alpha, 1)
+        XCTAssertNil(container.hitTest(NSPoint(x: 100, y: 100)))
+        container.setFrameSize(NSSize(width: 500, height: 320))
+        container.needsLayout = true; container.layoutSubtreeIfNeeded()
+        #endif
+        XCTAssertEqual(cover.frame, container.bounds)
+        XCTAssertEqual(browser.frame, container.bounds)
+        let visibleLease = QMplusBrowserMountLease(presentation: 1, role: .visible, browser: ObjectIdentifier(browser))
+        container.configure(browser, lease: visibleLease) { true }
+        XCTAssertTrue(cover.isHidden, "Only the deliberately presented official verification page is uncovered")
+        XCTAssertNil(browser.url)
+        container.detachIfOwned()
+    }
+
     func testRetiredQuietContainerCannotStealThePromotedVisibleBrowser() {
         let browser = makeBrowser()
         let quiet = QMplusWebViewContainer(frame: CGRect(x: 0, y: 0, width: 320, height: 500))

@@ -8,6 +8,116 @@ import XCTest
 // Synthetic specification source only. Do not execute while local tests and GUI are prohibited.
 @MainActor
 final class QMplusAutofillPipelineTests: XCTestCase {
+    func testDocumentReadinessRetriesWithoutCredentialsAndInstallsTheHelperOnlyOnce() async {
+        let fixture = Fixture()
+        fixture.evaluator.installResults = [.notReady, .notReady, .installed]
+        fixture.evaluator.holdsSubmission = true
+        fixture.evaluator.states = [state(.account, match: true)]
+        let submitted = expectation(description: "A ready document receives one installation and one account submission")
+        fixture.evaluator.onSubmission = { submitted.fulfill() }
+        fixture.onWait = { _ in
+            XCTAssertEqual(fixture.credentialReads, 0)
+            XCTAssertEqual(fixture.evaluator.installations, 0)
+            XCTAssertEqual(fixture.evaluator.inspections, 0)
+            XCTAssertFalse(fixture.ledger.accountAttempted)
+            XCTAssertEqual(fixture.progressCount, 0, "Readiness polling must not renew the owner's external watchdog")
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [submitted], timeout: 2)
+        XCTAssertEqual(fixture.evaluator.installCalls, 3)
+        XCTAssertEqual(fixture.evaluator.installations, 1)
+        XCTAssertEqual(fixture.evaluator.installationSources, Array(repeating: "synthetic source", count: 3))
+        XCTAssertEqual(fixture.evaluator.inspections, 1)
+        XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+        XCTAssertTrue(fixture.ledger.accountAttempted)
+        XCTAssertNil(fixture.ledger.accountSelectedDocument)
+        XCTAssertEqual(fixture.waits, [.milliseconds(250), .milliseconds(500)])
+        XCTAssertTrue(fixture.failures.isEmpty)
+        XCTAssertEqual(fixture.manualCount, 0)
+        fixture.pipeline.cancel()
+    }
+
+    func testDocumentReadinessHasItsOwnFiniteDiagnosticWithoutInstallingOrReadingCredentials() async {
+        let fixture = Fixture()
+        fixture.evaluator.installResult = .notReady
+        let completed = expectation(description: "Document readiness reaches the bounded installation retry limit")
+        fixture.onManual = { completed.fulfill() }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertEqual(fixture.waits.count, QMplusAutofillPolicy.maximumPageWaits)
+        XCTAssertEqual(fixture.evaluator.installCalls, QMplusAutofillPolicy.maximumPageWaits + 1)
+        XCTAssertEqual(fixture.evaluator.installations, 0)
+        XCTAssertEqual(fixture.evaluator.inspections, 0)
+        XCTAssertEqual(fixture.credentialReads, 0)
+        XCTAssertEqual(fixture.progressCount, 0)
+        XCTAssertFalse(fixture.ledger.accountAttempted)
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+        XCTAssertEqual(fixture.failures, [.init(code: .documentWaitExhausted, stage: nil, reason: nil)])
+    }
+
+    func testDocumentWaitRechecksCancellationOwnerRevisionAndViewportBeforeInstalling() async {
+        for invalidation in ["cancel", "owner", "revision"] {
+            let fixture = Fixture()
+            fixture.evaluator.installResult = .notReady
+            let waiting = expectation(description: "Readiness wait is invalidated by \(invalidation)")
+            fixture.onWait = { _ in
+                if invalidation == "cancel" { fixture.pipeline.cancel() }
+                else if invalidation == "owner" { fixture.current = false }
+                else { fixture.ledger.begin(presentation: 1, credentialRevision: 2) }
+                waiting.fulfill()
+            }
+            fixture.pipeline.start(source: "synthetic source")
+            await fulfillment(of: [waiting], timeout: 2)
+            await Task.yield()
+            XCTAssertEqual(fixture.evaluator.installCalls, 1)
+            XCTAssertEqual(fixture.evaluator.installations, 0)
+            XCTAssertEqual(fixture.credentialReads, 0)
+            XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+            XCTAssertTrue(fixture.failures.isEmpty)
+            fixture.pipeline.cancel()
+        }
+        let fixture = Fixture()
+        fixture.evaluator.installResults = [.notReady, .installed]
+        fixture.evaluator.holdsSubmission = true
+        fixture.evaluator.states = [state(.account, match: true)]
+        let submitted = expectation(description: "Viewport is checked again after a not-ready result")
+        fixture.evaluator.onSubmission = { submitted.fulfill() }
+        fixture.onWait = { _ in
+            if fixture.waits.count == 1 { fixture.viewportReady = false }
+            else { fixture.viewportReady = true }
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [submitted], timeout: 2)
+        XCTAssertEqual(fixture.evaluator.installCalls, 2, "Viewport loss must not call install against an unavailable viewport")
+        XCTAssertEqual(fixture.evaluator.installations, 1)
+        XCTAssertEqual(fixture.waits, [.milliseconds(250), .milliseconds(250)])
+        XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+        fixture.pipeline.cancel()
+    }
+
+    func testInstallationBridgeCarriesOnlyTrustedPublicOriginAndPathWithoutBindingNonceOrQuery() throws {
+        let source = "/* synthetic helper */\n(() => 'AUTH_INSTALLED')();"
+        let url = URL(string: "https://login.microsoftonline.com/\(QMplusAutofillPolicy.tenant)/saml2?synthetic_private_query=fixture")
+        let call = try XCTUnwrap(QMplusWebKitAutofillEvaluator.installationCall(source, url: url))
+        XCTAssertEqual(Set(call.arguments.keys), ["expectedOrigin", "expectedPath"])
+        XCTAssertEqual(call.arguments["expectedOrigin"] as? String, "https://login.microsoftonline.com")
+        XCTAssertEqual(call.arguments["expectedPath"] as? String, "/\(QMplusAutofillPolicy.tenant)/saml2")
+        let arguments = String(decoding: try JSONSerialization.data(withJSONObject: call.arguments), as: UTF8.self)
+        XCTAssertFalse(arguments.contains("synthetic_private_query"))
+        XCTAssertFalse(call.function.contains("documentNonce"))
+        XCTAssertFalse(call.function.contains("accountHint"))
+        XCTAssertFalse(call.function.contains("cookie"))
+        let verification = try XCTUnwrap(QMplusWebKitAutofillEvaluator.installationCall(source,
+            url: URL(string: "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess")))
+        XCTAssertEqual(verification.arguments["expectedPath"] as? String, "/common/deviceauthtls/reprocess")
+        for value in ["https://foreign.invalid/\(QMplusAutofillPolicy.tenant)/saml2",
+                      "https://login.microsoftonline.com/common/DeviceAuthTls/reprocess/",
+                      "https://login.microsoftonline.com/\(QMplusAutofillPolicy.tenant)/LOGIN",
+                      "https://login.microsoftonline.com/common/oauth2/authorize"] {
+            XCTAssertNil(QMplusWebKitAutofillEvaluator.installationCall(source, url: URL(string: value)))
+        }
+    }
+
     func testSlowFirstPickerCompletesInBackgroundWithoutManualContinuation() async {
         let fixture = Fixture()
         fixture.evaluator.holdsSubmission = true
@@ -47,6 +157,132 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
         XCTAssertFalse(fixture.ledger.accountAttempted)
         XCTAssertNil(fixture.ledger.accountSelectedDocument)
+        XCTAssertEqual(fixture.failures, [.init(code: .credentialsUnavailable, stage: .account, reason: .ready)])
+    }
+
+    func testFailureDiagnosticsDistinguishInstallationMissingHintAndInvalidInspectionWithoutPrivateData() {
+        for (installation, code) in [(QMplusAuthInstallResult.conflict, QMplusAutofillFailureCode.installConflict),
+                                      (.unavailable, .installUnavailable)] {
+            let fixture = Fixture()
+            fixture.evaluator.installResult = installation
+            fixture.pipeline.start(source: "synthetic source")
+            XCTAssertEqual(fixture.failures, [.init(code: code, stage: nil, reason: nil)])
+            XCTAssertEqual(fixture.credentialReads, 0)
+            XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+            XCTAssertEqual(fixture.manualCount, 1)
+        }
+        let missingHint = Fixture()
+        missingHint.credentialsAvailable = false
+        missingHint.evaluator.states = [state(.account, reason: .accountHintRequired)]
+        missingHint.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(missingHint.failures, [.init(code: .missingAccountHint, stage: .account, reason: .accountHintRequired)])
+        let unavailable = Fixture()
+        unavailable.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(unavailable.failures.first?.code, .inspectionUnavailable)
+        let stale = Fixture()
+        stale.evaluator.states = [state(.username, document: "nonceB456")]
+        stale.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(stale.failures.first?.code, .inspectionStale)
+        for code in QMplusAutofillFailureCode.allCases {
+            let diagnostic = QMplusAutofillFailure(code: code, stage: .account, reason: .ready).diagnosticCode
+            XCTAssertTrue(diagnostic.allSatisfy { $0.isASCII && ($0.isLetter || $0 == "_" || $0 == ":") })
+            XCTAssertFalse(diagnostic.contains("synthetic"))
+            XCTAssertFalse(diagnostic.contains("nonce"))
+            XCTAssertFalse(diagnostic.contains("@"))
+            XCTAssertFalse(diagnostic.contains("https"))
+        }
+    }
+
+    func testFailureDiagnosticsKeepTypedPageReasonDistinctFromARejectedClaim() {
+        let claim = Fixture()
+        claim.evaluator.states = [state(.account, match: false)]
+        claim.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(claim.failures, [.init(code: .claimRejected, stage: .account, reason: .ready)])
+        XCTAssertFalse(claim.ledger.accountAttempted)
+        let mismatch = Fixture()
+        mismatch.evaluator.states = [state(.manual, reason: .mismatch)]
+        mismatch.pipeline.start(source: "synthetic source")
+        XCTAssertEqual(mismatch.failures, [.init(code: .pageRejected, stage: .manual, reason: .mismatch)])
+        XCTAssertEqual(mismatch.failures.first?.diagnosticCode, "PAGE_REJECTED:manual:ACCOUNT_MISMATCH")
+        XCTAssertEqual(mismatch.identityMismatchCount, 1)
+        XCTAssertTrue(mismatch.evaluator.submissions.isEmpty)
+    }
+
+    func testSubmissionFailuresReportDistinctFixedCodesExactlyOnce() {
+        let cases: [(QMplusAuthSubmissionResult?, QMplusAutofillFailureCode)] = [
+            (nil, .submissionUnavailable), (.manual, .submissionManual), (.rejected, .submissionRejected),
+            (.stale, .submissionStale), (.usernameSubmitted, .unexpectedSubmissionACK)
+        ]
+        for (reply, code) in cases {
+            let fixture = Fixture()
+            fixture.evaluator.holdsSubmission = true
+            fixture.evaluator.states = [state(.account, match: true)]
+            fixture.pipeline.start(source: "synthetic source")
+            fixture.evaluator.finishSubmission(reply)
+            XCTAssertEqual(fixture.failures, [.init(code: code, stage: .account, reason: .ready)])
+            XCTAssertEqual(fixture.manualCount, 1)
+            XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+            fixture.evaluator.replaySubmission(.rejected)
+            XCTAssertEqual(fixture.failures.count, 1)
+            XCTAssertEqual(fixture.manualCount, 1)
+        }
+    }
+
+    func testPreclaimViewportRecoveryReinspectsAndSubmitsTheAccountOnlyOnce() async {
+        let fixture = Fixture()
+        fixture.evaluator.holdsSubmission = true
+        fixture.evaluator.states = [state(.account, match: true), state(.account, match: true)]
+        fixture.onCredentialRead = { read in if read == 2 { fixture.viewportReady = false } }
+        let submitted = expectation(description: "The first account claim occurs only after the viewport recovers")
+        fixture.evaluator.onSubmission = { submitted.fulfill() }
+        fixture.onWait = { _ in
+            XCTAssertFalse(fixture.ledger.accountAttempted)
+            XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+            fixture.viewportReady = true
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        XCTAssertFalse(fixture.ledger.accountAttempted)
+        await fulfillment(of: [submitted], timeout: 2)
+        XCTAssertEqual(fixture.evaluator.inspections, 2)
+        XCTAssertEqual(fixture.credentialReads, 3, "Recovery must reread the authorized credentials instead of retaining the previous password")
+        XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+        XCTAssertTrue(fixture.ledger.accountAttempted)
+        XCTAssertNil(fixture.ledger.accountSelectedDocument)
+        XCTAssertEqual(fixture.waits, [.milliseconds(250)])
+        XCTAssertTrue(fixture.failures.isEmpty)
+        XCTAssertEqual(fixture.manualCount, 0)
+        fixture.pipeline.cancel()
+    }
+
+    func testViewportLossAfterClaimEmitsAFixedFailureWithoutReplayingTheSubmission() {
+        let fixture = Fixture()
+        fixture.evaluator.states = [state(.username)]
+        fixture.onProgress = { progress in if case .username = progress { fixture.viewportReady = false } }
+        fixture.pipeline.start(source: "synthetic source")
+        XCTAssertTrue(fixture.ledger.usernameAttempted)
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+        XCTAssertEqual(fixture.failures, [.init(code: .viewportLostAfterClaim, stage: .username, reason: .ready)])
+        XCTAssertEqual(fixture.manualCount, 1)
+        fixture.viewportReady = true
+        fixture.pipeline.start(source: "synthetic source")
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
+        XCTAssertEqual(fixture.failures.count, 1)
+        XCTAssertEqual(fixture.manualCount, 1)
+    }
+
+    func testPreclaimViewportOscillationCannotResetThePipelineWaitBudget() async {
+        let fixture = Fixture()
+        fixture.evaluator.fallbackState = state(.account, match: true)
+        fixture.onCredentialRead = { read in if read > 1 { fixture.viewportReady = false } }
+        fixture.onWait = { _ in fixture.viewportReady = true }
+        let completed = expectation(description: "Repeated viewport loss before the first claim remains bounded")
+        fixture.onManual = { completed.fulfill() }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertEqual(fixture.waits.count, QMplusAutofillPolicy.maximumViewportWaits)
+        XCTAssertEqual(fixture.failures, [.init(code: .viewportWaitExhausted, stage: .account, reason: .ready)])
+        XCTAssertFalse(fixture.ledger.accountAttempted)
+        XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
     }
 
     func testResumptionRequiresANewRealCommitAndAnOfficialPausedSource() {
@@ -142,6 +378,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertEqual(fixture.credentialReads, 0)
         XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
         XCTAssertEqual(fixture.manualCount, 0, "An old callback must not reopen a cancelled session")
+        XCTAssertTrue(fixture.failures.isEmpty, "An old owner must not overwrite the current diagnostic")
     }
 
     func testSameDocumentSPATransitionSubmitsUsernameAndMatchingPasswordExactlyOnce() async {
@@ -233,6 +470,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertFalse(fixture.ledger.passwordAttempted)
         XCTAssertLessThanOrEqual(fixture.evaluator.inspections, QMplusAutofillPolicy.maximumPageWaits + 2)
         XCTAssertEqual(fixture.identityMismatchCount, 0)
+        XCTAssertEqual(fixture.failures, [.init(code: .accountSelectionNoAdvance, stage: .manual, reason: .chooser)])
         let unmatched = Fixture()
         let expired = expectation(description: "An initially unknown picker reaches its bounded read-only retry limit")
         unmatched.onManual = { expired.fulfill() }
@@ -249,6 +487,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertFalse(unmatched.ledger.usernameAttempted)
         XCTAssertFalse(unmatched.ledger.passwordAttempted)
         XCTAssertEqual(unmatched.manualCount, 1)
+        XCTAssertEqual(unmatched.failures, [.init(code: .pageWaitExhausted, stage: .manual, reason: .chooser)])
         XCTAssertEqual(unmatched.identityMismatchCount, 0, "An unknown picker is not proof that the cached business identity is wrong")
     }
 
@@ -707,6 +946,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         fixture.evaluator.finishInspection(state(.username))
         XCTAssertTrue(fixture.evaluator.submissions.isEmpty)
         XCTAssertEqual(fixture.manualCount, 0)
+        XCTAssertTrue(fixture.failures.isEmpty)
     }
 
     func testInactiveVisibleStoreRejectsLateInstallationWithoutReadingCredentialsOrClosingMFAOwner() throws {
@@ -761,10 +1001,17 @@ final class QMplusAutofillPipelineTests: XCTestCase {
     func testUnavailableViewportReadsNoCredentialAndLossDuringCallbackWaitsOnlyFinitely() async {
         let initial = Fixture()
         initial.viewportReady = false
+        let initialExpired = expectation(description: "An initial viewport absence has a finite wait before installation")
+        initial.onManual = { initialExpired.fulfill() }
         initial.pipeline.start(source: "synthetic source")
         XCTAssertEqual(initial.credentialReads, 0)
         XCTAssertTrue(initial.evaluator.submissions.isEmpty)
+        XCTAssertEqual(initial.manualCount, 0)
+        await fulfillment(of: [initialExpired], timeout: 2)
         XCTAssertEqual(initial.manualCount, 1)
+        XCTAssertEqual(initial.evaluator.installations, 0)
+        XCTAssertEqual(initial.waits.count, QMplusAutofillPolicy.maximumViewportWaits)
+        XCTAssertEqual(initial.failures, [.init(code: .viewportWaitExhausted, stage: nil, reason: nil)])
         let moved = Fixture()
         moved.evaluator.holdsInspection = true
         moved.pipeline.start(source: "synthetic source")
@@ -777,6 +1024,28 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertEqual(moved.manualCount, 1)
         XCTAssertEqual(moved.waits.count, QMplusAutofillPolicy.maximumViewportWaits)
         XCTAssertTrue(moved.waits.allSatisfy { $0 == .milliseconds(250) })
+        XCTAssertEqual(moved.failures, [.init(code: .viewportWaitExhausted, stage: .username, reason: .ready)])
+    }
+
+    func testInitialViewportRecoveryInstallsOnlyOnceAndNeverReportsAFailure() async {
+        let fixture = Fixture()
+        fixture.viewportReady = false
+        fixture.evaluator.holdsSubmission = true
+        fixture.evaluator.states = [state(.username)]
+        let submitted = expectation(description: "Installation and the first submission occur after initial layout recovers")
+        fixture.evaluator.onSubmission = { submitted.fulfill() }
+        fixture.onWait = { _ in
+            XCTAssertEqual(fixture.evaluator.installations, 0)
+            XCTAssertEqual(fixture.credentialReads, 0)
+            if fixture.waits.count == 2 { fixture.viewportReady = true }
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [submitted], timeout: 2)
+        XCTAssertEqual(fixture.evaluator.installations, 1)
+        XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+        XCTAssertTrue(fixture.failures.isEmpty)
+        XCTAssertEqual(fixture.manualCount, 0)
+        fixture.pipeline.cancel()
     }
 
     func testManualStatesAndMalformedOrMismatchedDocumentNeverSubmit() async {
@@ -942,6 +1211,10 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         var viewportReady = true
         var credentialReads = 0, manualCount = 0, progressCount = 0, challengeCount = 0, identityMismatchCount = 0
         var onManual: (@MainActor () -> Void)?
+        var onCredentialRead: (@MainActor (Int) -> Void)?
+        var onProgress: (@MainActor (QMplusAutofillPipeline.Progress) -> Void)?
+        var onWait: (@MainActor (Duration) -> Void)?
+        var failures: [QMplusAutofillFailure] = []
         var waits: [Duration] = []
         let nonce: String
         let verificationOnly: Bool
@@ -959,13 +1232,15 @@ final class QMplusAutofillPipelineTests: XCTestCase {
             verificationOnly: verificationOnly,
             credentials: { [weak self] in
                 self?.credentialReads += 1
+                if let self { self.onCredentialRead?(self.credentialReads) }
                 guard let self, self.credentialsAvailable else { return nil }
                 return self.saved
             }, manual: { [weak self] in self?.manualCount += 1; self?.onManual?() },
             challenge: { [weak self] in self?.challengeCount += 1 },
             identityMismatch: { [weak self] in self?.identityMismatchCount += 1 },
-            progress: { [weak self] _ in self?.progressCount += 1 }, wait: { [weak self] duration in
-                self?.waits.append(duration); await Task.yield()
+            onFailure: { [weak self] failure in self?.failures.append(failure) },
+            progress: { [weak self] progress in self?.progressCount += 1; self?.onProgress?(progress) }, wait: { [weak self] duration in
+                self?.waits.append(duration); self?.onWait?(duration); await Task.yield()
             })
             pipelineCache = pipeline
             return pipeline
@@ -978,11 +1253,16 @@ final class QMplusAutofillPipelineTests: XCTestCase {
     }
     @MainActor private final class FakeEvaluator: QMplusAutofillEvaluating {
         var installResult = QMplusAuthInstallResult.installed
+        var installations = 0
+        var installCalls = 0
+        var installResults: [QMplusAuthInstallResult] = []
+        var installationSources: [String] = []
         var submissionResult: QMplusAuthSubmissionResult?
         var states: [QMplusAuthInspection] = []
         var fallbackState: QMplusAuthInspection?
         var inspections = 0
         var onInspection: (@MainActor () -> Void)?
+        var onSubmission: (@MainActor () -> Void)?
         var submissions: [QMplusAuthSubmission] = []
         var identityAcknowledgements: [Bool] = []
         var accountHints: [String] = []
@@ -991,8 +1271,14 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         private var inspectCallback: (@MainActor @Sendable (QMplusAuthInspection?) -> Void)?
         private var submitCallback: (@MainActor @Sendable (QMplusAuthSubmissionResult?) -> Void)?
         private var lastSubmitCallback: (@MainActor @Sendable (QMplusAuthSubmissionResult?) -> Void)?
-        func install(_: String, completion: @escaping @MainActor @Sendable (QMplusAuthInstallResult) -> Void) {
-            if holdsInstallation { installCallback = completion } else { completion(installResult) }
+        func install(_ source: String, completion: @escaping @MainActor @Sendable (QMplusAuthInstallResult) -> Void) {
+            installCalls += 1; installationSources.append(source)
+            if holdsInstallation { installCallback = completion }
+            else {
+                let result = installResults.isEmpty ? installResult : installResults.removeFirst()
+                if result == .installed { installations += 1 }
+                completion(result)
+            }
         }
         func inspect(nonce _: String, accountHint: String, completion: @escaping @MainActor @Sendable (QMplusAuthInspection?) -> Void) {
             accountHints.append(accountHint)
@@ -1008,6 +1294,7 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         }
         func submit(_ submission: QMplusAuthSubmission, completion: @escaping @MainActor @Sendable (QMplusAuthSubmissionResult?) -> Void) {
             submissions.append(submission)
+            onSubmission?()
             lastSubmitCallback = completion
             if holdsSubmission { submitCallback = completion }
             else if let submissionResult { completion(submissionResult) }
@@ -1020,9 +1307,12 @@ final class QMplusAutofillPipelineTests: XCTestCase {
                 }
             }
         }
-        func finishInstallation(_ result: QMplusAuthInstallResult) { installCallback?(result); installCallback = nil }
+        func finishInstallation(_ result: QMplusAuthInstallResult) {
+            if installCallback != nil, result == .installed { installations += 1 }
+            installCallback?(result); installCallback = nil
+        }
         func finishInspection(_ result: QMplusAuthInspection) { inspectCallback?(result); inspectCallback = nil }
-        func finishSubmission(_ result: QMplusAuthSubmissionResult) { submitCallback?(result); submitCallback = nil }
+        func finishSubmission(_ result: QMplusAuthSubmissionResult?) { submitCallback?(result); submitCallback = nil }
         func replaySubmission(_ result: QMplusAuthSubmissionResult) { lastSubmitCallback?(result) }
     }
 }
