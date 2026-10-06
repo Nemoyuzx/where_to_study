@@ -3,9 +3,10 @@ import {readFileSync} from 'node:fs'
 import test from 'node:test'
 
 // Source regression specs, intentionally NOT executed on the user's machine.
-const read=path=>readFileSync(new URL('../native/harmony/entry/src/main/ets/'+path,import.meta.url),'utf8')
-test('course taps disclose cached work while separate info controls retain original detail navigation',()=>{
-  const view=read('view/CourseView.ets')
+const normalizeSource=source=>source.replace(/\r\n?/g,'\n')
+const read=path=>normalizeSource(readFileSync(new URL('../native/harmony/entry/src/main/ets/'+path,import.meta.url),'utf8'))
+function assertCourseTapOwnership(source){
+  const view=normalizeSource(source)
   assert.match(view,/toggleCourseInline\('ucloud', course.id\)/)
   assert.match(view,/toggleCourseInline\('qmplus', course.id\)/)
   assert.match(view,/courses.cloud.info.[\s\S]*?\.onClick\(\(\) => this.openCourse\('ucloud'/)
@@ -22,7 +23,13 @@ test('course taps disclose cached work while separate info controls retain origi
   }
   const inline=view.slice(view.indexOf('  private toggleCourseInline'),view.indexOf('  build()'))
   assert.doesNotMatch(inline,/loadCloudCourseDirectory|loadAssignment|openLogin|fetch\(/)
+}
+test('course taps disclose cached work while separate info controls retain original detail navigation',()=>{
+  assertCourseTapOwnership(read('view/CourseView.ets'))
   assert.match(read('view/CourseSession.ets'),/expandedCourseKeys/)
+})
+test('CRLF course source preserves separate disclosure and info ownership boundaries',()=>{
+  assertCourseTapOwnership(read('view/CourseView.ets').replaceAll('\n','\r\n'))
 })
 test('QM Off is initially folded but management can expand without enabling connect or losing drafts',()=>{
   const view=read('view/SettingsView.ets'),session=read('view/SettingsSession.ets')

@@ -4,19 +4,22 @@ import vm from 'node:vm'
 import test from 'node:test'
 import {transformSync} from 'esbuild'
 
-const settings = readFileSync(new URL('../native/harmony/entry/src/main/ets/view/SettingsView.ets', import.meta.url), 'utf8')
-const root = readFileSync(new URL('../native/harmony/entry/src/main/ets/view/RootView.ets', import.meta.url), 'utf8')
-const localization = readFileSync(new URL('../native/harmony/entry/src/main/ets/common/AppLocalization.ets', import.meta.url), 'utf8')
-const picker = readFileSync(new URL('../native/harmony/entry/src/main/ets/view/LanguagePickerView.ets', import.meta.url), 'utf8')
-const sessionSource = readFileSync(new URL('../native/harmony/entry/src/main/ets/view/SettingsSession.ets', import.meta.url), 'utf8')
+const normalizeSource = source => source.replace(/\r\n?/g, '\n')
+const read = path => normalizeSource(readFileSync(new URL('../native/harmony/entry/src/main/ets/' + path, import.meta.url), 'utf8'))
+const settings = read('view/SettingsView.ets')
+const root = read('view/RootView.ets')
+const localization = read('common/AppLocalization.ets')
+const picker = read('view/LanguagePickerView.ets')
+const sessionSource = read('view/SettingsSession.ets')
 
-function transitionFixture({reducedMotion = false} = {}) {
+function transitionFixture({reducedMotion = false, rootSource = root, session = sessionSource} = {}) {
+  const root = normalizeSource(rootSource)
   const start = root.indexOf('  private reduceLanguageMotion(')
   const end = root.indexOf('  @Builder\n  languageCompletionMark(')
   assert.ok(start >= 0 && end > start, 'load the production transition coordinator')
   const callbackStart = root.indexOf('class LanguageLayoutFrameCallback extends FrameCallback')
   const callbackEnd = root.indexOf('@ComponentV2', callbackStart)
-  const settingsSession = sessionSource.replace(/^import[^\n]+\n/gm, '')
+  const settingsSession = normalizeSource(session).replace(/^import[^\n]+\n/gm, '')
     .replace(/@ObservedV2\s*/g, '').replace(/@Trace\s+/g, '').replace('export class SettingsSession', 'class SettingsSession')
   const source = root.slice(callbackStart, callbackEnd) + settingsSession +
     '\nclass TransitionHarness {\n' + root.slice(start, end) +
@@ -108,6 +111,15 @@ function applyCoveredSelection(fixture, language = 'en') {
   fixture.finish(110)
   fixture.applyRequest()
 }
+
+test('CRLF production sources execute the same transition coordinator and preference handoff', () => {
+  const fixture = transitionFixture({rootSource: root.replaceAll('\n', '\r\n'), session: sessionSource.replaceAll('\n', '\r\n')})
+  applyCoveredSelection(fixture)
+  assert.equal(fixture.language, 'en')
+  assert.deepEqual(fixture.writes, ['en'])
+  assert.equal(fixture.owner.languageOverlayVisible, true)
+  fixture.owner.cancelLanguageTransition(false)
+})
 
 test('Harmony language picker keeps its owner above settings without animating the translated page', () => {
   const surface = settings.slice(settings.indexOf('  languageSurface() {'), settings.indexOf('  removedCoursesSurface() {'))
