@@ -32,6 +32,11 @@ object ColorThemeLogic {
         ColorThemePreset("violet", "鸢尾紫", "Iris Violet", ThemeSeeds("#70558F", "#A08AAB", "#504AA0")),
         ColorThemePreset("amber", "暖琥珀", "Warm Amber", ThemeSeeds("#92603A", "#A9946E", "#78533F")),
         ColorThemePreset("rose", "玫瑰", "Rose", ThemeSeeds("#A4556D", "#B3909A", "#803F68")),
+        ColorThemePreset("sage", "鼠尾草", "Sage", ThemeSeeds("#5C7A57", "#A9B894", "#3F6B4B")),
+        ColorThemePreset("terracotta", "陶土", "Terracotta", ThemeSeeds("#AE6247", "#C9A089", "#8F4B33")),
+        ColorThemePreset("plum", "梅子", "Plum", ThemeSeeds("#764463", "#B08AA0", "#5C3050")),
+        ColorThemePreset("graphite", "石墨", "Graphite", ThemeSeeds("#5E686F", "#9BA6AC", "#3E4A55")),
+        ColorThemePreset("navy", "夜蓝", "Navy", ThemeSeeds("#40507A", "#7A8BB0", "#32466E")),
     )
     private val rgbPattern = Regex("^#?[0-9A-Fa-f]{6}$")
 

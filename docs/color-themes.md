@@ -2,7 +2,7 @@
 
 ## Shared behavior / 跨平台约定
 
-- Preset IDs and seed colors are defined in `contracts/v1/color-themes.json`: `default`, `ocean`, `violet`, `amber`, `rose`, plus `custom`.
+- Preset IDs and seed colors are defined in `contracts/v1/color-themes.json`: `default`, `ocean`, `violet`, `amber`, `rose`, `sage`, `terracotta`, `plum`, `graphite`, `navy`, plus `custom`.
 - The initial selection is `default`. It returns each platform's exact existing light/dark palette, rather than regenerating the default from seeds.
 - Custom fields are primary, accent, and selected-date colors. Accept only six hexadecimal RGB digits, with an optional leading `#`; trim whitespace and normalize to uppercase `#RRGGBB`. Invalid edits show an error and do not replace the last valid saved selection. Unknown persisted preset IDs fall back to `default`; corrupt persisted color fields fall back to the corresponding default seed.
 - Keep custom colors when choosing another preset. Persist locally and restore after relaunch. Restore Default selects the default preset without deleting saved custom colors. Theme changes are UI-only: never trigger account saves, network refreshes, calendar reloads, or navigation-state resets.

@@ -54,7 +54,7 @@ export default function colorThemesTest() {
 
     it('presets_have_the_shared_identifiers_and_seeds', 0, () => {
       expect(ColorThemes.presets.map((seed: ColorThemeSeed) => seed.id).join(','))
-        .assertEqual('default,ocean,violet,amber,rose');
+        .assertEqual('default,ocean,violet,amber,rose,sage,terracotta,plum,graphite,navy');
       expect(ColorThemes.seeds(new ColorThemeSelection('ocean')).selectedDate).assertEqual('#3354A2');
       expect(ColorThemes.seeds(new ColorThemeSelection('violet')).selectedDate).assertEqual('#504AA0');
       expect(ColorThemes.seeds(new ColorThemeSelection('amber')).primary).assertEqual('#92603A');

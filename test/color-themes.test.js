@@ -20,7 +20,7 @@ function storageStub() {
 test('theme presets use the shared cross-platform contract', () => {
   const contract = JSON.parse(readFileSync(new URL('../contracts/v1/color-themes.json', import.meta.url)))
   assert.deepEqual(COLOR_THEME_PRESETS, contract.presets)
-  assert.equal(new Set(COLOR_THEME_PRESETS.map((item) => item.id)).size, 5)
+  assert.equal(new Set(COLOR_THEME_PRESETS.map((item) => item.id)).size, 10)
   assert.equal(DEFAULT_COLOR_THEME.preset, contract.defaultPreset)
   assert.equal(DEFAULT_COLOR_THEME.customPrimary, contract.presets[0].primary)
   for (const item of COLOR_THEME_PRESETS) {
@@ -134,7 +134,7 @@ test('non-default themes coordinate real canvas, cards, controls and navigation 
       backgrounds.add(surfaces.background)
     }
   }
-  assert.equal(backgrounds.size, 8)
+  assert.equal(backgrounds.size, 18)
 })
 
 test('custom backgrounds preserve readable primary and secondary text on every surface', () => {

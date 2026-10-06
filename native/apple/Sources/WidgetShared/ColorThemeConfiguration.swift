@@ -66,7 +66,7 @@ struct ColorThemeSeeds: Equatable, Sendable {
 }
 
 enum ColorThemePreset: String, CaseIterable, Sendable, Identifiable {
-    case `default`, ocean, violet, amber, rose, custom
+    case `default`, ocean, violet, amber, rose, sage, terracotta, plum, graphite, navy, custom
     var id: String { rawValue }
 
     var seeds: ColorThemeSeeds {
@@ -76,6 +76,11 @@ enum ColorThemePreset: String, CaseIterable, Sendable, Identifiable {
         case .violet: ("#70558F", "#A08AAB", "#504AA0")
         case .amber: ("#92603A", "#A9946E", "#78533F")
         case .rose: ("#A4556D", "#B3909A", "#803F68")
+        case .sage: ("#5C7A57", "#A9B894", "#3F6B4B")
+        case .terracotta: ("#AE6247", "#C9A089", "#8F4B33")
+        case .plum: ("#764463", "#B08AA0", "#5C3050")
+        case .graphite: ("#5E686F", "#9BA6AC", "#3E4A55")
+        case .navy: ("#40507A", "#7A8BB0", "#32466E")
         }
         return ColorThemeSeeds(primary: ThemeRGB(hex: values.0)!, accent: ThemeRGB(hex: values.1)!, selectedDate: ThemeRGB(hex: values.2)!)
     }
@@ -87,6 +92,11 @@ enum ColorThemePreset: String, CaseIterable, Sendable, Identifiable {
         case .violet: english ? "Iris Violet" : "鸢尾紫"
         case .amber: english ? "Warm Amber" : "暖琥珀"
         case .rose: english ? "Rose" : "玫瑰"
+        case .sage: english ? "Sage" : "鼠尾草"
+        case .terracotta: english ? "Terracotta" : "陶土"
+        case .plum: english ? "Plum" : "梅子"
+        case .graphite: english ? "Graphite" : "石墨"
+        case .navy: english ? "Navy" : "夜蓝"
         case .custom: english ? "Custom" : "自定义"
         }
     }

@@ -46,7 +46,12 @@ export class ColorThemes {
     new ColorThemeSeed('ocean', '海洋蓝', 'Ocean Blue', '#356A8A', '#75939A', '#3354A2'),
     new ColorThemeSeed('violet', '鸢尾紫', 'Iris Violet', '#70558F', '#A08AAB', '#504AA0'),
     new ColorThemeSeed('amber', '暖琥珀', 'Warm Amber', '#92603A', '#A9946E', '#78533F'),
-    new ColorThemeSeed('rose', '玫瑰', 'Rose', '#A4556D', '#B3909A', '#803F68')
+    new ColorThemeSeed('rose', '玫瑰', 'Rose', '#A4556D', '#B3909A', '#803F68'),
+    new ColorThemeSeed('sage', '鼠尾草', 'Sage', '#5C7A57', '#A9B894', '#3F6B4B'),
+    new ColorThemeSeed('terracotta', '陶土', 'Terracotta', '#AE6247', '#C9A089', '#8F4B33'),
+    new ColorThemeSeed('plum', '梅子', 'Plum', '#764463', '#B08AA0', '#5C3050'),
+    new ColorThemeSeed('graphite', '石墨', 'Graphite', '#5E686F', '#9BA6AC', '#3E4A55'),
+    new ColorThemeSeed('navy', '夜蓝', 'Navy', '#40507A', '#7A8BB0', '#32466E')
   ];
 
   static normalizeHex(value: string): string | null {

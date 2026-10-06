@@ -1,5 +1,5 @@
 .app-shell {
-  background: var(--app-background);
+  background: var(--app-canvas, var(--app-background));
   color: var(--text-primary);
   height: 100vh;
   height: 100dvh;

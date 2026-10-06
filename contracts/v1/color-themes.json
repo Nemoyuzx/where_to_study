@@ -7,7 +7,12 @@
     { "id": "ocean", "nameZh": "海洋蓝", "nameEn": "Ocean Blue", "primary": "#356A8A", "accent": "#75939A", "selectedDate": "#3354A2" },
     { "id": "violet", "nameZh": "鸢尾紫", "nameEn": "Iris Violet", "primary": "#70558F", "accent": "#A08AAB", "selectedDate": "#504AA0" },
     { "id": "amber", "nameZh": "暖琥珀", "nameEn": "Warm Amber", "primary": "#92603A", "accent": "#A9946E", "selectedDate": "#78533F" },
-    { "id": "rose", "nameZh": "玫瑰", "nameEn": "Rose", "primary": "#A4556D", "accent": "#B3909A", "selectedDate": "#803F68" }
+    { "id": "rose", "nameZh": "玫瑰", "nameEn": "Rose", "primary": "#A4556D", "accent": "#B3909A", "selectedDate": "#803F68" },
+    { "id": "sage", "nameZh": "鼠尾草", "nameEn": "Sage", "primary": "#5C7A57", "accent": "#A9B894", "selectedDate": "#3F6B4B" },
+    { "id": "terracotta", "nameZh": "陶土", "nameEn": "Terracotta", "primary": "#AE6247", "accent": "#C9A089", "selectedDate": "#8F4B33" },
+    { "id": "plum", "nameZh": "梅子", "nameEn": "Plum", "primary": "#764463", "accent": "#B08AA0", "selectedDate": "#5C3050" },
+    { "id": "graphite", "nameZh": "石墨", "nameEn": "Graphite", "primary": "#5E686F", "accent": "#9BA6AC", "selectedDate": "#3E4A55" },
+    { "id": "navy", "nameZh": "夜蓝", "nameEn": "Navy", "primary": "#40507A", "accent": "#7A8BB0", "selectedDate": "#32466E" }
   ],
   "surfaces": {
     "light": {

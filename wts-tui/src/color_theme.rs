@@ -66,7 +66,7 @@ pub static PRESETS: LazyLock<Vec<Preset>> = LazyLock::new(|| {
         .expect("valid bundled color theme contract")
         .presets
 });
-pub const IDS: [&str; 6] = ["default", "ocean", "violet", "amber", "rose", "custom"];
+pub const IDS: [&str; 11] = ["default", "ocean", "violet", "amber", "rose", "sage", "terracotta", "plum", "graphite", "navy", "custom"];
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -455,7 +455,7 @@ pub(crate) mod tests {
     fn shared_presets_and_default_palette_parity() {
         assert_eq!(
             PRESETS.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
-            IDS[..5]
+            IDS[..10]
         );
         assert_eq!(ColorTheme::default().palette(false), LIGHT);
         assert_eq!(ColorTheme::default().palette(true), DARK);

@@ -152,6 +152,7 @@ export function colorThemeVariables(settings, dark = false) {
   const secondaryText = readableColor(surfaces.secondaryText, worstInkBackdrop, dark ? '#FFFFFF' : '#000000')
   return {
     '--app-background': surfaces.background,
+    '--app-canvas': 'radial-gradient(130% 100% at 50% 0%, ' + rgba(seed, dark ? 0.16 : 0.07) + ' 0%, ' + rgba(seed, 0) + ' 62%), ' + surfaces.background,
     '--background': surfaces.background,
     '--surface': surfaces.surface,
     '--surface-subtle': surfaces.elevated,
