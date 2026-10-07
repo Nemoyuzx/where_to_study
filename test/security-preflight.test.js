@@ -1,21 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseUpdates, runPreflight } from '../scripts/security-preflight.mjs';
+import { fileURLToPath } from 'node:url';
+import { parseUpdates, runPreflight, withoutLocalGitEnvironment } from '../scripts/security-preflight.mjs';
 import { installHooks, OWNED_HOOK_MARKER } from '../scripts/install-git-hooks.mjs';
 
 const head = 'a'.repeat(40), base = 'b'.repeat(40), nil = '0'.repeat(40);
-function harness({ dirty = '', untracked = '', commit = head, fail = '', version = '8.30.1' } = {}) {
+const localNames = execFileSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' }).trim().split(/\r?\n/);
+const fixtureEnvironment = withoutLocalGitEnvironment(process.env, localNames);
+function harness({ dirty = '', untracked = '', commit = head, fail = '', version = '8.30.1', environmentNames = localNames } = {}) {
   const calls = [];
   const exec = (command, args, options) => {
     calls.push({ command, args, options });
     let stdout = '';
     if (command === 'gitleaks' && args[0] === 'version') stdout = version;
     if (command === 'git') {
-      if (args[0] === 'rev-parse') stdout = args.includes('--show-toplevel') ? '/repo' : args.includes('--verify') ? commit : head;
+      if (args[0] === 'rev-parse') stdout = args.includes('--local-env-vars') ? environmentNames.join('\n') : args.includes('--show-toplevel') ? '/repo' : args.includes('--verify') ? commit : head;
       if (args[0] === 'diff') stdout = args.includes('--name-only') ? dirty : 'tracked diff';
       if (args[0] === 'ls-files') stdout = untracked;
     }
@@ -67,6 +70,78 @@ test('missing tools/old scanner fail, tool-only never silently runs as hook', ()
   assert.throws(() => runPreflight({ ...harness(), hook: true, input: record(), checkOnly: true, log() {} }));
   const h = harness(); runPreflight({ ...h, checkOnly: true, log() {} });
   assert.ok(!h.calls.some(c => c.command === 'npm' && c.args[0] === 'test'));
+});
+test('Git checks retain hook selectors while every check subprocess receives a clean environment and root cwd', () => {
+  const environment = { PATH: '/tools', WTS_TEST_MARKER: 'retained', GIT_DIR: '/repo/.git', GIT_WORK_TREE: '/repo', GIT_INDEX_FILE: '/repo/.git/index', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.commentChar', GIT_CONFIG_VALUE_0: '#' };
+  const snapshot = { ...environment };
+  const h = harness();
+  runPreflight({ ...h, hook: true, input: record(), environment, log() {} });
+  for (const call of h.calls) {
+    if (call.command === 'git') assert.equal(call.options.env, environment);
+    else {
+      assert.deepEqual(call.options.env, { PATH: '/tools', WTS_TEST_MARKER: 'retained' });
+      assert.equal(call.options.cwd, '/repo');
+    }
+  }
+  assert.deepEqual(environment, snapshot);
+  for (const environmentNames of [[], ['PATH']]) {
+    const failure = harness({ environmentNames });
+    assert.throws(() => runPreflight({ ...failure, environment, log() {} }), /Cannot identify Git local environment/u);
+    assert.ok(failure.calls.every(call => call.command === 'git'));
+  }
+});
+test('a real linked worktree hook cannot redirect nested test repositories or weaken outgoing HEAD checks', t => {
+  const temporary = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'wts-hook-environment-')));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const primary = join(temporary, 'primary');
+  const linked = join(temporary, 'linked');
+  const git = (args, cwd = primary) => execFileSync('git', args, { cwd, env: fixtureEnvironment, encoding: 'utf8' }).trim();
+  execFileSync('git', ['init', '-q', primary], { env: fixtureEnvironment });
+  fs.writeFileSync(join(primary, 'fixture.txt'), 'initial\n');
+  git(['add', 'fixture.txt']);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'initial']);
+  const remote = git(['rev-parse', 'HEAD']);
+  git(['worktree', 'add', '-q', '-b', 'fixture-linked', linked]);
+  fs.writeFileSync(join(linked, 'fixture.txt'), 'linked\n');
+  git(['add', 'fixture.txt'], linked);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '-m', 'linked'], linked);
+  const local = git(['rev-parse', 'HEAD'], linked);
+  const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], linked);
+  const directory = git(['rev-parse', '--absolute-git-dir'], linked);
+  const environment = { ...fixtureEnvironment, GIT_DIR: directory, GIT_COMMON_DIR: common, GIT_INDEX_FILE: join(directory, 'index'), GIT_PREFIX: '', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.commentChar', GIT_CONFIG_VALUE_0: '#' };
+  const commonConfig = fs.readFileSync(join(common, 'config'), 'utf8');
+  let nestedTests = 0;
+  const calls = [];
+  const exec = (command, args, options) => {
+    calls.push({ command, args, options });
+    if (command === 'git') return spawnSync(command, args, { ...options, cwd: linked });
+    assert.equal(options.cwd, linked);
+    assert.deepEqual(options.env, fixtureEnvironment);
+    if (command === 'npm' && args[0] === 'test') {
+      nestedTests++;
+      // Exercise both real disposable-repository tests with the environment a
+      // pre-push check supplies. The name filter prevents recursive execution.
+      const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=CLI scans tracked files|stable generated hook blocks', fileURLToPath(new URL('./security-fixture-policy.test.js', import.meta.url)), fileURLToPath(import.meta.url)], { ...options, stdio: 'pipe' });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      return result;
+    }
+    return { status: 0, stdout: command === 'gitleaks' && args[0] === 'version' ? '8.30.1' : '' };
+  };
+  runPreflight({ exec, environment, hook: true, input: record(local, remote), log() {} });
+  assert.equal(nestedTests, 1);
+  assert.ok(calls.some(call => call.command === 'gitleaks' && call.args.includes(`${remote}..${local}`)));
+  assert.equal(fs.readFileSync(join(common, 'config'), 'utf8'), commonConfig);
+  assert.equal(git(['rev-parse', 'HEAD']), remote);
+  assert.equal(git(['rev-parse', 'HEAD'], linked), local);
+  assert.equal(git(['status', '--porcelain'], linked), '');
+  // Direct npm/node test invocation inside a hook must also be safe: fixtures
+  // independently clear the inherited selectors before git init/add/scanning.
+  const direct = spawnSync(process.execPath, ['--test', '--test-name-pattern=CLI scans tracked files|stable generated hook blocks', fileURLToPath(new URL('./security-fixture-policy.test.js', import.meta.url)), fileURLToPath(import.meta.url)], { cwd: linked, env: environment, encoding: 'utf8' });
+  assert.equal(direct.status, 0, direct.stdout + direct.stderr);
+  assert.equal(fs.readFileSync(join(common, 'config'), 'utf8'), commonConfig);
+  assert.equal(git(['status', '--porcelain'], linked), '');
+  assert.throws(() => runPreflight({ exec, environment, hook: true, input: record(remote, nil), log() {} }), /not this worktree HEAD/u);
+  assert.equal(nestedTests, 1);
 });
 function hookFixture(t, initialHooks = '') {
   const temporary = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'wts-hook-policy-')));
@@ -165,9 +240,9 @@ test('atomic hook generation failures never switch config or replace the existin
 test('stable generated hook blocks old branches missing preflight instead of silently bypassing', t => {
   const h = hookFixture(t);
   installHooks({ exec: h.exec });
-  assert.equal(spawnSync('git', ['init', '-q', h.root]).status, 0);
+  assert.equal(spawnSync('git', ['init', '-q', h.root], { env: fixtureEnvironment }).status, 0);
   fs.rmSync(join(h.root, 'scripts'), { recursive: true });
-  const result = spawnSync('sh', [h.target], { cwd: h.root, encoding: 'utf8' });
+  const result = spawnSync('sh', [h.target], { cwd: h.root, encoding: 'utf8', env: fixtureEnvironment });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /this branch has no security preflight/u);
   assert.ok(fs.existsSync(h.target));

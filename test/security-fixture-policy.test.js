@@ -6,6 +6,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analyzeRustTestCredentials, isSafeTrackedRustPath } from '../scripts/check-test-credentials.mjs';
+import { withoutLocalGitEnvironment } from '../scripts/security-preflight.mjs';
+
+// Git hooks export repository-local selectors. Never let them select a parent
+// repository while creating or inspecting this test's disposable repositories.
+const localGitNames = execFileSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' }).trim().split(/\r?\n/);
+const fixtureEnvironment = withoutLocalGitEnvironment(process.env, localGitNames);
 
 const scan = code => analyzeRustTestCredentials(`#[cfg(test)] mod tests {\n${code}\n}`);
 const helper = `fn temporary_password(label: &str) -> String {
@@ -40,20 +46,20 @@ test('known credential slots reject nested and multiline fixed expressions witho
 test('CLI scans tracked files only, rejects symlinks, and never echoes credentials', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'wts-fixture-policy-'));
   const script = fileURLToPath(new URL('../scripts/check-test-credentials.mjs', import.meta.url));
-  const run = () => spawnSync(process.execPath, [script, '--root', root], { encoding: 'utf8' });
+  const run = () => spawnSync(process.execPath, [script, '--root', root], { encoding: 'utf8', env: fixtureEnvironment });
   try {
-    execFileSync('git', ['init', '-q', root]);
+    execFileSync('git', ['init', '-q', root], { env: fixtureEnvironment });
     writeFileSync(path.join(root, 'safe.rs'), '#[cfg(test)] mod tests { let password = ""; }');
     writeFileSync(path.join(root, 'untracked.rs'), '#[cfg(test)] mod tests { let password = "synthetic-not-output"; }');
-    execFileSync('git', ['add', 'safe.rs'], { cwd: root });
+    execFileSync('git', ['add', 'safe.rs'], { cwd: root, env: fixtureEnvironment });
     assert.equal(run().status, 0);
-    execFileSync('git', ['add', 'untracked.rs'], { cwd: root });
+    execFileSync('git', ['add', 'untracked.rs'], { cwd: root, env: fixtureEnvironment });
     const failure = run();
     assert.equal(failure.status, 1);
     assert.match(failure.stderr, /^untracked\.rs:1:TEST_CREDENTIAL_LITERAL\n$/u);
     assert.ok(!failure.stderr.includes('synthetic-not-output'));
     symlinkSync(path.join(root, 'safe.rs'), path.join(root, 'link.rs'));
-    execFileSync('git', ['add', 'link.rs'], { cwd: root });
+    execFileSync('git', ['add', 'link.rs'], { cwd: root, env: fixtureEnvironment });
     assert.equal(run().status, 2);
     assert.equal(run().stderr, 'TEST_CREDENTIAL_CHECK_ERROR\n');
   } finally { rmSync(root, { recursive: true, force: true }); }
