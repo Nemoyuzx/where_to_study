@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parseUpdates, runPreflight } from '../scripts/security-preflight.mjs';
-import { installHooks } from '../scripts/install-git-hooks.mjs';
+import { installHooks, OWNED_HOOK_MARKER } from '../scripts/install-git-hooks.mjs';
 
 const head = 'a'.repeat(40), base = 'b'.repeat(40), nil = '0'.repeat(40);
 function harness({ dirty = '', untracked = '', commit = head, fail = '', version = '8.30.1' } = {}) {
@@ -64,19 +68,107 @@ test('missing tools/old scanner fail, tool-only never silently runs as hook', ()
   const h = harness(); runPreflight({ ...h, checkOnly: true, log() {} });
   assert.ok(!h.calls.some(c => c.command === 'npm' && c.args[0] === 'test'));
 });
-test('installer preserves every default non-sample hook, is idempotent and local only', () => {
-  for (const [hooks, entries, rejects] of [
-    ['custom', [], true], ['', ['pre-push'], true], ['', ['pre-commit'], true],
-    ['', ['post-checkout'], true], ['', ['custom-directory'], true],
-    ['', ['pre-commit.sample', 'pre-push.sample'], false], ['', [], false],
-    ['scripts/git-hooks', ['pre-commit'], false],
-  ]) {
-    const calls = [];
-    const exec = (_, args) => { calls.push(args); return { status: args[0] === 'config' && args[1] === '--get' && !hooks ? 1 : 0, stdout: args[0] === 'config' && args[1] === '--get' ? hooks : '/repo' }; };
-    const action = () => installHooks({ exec, exists: () => entries.length > 0, readdir: () => entries, chmod() {} });
-    if (rejects) assert.throws(action); else action();
-    assert.equal(calls.some(args => args.includes('--local')), !rejects);
-    assert.ok(!calls.some(args => args.includes('--global')));
-    if (!hooks) assert.ok(calls.some(args => args.join(' ') === 'rev-parse --git-path hooks'));
+function hookFixture(t, initialHooks = '') {
+  const temporary = fs.realpathSync(fs.mkdtempSync(join(tmpdir(), 'wts-hook-policy-')));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const root = join(temporary, 'checkout');
+  const common = join(temporary, 'common.git');
+  const defaults = join(common, 'hooks');
+  const directory = join(common, 'wts-hooks');
+  const target = join(directory, 'pre-push');
+  fs.mkdirSync(join(root, 'scripts/git-hooks'), { recursive: true });
+  fs.mkdirSync(defaults, { recursive: true });
+  const source = fs.readFileSync(new URL('../scripts/git-hooks/pre-push', import.meta.url), 'utf8');
+  fs.writeFileSync(join(root, 'scripts/git-hooks/pre-push'), source);
+  const calls = []; let hooks = initialHooks;
+  const exec = (_, args) => {
+    calls.push(args);
+    if (args[0] === 'config') {
+      if (args[1] === '--get') return { status: hooks ? 0 : 1, stdout: hooks };
+      hooks = args.at(-1); return { status: 0, stdout: '' };
+    }
+    return { status: 0, stdout: args.includes('--show-toplevel') ? root : args.includes('--git-common-dir') ? common : defaults };
+  };
+  return { root, common, defaults, directory, target, source, calls, exec, hooks: () => hooks };
+}
+test('installer writes identical executable hook to stable common-dir path, is idempotent and local only', t => {
+  const h = hookFixture(t, 'scripts/git-hooks');
+  installHooks({ exec: h.exec }); installHooks({ exec: h.exec });
+  assert.equal(h.hooks(), h.directory);
+  assert.equal(fs.readFileSync(h.target, 'utf8'), h.source);
+  assert.ok(h.source.startsWith(OWNED_HOOK_MARKER));
+  assert.equal(fs.statSync(h.target).mode & 0o777, 0o755);
+  assert.deepEqual(fs.readdirSync(h.directory), ['pre-push']);
+  assert.ok(h.calls.filter(args => args[0] === 'config' && args[1] !== '--get').every(args => args[1] === '--local' && args.at(-1) === h.directory));
+});
+test('installer refuses foreign hooksPath, foreign destination and any default non-sample hook', t => {
+  const foreign = hookFixture(t, '/foreign/hooks');
+  assert.throws(() => installHooks({ exec: foreign.exec }), /not ours/u);
+  for (const name of ['pre-push', 'pre-commit', 'post-checkout', 'custom-directory']) {
+    const h = hookFixture(t);
+    if (name === 'custom-directory') fs.mkdirSync(join(h.defaults, name)); else fs.writeFileSync(join(h.defaults, name), 'foreign');
+    assert.throws(() => installHooks({ exec: h.exec }), /non-sample/u);
+    assert.equal(h.hooks(), '');
+    assert.ok(!fs.existsSync(h.directory));
   }
+  for (const kind of ['empty', 'foreign', 'extra', 'symlink']) {
+    const h = hookFixture(t, 'scripts/git-hooks');
+    if (kind === 'symlink') fs.symlinkSync(h.defaults, h.directory, 'dir');
+    else {
+      fs.mkdirSync(h.directory);
+      if (kind !== 'empty') fs.writeFileSync(h.target, kind === 'foreign' ? '#!/bin/sh\nforeign' : h.source);
+      if (kind === 'extra') fs.writeFileSync(join(h.directory, 'pre-commit'), 'foreign');
+    }
+    assert.throws(() => installHooks({ exec: h.exec }), /not ours/u);
+    assert.equal(h.hooks(), 'scripts/git-hooks');
+  }
+  const samples = hookFixture(t);
+  fs.writeFileSync(join(samples.defaults, 'pre-push.sample'), 'sample');
+  installHooks({ exec: samples.exec });
+  assert.equal(fs.readFileSync(join(samples.defaults, 'pre-push.sample'), 'utf8'), 'sample');
+  const migration = hookFixture(t, 'scripts/git-hooks');
+  fs.writeFileSync(join(migration.root, 'scripts/git-hooks/pre-commit'), 'foreign');
+  assert.throws(() => installHooks({ exec: migration.exec }), /refusing to hide/u);
+  const hiddenDefault = hookFixture(t, 'scripts/git-hooks');
+  fs.writeFileSync(join(hiddenDefault.defaults, 'pre-commit'), 'foreign');
+  assert.throws(() => installHooks({ exec: hiddenDefault.exec }), /non-sample/u);
+});
+test('atomic hook generation failures never switch config or replace the existing hook', t => {
+  for (const operation of ['writeFileSync', 'chmodSync', 'renameSync']) {
+    const h = hookFixture(t, 'scripts/git-hooks');
+    const adapter = { ...fs, [operation]() { throw new Error('simulated atomic failure'); } };
+    assert.throws(() => installHooks({ exec: h.exec, fs: adapter }), /simulated/u);
+    assert.equal(h.hooks(), 'scripts/git-hooks');
+    assert.ok(!fs.existsSync(h.directory));
+  }
+  const h = hookFixture(t, 'scripts/git-hooks');
+  installHooks({ exec: h.exec });
+  const before = fs.readFileSync(h.target, 'utf8');
+  assert.throws(() => installHooks({ exec: h.exec, fs: { ...fs, renameSync() { throw new Error('simulated'); } } }), /simulated/u);
+  assert.equal(fs.readFileSync(h.target, 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(h.directory), ['pre-push']);
+  const configFailure = hookFixture(t, 'scripts/git-hooks');
+  const failingExec = (command, args, options) => args[0] === 'config' && args[1] === '--local'
+    ? { status: 1, stdout: '' } : configFailure.exec(command, args, options);
+  assert.throws(() => installHooks({ exec: failingExec }), /Cannot inspect/u);
+  assert.equal(configFailure.hooks(), 'scripts/git-hooks');
+  assert.equal(fs.readFileSync(configFailure.target, 'utf8'), configFailure.source);
+  assert.deepEqual(fs.readdirSync(configFailure.directory), ['pre-push']);
+  const collision = hookFixture(t, 'scripts/git-hooks');
+  let foreignTemporary;
+  assert.throws(() => installHooks({ exec: collision.exec, fs: { ...fs, openSync(file) {
+    foreignTemporary = file; fs.writeFileSync(file, 'foreign'); throw new Error('simulated collision');
+  } } }), /collision/u);
+  assert.equal(fs.readFileSync(foreignTemporary, 'utf8'), 'foreign');
+  assert.equal(collision.hooks(), 'scripts/git-hooks');
+});
+test('stable generated hook blocks old branches missing preflight instead of silently bypassing', t => {
+  const h = hookFixture(t);
+  installHooks({ exec: h.exec });
+  assert.equal(spawnSync('git', ['init', '-q', h.root]).status, 0);
+  fs.rmSync(join(h.root, 'scripts'), { recursive: true });
+  const result = spawnSync('sh', [h.target], { cwd: h.root, encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /this branch has no security preflight/u);
+  assert.ok(fs.existsSync(h.target));
 });

@@ -1,4 +1,9 @@
 #!/bin/sh
+# WTS-OWNED-PRE-PUSH-v1
 set -eu
 cd "$(git rev-parse --show-toplevel)"
+if [ ! -f scripts/security-preflight.mjs ]; then
+  echo 'WTS pre-push blocked: this branch has no security preflight. Restore the reviewed guard before pushing.' >&2
+  exit 1
+fi
 exec node scripts/security-preflight.mjs --hook
