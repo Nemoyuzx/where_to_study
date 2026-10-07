@@ -4,7 +4,7 @@
 
 ## 下载与安装
 
-最新 GitHub 正式版是 [Where To Study v0.3.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。下表为这个正式版的 Windows、Linux、macOS 和 Android 安装包。Apple 两端 0.3.2（108）已提交正式审核，0.4.0（121）已上传测试渠道；HarmonyOS 0.3.2（1002042，build 2）已提交正式审核，0.4.0（1002044，build 1）仅测试上传并通过云测试。提交审核或测试通过不代表已在商店上架，可安装版本以对应渠道为准。
+最新 GitHub 正式版是 [Where To Study v0.3.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。下表为这个正式版的 Windows、Linux、macOS 和 Android 安装包。Apple 两端 0.3.2（108）已提交正式审核，0.4.0（121）已上传测试渠道；HarmonyOS 0.3.2（1002042，build 2）已提交正式审核，0.4.0（1002044，build 1）已上传“测试和正式上架”可用包并通过云测试，但尚未提交0.4.0正式审核。提交审核或测试通过不代表已在商店上架，可安装版本以对应渠道为准。
 
 0.3.2 包含竞赛镜像、账户说明和班车完整时刻表，详见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。另有已公开的 [0.4.0 预发布测试版及分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease)，包含新课程页、QMplus、新作业提醒及主题等改进；它不是正式稳定版。
 
@@ -16,7 +16,7 @@
 | Ubuntu/Debian Linux | [x86_64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-x86_64.deb) · [aarch64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-aarch64.deb) | 按处理器架构选择，用系统软件安装器打开。 |
 | 其他 Linux | [x86_64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-x86_64.AppImage) · [aarch64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-aarch64.AppImage) | 允许文件「作为程序执行」后打开。 |
 | iPhone/iPad（iOS/iPadOS 16+） | [TestFlight 公测邀请](https://testflight.apple.com/join/yuzpAtDJ) | 先安装 TestFlight；可安装版本以 Apple 页面为准。 |
-| HarmonyOS NEXT | AppGallery / DevEco 对应渠道 | 0.3.2 已提交正式审核；0.4.0 仅测试，能否加入及安装以华为对应页面为准。 |
+| HarmonyOS NEXT | AppGallery / DevEco 对应渠道 | 0.3.2 已提交正式审核；0.4.0 已有正式可用build，仍为预发布、未送审，能否安装以华为对应页面为准。 |
 
 后续版本请查看[最新正式版页面](https://github.com/Nemoyuzx/where_to_study/releases/latest)。
 
@@ -183,7 +183,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 ./scripts/native-harmony-build.sh
 ```
 
-`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙 0.3.2（1002042，build 2）已提交正式审核；0.4.0（1002044，build 1）仅测试上传并通过云测试，两者都不能据此宣称已上架。
+`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙0.3.2（1002042，build 2）已提交正式审核；0.4.0（1002044，build 1）已通过DevEco“测试和发布”上传并通过云测试，原仅测试副本保留。软件包具备正式用途不等于应用已送审或上架。
 
 Android 主界面仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri；QMplus 官方 SSO/MFA 在独立进程的 WebView 中完成，不读取系统浏览器 Cookie。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
