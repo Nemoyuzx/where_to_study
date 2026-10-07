@@ -717,7 +717,13 @@ mod tests {
     use std::cell::{Cell, RefCell};
 
     fn temporary_password(label: &str) -> String {
-        format!("{label}-{}", std::process::id())
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
     }
 
     #[test]
@@ -861,20 +867,35 @@ mod tests {
 
     #[test]
     fn cloud_secret_is_only_in_secure_payload_not_settings_or_public_response() {
+        let test_password_extra_0 = temporary_password(
+            "cloud_secret_is_only_in_secure_payload_not_settings_or_public_response-0",
+        );
+        let test_password_extra_1 = temporary_password(
+            "cloud_secret_is_only_in_secure_payload_not_settings_or_public_response-1",
+        );
+        let test_password_extra_2 = temporary_password(
+            "cloud_secret_is_only_in_secure_payload_not_settings_or_public_response-2",
+        );
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(SETTINGS_FILE_NAME);
-        let mut request = fixture_request(Some("academic-secret"));
-        request.teaching_cloud_password = Some("cloud-secret".into());
+        let mut request = fixture_request(Some(test_password_extra_0.as_str()));
+        request.teaching_cloud_password = Some(test_password_extra_1.as_str().into());
         let plan = prepare_save_with(request, || Ok(None)).unwrap();
         let response = commit_save_to_path(&path, plan, |credentials| {
-            assert_eq!(credentials.assignment_password(), "cloud-secret");
+            assert_eq!(
+                credentials.assignment_password(),
+                test_password_extra_1.as_str()
+            );
             Ok(())
         })
         .unwrap();
         assert!(response.has_saved_teaching_cloud_password);
         let public = serde_json::to_string(&response).unwrap();
         let disk = fs::read_to_string(path).unwrap();
-        for secret in ["academic-secret", "cloud-secret"] {
+        for secret in [
+            test_password_extra_0.as_str(),
+            test_password_extra_1.as_str(),
+        ] {
             assert!(!public.contains(secret));
             assert!(!disk.contains(secret));
         }
@@ -883,7 +904,7 @@ mod tests {
         assert_eq!(legacy.assignment_password(), "legacy");
         let mut request = fixture_request(None);
         request.account.clear();
-        request.teaching_cloud_password = Some("cloud-only".into());
+        request.teaching_cloud_password = Some(test_password_extra_2.as_str().into());
         assert!(prepare_save_with(request, || Ok(None)).is_err());
     }
 
@@ -1178,16 +1199,18 @@ mod tests {
 
     #[test]
     fn missing_password_preserves_existing_secure_password() {
+        let test_password_extra_0 =
+            temporary_password("missing_password_preserves_existing_secure_password-0");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
 
         let saved = save_to_path(
             &path,
             fixture_request(None),
             || Ok(Some(stored.clone())),
             |credentials| {
-                assert_eq!(credentials.password, "existing-secret");
+                assert_eq!(credentials.password, test_password_extra_0.as_str());
                 Ok(())
             },
         )
@@ -1196,21 +1219,23 @@ mod tests {
         assert!(saved.has_saved_password);
         assert!(!fs::read_to_string(path)
             .unwrap()
-            .contains("existing-secret"));
+            .contains(test_password_extra_0.as_str()));
     }
 
     #[test]
     fn empty_password_preserves_existing_secure_password() {
+        let test_password_extra_0 =
+            temporary_password("empty_password_preserves_existing_secure_password-0");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
 
         let saved = save_to_path(
             &path,
             fixture_request(Some("")),
             || Ok(Some(stored.clone())),
             |credentials| {
-                assert_eq!(credentials.password, "existing-secret");
+                assert_eq!(credentials.password, test_password_extra_0.as_str());
                 Ok(())
             },
         )
@@ -1221,10 +1246,14 @@ mod tests {
 
     #[test]
     fn explicit_password_can_replace_credentials_for_a_changed_account() {
+        let test_password_extra_0 =
+            temporary_password("explicit_password_can_replace_credentials_for_a_changed_account-0");
+        let test_password_extra_1 =
+            temporary_password("explicit_password_can_replace_credentials_for_a_changed_account-1");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
-        let mut request = fixture_request(Some("replacement-secret"));
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
+        let mut request = fixture_request(Some(test_password_extra_1.as_str()));
         request.account = "other-account".to_string();
 
         let plan = prepare_save_with(request, || Ok(Some(stored.clone())))
@@ -1233,7 +1262,7 @@ mod tests {
 
         commit_save_to_path(&path, plan, |credentials| {
             assert_eq!(credentials.account, "other-account");
-            assert_eq!(credentials.password, "replacement-secret");
+            assert_eq!(credentials.password, test_password_extra_1.as_str());
             Ok(())
         })
         .expect("replace password");
@@ -1241,9 +1270,12 @@ mod tests {
 
     #[test]
     fn invalid_term_start_date_is_rejected_before_credentials_are_loaded() {
+        let test_password_extra_0 = temporary_password(
+            "invalid_term_start_date_is_rejected_before_credentials_are_loaded-0",
+        );
         for invalid in ["2026-02-30", "2026-13-01", "2026-2-03"] {
             let credentials_loaded = Cell::new(false);
-            let mut request = fixture_request(Some("replacement-secret"));
+            let mut request = fixture_request(Some(test_password_extra_0.as_str()));
             request.term_start_date = invalid.to_string();
 
             let result = prepare_save_with(request, || {
@@ -1265,7 +1297,10 @@ mod tests {
 
     #[test]
     fn automatic_settings_can_keep_empty_term_defaults_but_manual_settings_cannot() {
-        let mut automatic = fixture_request(Some("replacement-secret"));
+        let test_password_extra_0 = temporary_password(
+            "automatic_settings_can_keep_empty_term_defaults_but_manual_settings_cannot-0",
+        );
+        let mut automatic = fixture_request(Some(test_password_extra_0.as_str()));
         automatic.term_id.clear();
         automatic.term_start_date.clear();
         automatic.automatic_term_detection_enabled = true;
@@ -1274,7 +1309,7 @@ mod tests {
         assert!(plan.settings.term_start_date.is_empty());
 
         for missing_start in [false, true] {
-            let mut manual = fixture_request(Some("replacement-secret"));
+            let mut manual = fixture_request(Some(test_password_extra_0.as_str()));
             manual.automatic_term_detection_enabled = false;
             if missing_start {
                 manual.term_start_date.clear();
@@ -1287,9 +1322,12 @@ mod tests {
 
     #[test]
     fn malformed_manual_term_id_is_rejected_before_credentials_are_loaded() {
+        let test_password_extra_0 = temporary_password(
+            "malformed_manual_term_id_is_rejected_before_credentials_are_loaded-0",
+        );
         for invalid in ["garbage", "2025-2026-3", "2025-26-1"] {
             let credentials_loaded = Cell::new(false);
-            let mut request = fixture_request(Some("replacement-secret"));
+            let mut request = fixture_request(Some(test_password_extra_0.as_str()));
             request.automatic_term_detection_enabled = false;
             request.term_id = invalid.to_string();
 
@@ -1311,18 +1349,25 @@ mod tests {
 
     #[test]
     fn explicit_password_for_same_account_does_not_change_account_scope() {
+        let test_password_extra_0 = temporary_password(
+            "explicit_password_for_same_account_does_not_change_account_scope-0",
+        );
+        let test_password_extra_1 = temporary_password(
+            "explicit_password_for_same_account_does_not_change_account_scope-1",
+        );
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
-        let plan = prepare_save_with(fixture_request(Some("replacement-secret")), || {
-            Ok(Some(stored))
-        })
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
+        let plan = prepare_save_with(
+            fixture_request(Some(test_password_extra_1.as_str())),
+            || Ok(Some(stored)),
+        )
         .expect("prepare same-account password change");
 
         assert!(!plan.account_changed());
         commit_save_to_path(&path, plan, |credentials| {
             assert_eq!(credentials.account, "fixture-account");
-            assert_eq!(credentials.password, "replacement-secret");
+            assert_eq!(credentials.password, test_password_extra_1.as_str());
             Ok(())
         })
         .expect("save same-account password change");
@@ -1330,7 +1375,9 @@ mod tests {
 
     #[test]
     fn legacy_secure_credentials_receive_a_new_opaque_scope() {
-        let mut legacy = fixture_credentials("fixture-account", "existing-secret");
+        let test_password_extra_0 =
+            temporary_password("legacy_secure_credentials_receive_a_new_opaque_scope-0");
+        let mut legacy = fixture_credentials("fixture-account", test_password_extra_0.as_str());
         legacy.account_scope.clear();
 
         let plan = prepare_save_with(fixture_request(None), || Ok(Some(legacy)))
@@ -1345,10 +1392,16 @@ mod tests {
 
     #[test]
     fn changed_account_credential_failure_never_persists_identity_or_password() {
+        let test_password_extra_0 = temporary_password(
+            "changed_account_credential_failure_never_persists_identity_or_password-0",
+        );
+        let test_password_extra_1 = temporary_password(
+            "changed_account_credential_failure_never_persists_identity_or_password-1",
+        );
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
-        let mut request = fixture_request(Some("replacement-secret"));
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
+        let mut request = fixture_request(Some(test_password_extra_1.as_str()));
         request.account = "other-account".to_string();
         let plan =
             prepare_save_with(request, || Ok(Some(stored))).expect("prepare changed account");
@@ -1364,14 +1417,19 @@ mod tests {
 
     #[test]
     fn settings_write_failure_rolls_back_same_account_credentials() {
+        let test_password_extra_0 =
+            temporary_password("settings_write_failure_rolls_back_same_account_credentials-0");
+        let test_password_extra_1 =
+            temporary_password("settings_write_failure_rolls_back_same_account_credentials-1");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let blocking_file = directory.path().join("not-a-directory");
         fs::write(&blocking_file, b"block settings parent").expect("create blocking file");
         let path = blocking_file.join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
-        let plan = prepare_save_with(fixture_request(Some("replacement-secret")), || {
-            Ok(Some(stored.clone()))
-        })
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
+        let plan = prepare_save_with(
+            fixture_request(Some(test_password_extra_1.as_str())),
+            || Ok(Some(stored.clone())),
+        )
         .expect("prepare same-account update");
         let writes = RefCell::new(Vec::new());
 
@@ -1384,18 +1442,22 @@ mod tests {
         assert!(error.message.contains("无法创建本地设置目录"));
         let writes = writes.into_inner();
         assert_eq!(writes.len(), 2);
-        assert_eq!(writes[0].password, "replacement-secret");
+        assert_eq!(writes[0].password, test_password_extra_1.as_str());
         assert_eq!(writes[1], stored);
     }
 
     #[test]
     fn settings_write_failure_clears_new_changed_account_credentials() {
+        let test_password_extra_0 =
+            temporary_password("settings_write_failure_clears_new_changed_account_credentials-0");
+        let test_password_extra_1 =
+            temporary_password("settings_write_failure_clears_new_changed_account_credentials-1");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let blocking_file = directory.path().join("not-a-directory");
         fs::write(&blocking_file, b"block settings parent").expect("create blocking file");
         let path = blocking_file.join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
-        let mut request = fixture_request(Some("replacement-secret"));
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
+        let mut request = fixture_request(Some(test_password_extra_1.as_str()));
         request.account = "other-account".to_string();
         let plan = prepare_save_with(request, || Ok(Some(stored)))
             .expect("prepare changed-account update");
@@ -1410,15 +1472,17 @@ mod tests {
         let writes = writes.into_inner();
         assert_eq!(writes.len(), 2);
         assert_eq!(writes[0].account, "other-account");
-        assert_eq!(writes[0].password, "replacement-secret");
+        assert_eq!(writes[0].password, test_password_extra_1.as_str());
         assert_eq!(writes[1], Credentials::default());
     }
 
     #[test]
     fn changing_account_without_a_new_password_is_rejected() {
+        let test_password_extra_0 =
+            temporary_password("changing_account_without_a_new_password_is_rejected-0");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
         let mut request = fixture_request(None);
         request.account = "other-account".to_string();
         let save_called = Cell::new(false);
@@ -1459,9 +1523,11 @@ mod tests {
 
     #[test]
     fn empty_account_and_password_clear_secure_credentials() {
+        let test_password_extra_0 =
+            temporary_password("empty_account_and_password_clear_secure_credentials-0");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let stored = fixture_credentials("fixture-account", "existing-secret");
+        let stored = fixture_credentials("fixture-account", test_password_extra_0.as_str());
         let mut request = fixture_request(Some(""));
         request.account = "  ".to_string();
 
@@ -1482,9 +1548,10 @@ mod tests {
 
     #[test]
     fn password_without_an_account_is_rejected() {
+        let test_password_extra_0 = temporary_password("password_without_an_account_is_rejected-0");
         let directory = tempfile::tempdir().expect("create temporary directory");
         let path = directory.path().join("settings.json");
-        let mut request = fixture_request(Some("orphan-secret"));
+        let mut request = fixture_request(Some(test_password_extra_0.as_str()));
         request.account = " ".to_string();
         let save_called = Cell::new(false);
 
@@ -1506,11 +1573,16 @@ mod tests {
 
     #[test]
     fn stored_password_is_only_merged_for_the_same_account() {
-        let stored = fixture_credentials("saved-user", "saved-secret");
+        let test_password_extra_0 =
+            temporary_password("stored_password_is_only_merged_for_the_same_account-0");
+        let stored = fixture_credentials("saved-user", test_password_extra_0.as_str());
         let mut matching_account = Some("saved-user".to_string());
         let mut matching_password = None;
         merge_saved_credentials(&mut matching_account, &mut matching_password, Some(&stored));
-        assert_eq!(matching_password.as_deref(), Some("saved-secret"));
+        assert_eq!(
+            matching_password.as_deref(),
+            Some(test_password_extra_0.as_str())
+        );
 
         let mut different_account = Some("other-user".to_string());
         let mut different_password = None;

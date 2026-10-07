@@ -19,3 +19,6 @@ zeroize = "1"
 
 [profile.release]
 strip = true
+
+[dev-dependencies]
+getrandom = "0.3"

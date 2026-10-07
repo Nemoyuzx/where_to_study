@@ -292,22 +292,33 @@ pub async fn clear_qmplus_login(app: tauri::AppHandle) -> Result<LoginStatus, St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn temporary_password(label: &str) -> String {
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
+    }
+
     #[test]
     fn independent_record_requires_an_explicit_opaque_marker_and_bounded_email_password() {
         let mut record = Credentials {
             account: "student@example.org".into(),
-            password: "synthetic".into(),
+            password: temporary_password("login"),
             teaching_cloud_password: None,
             account_scope: format!("opaque-v1:{}", "a".repeat(64)),
         };
         assert!(valid(&record));
         record.password = "x".repeat(2049);
         assert!(!valid(&record));
-        record.password = "synthetic".into();
+        record.password = temporary_password("login");
         record.account_scope.clear();
         assert!(!valid(&record));
         record.account_scope = format!("opaque-v1:{}", "a".repeat(64));
-        record.teaching_cloud_password = Some("forbidden".into());
+        record.teaching_cloud_password = Some(temporary_password("forbidden-cloud"));
         assert!(!valid(&record));
         assert_ne!(ENTRY, "default-account");
     }

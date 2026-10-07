@@ -881,18 +881,28 @@ fn parse_slot_filter(text: &str) -> ServiceResult<Vec<usize>> {
 
 #[cfg(test)]
 mod tests {
+    fn temporary_password(label: &str) -> String {
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
+    }
+
     use super::*;
 
     #[test]
     fn academic_password_changes_invalidate_even_with_unchanged_cloud_password() {
         let first = where_to_study_lib::credential_store::Credentials {
             account: "synthetic-account".into(),
-            password: "fixture-old".into(),
-            teaching_cloud_password: Some("fixture-cloud".into()),
+            password: temporary_password("old"),
+            teaching_cloud_password: Some(temporary_password("cloud")),
             account_scope: "fixture-scope".into(),
         };
         let mut second = first.clone();
-        second.password = "fixture-new".into();
+        second.password = temporary_password("new");
         assert_eq!(
             first.teaching_cloud_password,
             second.teaching_cloud_password

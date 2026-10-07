@@ -313,6 +313,16 @@ fn ensure_private_file_permissions(_path: &Path, _metadata: &fs::Metadata) -> Se
 
 #[cfg(test)]
 mod tests {
+    fn temporary_password(label: &str) -> String {
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
+    }
+
     use super::*;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -324,10 +334,12 @@ mod tests {
     #[test]
     fn cloud_password_blank_edits_and_account_changes_preserve_only_matching_account() {
         let mut old = fixture("a", VALID_SCOPE);
-        old.teaching_cloud_password = Some("cloud".into());
+        let cloud = temporary_password("cloud");
+        let new_cloud = temporary_password("new-cloud");
+        old.teaching_cloud_password = Some(cloud.clone());
         assert_eq!(
             cloud_password_for(Some(&old), "a", String::new(), false).as_deref(),
-            Some("cloud")
+            Some(cloud.as_str())
         );
         assert_eq!(
             cloud_password_for(Some(&old), "b", String::new(), false),
@@ -338,8 +350,8 @@ mod tests {
             None
         );
         assert_eq!(
-            cloud_password_for(Some(&old), "a", "new-cloud".into(), false).as_deref(),
-            Some("new-cloud")
+            cloud_password_for(Some(&old), "a", new_cloud.clone(), false).as_deref(),
+            Some(new_cloud.as_str())
         );
         let legacy: Credentials =
             serde_json::from_str(r#"{"account":"a","password":"academic"}"#).unwrap();
@@ -349,7 +361,7 @@ mod tests {
     fn fixture(account: &str, scope: &str) -> Credentials {
         Credentials {
             account: account.to_string(),
-            password: "fixture-password".to_string(),
+            password: temporary_password("credential"),
             teaching_cloud_password: None,
             account_scope: scope.to_string(),
         }

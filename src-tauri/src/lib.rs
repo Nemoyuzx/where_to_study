@@ -415,7 +415,13 @@ fn set_desktop_notification_preferences(
 #[cfg(test)]
 mod local_data_coordination_tests {
     fn temporary_password(label: &str) -> String {
-        format!("{label}-{}", std::process::id())
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
     }
     use super::*;
     use std::fs;

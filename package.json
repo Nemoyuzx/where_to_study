@@ -7,6 +7,9 @@
   "scripts": {
     "dev": "vite",
     "test": "node --test test/*.test.js",
+    "security:preflight": "node scripts/security-preflight.mjs",
+    "security:tools": "node scripts/security-preflight.mjs --check-only",
+    "hooks:install": "node scripts/install-git-hooks.mjs",
     "licenses:generate": "node scripts/generate-third-party-licenses.mjs",
     "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "icons:sync": "./scripts/sync-app-icons.sh",
