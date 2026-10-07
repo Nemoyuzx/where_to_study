@@ -68,6 +68,7 @@ internal class QmplusRepository(context: Context,
         private set
     private var cookieClearDeadline: Runnable? = null
     private var pendingLoginPassword: CharArray? = null
+    private var pendingLoginDisableRevision: Long? = null
     private var warmRefreshStarted = false
     private val observers = ConcurrentHashMap<Any, () -> Unit>()
 
@@ -77,7 +78,12 @@ internal class QmplusRepository(context: Context,
         worker.execute {
             val result = runCatching {
                 // A broken optional saved-login record must not erase readable course data.
-                val loginStatus = runCatching { savedLoginStore?.status() }.getOrNull() ?: QmplusCredentialStatus()
+                val optedOut = preferencesOverride == null && appContext.getSharedPreferences("qmplus_settings_ui", Context.MODE_PRIVATE).let {
+                    it.getBoolean("autofill_revoked", false) || !it.getBoolean("save_login_selected", true)
+                }
+                val loginStatus = if (optedOut) {
+                    runCatching { savedLoginStore?.clear() }.getOrNull() ?: QmplusCredentialStatus()
+                } else runCatching { savedLoginStore?.status() }.getOrNull() ?: QmplusCredentialStatus()
                 val raw = synchronized(prefs) { Triple(prefs.getLong(GENERATION, 0),
                     prefs.getBoolean(COOKIE_CLEAR_PENDING, false), prefs.getString(SNAPSHOT, null)) }
                 val cached = raw.third?.toByteArray(StandardCharsets.UTF_8)
@@ -179,6 +185,56 @@ internal class QmplusRepository(context: Context,
         connection = null; notifyObservers(); true
     }
 
+    /** Revoke only saved-login authority, preserving the official session and course cache. */
+    fun disableSavedLogin(onComplete: (Result<Unit>) -> Unit) {
+        val retired = synchronized(stateLock) {
+            if (closed.get() || restoringSnapshot) return
+            revision++
+            val token = connection?.token
+            connection = null
+            pendingLoginPassword?.fill('\u0000'); pendingLoginPassword = null
+            savedLoginStatus = savedLoginStatus.copy(enabled = false)
+            isSavingLogin = true
+            pendingLoginDisableRevision = revision
+            isLoading = false
+            manualContinuationRequired = false
+            Triple(revision, token, savedLoginStatus.revision)
+        }
+        retired.second?.let { token ->
+            if (preferencesOverride == null) runCatching {
+                appContext.startService(Intent(appContext, QmplusClearService::class.java)
+                    .putExtra(QmplusClearService.EXTRA_STOP_SAVED_LOGIN_ONLY, true)
+                    .putExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN, token))
+            }
+        }
+        notifyObservers()
+        try {
+            worker.execute {
+                val result = runCatching {
+                    synchronized(stateLock) {
+                        check(!closed.get() && pendingLoginDisableRevision == retired.first)
+                        val selectedOff = if (preferencesOverride == null) runCatching {
+                            check(appContext.getSharedPreferences("qmplus_settings_ui", Context.MODE_PRIVATE)
+                                .edit().putBoolean("save_login_selected", false).putBoolean("autofill_revoked", true).commit())
+                        } else Result.success(Unit)
+                        // Attempt the durable tombstone even if the UI preference write failed.
+                        savedLoginStatus = checkNotNull(savedLoginStore).clear(expectedRevision = retired.third)
+                        selectedOff.getOrThrow()
+                    }
+                }
+                synchronized(stateLock) {
+                    if (pendingLoginDisableRevision == retired.first) { isSavingLogin = false; pendingLoginDisableRevision = null }
+                }
+                notifyObservers()
+                handler.post { if (!closed.get()) onComplete(result) }
+            }
+        } catch (_: RejectedExecutionException) {
+            synchronized(stateLock) {
+                if (pendingLoginDisableRevision == retired.first) { isSavingLogin = false; pendingLoginDisableRevision = null }
+            }
+        }
+    }
+
     /** Explicit save only. Invalidate the old QM identity before publishing a new saved login. */
     fun saveLogin(account: String, password: CharArray, explicitOptIn: Boolean, onComplete: (Result<Unit>) -> Unit) {
         val ownedPassword = password.copyOf()
@@ -213,16 +269,22 @@ internal class QmplusRepository(context: Context,
                                         store.status() == savedLoginStatus
                                 } finally { saved?.erase() }
                             } else false
-                            if (unchanged) return@synchronized savedLoginStatus
+                            if (unchanged) {
+                                persistSavedLoginChoice()
+                                return@synchronized savedLoginStatus
+                            }
                             clearInternal(preservingPendingLogin = true)
                             val savedStatus = store.save(account, ownedPassword, true, savedLoginStatus.revision)
+                            persistSavedLoginChoice()
                             savedLoginStatus = savedStatus
                             manualContinuationRequired = false
                             savedStatus
                         }
                     }
                 } finally { ownedPassword.fill('\u0000') }
-                synchronized(stateLock) { isSavingLogin = false; if (pendingLoginPassword === ownedPassword) pendingLoginPassword = null }
+                synchronized(stateLock) {
+                    if (pendingLoginPassword === ownedPassword) { isSavingLogin = false; pendingLoginPassword = null }
+                }
                 notifyObservers()
                 if (!closed.get()) handler.post {
                     if (!closed.get()) {
@@ -233,8 +295,15 @@ internal class QmplusRepository(context: Context,
             }
         } catch (_: RejectedExecutionException) {
             ownedPassword.fill('\u0000')
-            synchronized(stateLock) { isSavingLogin = false; if (pendingLoginPassword === ownedPassword) pendingLoginPassword = null }
+            synchronized(stateLock) {
+                if (pendingLoginPassword === ownedPassword) { isSavingLogin = false; pendingLoginPassword = null }
+            }
         }
+    }
+
+    private fun persistSavedLoginChoice() {
+        if (preferencesOverride == null) check(appContext.getSharedPreferences("qmplus_settings_ui", Context.MODE_PRIVATE)
+            .edit().putBoolean("save_login_selected", true).putBoolean("autofill_revoked", false).commit())
     }
 
     fun accept(bytes: ByteArray, expectedGeneration: Long) {
@@ -351,7 +420,10 @@ internal class QmplusRepository(context: Context,
         cancelCookieClearDeadlineLocked()
         revision++
         connection = null
-        if (!preservingPendingLogin) { pendingLoginPassword?.fill('\u0000'); pendingLoginPassword = null }
+        if (!preservingPendingLogin) {
+            pendingLoginPassword?.fill('\u0000'); pendingLoginPassword = null
+            pendingLoginDisableRevision = null; isSavingLogin = false
+        }
         // Separate encrypted domain; a durable tombstone invalidates in-flight
         // decrypt/fill requests in the private WebView process as well.
         val loginClear = runCatching { savedLoginStore?.clear() ?: QmplusCredentialStatus(savedLoginStatus.revision + 1) }
@@ -372,6 +444,7 @@ internal class QmplusRepository(context: Context,
         synchronized(stateLock) {
             revision++; snapshot = null; connection = null; isClearingSession = false; isSavingLogin = false
             pendingLoginPassword?.fill('\u0000'); pendingLoginPassword = null
+            pendingLoginDisableRevision = null
             cancelCookieClearDeadlineLocked()
         }
         observers.clear(); handler.removeCallbacksAndMessages(null); worker.shutdownNow()

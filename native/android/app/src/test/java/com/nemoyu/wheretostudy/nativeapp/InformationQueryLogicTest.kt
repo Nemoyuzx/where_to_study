@@ -11,6 +11,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class InformationQueryLogicTest {
+    @Test fun otherQmTermFilterKeepsExpandedCoursesPagingAndScrollInTheSameSession() {
+        val session = InformationQuerySessionState(InformationQueryMode.COURSES.name)
+        session.expandedCourseKeys.addAll(listOf("qmplus.course.1", "teaching-cloud.course.cloud"))
+        session.inlineCourseCounts["qmplus.course.1"] = 40
+        session.modeScrollY[InformationQueryMode.COURSES] = 137
+        session.visibleQmplusRowCount = 40
+        session.automaticCourseLoadAttempted = true
+        repeat(3) { session.showsOtherQmCourses = !session.showsOtherQmCourses }
+        assertTrue(session.showsOtherQmCourses)
+        assertEquals(setOf("qmplus.course.1", "teaching-cloud.course.cloud"), session.expandedCourseKeys)
+        assertEquals(40, session.inlineCourseCounts["qmplus.course.1"])
+        assertEquals(137, session.modeScrollY[InformationQueryMode.COURSES])
+        assertEquals(40, session.visibleQmplusRowCount)
+        assertTrue(session.automaticCourseLoadAttempted)
+        assertEquals(InformationQueryMode.COURSES, session.selectedMode)
+    }
+
     @Test fun fullShuttleTimetableIsInitiallyCollapsedAndSessionOnlyTogglesItsBody() {
         val session = InformationQuerySessionState()
         assertFalse(session.fullTimetableExpanded)

@@ -33,6 +33,8 @@ class PlannerQueryState(defaultCampusID: String) {
     val selectedBuildings: MutableSet<String> = mutableSetOf()
     var usePersonalSchedule: Boolean = true
     private var slotSelectionInitialized: Boolean = false
+    private var automaticSlotSelection: Set<Int> = emptySet()
+    private var userEditedSlotSelection = false
 
     fun selectCampus(campusID: String) {
         this.campusID = campusID
@@ -43,10 +45,22 @@ class PlannerQueryState(defaultCampusID: String) {
     }
 
     fun ensureSlotSelection(allSlots: Iterable<Int>, personalBusySlots: Set<Int>) {
-        if (slotSelectionInitialized) return
-        selectedSlots += allSlots.filterNot { usePersonalSchedule && it in personalBusySlots }
+        // A provisional all-free selection is rebuilt when the cached personal
+        // schedule arrives. Explicit user filters survive adaptive/page rebuilds.
+        if (slotSelectionInitialized && (userEditedSlotSelection || selectedSlots != automaticSlotSelection)) {
+            userEditedSlotSelection = true
+            return
+        }
+        automaticSlotSelection = allSlots.filterNot { usePersonalSchedule && it in personalBusySlots }.toSet()
+        selectedSlots.clear()
+        selectedSlots += automaticSlotSelection
         slotSelectionInitialized = true
     }
+
+    fun markSlotSelectionEdited() { userEditedSlotSelection = true }
+
+    fun effectiveSlotSelection(personalBusySlots: Set<Int>): Set<Int> =
+        selectedSlots.filterNot { usePersonalSchedule && it in personalBusySlots }.toSet()
 }
 
 class PlannerPage(
@@ -63,6 +77,8 @@ class PlannerPage(
     private val today = Calendar.getInstance(shanghai)
     private val personalBusySlots = ScheduleLogic.busySlots(scheduleRepository.schedule, today)
     private val selectedSlots: MutableSet<Int> = queryState.selectedSlots
+    private val effectiveSelectedSlots: Set<Int>
+        get() = queryState.effectiveSlotSelection(personalBusySlots)
     private val selectedBuildings: MutableSet<String> = queryState.selectedBuildings
     private var usePersonalSchedule: Boolean
         get() = queryState.usePersonalSchedule
@@ -598,7 +614,7 @@ class PlannerPage(
         fun refreshCells() {
             cells.forEach { (index, cell) ->
                 val busy = usePersonalSchedule && index in personalBusySlots
-                val selected = index in selectedSlots
+                val selected = index in effectiveSelectedSlots
                 cell.isEnabled = !busy
                 cell.setThemeTextColor { when {
                         selected -> Palette.onPrimary
@@ -620,6 +636,7 @@ class PlannerPage(
             minHeight = activity.dp(controlHeightDp)
             setOnClickListener {
                 activity.performControlHaptic(it)
+                queryState.markSlotSelectionEdited()
                 onClick()
                 refreshCells()
                 renderResultsAndSummary()
@@ -653,6 +670,7 @@ class PlannerPage(
 
         personalToggle.setOnCheckedChangeListener { button, checked ->
             activity.performControlHaptic(button)
+            queryState.markSlotSelectionEdited()
             usePersonalSchedule = checked
             if (usePersonalSchedule) {
                 selectedSlots.removeAll(personalBusySlots)
@@ -720,6 +738,7 @@ class PlannerPage(
                             setOnClickListener {
                                 if (usePersonalSchedule && slot.index in personalBusySlots) return@setOnClickListener
                                 activity.performControlHaptic(it)
+                                queryState.markSlotSelectionEdited()
                                 if (!selectedSlots.add(slot.index)) selectedSlots.remove(slot.index)
                                 refreshCells()
                                 renderResultsAndSummary()
@@ -879,7 +898,7 @@ class PlannerPage(
             selectedBuildings.isEmpty() -> {
                 ClassroomResultsPresentation.empty("未选择教学楼")
             }
-            selectedSlots.isEmpty() -> {
+            effectiveSelectedSlots.isEmpty() -> {
                 ClassroomResultsPresentation.empty("未选择节次")
             }
             else -> {
@@ -952,7 +971,7 @@ class PlannerPage(
         val values = listOf(
             "当天课程" to ScheduleLogic.courses(scheduleRepository.schedule, today).size,
             "个人空闲节次" to freeCount,
-            "匹配教室" to if (selectedBuildings.isEmpty() || selectedSlots.isEmpty()) 0 else matchingRooms().size,
+            "匹配教室" to if (selectedBuildings.isEmpty() || effectiveSelectedSlots.isEmpty()) 0 else matchingRooms().size,
         )
         val columns = AdaptiveContentLogic.plannerSummaryColumns(availableWidthDp)
         fun metric(label: String, value: Int): LinearLayout = LinearLayout(activity).apply {
@@ -1009,12 +1028,12 @@ class PlannerPage(
     private fun matchingRooms(): List<Classroom> = campusRooms()
         .asSequence()
         .filter { it.building in selectedBuildings }
-        .filter { room -> selectedSlots.all(room.availableSlots::contains) }
+        .filter { room -> effectiveSelectedSlots.all(room.availableSlots::contains) }
         .sortedWith(compareBy(Classroom::building, Classroom::room))
         .toList()
 
     private fun selectedRanges(): String {
-        val slots = selectedSlots.sorted()
+        val slots = effectiveSelectedSlots.sorted()
         if (slots.isEmpty()) return "未选择"
         val ranges = mutableListOf<IntRange>()
         var start = slots.first()

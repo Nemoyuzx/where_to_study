@@ -150,8 +150,10 @@ internal class QmplusCredentialStore(context: Context, private val testDomain: S
     }
 
     /** A durable disabled tombstone stops delayed reads/saves in either app process. */
-    fun clear(): QmplusCredentialStatus = locked {
-        val next = QmplusCredentialStatus(Math.addExact(readRecord().status.revision, 1), false)
+    fun clear(expectedRevision: Long? = null): QmplusCredentialStatus = locked {
+        val previous = readRecord().status
+        if (expectedRevision != null) check(previous.revision == expectedRevision) { "QM saved-login clear was invalidated." }
+        val next = QmplusCredentialStatus(Math.addExact(previous.revision, 1), false)
         writeRecord(Record(next))
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         if (keyStore.containsAlias(keyAlias)) keyStore.deleteEntry(keyAlias)

@@ -61,6 +61,10 @@ export class QMPlusAuthAttemptLedger {
   private selectedAccountDocument: string = '';
   private claimedUsernameDocument: string = '';
   private submittedUsernameDocument: string = '';
+  private submittedUsernameDeadline: number = 0;
+  private readonly clock: () => number;
+
+  constructor(clock: () => number = (): number => Date.now()) { this.clock = clock; }
 
   begin(): void {
     this.active = true;
@@ -73,6 +77,7 @@ export class QMPlusAuthAttemptLedger {
     this.documentNonce = '';
     this.claimedUsernameDocument = '';
     this.submittedUsernameDocument = '';
+    this.submittedUsernameDeadline = 0;
     this.claimedAccountDocument = '';
     this.selectedAccountDocument = '';
   }
@@ -90,6 +95,7 @@ export class QMPlusAuthAttemptLedger {
     this.documentNonce = document;
     this.claimedUsernameDocument = '';
     this.submittedUsernameDocument = '';
+    this.submittedUsernameDeadline = 0;
     this.claimedAccountDocument = '';
     this.selectedAccountDocument = '';
   }
@@ -141,13 +147,23 @@ export class QMPlusAuthAttemptLedger {
   recordUsernameSubmission(document: string, code: string): boolean {
     if (!this.active || !this.usernameClaimed || this.claimedUsernameDocument !== document ||
       code !== 'USERNAME_SUBMITTED') { return false; }
-    this.submittedUsernameDocument = document;
+    // A foreground resume or repeated ACK must not mint another settling
+    // window. Keep the first ACK's original, same-document two-second bound.
+    if (this.submittedUsernameDocument !== document) {
+      this.submittedUsernameDeadline = this.clock() + 2000;
+      this.submittedUsernameDocument = document;
+    }
     this.acknowledgedIdentity = true;
     return true;
   }
 
   usernameSubmitted(document: string): boolean {
     return this.active && document.length > 0 && this.submittedUsernameDocument === document;
+  }
+
+  usernameTransitionDeadline(document: string): number {
+    return this.usernameSubmitted(document) && !this.passwordClaimed && !this.continueClaimed ?
+      this.submittedUsernameDeadline : 0;
   }
 
   claimPassword(document: string, accountMatch: boolean): boolean {
@@ -160,6 +176,29 @@ export class QMPlusAuthAttemptLedger {
     if (!this.active || this.continueClaimed || !accountMatch || !this.identityAcknowledged(document)) { return false; }
     this.continueClaimed = true;
     return true;
+  }
+}
+
+// The production auth loop's settling state. Recreating the loop may restore
+// the username ACK's remaining read-only budget, never its submission claims.
+export class QMPlusAuthTransitionState {
+  private deadline: number;
+  private readonly ledger: QMPlusAuthAttemptLedger;
+  private readonly document: string;
+  private readonly clock: () => number;
+  constructor(ledger: QMPlusAuthAttemptLedger, document: string,
+    clock: () => number = (): number => Date.now()) {
+    this.ledger = ledger; this.document = document; this.clock = clock;
+    this.deadline = ledger.usernameTransitionDeadline(document);
+  }
+  restoreUsernameBudget(): void {
+    this.deadline = this.ledger.usernameTransitionDeadline(this.document);
+  }
+  beginSettling(): void { this.deadline = this.clock() + 2000; }
+  isWithinBudget(): boolean { return this.ledger.identityAcknowledged(this.document) && this.clock() < this.deadline; }
+  canWait(reason: string, afterStep: boolean): boolean {
+    return afterStep && this.isWithinBudget() &&
+      ['ALREADY_ATTEMPTED', 'KNOWN_FORM_ABSENT', 'FORM_UNTRUSTED'].includes(reason);
   }
 }
 
@@ -661,7 +700,7 @@ export struct QMPlusConnectionView {
       let passwordSubmittedHere: boolean = false;
       let afterContinue: boolean = false;
       let initialChooserChecks: number = 0;
-      let transitionDeadline: number = 0;
+      const transition: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(this.authLedger, nonce);
       let deadline: number = Date.now() + 4500;
       while (this.sameAuthPage(owner, page, url, nonce) && Date.now() < deadline) {
         const state: QMPlusAuthInspection | null = await this.inspectAuth(owner, page, url, nonce,
@@ -710,7 +749,7 @@ export struct QMPlusConnectionView {
           if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
           if (!this.authLedger.recordAccountSelection(nonce, code)) { this.requireManualAuth(''); return; }
           afterAccount = true;
-          transitionDeadline = Date.now() + 2000;
+          transition.beginSettling();
           this.authStatus = '';
           await this.waitForAuthStep();
           continue;
@@ -721,7 +760,9 @@ export struct QMPlusConnectionView {
           if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
           if (!this.authLedger.recordUsernameSubmission(nonce, code)) { this.requireManualAuth(''); return; }
           afterUsername = true;
-          transitionDeadline = Date.now() + 2000;
+          // Restore the ledger's first ACK deadline rather than a loop-local
+          // zero (or a fresh budget on every foreground callback).
+          transition.restoreUsernameBudget();
           this.authStatus = '';
           await this.waitForAuthStep();
           continue;
@@ -740,7 +781,7 @@ export struct QMPlusConnectionView {
             this.authStatus = '';
             afterPassword = true;
             passwordSubmittedHere = true;
-            transitionDeadline = Date.now() + 2000;
+            transition.beginSettling();
             await this.waitForAuthStep();
             continue;
           } else { this.requireManualAuth(''); }
@@ -754,23 +795,22 @@ export struct QMPlusConnectionView {
           if (!this.sameAuthPage(owner, page, url, nonce)) { return; }
           if (code !== 'CONTINUE_SUBMITTED') { this.requireManualAuth(''); return; }
           afterContinue = true;
-          transitionDeadline = Date.now() + 2000;
+          transition.beginSettling();
           this.authStatus = '';
           await this.waitForAuthStep();
           continue;
         }
         if (afterAccount && this.authLedger.accountSelected(nonce) && !this.authLedger.passwordAttempted() &&
-          state.stage === 'manual' && state.reason === 'ACCOUNT_CHOOSER' && Date.now() < transitionDeadline) {
+          state.stage === 'manual' && state.reason === 'ACCOUNT_CHOOSER' && transition.isWithinBudget()) {
           await this.waitForAuthStep();
           continue;
         }
         if ((passwordSubmittedHere || afterContinue) && state.stage === 'manual' && state.reason === 'INTERFERENCE' &&
-          Date.now() < transitionDeadline) {
+          transition.isWithinBudget()) {
           await this.waitForAuthStep();
           continue;
         }
-        if ((afterUsername || afterAccount || afterPassword || afterContinue) && Date.now() < transitionDeadline &&
-          ['ALREADY_ATTEMPTED', 'KNOWN_FORM_ABSENT', 'FORM_UNTRUSTED'].includes(state.reason)) {
+        if (transition.canWait(state.reason, afterUsername || afterAccount || afterPassword || afterContinue)) {
           await this.waitForAuthStep();
           continue;
         }

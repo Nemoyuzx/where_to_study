@@ -201,12 +201,25 @@ internal interface QmplusAuthScheduler {
 internal data class QmplusAuthObservation(val stage: String, val document: String, val accountMatch: Boolean, val reason: String)
 
 internal object QmplusAuthResultCodec {
+    private val stages = setOf("authenticated", "account", "username", "password", "continue", "loading", "manual", "challenge")
     fun guestEntry(encoded: String): String? = encoded.takeIf { it.length <= 32 }?.let {
         runCatching { JSONArray("[$it]").get(0) as? String }.getOrNull()
     }?.takeIf { it in setOf("saml", "login", "none") }
     private val reasons = setOf("READY", "AUTHENTICATED", "LOADING", "INVALID_NONCE", "STALE_DOCUMENT", "UNTRUSTED_CONTEXT",
         "UNSUPPORTED_PAGE", "ACCOUNT_CHOOSER", "ACCOUNT_HINT_REQUIRED", "FORM_UNTRUSTED", "INTERFERENCE", "KNOWN_FORM_ABSENT", "ACCOUNT_MISMATCH",
         "USERNAME_NOT_SUBMITTED", "ALREADY_ATTEMPTED", "CAPTCHA_REQUIRED", "MFA_REQUIRED", "CURRENT_ACCOUNT_VERIFIED")
+    private val observationPhases = stages.flatMap { stage -> reasons.map { reason -> "observed_${stage}_$reason" } }.toSet()
+    private val diagnosticPhases = setOf("challenge", "manual", "closed", "QM_ERROR_PAGE", "sso_navigation",
+        "login_entry_navigation", "authenticated", "detail_visible", "installing", "inspecting", "account_selected",
+        "username_submitted", "continue_submitted", "password_submitted", "connection_deadline", "invalid_observation",
+        "authorization_denied", "account_hint_unavailable", "helper_not_installed", "unsupported_navigation",
+        "WEB_SSL_REJECTED", "WEB_MAIN_FRAME_HOST_LOOKUP", "WEB_MAIN_FRAME_CONNECT", "WEB_MAIN_FRAME_TIMEOUT",
+        "WEB_MAIN_FRAME_SSL_HANDSHAKE", "WEB_MAIN_FRAME_OTHER", "WEB_SETUP_FAILED",
+        "ACTIVITY_RESUME", "ACTIVITY_PAUSE", "ACTIVITY_STOP") +
+        QmplusPageKind.entries.map { "page_${it.name}" } + observationPhases
+    fun diagnosticPhase(value: String): String? = value.takeIf { it in diagnosticPhases }
+    fun observationPhase(value: QmplusAuthObservation): String? =
+        "observed_${value.stage}_${value.reason}".takeIf { it in observationPhases }
     fun code(encoded: String): String? = encoded.takeIf { it.length <= 96 }?.let {
         runCatching { JSONArray("[$it]").get(0) as? String }.getOrNull()
     }?.takeIf { it in setOf("AUTH_INSTALLED", "AUTH_CONFLICT", "ACCOUNT_SELECTED", "USERNAME_SUBMITTED", "PASSWORD_SUBMITTED", "CONTINUE_SUBMITTED", "MANUAL_REQUIRED", "REJECTED", "STALE_DOCUMENT") }
@@ -219,7 +232,7 @@ internal object QmplusAuthResultCodec {
             val document = json.get("document") as? String ?: error("Invalid document.")
             val match = json.get("accountMatch") as? Boolean ?: error("Invalid match.")
             val reason = json.get("reason") as? String ?: error("Invalid reason.")
-            require(stage in setOf("authenticated", "account", "username", "password", "continue", "loading", "manual", "challenge") && document == nonce && reason in reasons)
+            require(stage in stages && document == nonce && reason in reasons)
             require((stage == "challenge") == (reason in setOf("CAPTCHA_REQUIRED", "MFA_REQUIRED")))
             QmplusAuthObservation(stage, document, match, reason)
         }.getOrNull()
@@ -265,7 +278,7 @@ internal class QmplusAuthFlow(
     fun begin() {
         if (!checkFeature() || manual || waitingForVerification || cancelDeadline != null) return
         val weak = WeakReference(this)
-        cancelDeadline = scheduler.schedule(25_000) { weak.get()?.manualRequired() }
+        cancelDeadline = scheduler.schedule(25_000) { weak.get()?.let { it.reportPhase("connection_deadline"); it.manualRequired() } }
     }
     fun pageStarted(value: String) {
         if (!checkFeature()) return
@@ -276,7 +289,9 @@ internal class QmplusAuthFlow(
         begin()
         if (!QmplusLoginPagePolicy.isOfficialQMPage(value) && !QmplusLoginPagePolicy.canInspectAuthenticationPage(value) &&
             !QmplusLoginPagePolicy.isMicrosoftTransitPage(value) &&
-            !(savedOptIn && (QmplusLoginPagePolicy.isSSOTransit(value) || QmplusLoginPagePolicy.isSSOEntry(value)))) manualRequired()
+            !(savedOptIn && (QmplusLoginPagePolicy.isSSOTransit(value) || QmplusLoginPagePolicy.isSSOEntry(value)))) {
+            reportPhase("unsupported_navigation"); manualRequired()
+        }
     }
     fun pageReady(value: String) {
         if (!checkFeature() || url != value || busy || renderer.currentURL != value || !renderer.active) return
@@ -341,7 +356,7 @@ internal class QmplusAuthFlow(
             val owner = weak.get() ?: return@authorizationReply
             if (!owner.checkedCurrent(document, value) || owner.manual) return@authorizationReply
             owner.busy = false
-            if (allowed) action() else owner.manualRequired()
+            if (allowed) action() else { owner.reportPhase("authorization_denied"); owner.manualRequired() }
         }
     }
     private fun inspectSession(document: Long, value: String) {
@@ -352,6 +367,7 @@ internal class QmplusAuthFlow(
             if (!owner.checkedCurrent(document, value)) return@evaluate
             owner.busy = false
             val kind = QmplusPageKind.decode(result)
+            owner.reportPhase("page_${kind.name}")
             owner.pageObserved(kind)
             if (kind == QmplusPageKind.ERROR) { owner.reportPhase("QM_ERROR_PAGE"); owner.manualRequired(); return@evaluate }
             if (kind == QmplusPageKind.LOADING || (QmplusLoginPagePolicy.isSSOTransit(value) &&
@@ -410,7 +426,9 @@ internal class QmplusAuthFlow(
                 val owner = weak.get() ?: return@evaluate
                 if (!owner.checkedCurrent(document, value) || owner.manual) return@evaluate
                 owner.busy = false
-                if (!owner.gate.installed(document, QmplusAuthResultCodec.code(encoded).orEmpty())) { owner.manualRequired(); return@evaluate }
+                if (!owner.gate.installed(document, QmplusAuthResultCodec.code(encoded).orEmpty())) {
+                    owner.reportPhase("helper_not_installed"); owner.manualRequired(); return@evaluate
+                }
                 owner.installed = true
                 owner.loadAccount(document, value)
             }
@@ -437,6 +455,8 @@ internal class QmplusAuthFlow(
             if (!checkedCurrent(document, value) || manual) return@evaluate
             busy = false
             val state = QmplusAuthResultCodec.observation(encoded, nonce)
+            if (state == null) reportPhase("invalid_observation")
+            else QmplusAuthResultCodec.observationPhase(state)?.let(reportPhase)
             when {
                 state?.stage == "challenge" -> {
                     manualRequired(challenge = true); schedulePoll(document, value, 750)
@@ -457,7 +477,7 @@ internal class QmplusAuthFlow(
             if (!owner.checkedCurrent(document, value) || owner.manual) return@account
             owner.busy = false
             if (account == null || account.length > 320 || !Regex("^[^\\s@]+@[^\\s@]+$").matches(account.trim())) {
-                owner.manualRequired(); return@account
+                owner.reportPhase("account_hint_unavailable"); owner.manualRequired(); return@account
             }
             owner.accountHint = account
             owner.inspect(document, value)
@@ -473,7 +493,8 @@ internal class QmplusAuthFlow(
                 if (!owner.checkedCurrent(document, value) || owner.manual) return@evaluate
                 owner.busy = false
                 val state = QmplusAuthResultCodec.observation(encoded, owner.nonce)
-                if (state == null) { owner.manualRequired(); return@evaluate }
+                if (state == null) { owner.reportPhase("invalid_observation"); owner.manualRequired(); return@evaluate }
+                QmplusAuthResultCodec.observationPhase(state)?.let(owner.reportPhase)
                 if (state.stage != "challenge" && owner.waitingForVerification) {
                     owner.waitingForVerification = false; owner.verificationFinished(); owner.begin()
                 }
@@ -488,6 +509,11 @@ internal class QmplusAuthFlow(
                     state.stage == "manual" && state.reason in setOf("FORM_UNTRUSTED", "KNOWN_FORM_ABSENT") &&
                         owner.lastSubmittedStage == null && owner.initialLayoutChecks++ < 8 ->
                         owner.schedulePoll(document, value)
+                    // A confirmed username ACK can precede the password form's SPA layout.
+                    // Observe only; never re-submit, trust an unready form or renew the total deadline.
+                    state.stage == "manual" && state.reason in setOf("FORM_UNTRUSTED", "KNOWN_FORM_ABSENT") &&
+                        owner.lastSubmittedStage == "username" && owner.gate.usernameSubmitted(document) &&
+                        owner.postSubmitChecks++ < 12 -> owner.schedulePoll(document, value)
                     state.stage == "manual" && owner.lastSubmittedStage in setOf("password", "continue") &&
                         state.reason in setOf("INTERFERENCE", "FORM_UNTRUSTED", "KNOWN_FORM_ABSENT") &&
                         owner.postSubmitChecks++ < 12 -> owner.schedulePoll(document, value)

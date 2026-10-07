@@ -1721,20 +1721,41 @@ class MainNavigationSmokeTest {
                     val grid = activity.findViewById<ViewGroup>(R.id.calendar_month_grid)
                     val dragHandle = activity.findViewById<View>(R.id.calendar_month_drag_handle)
                     val body = activity.findViewById<View>(R.id.calendar_page_body)
-                    val firstRowHeightDp = grid.getChildAt(0).height /
-                        activity.resources.displayMetrics.density
+                    val weekday = activity.findViewById<View>(R.id.calendar_month_weekday_header)
+                    val weekdayMargins = weekday.layoutParams as ViewGroup.MarginLayoutParams
+                    val weekdayReservedPx = weekday.height + weekdayMargins.topMargin +
+                        weekdayMargins.bottomMargin
+                    val availableGridHeightPx = monthView.height - monthView.paddingTop -
+                        monthView.paddingBottom - weekdayReservedPx - dragHandle.height
+                    // Six-row integer-dp division plus bounded px/dp conversion rounding.
+                    val roundingTolerancePx = kotlin.math.ceil(
+                        activity.resources.displayMetrics.density * 6.0,
+                    ).toInt() + 10
                     assertTrue(
-                        "Expanded month rows must stay close to the native iOS height",
-                        firstRowHeightDp <= TeachingCalendarLogic.monthCellHeightDp(expanded = true) + 1,
+                        "Six expanded month rows must fill the measured viewport, not stop at 82dp",
+                        kotlin.math.abs(availableGridHeightPx - grid.height) <= roundingTolerancePx,
                     )
                     assertTrue(
                         "Expanded month handle must remain inside the measured month viewport",
                         dragHandle.bottom <= monthView.height - monthView.paddingBottom,
                     )
                     activity.findViewById<View?>(R.id.phone_navigation)?.let { phoneNavigation ->
+                        val bodyBounds = android.graphics.Rect()
+                        val navigationBounds = android.graphics.Rect()
+                        assertTrue(body.getGlobalVisibleRect(bodyBounds))
+                        assertTrue(phoneNavigation.getGlobalVisibleRect(navigationBounds))
                         assertEquals(
-                            "Month view must reserve only the floating navigation height and gap",
-                            activity.dp(TeachingCalendarLogic.bottomNavigationContentInsetDp),
+                            "Month view must reserve the measured floating navigation overlap plus gap",
+                            TeachingCalendarLogic.monthNavigationBottomInsetPx(
+                                bodyBounds.height(),
+                                if (android.graphics.Rect.intersects(bodyBounds, navigationBounds)) {
+                                    bodyBounds.bottom - navigationBounds.top
+                                } else {
+                                    0
+                                },
+                                activity.dp(PhoneNavigationLayoutLogic.CONTENT_GAP_DP),
+                                activity.dp(PhoneNavigationLayoutLogic.CONTENT_INSET_DP),
+                            ),
                             body.paddingBottom,
                         )
                         val handleLocation = IntArray(2).also(dragHandle::getLocationOnScreen)

@@ -520,16 +520,118 @@ class ScheduleLogicTest {
 
         assertEquals(48, resolvedHeight(360))
         assertEquals(64, resolvedHeight(456))
-        assertEquals(82, resolvedHeight(720))
+        assertEquals(108, resolvedHeight(720))
+        assertEquals(158, resolvedHeight(1_020))
         assertEquals(28, resolvedHeight(240))
         assertEquals(8, resolvedHeight(120))
-        listOf(120, 240, 360, 456, 720).forEach { monthViewHeightDp ->
+        listOf(120, 240, 360, 456, 720, 1_020).forEach { monthViewHeightDp ->
             val rowsHeightDp = resolvedHeight(monthViewHeightDp) * 6
-            assertTrue(
-                rowsHeightDp + 8 + weekdayReservedHeightDp +
-                    TeachingCalendarLogic.monthDragHandleHeightDp <= monthViewHeightDp,
-            )
+            val unusedHeightDp = monthViewHeightDp - rowsHeightDp - 8 -
+                weekdayReservedHeightDp - TeachingCalendarLogic.monthDragHandleHeightDp
+            assertTrue(unusedHeightDp in 0..5)
         }
+    }
+
+    @Test
+    fun measuredExpandedMonthHeightDoesNotAlterDetailsOrSelectedWeekAnchors() {
+        val expandedHeightDp = TeachingCalendarLogic.expandedMonthCellHeightDp(
+            monthViewHeightDp = 1_020,
+            verticalPaddingDp = 8,
+            weekdayReservedHeightDp = 34,
+            dragHandleReservedHeightDp = 28,
+        )
+        assertEquals(158, TeachingCalendarLogic.monthRowHeightDp(0f, 0, 3, expandedHeightDp))
+        assertEquals(102, TeachingCalendarLogic.monthRowHeightDp(0.5f, 0, 3, expandedHeightDp))
+        listOf(1f, 1.5f, 2f).forEach { position ->
+            assertEquals(46, TeachingCalendarLogic.monthRowHeightDp(position, 0, 3, expandedHeightDp))
+        }
+        assertEquals(948, TeachingCalendarLogic.monthGridViewportHeight(0f, 6, expandedHeightDp))
+        assertEquals(276, TeachingCalendarLogic.monthGridViewportHeight(1f, 6, 46))
+        assertEquals(46, TeachingCalendarLogic.monthGridViewportHeight(2f, 6, 46))
+        assertEquals(-138, TeachingCalendarLogic.monthGridTranslationY(2f, 3, 46))
+        assertEquals(0, TeachingCalendarLogic.expandedMonthCellHeightDp(60, 8, 34, 28))
+    }
+
+    @Test
+    fun monthNavigationInsetUsesMeasuredOverlapAfterStartupAndClampsShortWindows() {
+        val gapPx = PhoneNavigationLayoutLogic.CONTENT_GAP_DP
+        val fallbackPx = PhoneNavigationLayoutLogic.CONTENT_INSET_DP
+        fun inset(height: Int, overlap: Int?) = TeachingCalendarLogic.monthNavigationBottomInsetPx(
+            height, overlap, gapPx, fallbackPx,
+        )
+        assertEquals(74, inset(720, null))
+        assertEquals(91, inset(720, 83))
+        assertEquals(0, inset(720, 0)) // Measured hidden or non-overlapping navigation.
+        assertEquals(0, inset(720, -12))
+        assertEquals(48, inset(320, 40)) // Re-layout / rotated navigation geometry.
+        assertEquals(36, inset(36, 83))
+        assertEquals(36, inset(36, null))
+        assertEquals(0, inset(0, 83))
+        assertEquals(0, inset(-1, null))
+        assertEquals(66, TeachingCalendarLogic.monthNavigationBottomInsetPx(720, 66, -8, 74))
+    }
+
+    @Test
+    fun shortMonthRowsNeverGrowBeyondMeasuredCapacityWhenCollapsingToDetailsOrWeek() {
+        for (expandedHeight in listOf(0, 8, 28, 45, 46, 108)) {
+            val compactHeight = minOf(expandedHeight, 46)
+            for (position in listOf(0f, 0.5f, 1f, 1.5f, 2f)) {
+                val rowHeight = TeachingCalendarLogic.monthRowHeightDp(position, 0, 3, expandedHeight)
+                assertTrue(rowHeight in compactHeight..expandedHeight)
+                assertEquals(rowHeight, TeachingCalendarLogic.monthRowHeightDp(position, 5, 3, expandedHeight))
+                assertTrue(TeachingCalendarLogic.monthGridViewportHeight(position, 6, rowHeight) <= expandedHeight * 6)
+            }
+            assertEquals(expandedHeight, TeachingCalendarLogic.monthRowHeightDp(0f, 0, 3, expandedHeight))
+            assertEquals(compactHeight, TeachingCalendarLogic.monthRowHeightDp(1f, 0, 3, expandedHeight))
+            assertEquals(compactHeight, TeachingCalendarLogic.monthRowHeightDp(2f, 3, 3, expandedHeight))
+            assertEquals(compactHeight, TeachingCalendarLogic.monthGridViewportHeight(2f, 6, compactHeight))
+            assertEquals(-3 * compactHeight, TeachingCalendarLogic.monthGridTranslationY(2f, 3, compactHeight))
+        }
+    }
+
+    @Test
+    fun monthDragMapsEachMeasuredPhysicalSegmentContinuously() {
+        fun position(delta: Float, start: Float) = TeachingCalendarLogic.monthSheetDragPosition(delta, start, 323f, 230f)
+        assertEquals(0.5f, position(-161.5f, 0f), 0.001f)
+        assertEquals(1f, position(-323f, 0f), 0.001f)
+        assertEquals(1.5f, position(-438f, 0f), 0.001f)
+        assertEquals(2f, position(-553f, 0f), 0.001f)
+        assertEquals(1f, position(115f, 1.5f), 0.001f)
+        assertEquals(0.5f, position(276.5f, 1.5f), 0.001f)
+        assertEquals(1.5f, position(-276.5f, 0.5f), 0.001f)
+        assertEquals(0f, position(553f, 2f), 0.001f)
+        fun distance(p: Float) = p.coerceIn(0f, 1f) * 323f + (p - 1f).coerceIn(0f, 1f) * 230f
+        for (start in listOf(0f, 0.25f, 0.75f, 1f, 1.25f, 1.75f, 2f)) {
+            for (delta in listOf(-600f, -300f, -25f, 0f, 25f, 300f, 600f)) {
+                assertEquals((distance(start) - delta).coerceIn(0f, 553f), distance(position(delta, start)), 0.001f)
+            }
+        }
+    }
+
+    @Test
+    fun monthPhysicalOverflowUsesTheSameTwoSegmentMappingWithoutResettingSelectedWeek() {
+        assertEquals(0f, TeachingCalendarLogic.monthDetailsDragOverflowDp(-553f, 0f, 323f, 230f), 0.001f)
+        assertEquals(20f, TeachingCalendarLogic.monthDetailsDragOverflowDp(-573f, 0f, 323f, 230f), 0.001f)
+        assertEquals(20f, TeachingCalendarLogic.monthDetailsDragOverflowDp(-411.5f, 0.5f, 323f, 230f), 0.001f)
+        assertEquals(20f, TeachingCalendarLogic.monthDetailsDragOverflowDp(-250f, 1f, 323f, 230f), 0.001f)
+        assertEquals(20f, TeachingCalendarLogic.monthDetailsDragOverflowDp(-20f, 2f, 323f, 230f), 0.001f)
+        assertEquals(0f, TeachingCalendarLogic.monthDetailsDragOverflowDp(20f, 2f, 323f, 230f), 0.001f)
+        for (week in listOf(0, 1, 3, 5)) {
+            val p = TeachingCalendarLogic.monthSheetDragPosition(-553f, 0f, 323f, 230f)
+            assertEquals(-week * 46, TeachingCalendarLogic.monthGridTranslationY(p, week, 46))
+        }
+    }
+
+    @Test
+    fun monthPhysicalDragHandlesUnmeasuredZeroAndNonFiniteSegmentsWithoutNaN() {
+        assertEquals(0.5f, TeachingCalendarLogic.monthSheetDragPosition(-100f, 0.5f, 0f, 0f), 0.001f)
+        assertEquals(0f, TeachingCalendarLogic.monthDetailsDragOverflowDp(-100f, 0.5f, 0f, 0f), 0.001f)
+        assertEquals(1.5f, TeachingCalendarLogic.monthSheetDragPosition(-115f, 0f, 0f, 230f), 0.001f)
+        assertEquals(2f, TeachingCalendarLogic.monthSheetDragPosition(-1f, 1f, 323f, 0f), 0.001f)
+        assertEquals(0f, TeachingCalendarLogic.monthSheetDragPosition(1f, 1f, 0f, 230f), 0.001f)
+        assertEquals(1f, TeachingCalendarLogic.monthSheetDragPosition(Float.NaN, 1f, 323f, 230f), 0.001f)
+        assertEquals(0f, TeachingCalendarLogic.monthSheetDragPosition(-1f, Float.NaN, Float.NaN, 0f), 0.001f)
+        assertEquals(0f, TeachingCalendarLogic.monthDetailsDragOverflowDp(Float.NEGATIVE_INFINITY, 0f, 323f, 230f), 0.001f)
     }
 
     @Test

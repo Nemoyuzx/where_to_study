@@ -55,7 +55,7 @@ class SettingsVisualLayoutUiTest {
                         val page = activity.findViewById<ScrollView>(R.id.page_settings)
                         val content = page.getChildAt(0) as ViewGroup
                         val touchTargets = descendants(page).filterIsInstance<TextView>()
-                            .filter { it.isClickable || it is EditText }
+                            .filter { it.isShown && (it.isClickable || it is EditText) }
                         assertTrue("The real settings page must contain controls", touchTargets.isNotEmpty())
                         touchTargets.forEach { control ->
                             assertTrue("Below compact baseline: ${control.text}", control.height >= activity.dp(UiMetrics.controlHeightDp))

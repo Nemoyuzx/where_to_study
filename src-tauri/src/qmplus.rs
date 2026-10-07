@@ -311,8 +311,31 @@ impl AuthLedger {
                 || (self.continue_submitted
                     && self.continue_claimed_document.as_deref() == Some(nonce)))
     }
-    fn claim_submission_settling(&mut self, nonce: &str, credential_revision: u64) -> bool {
-        if !self.is_awaiting_navigation(nonce, credential_revision)
+    fn can_wait_for_submission(
+        &self,
+        stage: &str,
+        reason: &str,
+        nonce: &str,
+        credential_revision: u64,
+    ) -> bool {
+        let username_ack = self.accepts(credential_revision)
+            && !self.password_attempted
+            && !self.continue_attempted
+            && self.username_submitted_document.as_deref() == Some(nonce);
+        let later_ack = self.is_awaiting_navigation(nonce, credential_revision);
+        stage == "manual"
+            && ((["ALREADY_ATTEMPTED", "FORM_UNTRUSTED", "KNOWN_FORM_ABSENT"].contains(&reason)
+                && (username_ack || later_ack))
+                || (reason == "INTERFERENCE" && later_ack))
+    }
+    fn claim_submission_settling(
+        &mut self,
+        stage: &str,
+        reason: &str,
+        nonce: &str,
+        credential_revision: u64,
+    ) -> bool {
+        if !self.can_wait_for_submission(stage, reason, nonce, credential_revision)
             || self.submission_settling_polls >= MAXIMUM_SUBMISSION_SETTLING_POLLS
         {
             return false;
@@ -1324,23 +1347,22 @@ pub fn accept_qmplus_auth(
         record_connection_status(&app, "checking", "ACCOUNT_CHOOSER");
         return Ok(true);
     }
-    if auth
-        .ledger
-        .is_awaiting_navigation(&nonce, credential_revision)
-        && report.stage == "manual"
-        && [
-            "ALREADY_ATTEMPTED",
-            "FORM_UNTRUSTED",
-            "KNOWN_FORM_ABSENT",
-            "INTERFERENCE",
-        ]
-        .contains(&report.reason.as_str())
-    {
+    if auth.ledger.can_wait_for_submission(
+        &report.stage,
+        &report.reason,
+        &nonce,
+        credential_revision,
+    ) {
         // The acknowledged submit can leave its old form visible while the
-        // official page prepares MFA/KMSI. Observe finitely without new claims.
-        let wait = auth
-            .ledger
-            .claim_submission_settling(&nonce, credential_revision);
+        // official page prepares the next form or MFA/KMSI. This native ACK
+        // budget also survives exhaustion of the JS initial-layout budget.
+        // Username transitions do not gain the later-stage INTERFERENCE wait.
+        let wait = auth.ledger.claim_submission_settling(
+            &report.stage,
+            &report.reason,
+            &nonce,
+            credential_revision,
+        );
         drop(auth);
         if wait {
             record_connection_status(&app, "checking", "SUBMISSION_SETTLING");
@@ -2217,26 +2239,80 @@ mod tests {
         ledger.begin(7);
         assert!(ledger.verify_current_identity("password", "nonceA123", true, 7));
         assert!(ledger.claim("password", "nonceA123", true, 7));
-        assert!(!ledger.claim_submission_settling("nonceA123", 7));
+        assert!(!ledger.claim_submission_settling("manual", "INTERFERENCE", "nonceA123", 7));
         assert!(ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
-        assert!(!ledger.claim_submission_settling("nonceB456", 7));
-        assert!(!ledger.claim_submission_settling("nonceA123", 8));
+        assert!(!ledger.claim_submission_settling("manual", "INTERFERENCE", "nonceB456", 7));
+        assert!(!ledger.claim_submission_settling("manual", "INTERFERENCE", "nonceA123", 8));
         for _ in 0..MAXIMUM_SUBMISSION_SETTLING_POLLS {
-            assert!(ledger.claim_submission_settling("nonceA123", 7));
+            assert!(ledger.claim_submission_settling("manual", "INTERFERENCE", "nonceA123", 7));
             assert!(ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
         }
-        assert!(!ledger.claim_submission_settling("nonceA123", 7));
+        assert!(!ledger.claim_submission_settling("manual", "INTERFERENCE", "nonceA123", 7));
         assert!(!ledger.claim("password", "nonceA123", true, 7));
         ledger.stop();
         assert!(!ledger.is_awaiting_navigation("nonceA123", 7));
         ledger.begin(8);
         assert!(ledger.verify_current_identity("continue", "nonceC789", true, 8));
         assert!(ledger.claim("continue", "nonceC789", true, 8));
-        assert!(!ledger.claim_submission_settling("nonceC789", 8));
+        assert!(!ledger.claim_submission_settling("manual", "FORM_UNTRUSTED", "nonceC789", 8));
         assert!(ledger.submitted("nonceC789", "CONTINUE_SUBMITTED", 8));
-        assert!(ledger.claim_submission_settling("nonceC789", 8));
+        assert!(ledger.claim_submission_settling("manual", "FORM_UNTRUSTED", "nonceC789", 8));
         assert!(!ledger.can_begin_sso(8));
         assert!(!ledger.claim("continue", "nonceC789", true, 8));
+    }
+
+    #[test]
+    fn username_ack_gets_finite_layout_settling_without_resetting_claims_or_accepting_interference()
+    {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        assert!(ledger.claim("username", "nonceA123", false, 7));
+        assert!(!ledger.claim_submission_settling("manual", "FORM_UNTRUSTED", "nonceA123", 7));
+        assert!(!ledger.submitted("nonceB456", "USERNAME_SUBMITTED", 7));
+        assert!(!ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 8));
+        assert!(ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 7));
+        for reason in [
+            "INTERFERENCE",
+            "ACCOUNT_MISMATCH",
+            "UNSUPPORTED_PAGE",
+            "AUTH_CONFLICT",
+        ] {
+            assert!(!ledger.can_wait_for_submission("manual", reason, "nonceA123", 7));
+        }
+        assert!(!ledger.can_wait_for_submission("challenge", "MFA_REQUIRED", "nonceA123", 7));
+        assert!(!ledger.can_wait_for_submission("manual", "FORM_UNTRUSTED", "nonceB456", 7));
+        assert!(!ledger.can_wait_for_submission("manual", "FORM_UNTRUSTED", "nonceA123", 8));
+        for index in 0..MAXIMUM_SUBMISSION_SETTLING_POLLS {
+            let reason = if index % 2 == 0 {
+                "FORM_UNTRUSTED"
+            } else {
+                "KNOWN_FORM_ABSENT"
+            };
+            assert!(ledger.claim_submission_settling("manual", reason, "nonceA123", 7));
+            // A repeated ACK cannot grant another username attempt or wait budget.
+            assert!(ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 7));
+            assert!(!ledger.claim("username", "nonceA123", false, 7));
+        }
+        assert!(!ledger.claim_submission_settling("manual", "FORM_UNTRUSTED", "nonceA123", 7));
+        ledger.stop();
+        assert!(!ledger.can_wait_for_submission("manual", "KNOWN_FORM_ABSENT", "nonceA123", 7));
+        assert!(!ledger.claim("password", "nonceA123", true, 7));
+    }
+
+    #[test]
+    fn username_layout_settling_allows_only_one_later_matching_password_claim() {
+        let mut ledger = AuthLedger::default();
+        ledger.begin(7);
+        assert!(ledger.claim("username", "nonceA123", false, 7));
+        assert!(ledger.submitted("nonceA123", "USERNAME_SUBMITTED", 7));
+        assert!(ledger.claim_submission_settling("manual", "FORM_UNTRUSTED", "nonceA123", 7));
+        assert!(ledger.claim_submission_settling("manual", "KNOWN_FORM_ABSENT", "nonceA123", 7));
+        assert!(!ledger.claim("password", "nonceA123", false, 7));
+        assert!(ledger.claim("password", "nonceA123", true, 7));
+        assert!(!ledger.claim("password", "nonceA123", true, 7));
+        assert!(!ledger.can_wait_for_submission("manual", "FORM_UNTRUSTED", "nonceA123", 7));
+        assert!(ledger.submitted("nonceA123", "PASSWORD_SUBMITTED", 7));
+        assert!(ledger.claim_submission_settling("manual", "INTERFERENCE", "nonceA123", 7));
     }
 
     #[test]

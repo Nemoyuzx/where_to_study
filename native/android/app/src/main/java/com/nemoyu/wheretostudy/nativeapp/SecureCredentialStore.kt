@@ -24,6 +24,10 @@ data class Credentials(
 
 internal class CredentialUpdateException(message: String) : IllegalArgumentException(message)
 
+/** Display metadata only; never retains either password or an encryption key. */
+internal data class CredentialIdentity(val account: String, val hasPassword: Boolean,
+    val hasTeachingCloudPassword: Boolean, val scope: String?)
+
 internal object CredentialUpdateLogic {
     fun resolve(
         saved: Credentials?,
@@ -69,13 +73,13 @@ class SecureCredentialStore(context: Context) {
         val previous = loadRaw()
         val same = previous != null && previous.account == credentials.account && previous.password == credentials.password &&
             previous.teachingCloudPassword == credentials.teachingCloudPassword
-        if (same && previous?.cacheScope != null) { currentScope = previous.cacheScope; return@synchronized }
-        currentScope = null
+        if (same && previous?.cacheScope != null) { publishIdentity(previous); return@synchronized }
+        publishIdentity(null)
         courseDTOCache.clear()
         val scope = java.util.UUID.randomUUID().toString().replace("-", "")
         saveRaw(credentials.copy(cacheScope = scope))
         check(loadRaw(true)?.cacheScope == scope) { "无法安全保存本地凭据。" }
-        currentScope = scope
+        publishIdentity(credentials.copy(cacheScope = scope))
     }
 
     private fun saveRaw(credentials: Credentials) {
@@ -102,15 +106,22 @@ class SecureCredentialStore(context: Context) {
     }
 
     fun load(throwOnFailure: Boolean = false): Credentials? = synchronized(recordLock) {
-        val saved = loadRaw(throwOnFailure) ?: run { currentScope = null; return@synchronized null }
-        if (saved.cacheScope != null) { currentScope = saved.cacheScope; return@synchronized saved }
+        val saved = loadRaw(throwOnFailure) ?: run { publishIdentity(null); return@synchronized null }
+        if (saved.cacheScope != null) { publishIdentity(saved); return@synchronized saved }
         val migrated = saved.copy(cacheScope = java.util.UUID.randomUUID().toString().replace("-", ""))
         val verified = runCatching { saveRaw(migrated); check(loadRaw(true)?.cacheScope == migrated.cacheScope); migrated }.getOrNull()
-        currentScope = verified?.cacheScope
+        publishIdentity(verified ?: saved)
         verified ?: saved
     }
 
     internal fun cachedScope(): String? = currentScope
+    internal fun cachedIdentity(): CredentialIdentity? = currentIdentity
+
+    private fun publishIdentity(credentials: Credentials?) {
+        currentScope = credentials?.cacheScope
+        currentIdentity = credentials?.let { CredentialIdentity(it.account, it.password.isNotBlank(),
+            !it.teachingCloudPassword.isNullOrEmpty(), it.cacheScope) }
+    }
 
     private fun loadRaw(throwOnFailure: Boolean = false): Credentials? {
         val encodedIv = preferences.getString(IV_KEY, null) ?: return null
@@ -137,7 +148,7 @@ class SecureCredentialStore(context: Context) {
     }
 
     fun clear() = synchronized(recordLock) {
-        currentScope = null
+        publishIdentity(null)
         courseDTOCache.clear()
         if (!preferences.edit().clear().commit()) {
             throw IllegalStateException("无法清除本地凭据记录。")
@@ -171,6 +182,7 @@ class SecureCredentialStore(context: Context) {
     private companion object {
         val recordLock = Any()
         @Volatile var currentScope: String? = null
+        @Volatile var currentIdentity: CredentialIdentity? = null
         const val KEYSTORE_PROVIDER = "AndroidKeyStore"
         const val KEY_ALIAS = "where_to_study.credentials.v1"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

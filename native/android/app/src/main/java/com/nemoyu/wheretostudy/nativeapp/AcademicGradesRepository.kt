@@ -9,11 +9,13 @@ internal class AcademicGradesRepository(
     private val credentials: () -> Credentials?,
     private val fetchTerms: (Credentials) -> AcademicTerms = SjdAcademicClient()::terms,
     private val fetchGrades: (Credentials, String, String) -> AcademicGrades = SjdAcademicClient()::grades,
+    private val credentialIdentity: (() -> CredentialIdentity?)? = null,
 ) {
     private val worker = Executors.newSingleThreadExecutor()
     private val handler = Handler(Looper.getMainLooper())
     private val observers = mutableSetOf<() -> Unit>()
     private var owner: Credentials? = null
+    private var ownerIdentity: CredentialIdentity? = null
     private var generation = -1L
     private var request = 0L
     private var closed = false
@@ -27,19 +29,20 @@ internal class AcademicGradesRepository(
         reconcile()
         return selectedTermID?.let { cache[it to recordType] }
     }
-    val hasCredentials: Boolean get() = credentials()?.let {
-        it.account.isNotBlank() && it.password.isNotBlank()
-    } == true
+    val hasCredentials: Boolean get() = if (credentialIdentity != null) credentialIdentity.invoke()?.let {
+        it.account.isNotBlank() && it.hasPassword
+    } == true else credentials()?.let { it.account.isNotBlank() && it.password.isNotBlank() } == true
 
     fun addObserver(observer: () -> Unit) { observers += observer }
     fun removeObserver(observer: () -> Unit) { observers -= observer }
     internal fun clearUiObservers() { observers.clear() }
 
     fun reconcile() {
-        val current = credentials()
+        val current = if (credentialIdentity == null) credentials() else null
+        val currentIdentity = credentialIdentity?.invoke()
         val currentGeneration = LocalDataCoordinator.snapshot()
-        if (current != owner || generation != currentGeneration) {
-            owner = current; generation = currentGeneration; request += 1
+        if (current != owner || currentIdentity != ownerIdentity || generation != currentGeneration) {
+            owner = current; ownerIdentity = currentIdentity; generation = currentGeneration; request += 1
             cache.clear(); terms = null; selectedTermID = null; recordType = "1"
             isLoading = false; error = null
         }
@@ -49,7 +52,9 @@ internal class AcademicGradesRepository(
         reconcile()
         if (closed || isLoading || !hasCredentials) return
         if (!force && snapshot != null) return
-        val capturedOwner = owner ?: return
+        val capturedIdentity = ownerIdentity
+        val fallbackOwner = owner
+        if (credentialIdentity == null && fallbackOwner == null) return
         val capturedGeneration = generation
         val token = ++request
         val selected = selectedTermID
@@ -57,16 +62,28 @@ internal class AcademicGradesRepository(
         val knownTerms = if (force) null else terms
         isLoading = true; error = null; notifyObservers()
         worker.execute {
-            val catalogResult = runCatching { knownTerms ?: fetchTerms(capturedOwner) }
+            val capturedOwner = runCatching {
+                LocalDataCoordinator.withCurrent(capturedGeneration) {
+                    checkNotNull(if (credentialIdentity == null) fallbackOwner else credentials()).also {
+                        if (credentialIdentity != null) check(credentialIdentity.invoke() == capturedIdentity)
+                    }
+                }
+            }
+            val catalogResult = runCatching { knownTerms ?: fetchTerms(capturedOwner.getOrThrow()) }
             val result = runCatching {
                 val catalog = catalogResult.getOrThrow()
                 val termID = selected ?: catalog.currentTermID.takeIf(String::isNotBlank)
                     ?: throw ScheduleClientException("学校未返回当前学期，请选择学期。")
-                catalog to fetchGrades(capturedOwner, termID, type)
+                (catalog to fetchGrades(capturedOwner.getOrThrow(), termID, type)).also {
+                    LocalDataCoordinator.withCurrent(capturedGeneration) {
+                        check(credentials() == capturedOwner.getOrThrow()) { "账号凭据已更新。" }
+                    }
+                }
             }
             handler.post {
                 if (closed || token != request || !LocalDataCoordinator.isCurrent(capturedGeneration) ||
-                    credentials() != capturedOwner
+                    (if (credentialIdentity != null) credentialIdentity.invoke() != capturedIdentity
+                        else credentials() != capturedOwner.getOrNull())
                 ) {
                     reconcile()
                     if (!closed) notifyObservers()

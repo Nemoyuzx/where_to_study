@@ -110,7 +110,6 @@ class MainActivity : Activity() {
     private var notificationPermissionRequestPending = false
     private var notificationPermissionKind = CourseNotificationKind.DAILY_SUMMARY
     private var notificationPermissionAccountKey = ""
-    private var lastCourseReminderExactAccess: Boolean? = null
     private var pendingNotificationPermissionCompletion: ((Boolean) -> Unit)? = null
     private var currentLayoutSpec: AdaptiveLayoutSpec? = null
     private var navigationRailCollapsed = false
@@ -126,9 +125,6 @@ class MainActivity : Activity() {
     internal var controlHapticEventCount = 0
         private set
     private var currentFoldingFeature: FoldingFeature? = null
-    private var automaticScheduleLaunchRefreshKey: AutomaticScheduleLaunchRefreshKey?
-        get() = activitySession.automaticRefreshKey
-        set(value) { activitySession.automaticRefreshKey = value }
     private var applicationContentStarted = false
     private var privacyConsentDialog: AlertDialog? = null
     private var newAssignmentsDialog: AlertDialog? = null
@@ -256,9 +252,7 @@ class MainActivity : Activity() {
             shuttleBusRepository.load()
         }
         updateAdaptiveLayout(force = true)
-        DailyClassroomRefreshScheduler.ensureScheduled(this)
-        DailyCourseSummaryScheduler.reconcile(this)
-        CourseReminderScheduler.reconcile(this)
+        activitySession.ensureClassroomRefreshScheduled()
         if (firstSessionStart) {
             refreshScheduleAtStartup()
             refreshClassroomsAtStartup()
@@ -295,18 +289,11 @@ class MainActivity : Activity() {
             calendarDailyInfoRepository.loadImportantEvents()
             shuttleBusRepository.load()
         }
-        val settingChanged = DailyCourseSummaryScheduler.synchronizePermissionState(this)
-        val courseReminderChanged = CourseReminderScheduler.synchronizePermissionState(this)
-        val exactAccess = CourseReminderScheduler.hasExactAccess(this)
-        val exactAccessChanged = lastCourseReminderExactAccess != null && lastCourseReminderExactAccess != exactAccess
-        lastCourseReminderExactAccess = exactAccess
-        DailyCourseSummaryScheduler.reconcile(this)
-        CourseReminderScheduler.reconcile(this)
-        if ((settingChanged || courseReminderChanged || exactAccessChanged) && ::content.isInitialized &&
-            selectedDestination == Destination.SETTINGS
-        ) {
-            refreshCurrentPage()
-        }
+        activitySession.reconcileNotifications()
+    }
+
+    internal fun notificationSettingsDidChange() {
+        if (::content.isInitialized && selectedDestination == Destination.SETTINGS) refreshCurrentPage()
     }
 
     override fun onStart() {
@@ -962,6 +949,10 @@ class MainActivity : Activity() {
         }
     }
 
+    internal fun disableQmplusSavedLogin(onComplete: (Result<Unit>) -> Unit) {
+        activitySession.qmplus.disableSavedLogin(onComplete)
+    }
+
     private fun clearQmplusWebSession(): Boolean = runCatching {
         val repository = activitySession.qmplus
         val attempt = checkNotNull(repository.pendingCookieClearAttempt)
@@ -1320,17 +1311,15 @@ class MainActivity : Activity() {
     }
 
     fun reconcileDailyCourseNotifications() {
-        DailyCourseSummaryScheduler.reconcile(this)
-        CourseReminderScheduler.reconcile(this, force = true)
+        activitySession.reconcileNotifications(force = true)
     }
 
     fun personalScheduleWasEdited() {
         // Cancel an already displayed summary and invalidate any in-flight draft
         // before a deleted occurrence can be delivered from its older snapshot.
         DailyCourseSummaryNotificationRuntime.cancel(this)
-        DailyCourseSummaryScheduler.reconcileAt(this, forceReschedule = true)
         CourseReminderNotificationRuntime.cancel(this)
-        CourseReminderScheduler.reconcile(this, force = true)
+        activitySession.reconcileNotifications(force = true)
         if (selectedDestination == Destination.SETTINGS) settingsPage?.scheduleDidRefresh()
         else refreshCurrentPage()
     }
@@ -1564,32 +1553,15 @@ class MainActivity : Activity() {
     }
 
     private fun refreshScheduleAtStartup() {
-        val credentials = credentialStore.load()
-        if (!SemesterLogic.shouldRefreshAutomatically(
-                preferences.automaticTermDetectionEnabled,
-                credentials,
-            )
-        ) {
-            return
-        }
-        val currentTermID = SemesterLogic.suggestTermForDate().termId
-        val key = ProcessAutomaticScheduleLaunchRefreshGate.begin(
-            credentials?.account.orEmpty(),
-            currentTermID,
-        ) ?: return
-        automaticScheduleLaunchRefreshKey = key
         val retained = activitySession
-        val scheduled = scheduleRepository.refreshAutomatically { result ->
-            ProcessAutomaticScheduleLaunchRefreshGate.finish(key, result.isSuccess)
-            if (retained.automaticRefreshKey == key) {
-                retained.automaticRefreshKey = null
+        scheduleRepository.whenCacheRestored {
+            retained.uiOwner.current()?.let { current ->
+                current.scheduleDidRefresh()
+                current.informationQueryPage?.credentialsDidRestore()
+                current.coursesPage?.credentialsDidRestore()
             }
-            retained.uiOwner.current()?.publishScheduleCompletion(result, false, true)
-        }
-        if (!scheduled) {
-            ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
-            if (automaticScheduleLaunchRefreshKey == key) {
-                automaticScheduleLaunchRefreshKey = null
+            retained.schedule.refreshAtStartup { result ->
+                retained.uiOwner.current()?.publishScheduleCompletion(result, false, true)
             }
         }
     }
@@ -1618,10 +1590,6 @@ class MainActivity : Activity() {
         qmWarmRefreshForeground = false
         if (applicationContentStarted) activitySession.qmplus.removeObserver(this)
         languageTransition.close()
-        if (!isChangingConfigurations) automaticScheduleLaunchRefreshKey?.let { key ->
-            ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
-            automaticScheduleLaunchRefreshKey = null
-        }
         if (::adaptiveRoot.isInitialized) adaptiveRoot.removeCallbacks(applyAdaptiveLayout)
         navigationRailAnimator?.cancel()
         pendingCalendarImport = null

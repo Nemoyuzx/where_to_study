@@ -68,6 +68,9 @@ export struct MobileTeachingCalendarView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param session: TeachingCalendarSession = new TeachingCalendarSession();
   @Param qmPlusSession: QMPlusSession = new QMPlusSession();
+  @Param hasPhoneNavigation: boolean = false;
+  @Param phoneNavigationGlobalTop: number = -1;
+  @Param phoneNavigationGlobalBottom: number = -1;
   @Event onOpenCourse: (source: string, id: string) => boolean = () => false;
   @Local presentedDay: DateParts | null = null;
   @Local presentedDayOpacity: number = 0;
@@ -78,6 +81,10 @@ export struct MobileTeachingCalendarView {
   @Local contentWidth: number = 350;
   private readonly isPc: boolean = DeviceState.isPc2in1();
   @Local contentHeight: number = 500;
+  @Local contentGlobalTop: number = 0;
+  private contentAreaMeasured: boolean = false;
+  @Local monthHeaderHeight: number = 26;
+  @Local incomingMonthHeaderHeight: number = 26;
   @Local rootWidth: number = 350;
   @Local rootHeight: number = 640;
   @Local isDarkMode: boolean = false;
@@ -113,6 +120,8 @@ export struct MobileTeachingCalendarView {
   private monthGestureAxis: CalendarGestureAxis | null = null;
   private monthGestureRoutedToDetails: boolean = false;
   private monthDetailsAtTopAtGestureStart: boolean = true;
+  private monthExpandedTravel: number = 0;
+  private monthWeekTravel: number = 0;
   private monthScrollEnableRevision: number = 0;
   private monthScrollEnableTimer: number = -1;
   private monthResetTimer: number = -1;
@@ -155,6 +164,7 @@ export struct MobileTeachingCalendarView {
   }
 
   aboutToDisappear(): void {
+    this.contentAreaMeasured = false;
     this.finishCourseMotionForNavigation();
     this.darkModeProbe.unregister();
     const pendingPage: CalendarPageRequest | null = this.pageQueue.interrupt();
@@ -561,6 +571,10 @@ export struct MobileTeachingCalendarView {
     this.monthGestureAxis = null;
     this.monthGestureRoutedToDetails = false;
     this.monthDragStartPosition = this.monthSheetPosition;
+    const expanded: number = this.contentAreaMeasured ? this.expandedMonthCellHeight() : 0;
+    const compact: number = Math.min(TeachingCalendarLogic.monthCollapsedCellHeight, expanded);
+    this.monthExpandedTravel = 6 * (expanded - compact);
+    this.monthWeekTravel = 5 * compact;
     this.monthScrollEnableRevision++;
     this.monthDetailsScrollEnabled = TeachingCalendarLogic.monthDetailsCanScrollAtGestureStart(
       this.monthDragStartPosition);
@@ -599,7 +613,7 @@ export struct MobileTeachingCalendarView {
     }
     if (this.monthDragging) {
       this.monthSheetPosition = TeachingCalendarLogic.monthSheetDragPosition(
-        offsetY, this.monthDragStartPosition);
+        offsetY, this.monthDragStartPosition, this.monthExpandedTravel, this.monthWeekTravel);
     }
   }
 
@@ -716,6 +730,8 @@ export struct MobileTeachingCalendarView {
         .onAreaChange((oldArea: Area, newArea: Area) => {
           this.contentWidth = Number(newArea.width);
           this.contentHeight = Number(newArea.height);
+          this.contentGlobalTop = Number(newArea.globalPosition.y);
+          this.contentAreaMeasured = this.contentHeight > 0;
         })
       }
       .width('100%')
@@ -1077,7 +1093,7 @@ export struct MobileTeachingCalendarView {
       .layoutWeight(1)
       .scrollable(ScrollDirection.Vertical)
       .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
+      .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
       .width('100%')
       .id('calendar.mobile.timeline-scroll')
       .onAppear(() => {
@@ -1259,7 +1275,7 @@ export struct MobileTeachingCalendarView {
     }
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.None)
+    .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
     .width('100%')
     .height(46)
     .backgroundColor(AppTheme.surface())
@@ -1293,6 +1309,7 @@ export struct MobileTeachingCalendarView {
       }.width('100%').alignItems(VerticalAlign.Top)
     }.width('100%').constraintSize({ maxHeight: 82, minHeight: 40 })
       .scrollable(ScrollDirection.Vertical).scrollBar(BarState.Off).backgroundColor(AppTheme.surface())
+      .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
   }
 
   private weekAllDayLabel(day: DateParts): string {
@@ -1381,8 +1398,18 @@ export struct MobileTeachingCalendarView {
   @Builder
   monthView(renderDate: DateParts, interactive: boolean) {
     Column({ space: 0 }) {
-      this.statusArea(false, CalendarMode.month, renderDate)
-      this.monthWeekdayHeader()
+      Column({ space: 0 }) {
+        this.statusArea(false, CalendarMode.month, renderDate)
+        this.monthWeekdayHeader()
+      }
+      .width('100%')
+      .onAreaChange((oldArea: Area, newArea: Area) => {
+        if (interactive && this.monthPageIdentity(renderDate) === this.monthPageIdentity(this.selectedDate())) {
+          this.monthHeaderHeight = Number(newArea.height);
+        } else if (!interactive && this.monthPageIdentity(renderDate) === this.monthPageIdentity(this.incomingDate)) {
+          this.incomingMonthHeaderHeight = Number(newArea.height);
+        }
+      })
       Stack({ alignContent: Alignment.TopStart }) {
         Column({ space: 0 }) {
           ForEach(this.monthWeeks(renderDate), (week: DateParts[], rowIndex: number) => {
@@ -1393,20 +1420,20 @@ export struct MobileTeachingCalendarView {
             }
             .width('100%')
             .height(this.monthGridRowHeight(renderDate,
-              this.renderedMonthSheetPosition(interactive)))
+              this.renderedMonthSheetPosition(interactive), interactive))
           }, (week: DateParts[], rowIndex: number) => 'month-week.' + rowIndex.toString() + '.' +
             StrictDates.formatDateParts(week[0]))
         }
         .width('100%')
         .height(this.monthGridContentHeight(renderDate,
-          this.renderedMonthSheetPosition(interactive)))
+          this.renderedMonthSheetPosition(interactive), interactive))
         .translate({ y: this.monthGridTranslationY(this.renderedMonthDate(renderDate, interactive),
-          this.renderedMonthSheetPosition(interactive)) })
+          this.renderedMonthSheetPosition(interactive), interactive) })
         .id('calendar.mobile.month-grid.' + this.monthPageIdentity(renderDate))
       }
       .width('100%')
       .height(this.monthGridViewportHeight(renderDate,
-        this.renderedMonthSheetPosition(interactive)))
+        this.renderedMonthSheetPosition(interactive), interactive))
       .clip(true)
       .id('calendar.mobile.month-grid-viewport.' + this.monthPageIdentity(renderDate))
 
@@ -1427,17 +1454,18 @@ export struct MobileTeachingCalendarView {
               CalendarDailyInfoCards({ day: this.renderedMonthDate(renderDate, interactive) })
             }
             .width('100%')
-            .padding({ bottom: PhoneNavigationLayout.minimumContentBottomInsetVp })
             .alignItems(HorizontalAlign.Start)
           }
         }
         .layoutWeight(1)
         .width('100%')
-        .padding({ top: 8 })
+        .padding({ top: TeachingCalendarLogic.monthDetailsTopGap(
+          this.renderedMonthSheetPosition(interactive), this.monthDetailsAvailableHeight(renderDate, interactive)) })
+        .visibility(this.renderedMonthSheetPosition(interactive) > 0 ? Visibility.Visible : Visibility.None)
         .opacity(Math.min(this.renderedMonthSheetPosition(interactive), 1))
         .enableScrollInteraction(interactive && this.monthDetailsScrollEnabled)
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
         .borderRadius(10)
         .backgroundColor(AppTheme.background())
         .clip(true)
@@ -1445,7 +1473,8 @@ export struct MobileTeachingCalendarView {
     }
     .padding({ left: 0, right: 0, top: 8, bottom: 0 })
     .width('100%')
-    .height('100%')
+    .height(this.monthUsableHeight())
+    .clip(true)
     .id('calendar.mobile.month-page.' + this.monthPageIdentity(renderDate))
     // 与 iOS simultaneousGesture 一致：页面手势与详情 List 并行识别，
     // 然后由上方的轴锁定/顶部快照决定归属。排他手势会导致 List
@@ -1507,41 +1536,57 @@ export struct MobileTeachingCalendarView {
     .padding({ bottom: 8 })
   }
 
-  private expandedMonthCellHeight(): number {
-    const reserved: number = 26 + 8 + 28;
-    return Math.max(44, Math.min(TeachingCalendarLogic.monthExpandedCellHeight,
-      Math.floor((this.contentHeight - reserved) / 6)));
+  private monthNavigationInset(): number {
+    return TeachingCalendarLogic.monthNavigationBottomInset(this.contentGlobalTop,
+      this.contentHeight, this.phoneNavigationGlobalTop, this.phoneNavigationGlobalBottom,
+      this.hasPhoneNavigation, PhoneNavigationLayout.navigationHeightVp +
+      PhoneNavigationLayout.minimumBottomClearanceVp + TeachingCalendarLogic.monthNavigationGap);
+  }
+
+  private monthUsableHeight(): number {
+    return Math.max(this.contentHeight - this.monthNavigationInset(), 0);
+  }
+
+  private expandedMonthCellHeight(interactive: boolean = true): number {
+    return TeachingCalendarLogic.measuredExpandedMonthCellHeight(this.contentHeight,
+      this.monthNavigationInset(), interactive ? this.monthHeaderHeight : this.incomingMonthHeaderHeight);
+  }
+
+  private monthDetailsAvailableHeight(renderDate: DateParts, interactive: boolean): number {
+    return Math.max(this.monthUsableHeight() - 8 -
+      (interactive ? this.monthHeaderHeight : this.incomingMonthHeaderHeight) - 28 -
+      this.monthGridViewportHeight(renderDate, this.renderedMonthSheetPosition(interactive), interactive), 0);
   }
 
   private monthRowHeight(rowIndex: number, renderDate: DateParts = this.selectedDate(),
-    sheetPosition: number = this.monthSheetPosition): number {
+    sheetPosition: number = this.monthSheetPosition, interactive: boolean = true): number {
     // 当前六行始终同高；monthRowHeight 不使用选中周，平移时才需要计算周索引。
     return TeachingCalendarLogic.monthRowHeight(sheetPosition, rowIndex,
-      0, this.expandedMonthCellHeight());
+      0, this.expandedMonthCellHeight(interactive));
   }
 
   private monthGridRowHeight(renderDate: DateParts,
-    sheetPosition: number = this.monthSheetPosition): number {
-    return this.monthRowHeight(0, renderDate, sheetPosition);
+    sheetPosition: number = this.monthSheetPosition, interactive: boolean = true): number {
+    return this.monthRowHeight(0, renderDate, sheetPosition, interactive);
   }
 
   private monthGridViewportHeight(renderDate: DateParts,
-    sheetPosition: number = this.monthSheetPosition): number {
+    sheetPosition: number = this.monthSheetPosition, interactive: boolean = true): number {
     return TeachingCalendarLogic.monthGridViewportHeight(sheetPosition, 6,
-      this.monthGridRowHeight(renderDate, sheetPosition));
+      this.monthGridRowHeight(renderDate, sheetPosition, interactive));
   }
 
   private monthGridContentHeight(renderDate: DateParts,
-    sheetPosition: number = this.monthSheetPosition): number {
+    sheetPosition: number = this.monthSheetPosition, interactive: boolean = true): number {
     return TeachingCalendarLogic.monthGridContentHeight(6,
-      this.monthGridRowHeight(renderDate, sheetPosition));
+      this.monthGridRowHeight(renderDate, sheetPosition, interactive));
   }
 
   private monthGridTranslationY(renderDate: DateParts,
-    sheetPosition: number = this.monthSheetPosition): number {
+    sheetPosition: number = this.monthSheetPosition, interactive: boolean = true): number {
     return TeachingCalendarLogic.monthGridTranslationY(sheetPosition,
       this.selectedMonthWeekIndex(renderDate),
-      this.monthGridRowHeight(renderDate, sheetPosition));
+      this.monthGridRowHeight(renderDate, sheetPosition, interactive));
   }
 
   private monthExpansionProgress(sheetPosition: number = this.monthSheetPosition): number {
@@ -1607,7 +1652,7 @@ export struct MobileTeachingCalendarView {
     }
     .layoutWeight(1)
     .height(this.monthRowHeight(rowIndex, renderDate,
-      this.renderedMonthSheetPosition(interactive)))
+      this.renderedMonthSheetPosition(interactive), interactive))
     .backgroundColor(this.monthBackground(day, this.renderedMonthDate(renderDate, interactive)))
     .borderRadius(10)
     .clip(true)
@@ -1654,7 +1699,7 @@ export struct MobileTeachingCalendarView {
   private monthEventCapacity(day: DateParts, renderDate: DateParts,
     interactive: boolean): number {
     const sheetPosition: number = this.renderedMonthSheetPosition(interactive);
-    const height: number = this.monthRowHeight(0, renderDate, sheetPosition);
+    const height: number = this.monthRowHeight(0, renderDate, sheetPosition, interactive);
     const available: number = TeachingCalendarLogic.monthEntryAvailableHeight(
       height, this.monthExpansionProgress(sheetPosition));
     return TeachingCalendarLogic.monthEntrySlotCapacity(available);
@@ -1698,7 +1743,7 @@ export struct MobileTeachingCalendarView {
     .width('100%')
     .height(TeachingCalendarLogic.monthEntryAvailableHeight(
       this.monthRowHeight(0, renderDate,
-        this.renderedMonthSheetPosition(interactive)),
+        this.renderedMonthSheetPosition(interactive), interactive),
       this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive))))
     .alignItems(HorizontalAlign.Start)
     .opacity(this.monthExpansionProgress(this.renderedMonthSheetPosition(interactive)))
@@ -1857,7 +1902,7 @@ export struct MobileTeachingCalendarView {
       .alignItems(HorizontalAlign.Start)
     }
     .scrollBar(BarState.Off)
-    .edgeEffect(EdgeEffect.Spring)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     .width('100%')
     .height('100%')
     .align(Alignment.Top)
@@ -2186,7 +2231,7 @@ export struct MobileTeachingCalendarView {
           .alignItems(HorizontalAlign.Start)
         }
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
         .constraintSize({ maxHeight: Math.max(this.rootHeight - 180, 160) })
         .width('100%')
       }
@@ -2247,7 +2292,7 @@ export struct MobileTeachingCalendarView {
           .alignItems(HorizontalAlign.Start)
         }
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
         .layoutWeight(1)
         .width('100%')
       }

@@ -122,16 +122,25 @@ export class QMPlusSession {
   private readonly recordIDFactory: () => string;
   private loginSettingsRevision: number = 0;
   private restoredLoginSettings: boolean = false;
+  private loginSettingsRestore: Promise<void> | null = null;
+  private loginSettingsRestoreRevision: number = -1;
   private quietDeadlineTimer: number = -1;
-  private readonly businessCache: CourseDTOCacheStore = new CourseDTOCacheStore('qmplus');
+  private readonly businessCache: CourseDTOCacheStore;
   private cacheRevision: number = 0;
   private cacheRestore: Promise<void> | null = null;
+  private cacheRestoreScope: string = '';
+  private cacheRestoreRevision: number = -1;
+  private cacheRestoreTerm: string = '';
   private silentRefreshOwner: boolean = false;
   private warmRefreshStarted: boolean = false;
+  private warmRefreshWork: Promise<void> | null = null;
+  private warmRefreshWorkRevision: number = -1;
+  private warmRefreshTerm: string = '';
+  private warmRefreshRevision: number = 0;
 
   constructor(clearIncognitoData?: () => void, savedLoginStore?: QMPlusSavedLoginStoring,
     authorizationJournal?: QMPlusAuthorizationJournal, recordIDFactory?: () => string,
-    webProfile?: QMPlusWebProfileStoring) {
+    webProfile?: QMPlusWebProfileStoring, businessCache?: CourseDTOCacheStore) {
     this.clearIncognitoData = clearIncognitoData ?? ((): void => {
       webview.WebCookieManager.clearAllCookiesSync(true);
       webview.WebStorage.deleteAllData(true);
@@ -141,12 +150,16 @@ export class QMPlusSession {
     this.officialWebProfileReady = this.webProfile === null;
     this.authorizationJournal = authorizationJournal ?? new PreferencesStore();
     this.recordIDFactory = recordIDFactory ?? ((): string => newQMPlusRecordID());
+    this.businessCache = businessCache ?? new CourseDTOCacheStore('qmplus');
   }
 
   async restoreSavedLoginStatus(): Promise<void> {
     if (this.restoredLoginSettings || this.loginSettingsBusy) { return; }
     const revision: number = this.loginSettingsRevision;
-    try {
+    if (this.loginSettingsRestore !== null && this.loginSettingsRestoreRevision === revision) {
+      return await this.loginSettingsRestore;
+    }
+    const work: Promise<void> = (async (): Promise<void> => { try {
       const login: QMPlusSavedLogin | null = await this.savedLoginStore.load();
       const authorization: string | null = await this.authorizationJournal.getString(
         QMPlusSession.autoFillAuthorizationKey);
@@ -159,34 +172,71 @@ export class QMPlusSession {
       if (revision !== this.loginSettingsRevision) { return; }
       this.autoFillEnabled = false;
       this.loginSettingsError = '无法读取 QMplus 登录资料，自动填写已关闭。';
+    } })();
+    this.loginSettingsRestore = work;
+    this.loginSettingsRestoreRevision = revision;
+    try { await work; } finally {
+      if (this.loginSettingsRestore === work) { this.loginSettingsRestore = null; }
     }
   }
 
   async restoreBusinessCache(): Promise<void> {
-    if (this.cacheRestore !== null) { return await this.cacheRestore; }
     const revision: number = this.cacheRevision;
     const term: string = this.termID;
     const scope: string = this.webProfile?.businessScope?.() ?? '';
+    if (!this.isFeatureEnabled || !/^[0-9a-f]{32}$/.test(scope) || this.webProfile === null || !this.webProfile.isReady()) { return; }
+    if (this.cacheRestore !== null && this.cacheRestoreScope === scope && this.cacheRestoreRevision === revision) {
+      const pendingTerm: string = this.cacheRestoreTerm;
+      await this.cacheRestore;
+      if (pendingTerm !== this.termID && revision === this.cacheRevision) { await this.restoreBusinessCache(); }
+      return;
+    }
     const work: Promise<void> = (async (): Promise<void> => {
-      if (!/^[0-9a-f]{32}$/.test(scope) || this.webProfile === null || !this.webProfile.isReady()) { return; }
       const cached: QMPlusSnapshot | null = await this.businessCache.loadQM(scope);
       if (cached !== null && revision === this.cacheRevision && term === this.termID && this.snapshot === null &&
-        this.webProfile.isReady() && this.webProfile.businessScope?.() === scope) {
+        this.isFeatureEnabled && this.webProfile !== null && this.webProfile.isReady() && this.webProfile.businessScope?.() === scope) {
         this.snapshot = cached;
         this.rememberAssignments(cached, true);
       }
     })();
     this.cacheRestore = work;
-    await work;
+    this.cacheRestoreScope = scope;
+    this.cacheRestoreRevision = revision;
+    this.cacheRestoreTerm = term;
+    try { await work; } finally {
+      if (this.cacheRestore === work) { this.cacheRestore = null; }
+    }
   }
 
   async startWarmRefresh(): Promise<void> {
-    await this.restoreBusinessCache();
-    await this.restoreSavedLoginStatus();
     if (this.warmRefreshStarted || !this.isFeatureEnabled || !this.loginForeground || this.loginVisible || this.loginSettingsBusy) { return; }
-    if (!this.savedLoginAvailable && this.snapshot === null && !(this.webProfile?.hasBeenMounted?.() ?? false)) { return; }
-    this.warmRefreshStarted = true;
-    this.openLogin(QMPlusURLPolicy.home, true);
+    if (this.warmRefreshWork !== null) {
+      const pendingTerm: string = this.warmRefreshTerm;
+      const pendingRevision: number = this.warmRefreshWorkRevision;
+      await this.warmRefreshWork;
+      if (pendingTerm !== this.termID || pendingRevision !== this.warmRefreshRevision) { await this.startWarmRefresh(); }
+      return;
+    }
+    const revision: number = this.warmRefreshRevision;
+    const term: string = this.termID;
+    const work: Promise<void> = (async (): Promise<void> => {
+      try { await this.restoreBusinessCache(); } catch (e) {
+        if (revision === this.warmRefreshRevision) { this.error = '数据暂时无法读取。'; }
+      }
+      if (revision !== this.warmRefreshRevision || term !== this.termID || !this.isFeatureEnabled || !this.loginForeground) { return; }
+      await this.restoreSavedLoginStatus();
+      if (revision !== this.warmRefreshRevision || term !== this.termID || this.warmRefreshStarted ||
+        !this.isFeatureEnabled || !this.loginForeground || this.loginVisible || this.loginSettingsBusy) { return; }
+      if (!this.savedLoginAvailable && this.snapshot === null && !(this.webProfile?.hasBeenMounted?.() ?? false)) { return; }
+      this.warmRefreshStarted = true;
+      this.openLogin(QMPlusURLPolicy.home, true);
+    })();
+    this.warmRefreshWork = work;
+    this.warmRefreshWorkRevision = revision;
+    this.warmRefreshTerm = term;
+    try { await work; } finally {
+      if (this.warmRefreshWork === work) { this.warmRefreshWork = null; }
+    }
   }
 
   loginOwner(): QMPlusLoginOwner {
@@ -684,12 +734,21 @@ export class QMPlusSession {
     this.syncing = false;
   }
 
+  updateTermID(term: string): void {
+    if (term === this.termID) { return; }
+    this.warmRefreshRevision++;
+    this.warmRefreshStarted = false;
+    this.closeLogin();
+    this.termID = term;
+  }
+
   setFeatureEnabled(enabled: boolean): void {
     if (enabled === this.isFeatureEnabled) { return; }
     this.isFeatureEnabled = enabled;
+    this.warmRefreshRevision++;
     // Feature Off retires in-flight owners without deleting the independently
     // saved record, persistent cookies, or the last verified business snapshot.
-    if (!enabled) { this.closeLogin(); }
+    if (!enabled) { this.warmRefreshStarted = false; this.closeLogin(); }
   }
 
   logout(): boolean {
@@ -701,6 +760,8 @@ export class QMPlusSession {
   }
 
   private clearConnection(): boolean {
+    this.warmRefreshRevision++;
+    this.warmRefreshStarted = false;
     this.assignmentNoticeEpoch++;
     // Persist the fence before changing identity or touching engine storage.
     const pendingSaved: boolean = this.webProfile === null || this.webProfile.markClearPending();
@@ -764,6 +825,8 @@ export class QMPlusSession {
   }
 
   dispose(): void {
+    this.warmRefreshRevision++;
+    this.cacheRevision++;
     this.persistOfficialWebSession();
     this.loginSettingsRevision++;
     this.loginSettingsBusy = false;

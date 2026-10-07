@@ -58,6 +58,8 @@ export struct RootView {
   @Local courseSession: CourseSession = new CourseSession();
   @Local qmPlusSession: QMPlusSession = new QMPlusSession();
   @Local phoneNavigationBottomMargin: number = PhoneNavigationLayout.minimumBottomClearanceVp;
+  @Local phoneNavigationGlobalTop: number = -1;
+  @Local phoneNavigationGlobalBottom: number = -1;
   private deadlineRefreshTimer: number = -1;
   private readonly assignmentNotices: NewAssignmentNoticeQueue = new NewAssignmentNoticeQueue();
   private assignmentModelEpoch: number = 0;
@@ -96,10 +98,13 @@ export struct RootView {
     return AppLanguageInfo.isRightToLeft(this.model.resolvedLanguage());
   }
 
-  @Monitor('model.qmplusEnabled')
+  @Monitor('model.qmplusEnabled', 'model.localHydrationReady')
   onQMplusEnabledChanged(monitor: IMonitor): void {
     this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled && !this.model.isSampleMode());
-    if (this.model.qmplusEnabled && !this.model.isSampleMode()) { void this.qmPlusSession.startWarmRefresh(); }
+    if (this.model.localHydrationReady && this.model.qmplusEnabled && !this.model.isSampleMode()) {
+      this.qmPlusSession.updateTermID(this.model.termID);
+      void this.qmPlusSession.startWarmRefresh();
+    }
     if (!this.model.qmplusEnabled && this.courseSession.selectedCourseSource === 'qmplus') {
       this.courseSession.closeCourse();
     }
@@ -107,12 +112,13 @@ export struct RootView {
 
   @Monitor('model.termID')
   onAssignmentTermChanged(monitor: IMonitor): void {
-    this.qmPlusSession.cancelSync();
-    this.qmPlusSession.termID = this.model.termID;
+    this.qmPlusSession.updateTermID(this.model.termID);
     this.qmPlusSession.newAssignmentNotice = null;
     this.model.newAssignmentNotice = null;
     this.assignmentNotices.retire('ucloud');
     this.assignmentNotices.retire('qmplus');
+    if (this.navigationAvoidanceActive && this.model.localHydrationReady &&
+      this.model.qmplusEnabled && !this.model.isSampleMode()) { void this.qmPlusSession.startWarmRefresh(); }
   }
 
   @Monitor('model.assignmentNoticeEpoch', 'qmPlusSession.assignmentNoticeEpoch')
@@ -161,7 +167,7 @@ export struct RootView {
     this.assignmentModelEpoch = this.model.assignmentNoticeEpoch;
     this.assignmentQMEpoch = this.qmPlusSession.assignmentNoticeEpoch;
     this.qmPlusSession.assignmentText = (source: string): string => this.model.text(source);
-    this.qmPlusSession.termID = this.model.termID;
+    this.qmPlusSession.updateTermID(this.model.termID);
     this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled && !this.model.isSampleMode());
     if (AppLaunchConfiguration.consumeSettingsPresentationSeedForTesting()) {
       this.settingsSession.seedReviewPresentationDraftsOnce();
@@ -173,7 +179,12 @@ export struct RootView {
     this.model.launch().then((): void => {
       if (!this.navigationAvoidanceActive || this.model.isSampleMode()) { return; }
       this.qmPlusSession.setFeatureEnabled(this.model.qmplusEnabled);
-      void this.qmPlusSession.startWarmRefresh();
+      if (this.model.localHydrationReady && this.model.qmplusEnabled) {
+        this.qmPlusSession.updateTermID(this.model.termID);
+        void this.qmPlusSession.startWarmRefresh();
+      }
+    }).catch((): void => {
+      this.model.statusMessage = '数据暂时无法读取。';
     });
     this.model.refreshClassroomsIfNeeded();
     if (this.deadlineRefreshTimer < 0) {
@@ -764,6 +775,9 @@ export struct RootView {
           PlannerView()
         } else if (this.currentSection === AppSection.calendar) {
           CalendarSectionView({ containerWidth: this.containerWidth, qmPlusSession: this.qmPlusSession,
+            hasPhoneNavigation: AppSectionInfo.showsPhoneNavigation(this.currentSection, false),
+            phoneNavigationGlobalTop: this.phoneNavigationGlobalTop,
+            phoneNavigationGlobalBottom: this.phoneNavigationGlobalBottom,
             onOpenCourse: (source: string, id: string): boolean => this.openCalendarCourse(source, id) })
             .direction(Direction.Ltr)
         } else if (this.currentSection === AppSection.courses) {
@@ -799,6 +813,12 @@ export struct RootView {
         .backgroundColor(AppTheme.surfaceVariant())
         .shadow({ radius: 8, color: '#33000000', offsetY: 4 })
         .id('phone_navigation')
+        .onAreaChange((oldArea: Area, newArea: Area) => {
+          const top: number = Number(newArea.globalPosition.y);
+          const height: number = Number(newArea.height);
+          this.phoneNavigationGlobalTop = height > 0 ? top : -1;
+          this.phoneNavigationGlobalBottom = height > 0 ? top + height : -1;
+        })
       }
     }
     .width('100%')

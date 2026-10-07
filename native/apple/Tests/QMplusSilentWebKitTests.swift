@@ -15,6 +15,87 @@ final class QMplusSilentWebKitTests: XCTestCase {
     private let password = "synthetic-only"
     private let nonce = "silentQA123"
 
+    func testTransientPasswordIdentityLayoutNeverReportsMismatchOrFillsUntilHitValid() async throws {
+        let browser = makeBrowser()
+        try await loadPasswordFixture(in: browser)
+        let evaluator = QMplusWebKitAutofillEvaluator(browser: browser)
+        let installed = await install(evaluator)
+        XCTAssertEqual(installed, .installed)
+        for mutation in ["identity.id='synthetic-pending-header'", "identity.textContent=''",
+                         "identity.style.visibility='hidden'", "identity.style.opacity='0'",
+                         "identity.style.width='0px'", "identity.style.pointerEvents='none'"] {
+            _ = try await metadata(browser, "const identity=document.querySelector('#displayName'); \(mutation); return 'synthetic';")
+            let state = await inspect(evaluator, identityAcknowledged: true)
+            XCTAssertEqual(state?.stage, .manual)
+            XCTAssertEqual(state?.reason, .absent)
+            let rejected = await submit(evaluator, .password(document: nonce, account: account, password: password,
+                                                            identityAcknowledged: true))
+            XCTAssertEqual(rejected, .manual)
+            let untouched = try await metadata(browser, "return JSON.stringify({clicks:window.syntheticClicks,passwordEmpty:document.querySelector('#i0118').value===''});")
+            XCTAssertTrue(untouched.contains("\"clicks\":0"), untouched)
+            XCTAssertTrue(untouched.contains("\"passwordEmpty\":true"), untouched)
+            _ = try await metadata(browser, "const identity=document.querySelector('#displayName,#synthetic-pending-header'); identity.id='displayName'; identity.textContent='synthetic@example.invalid'; identity.style.cssText=''; return 'synthetic';")
+        }
+        let ready = await inspect(evaluator, identityAcknowledged: true)
+        XCTAssertEqual(ready?.stage, .password)
+        XCTAssertEqual(ready?.reason, .ready)
+        let accepted = await submit(evaluator, .password(document: nonce, account: account, password: password,
+                                                        identityAcknowledged: true))
+        XCTAssertEqual(accepted, .passwordSubmitted)
+        let duplicate = await submit(evaluator, .password(document: nonce, account: account, password: password,
+                                                         identityAcknowledged: true))
+        XCTAssertEqual(duplicate, .manual)
+        let once = try await metadata(browser, "return JSON.stringify({clicks:window.syntheticClicks});")
+        XCTAssertTrue(once.contains("\"clicks\":1"), once)
+    }
+
+    func testOccludedPasswordIdentityRetainsStrictHitGuardWithoutClaimingAnotherAccount() async throws {
+        let browser = makeBrowser()
+        try await loadPasswordFixture(in: browser)
+        let evaluator = QMplusWebKitAutofillEvaluator(browser: browser)
+        let installed = await install(evaluator)
+        XCTAssertEqual(installed, .installed)
+        _ = try await metadata(browser, """
+            const identity=document.querySelector('#displayName'); const r=identity.getBoundingClientRect();
+            const overlay=document.createElement('div'); overlay.id='synthetic-cover';
+            overlay.style.cssText=`position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;z-index:9999;background:white`;
+            document.body.append(overlay); return 'synthetic';
+            """)
+        for changedIdentity in [false, true] {
+            if changedIdentity {
+                _ = try await metadata(browser, "document.querySelector('#displayName').textContent='other@example.invalid'; return 'synthetic';")
+            }
+            let state = await inspect(evaluator, identityAcknowledged: true)
+            XCTAssertEqual(state?.reason, .absent, "Covered text is not trusted evidence of an identity change")
+            let rejected = await submit(evaluator, .password(document: nonce, account: account, password: password,
+                                                            identityAcknowledged: true))
+            XCTAssertEqual(rejected, .manual)
+        }
+        let untouched = try await metadata(browser, "return JSON.stringify({clicks:window.syntheticClicks,passwordEmpty:document.querySelector('#i0118').value===''});")
+        XCTAssertTrue(untouched.contains("\"clicks\":0"), untouched)
+        XCTAssertTrue(untouched.contains("\"passwordEmpty\":true"), untouched)
+    }
+
+    func testOnlyUniqueVisibleHitValidDifferentPasswordIdentityReportsMismatch() async throws {
+        let browser = makeBrowser()
+        try await loadPasswordFixture(in: browser)
+        let evaluator = QMplusWebKitAutofillEvaluator(browser: browser)
+        let installed = await install(evaluator)
+        XCTAssertEqual(installed, .installed)
+        _ = try await metadata(browser, "document.querySelector('#displayName').textContent='other@example.invalid'; return 'synthetic';")
+        let mismatch = await inspect(evaluator, identityAcknowledged: true)
+        XCTAssertEqual(mismatch?.reason, .mismatch)
+        let rejected = await submit(evaluator, .password(document: nonce, account: account, password: password,
+                                                        identityAcknowledged: true))
+        XCTAssertEqual(rejected, .manual)
+        _ = try await metadata(browser, "const duplicate=document.querySelector('#displayName').cloneNode(true); document.querySelector('form').prepend(duplicate); return 'synthetic';")
+        let duplicate = await inspect(evaluator, identityAcknowledged: true)
+        XCTAssertEqual(duplicate?.reason, .absent)
+        let untouched = try await metadata(browser, "return JSON.stringify({clicks:window.syntheticClicks,passwordEmpty:document.querySelector('#i0118').value===''});")
+        XCTAssertTrue(untouched.contains("\"clicks\":0"), untouched)
+        XCTAssertTrue(untouched.contains("\"passwordEmpty\":true"), untouched)
+    }
+
     func testOwnedPlaceholderAutofillDoesNotFocusFieldsOrOpenKeyboard() async throws {
         let browser = makeBrowser()
         #if os(iOS)
@@ -101,6 +182,17 @@ final class QMplusSilentWebKitTests: XCTestCase {
         configuration.websiteDataStore = .nonPersistent()
         return WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 760), configuration: configuration)
     }
+    private func loadPasswordFixture(in browser: WKWebView) async throws {
+        try await load("""
+            <form id="i0281" action="https://login.microsoftonline.com/\(QMplusAutofillPolicy.tenant)/login">
+              <div id="displayName">synthetic@example.invalid</div>
+              <input id="i0118" name="passwd" type="password">
+              <input id="idSIButton9" type="submit" value="Synthetic Sign in">
+            </form>
+            <script>window.syntheticClicks=0;
+            document.querySelector('form').addEventListener('submit',event=>{event.preventDefault();window.syntheticClicks++;});</script>
+            """, in: browser)
+    }
     private func load(_ body: String, in browser: WKWebView) async throws {
         let completion = expectation(description: "Synthetic inline page loads")
         let delegate = InlineNavigation(completion)
@@ -127,9 +219,9 @@ final class QMplusSilentWebKitTests: XCTestCase {
         guard let source = try? source() else { return .unavailable }
         return await withCheckedContinuation { continuation in evaluator.install(source) { continuation.resume(returning: $0) } }
     }
-    private func inspect(_ evaluator: QMplusWebKitAutofillEvaluator) async -> QMplusAuthInspection? {
+    private func inspect(_ evaluator: QMplusWebKitAutofillEvaluator, identityAcknowledged: Bool = false) async -> QMplusAuthInspection? {
         await withCheckedContinuation { continuation in
-            evaluator.inspect(nonce: nonce, accountHint: account) { continuation.resume(returning: $0) }
+            evaluator.inspect(nonce: nonce, accountHint: account, identityAcknowledged: identityAcknowledged) { continuation.resume(returning: $0) }
         }
     }
     private func submit(_ evaluator: QMplusWebKitAutofillEvaluator, _ value: QMplusAuthSubmission) async -> QMplusAuthSubmissionResult? {

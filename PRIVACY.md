@@ -72,6 +72,10 @@ At launch, validated local course and assignment data appears before a backgroun
 
 ## QMplus 独立连接 / Independent QMplus connection
 
+原生 macOS 公共 DMG/ZIP 的 QMplus 资料使用与商店渠道独立的本机系统 Keychain 记录，遵循系统默认访问控制，不保存明文、不放宽可信应用列表。iOS、TestFlight／App Store 继续使用原 Data Protection Keychain。公共渠道的授权、保存偏好、功能开关、网页会话标识与业务缓存独立，不读取、迁移或删除商店渠道的 QMplus 资料或 Cookie；首次使用需重新保存并授权一次，官方服务可能要求重新登录／MFA。未知分发标记阻断 QMplus，不会因存储失败而自动切换后端。
+
+Native macOS public DMG/ZIP packages keep QMplus credentials in a separate local system Keychain record with the default OS access controls, without plaintext storage or broader trusted-app access. iOS and TestFlight/App Store retain the existing Data Protection Keychain. Public-channel authorization, save preferences, the feature switch, web-session identifiers and business caches are separate; Store-channel QMplus data and cookies are not read, migrated or deleted. First use requires saving and authorizing again, and official sign-in/MFA may be required. Unknown distribution markers block QMplus; storage failure does not select another backend.
+
 QMplus 与北邮账号独立。你主动连接时，应用使用自己的隔离官方网页会话，不读取系统浏览器 Cookie，也不把北邮教务或教学云密码发送给 QMplus。保存选项首次默认开启；只有填写资料并点击保存后，才会在本机安全存储中保存并按所选项授权自动填写。已明确关闭的选项会保留，预选不代表已有凭据或已授权。保存资料使用 Apple Keychain、Android Keystore、HarmonyOS Asset Store、Windows Credential Manager 或 Linux Secret Service，与北邮凭据分开；不能访问安全存储时不会退回明文。授权后，仅在已核验的官方 Microsoft 页面自动选择精确匹配的已保存账号，并在已确认的账号／密码表单尝试一次普通 Next／Sign in。已确认且身份匹配的账号、密码和普通“保持登录”步骤可后台完成，跨页面只保留本次连接已确认的身份，不重试密码。应用在前台检测到验证码或 MFA 时自动显示官方窗口，完成验证后继续；未匹配账号、未知页面、风险或新协议会暂停，供你选择手动继续。有效会话优先只读同步。更换 QMplus 身份或登录资料会撤销旧连接，旧网页区不能用于新身份。关闭“启用 QMplus”只暂停连接和同步，保留已保存登录资料、官方网页会话及课程缓存。关闭自动填写会撤销本机授权；Apple 的“关闭自动填写并删除 QMplus 登录信息”还会删除已保存资料。删除登录资料、退出并清除数据或清除本地数据，会删除相应的独立安全记录。删除失败会提示重试，不能把本次停用误称永久删除。系统密码管理器由你自行控制。本项目服务器不会接收 QMplus 登录资料、身份或课程数据。
 
 独立的共享只读脚本仅在官方 QMplus 读取当前 EBU 课程、已发布 Assignment／Quiz 及其可验证时间；不请求日历或 Timeline，不提交作业、开始测验、上传文件或访问答案与评分反馈。业务快照不包含密码、Cookie、`sesskey`、认证令牌或完整 HTML，不使用第三方 Worker 代理。保存的密码仅用于你授权的官方登录填写，不进入业务快照、日志、截图、剪贴板、通知或小组件。

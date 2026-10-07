@@ -29,15 +29,25 @@
 
 1. 安装 DevEco Studio 6.1.1（含 HarmonyOS NEXT SDK，API 24）。
 2. 打开 native/harmony，等待 hvigor 依赖自动安装后直接运行 entry 模块。
-3. 命令行构建与单元测试（自动探测 DevEco；测试需要已连接的设备/模拟器）：
+3. 命令行构建与单元测试（自动探测 DevEco；module Hypium 在本机运行，UI/ohosTest 才需要设备或模拟器）：
 
 ```bash
-./scripts/native-harmony-build.sh      # assembleHap/assembleApp + 144 个契约单元测试
+./scripts/native-harmony-build.sh      # 完整 Release HAP/APP（包含签名）+ module Hypium；数量以报告为准
 ./scripts/native-harmony-ui-smoke.sh   # UI 冒烟测试（手机 21 项、宽屏 11 项）
 ```
 
 手动命令（hvigorw 在 DevEco 安装目录下）：`hvigorw assembleHap` 与
 `hvigorw test --mode module -p module=entry -p buildMode=test`。
+完整脚本还会执行 OHPM install，不应当作只编译或只读检查入口。若只核验 ArkTS，可使用
+`hvigorw default@CompileArkTS --mode module -p module=entry@default -p product=default -p buildMode=release`；
+所有 SDK 重任务沿用 `--no-daemon --no-parallel --max-old-space-size=2048 --optimization-strategy=memory`。
+设备脚本会停止应用、切换测试模式、读取完整界面树并输入合成学号；ohosTest 聚合还包含真实 SJD 无效凭据联网探针。
+这些入口只用于获授权的专用 Debug/合成 QA 环境，不能直接用于用户已登录的真实会话。
+
+2026-10-07 月视图实测布局阶段已有 400/400 module Hypium 与完整 Release APP/HAP 构建验签。
+同日最终 `0.4.0 / 1002045` 已在同步 canonical QM 登录脚本、两段实测拖动和黄历自适应标签后重新构建，
+405/405 module Hypium、最终 APP/HAP 验签、当前字节码及包内脚本／法律文件逐件核验通过。
+这不等于新包的实机或云测证明；上传前仍须核对 AGC 构建计数是否占用，测试和正式上架用途也不等于提交审核。
 测试源码在 `entry/src/test`（契约用例覆盖日期/节次/公历周与教学周/表单编码/URL 策略/
 课表解析/空教室解析/节假日解析/天气与黄历解析、云课堂作业契约、公开 DDL、折叠策略、日历纯逻辑/通知规划与协调）与
 `entry/src/ohosTest`（DevEco 内运行的 UI 冒烟套件，对应
@@ -45,7 +55,7 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
 
 ## 签名与发布
 
-最新 0.3.0 构建及测试渠道上传状态见[0.3.0 发布记录](../../docs/release-v0.3.0.md)，包括真实 versionCode、最终签名包摘要和 DevEco 回执；不要把本地构建号或历史记录当成最新上架版本。
+历史 0.3.0 构建及测试渠道上传状态见[0.3.0 发布记录](../../docs/release-v0.3.0.md)，包括当时的 versionCode、最终签名包摘要和 DevEco 回执；0.4.0 资料见[审核资料记录](../../docs/v040-harmony-review-draft.md)。不要把本地构建号或历史记录当成最新上架版本。
 
 此前测试构建 `0.2.9 (1002026)`：2026-09-09 15:58 +0800 确认 DevEco **仅测试**上传完成，云测试通过；新增自定义每日课程提醒时间和卡片剩余空间的明日课程。复用 175 项单测与完整构建回归，最终 APP/HAP 版本和签名复核通过；没有提交上架审核，未补记设备视觉验证。详见[测试上传记录](../../docs/release-v0.2.9.md)。
 
@@ -66,6 +76,12 @@ native/apple/UITests/PrimaryNavigationSmokeTests 的导航、账号输入、示�
   本仓库只提供 `build-profile.example.json5` 无秘密模板；复制为已忽略的
   `build-profile.json5` 后再由 DevEco 或 CI Secret 写入本机签名配置。签名材料与密码
   **绝不能提交仓库**（与全仓库的凭据不变量一致）。
+- **公开法律资产**：CLI 与 DevEco 构建／同步都会通过同一 asset step 将仓库根目录的
+  `LICENSE`、`THIRD_PARTY_LICENSES.html`、`THIRD_PARTY_NOTICES.md` 原字节复制到 rawfile。
+  生成副本已忽略，不手工维护；缺文件、空文件或符号链接会阻断生成。
+  `verify-harmony-release-package.mjs PACKAGE.hap|PACKAGE.app --compiled-abc entry/build/default/intermediates/loader_out/default/ets/modules.abc`
+  核验每个实际 HAP 的 Release 模式、三份完整法律文件及当前编译字节码；CLI 完整构建强制传入字节码基线，避免旧 APP/HAP 混用。
+  这不代替 SDK 的独立签名验证，也不证明当前包已上传或云测通过。
 - **上架**：在 AppGallery Connect 创建应用、上传签名的 APP/HAP、填写隐私声明
   （本应用隐私文案与 `PRIVACY.md` 一致）与截图。发布前复核
   `native/apple/AppStore/submission-checklist.md` 中与商店审核对应的通用条目。
@@ -134,7 +150,7 @@ QMplus 使用应用普通 ArkWeb 持久数据区，与系统浏览器及原生�
 
 重要事件首批只渲染 20 条，接近列表底部后自动追加 20 条；搜索、筛选和数据变化会重置本地显示窗口，但不会重新请求网络。作业、学科竞赛、会议/期刊、校内竞赛、夏令营/预推免、黑客松与自定义日程分别使用独立颜色，并贯通设置、月/年双层边框、日周全天与详情。
 
-> 构建与运行验证：当前源码已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
+> 以下为历史 0.2.8 验证记录，不代表当前 0.4.0 源码、签名包或设备覆盖。构建与运行验证：当时源码已通过 DevEco Studio 6.1.1 自带 hvigor 6.24.4 + SDK 6.1.1(24)
 > 的 assembleHap/assembleApp 编译与 139 个契约单元测试；Pura 90 仿真器上的完整设备测试 12/12、手机 UI
 > 冒烟测试 21/21、真实 SJD 登录/无请求体课表 POST、重复缓存写入和隔离 ASSET 测试均通过；另以获授权真实账号完成保存、课表获取、强制重启和 ASSET 再读取，测试后已清除模拟器凭据。已上传的 0.2.8 (1002021) Release APP/HAP 另已通过 SHA-256、
 > 独立 HAP 签名、APP ZIP 结构、版本和三项固定 HTTPS API 校验。DevEco“上传产品”已将

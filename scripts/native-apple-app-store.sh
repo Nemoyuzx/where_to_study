@@ -329,7 +329,7 @@ validate_archive() {
       rm -f "$entitlements"
       exit 1
     fi
-    if [[ "$(plutil -extract LSApplicationCategoryType raw "$info")" != "public.app-category.education" ]]; then
+    if [[ "$(plutil -extract LSApplicationCategoryType raw "$info")" != "public.app-category.utilities" ]]; then
       echo "Signed macOS archive has the wrong App Store category." >&2
       rm -f "$entitlements"
       exit 1

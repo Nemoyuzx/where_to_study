@@ -11,6 +11,46 @@ const nonce = 'nonceA123'
 const account = 'student@example.org'
 const secret = 'synthetic-password-not-real'
 
+test('Apple identity layout diagnostics remain DEBUG opt-in and never read secret or URL surfaces',()=>{
+  const swift=readFileSync(new URL('../native/apple/Sources/Shared/QMplusAutofillPipeline.swift',import.meta.url),'utf8')
+  const debug=swift.slice(swift.indexOf('    #if DEBUG\n    private static let qaLayoutLogger'),swift.indexOf('    #endif\n    func submit'))
+  assert.ok(debug.length>0)
+  assert.match(debug,/environment\["WTS_QMPLUS_AUTH_TRACE"\] == "1"/)
+  assert.match(debug,/isInspectableMicrosoftDocument\(browser.url\)/)
+  assert.match(debug,/state.stage == \.manual && state.reason == \.mismatch/)
+  assert.match(swift,/#if DEBUG\nimport OSLog\n#endif/)
+  assert.match(debug,/Logger\(subsystem: "com\.nemoyu\.wheretostudy\.qa\.qm-auth", category: "layout"\)/)
+  assert.match(debug,/qaLayoutLogger\.notice\("WTS_QM_IDENTITY_LAYOUT \\\(text, privacy: \.public\)/)
+  const script=debug.match(/static let identityLayoutTraceScript = """\n([\s\S]*?)\n        """/)?.[1]
+  assert.ok(script)
+  assert.doesNotMatch(script,/\.value\b|\bcookies?\b|\blocation\b|\bURL\b|innerHTML|outerHTML|fetch\s*\(|XMLHttpRequest|localStorage|sessionStorage|\.click\s*\(|\.focus\s*\(|setAttribute\s*\(/)
+  assert.doesNotMatch(script,/textContent\s*[,}]|[{,]\s*(?:identity|account|password|text|value|url|html)\s*:/i)
+})
+
+test('Apple mismatch diagnostics reduce synthetic noninteractive identity to bounded safe metadata',()=>{
+  const swift=readFileSync(new URL('../native/apple/Sources/Shared/QMplusAutofillPipeline.swift',import.meta.url),'utf8')
+  const script=swift.match(/static let identityLayoutTraceScript = """\n([\s\S]*?)\n        """/)?.[1]
+  const f=fixture({stage:'password'})
+  f.displayName.style.pointerEvents='none'
+  f.form.style.display='SYNTHETIC_PRIVATE_STYLE'
+  const hit=f.document.elementFromPoint.bind(f.document)
+  f.document.elementFromPoint=(x,y)=>y<80?f.form:hit(x,y)
+  for(const node of [f.user,f.pass,f.submit])Object.defineProperty(node,'value',{get(){throw Error('secret read forbidden')}})
+  Object.defineProperty(f.document,'cookie',{get(){throw Error('cookie read forbidden')}})
+  const output=vm.runInNewContext(`(function(){${script}})()`,{
+    document:f.document,window:f.window,accountHint:account,innerWidth:900,innerHeight:700,
+  })
+  const metadata=JSON.parse(output)
+  assert.deepEqual(Object.keys(metadata).sort(),['ancestors','forms','identities','identityHit','identityMatches','passwords','ready','submitHit','submits','usernames','viewport'])
+  assert.equal(metadata.identityMatches,true)
+  assert.equal(metadata.identityHit,'parent')
+  assert.equal(metadata.submitHit,'self')
+  assert.equal(metadata.ancestors[0].style.pointerEvents,'none')
+  assert.equal(metadata.ancestors[1].style.display,'other')
+  assert.ok(metadata.ancestors.length<=12)
+  assert.doesNotMatch(output,/student@|synthetic-password|SYNTHETIC_PRIVATE_STYLE|https?:|textContent|cookie/)
+})
+
 class FakeEvent { constructor(type) { this.type = type } }
 class FakeElement {
   constructor({id='',name='',type='',tagName='DIV',classes=[],rect={left:0,top:0,width:100,height:30},opacity='1',textContent=''}={}) {
@@ -430,6 +470,122 @@ test('desktop layout reports bounded hidden settling and stops without treating 
   assert.equal(visible.reports.at(-1).args.report.reason,'READY')
 })
 
+function desktopAfterExhaustedLayout(reason,{approve=count=>Promise.resolve(count<=24)}={}) {
+  const f=fixture({skipInstall:true})
+  f.submit.rect.width=0
+  let usernameAcknowledged=false,nativeWaits=0
+  const clicked=f.submit.onClick
+  f.submit.onClick=()=>{
+    clicked()
+    if(f.state.stage==='password') {
+      f.pass.rect.width=0;f.pass.style.opacity='0'
+      if(reason==='FORM_UNTRUSTED')f.submit.rect.width=0
+    }
+  }
+  const bridge=desktopBootstrap(f,{invoke:async(command,args)=>{
+    const report=args.report
+    if(report.stage==='submitted') {
+      assert.equal(report.reason,'USERNAME_SUBMITTED')
+      assert.equal(report.document,nonce)
+      usernameAcknowledged=true
+    } else if(report.stage==='username'&&report.reason==='READY') {
+      assert.equal(usernameAcknowledged,false)
+      const code=f.context.WTSQmAuth.fillAndSubmit({document:nonce,stage:'username',account})
+      assert.equal(code,'USERNAME_SUBMITTED')
+      await f.window.__TAURI_INTERNALS__.invoke(command,{revision:args.revision,
+        report:{v:1,stage:'submitted',document:nonce,accountMatch:false,reason:code}})
+    } else if(report.stage==='manual'&&report.reason===reason&&usernameAcknowledged) {
+      return approve(++nativeWaits)
+    } else if(report.stage==='password'&&report.reason==='READY') {
+      assert.equal(usernameAcknowledged,true)
+      assert.equal(f.context.WTSQmAuth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),
+        'PASSWORD_SUBMITTED')
+    }
+    return false
+  }})
+  return {f,bridge,get nativeWaits(){return nativeWaits},
+    async submitAfterLayoutBudget() {
+      // All 16 shared JS layout waits are consumed before a trusted username
+      // form appears. The next hidden form must use the native ACK budget.
+      for(let index=0;index<15;index++)assert.equal(await bridge.next(),250)
+      assert.equal(f.submit.clicked,0)
+      f.submit.rect.width=108
+      assert.equal(await bridge.next(),250)
+      assert.equal(usernameAcknowledged,true)
+      assert.equal(f.submit.clicked,1)
+      assert.equal(f.pass.value,'')
+    },
+    revealPassword() {
+      f.pass.rect={left:100,top:100,width:348,height:36};f.pass.style.opacity='1';f.submit.rect.width=108
+    }}
+}
+
+test('desktop username ACK can settle an exhausted initial layout budget and submit the matching password once',async()=>{
+  for(const reason of ['FORM_UNTRUSTED','KNOWN_FORM_ABSENT']) {
+    const transition=desktopAfterExhaustedLayout(reason)
+    const {f,bridge}=transition
+    await transition.submitAfterLayoutBudget()
+    assert.equal(await bridge.next(),350)
+    assert.equal(bridge.reports.at(-1).args.report.reason,reason)
+    assert.equal(transition.nativeWaits,1)
+    assert.equal(f.submit.clicked,1);assert.equal(f.pass.value,'')
+    transition.revealPassword()
+    assert.equal(await bridge.next(),750)
+    assert.equal(bridge.reports.at(-1).args.report.stage,'password')
+    assert.equal(f.submit.clicked,2)
+    assert.equal(f.user.value,account);assert.equal(f.pass.value,secret)
+    f.window.dispatchEvent(new FakeEvent('pagehide'))
+    assert.equal(bridge.timers.size,0)
+  }
+})
+
+test('desktop username layout settling reports MFA immediately without filling the challenge or password',async()=>{
+  for(const reason of ['FORM_UNTRUSTED','KNOWN_FORM_ABSENT']) {
+    const transition=desktopAfterExhaustedLayout(reason)
+    const {f,bridge}=transition
+    await transition.submitAfterLayoutBudget()
+    await bridge.next()
+    const code=new FakeInput({type:'text',name:'otc',rect:{left:500,top:100,width:170,height:30}})
+    code.parentElement=f.form;f.state.extra.push(code)
+    assert.equal(await bridge.next(),750)
+    assert.equal(bridge.reports.at(-1).args.report.stage,'challenge')
+    assert.equal(bridge.reports.at(-1).args.report.reason,'MFA_REQUIRED')
+    assert.equal(f.submit.clicked,1);assert.equal(f.pass.value,'');assert.equal(code.value,'')
+    f.window.dispatchEvent(new FakeEvent('pagehide'))
+  }
+})
+
+test('desktop username ACK settling ends at the finite native limit without another input attempt',async()=>{
+  for(const reason of ['FORM_UNTRUSTED','KNOWN_FORM_ABSENT']) {
+    const transition=desktopAfterExhaustedLayout(reason)
+    const {f,bridge}=transition
+    await transition.submitAfterLayoutBudget()
+    assert.equal(await bridge.next(),350)
+    for(let index=1;index<=24;index++)assert.equal(await bridge.next(),750)
+    assert.equal(transition.nativeWaits,25)
+    assert.equal(bridge.timers.size,0);assert.equal(bridge.active(nonce),false)
+    assert.equal(f.submit.clicked,1);assert.equal(f.pass.value,'')
+  }
+})
+
+test('desktop username settling cannot revive a stopped owner or changed document after native approval',async()=>{
+  for(const event of ['pagehide','wts-qm-auth-stop','changedURL']) {
+    let resolveNative
+    const approval=new Promise(resolve=>{resolveNative=resolve})
+    const transition=desktopAfterExhaustedLayout('FORM_UNTRUSTED',{approve:()=>approval})
+    const {f,bridge}=transition
+    await transition.submitAfterLayoutBudget()
+    const pending=bridge.next()
+    await bridge.settle()
+    if(event==='changedURL')f.setURL('https://example.invalid/')
+    else f.window.dispatchEvent(new FakeEvent(event))
+    resolveNative(true)
+    await pending
+    assert.equal(bridge.timers.size,0);assert.equal(bridge.active(nonce),false)
+    assert.equal(f.submit.clicked,1);assert.equal(f.pass.value,'')
+  }
+})
+
 test('desktop poll rejects a stale native owner and clears timers on background, pagehide or changed URL',async()=>{
   const stale=fixture({skipInstall:true})
   const rejected=desktopBootstrap(stale,{revision:7,invoke:(_command,args)=>
@@ -727,6 +883,57 @@ test('direct password page identifies the exact current account but still requir
   assert.equal(inspect(mismatch).stage,'manual')
   assert.equal(mismatch.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'MANUAL_REQUIRED')
   assert.equal(mismatch.submit.clicked,1)
+})
+
+test('password identity layout or missing evidence never masquerades as a different account and retains the once-only username ACK',()=>{
+  for(const variant of ['missing','duplicate','empty','name-only','hidden','transparent','tiny','occluded','noninteractive']){
+    const f=fixture();inspect(f)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'username',account}),'USERNAME_SUBMITTED')
+    const query=f.document.querySelectorAll.bind(f.document)
+    if(variant==='missing'||variant==='duplicate')f.document.querySelectorAll=selector=>selector==='#displayName'?(variant==='missing'?[]:[f.displayName,f.displayName]):query(selector)
+    if(variant==='empty')f.displayName.textContent=''
+    if(variant==='name-only')f.displayName.textContent='Synthetic Display Name'
+    if(variant==='hidden')f.displayName.hidden=true
+    if(variant==='transparent')f.displayName.style.opacity='0'
+    if(variant==='tiny')f.displayName.rect.width=0
+    if(variant==='occluded'||variant==='noninteractive'){
+      const hit=f.document.elementFromPoint.bind(f.document)
+      f.document.elementFromPoint=(x,y)=>y<80?(variant==='occluded'?new FakeElement():f.form):hit(x,y)
+    }
+    const state=inspect(f);assertFixed(state)
+    assert.equal(state.stage,'manual',variant)
+    assert.equal(state.reason,'KNOWN_FORM_ABSENT',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret,identityAcknowledged:true}),'MANUAL_REQUIRED',variant)
+    assert.equal(f.pass.value,'',variant);assert.equal(f.submit.clicked,1,variant)
+    f.document.querySelectorAll=query
+    f.displayName.textContent=account;f.displayName.hidden=false;f.displayName.style.opacity='1';f.displayName.rect.width=348
+    f.document.elementFromPoint=(x,y)=>y<80?f.displayName:y<150?f.pass:f.submit
+    assert.equal(inspect(f).reason,'READY',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'PASSWORD_SUBMITTED',variant)
+    assert.equal(f.submit.clicked,2,variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret}),'MANUAL_REQUIRED',variant)
+    assert.equal(f.submit.clicked,2,variant)
+  }
+})
+
+test('only a unique hit-valid visible account header proves password identity mismatch',()=>{
+  for(const variant of ['visible','hidden','occluded','duplicate']){
+    const f=fixture({stage:'password'})
+    f.pass.rect={left:100,top:100,width:348,height:36};f.pass.style.opacity='1'
+    f.displayName.textContent='other@example.org'
+    if(variant==='hidden')f.displayName.hidden=true
+    if(variant==='occluded'){
+      const hit=f.document.elementFromPoint.bind(f.document)
+      f.document.elementFromPoint=(x,y)=>y<80?new FakeElement():hit(x,y)
+    }
+    if(variant==='duplicate'){
+      const query=f.document.querySelectorAll.bind(f.document)
+      f.document.querySelectorAll=selector=>selector==='#displayName'?[f.displayName,f.displayName]:query(selector)
+    }
+    assert.equal(inspect(f,account,nonce,true).reason,variant==='visible'?'ACCOUNT_MISMATCH':'KNOWN_FORM_ABSENT',variant)
+    assert.equal(f.auth.fillAndSubmit({document:nonce,stage:'password',account,password:secret,identityAcknowledged:true}),'MANUAL_REQUIRED',variant)
+    assert.equal(f.pass.value,'');assert.equal(f.submit.clicked,0)
+  }
 })
 
 test('native identity ACK may cross a real document but is not retained by inspect or inferred from truthy values',()=>{

@@ -137,6 +137,17 @@ test("client versions consistently release 0.4.0 with fresh distribution build c
   assert.match(macosPackageScript, /RELEASE_LABEL="\$\{1:-v0\.4\.0-prerelease\}"/);
 });
 
+test("native macOS generated metadata and signed archive gate agree on Utilities", () => {
+  const project = readFileSync(path.join(root, "native", "apple", "project.yml"), "utf8");
+  const archiveScript = readFileSync(path.join(root, "scripts", "native-apple-app-store.sh"), "utf8");
+  const generatedCategory = project.match(/^\s+LSApplicationCategoryType:\s+(\S+)$/m)?.[1];
+  const archiveCategory = archiveScript.match(/plutil -extract LSApplicationCategoryType raw "\$info"\)" != "([^"]+)"/)?.[1];
+
+  assert.equal(generatedCategory, "public.app-category.utilities");
+  assert.equal(archiveCategory, generatedCategory);
+  assert.doesNotMatch(project, /LSApplicationCategoryType:\s+public\.app-category\.education/);
+});
+
 test("native Android CI avoids the removed legacy SDK tools package", () => {
   const workflow = readFileSync(path.join(root, ".github", "workflows", "build-native.yml"), "utf8");
   for (const source of [workflow, workflow.replace(/\r?\n/g, "\r\n")]) {

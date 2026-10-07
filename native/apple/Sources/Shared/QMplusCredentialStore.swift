@@ -2,6 +2,64 @@ import Foundation
 import Security
 import Combine
 
+/// Selected from the packaged app, never from preferences or a failed read.
+/// The store distribution keeps its existing Data Protection namespace.
+enum QMplusCredentialBackend: String, Codable, Sendable {
+    case dataProtection = "data-protection"
+    case publicMacOS = "public-macos-system-keychain-v1"
+    case unsupported = "unsupported-distribution"
+
+    static let distributionKey = "WTSQMplusCredentialDistribution"
+    static let publicDistribution = "public-macos-v1"
+
+    static var current: Self {
+        #if os(macOS)
+        resolve(distributionMarker: Bundle.main.object(forInfoDictionaryKey: distributionKey), isMacOS: true)
+        #else
+        .dataProtection
+        #endif
+    }
+
+    static func resolve(distributionMarker: Any?, isMacOS: Bool) -> Self {
+        guard isMacOS else { return .dataProtection }
+        guard let distributionMarker else { return .dataProtection }
+        return distributionMarker as? String == publicDistribution ? .publicMacOS : .unsupported
+    }
+
+    var isSupported: Bool { self != .unsupported }
+    func preferenceKey(_ original: String) -> String {
+        self == .dataProtection ? original : original + "." + rawValue
+    }
+    var profileIdentifierKey: String { preferenceKey("qmplusWebsiteDataStoreIdentifier") }
+    var cacheDirectoryName: String {
+        self == .dataProtection ? "course-business-cache-v1" : "qmplus-business-cache-" + rawValue
+    }
+    func businessOwner(profileIdentifier: String?) -> String {
+        // The independent directory and profile preference key isolate public
+        // caches. Keep owners within the shared validator's UUID/legacy format.
+        profileIdentifier.flatMap(UUID.init(uuidString:))?.uuidString ?? "legacy"
+    }
+    func makeCredentialStore() -> any QMplusCredentialStoring {
+        guard isSupported else { return QMplusUnavailableCredentialStore() }
+        return QMplusKeychainCredentialStore(backend: self)
+    }
+    func makeBusinessCache() -> CourseBusinessCacheStorage {
+        if self == .dataProtection { return .shared }
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("WhereToStudyNative", isDirectory: true)
+            .appendingPathComponent(cacheDirectoryName, isDirectory: true)
+        return CourseBusinessCacheStorage(directory: directory,
+            enabled: isSupported && !AppLaunchConfiguration.isXCTestRunning && !AppLaunchConfiguration.isUITesting && !AppLaunchConfiguration.isReviewDemo)
+    }
+}
+
+private struct QMplusUnavailableCredentialStore: QMplusCredentialStoring {
+    func authorizationMarker() throws -> QMplusCredentialAuthorizationMarker? { throw QMplusCredentialStorageError.unsupportedDistribution }
+    func load() throws -> QMplusSavedCredentials? { throw QMplusCredentialStorageError.unsupportedDistribution }
+    func save(_ credentials: QMplusSavedCredentials) throws { throw QMplusCredentialStorageError.unsupportedDistribution }
+    func clear() throws { throw QMplusCredentialStorageError.unsupportedDistribution }
+}
+
 struct QMplusCredentialAuthorizationMarker: Codable, Equatable, Sendable {
     let recordID: UUID
     let authorizationNonce: UUID
@@ -32,25 +90,59 @@ protocol QMplusCredentialAuthorizationJournaling: Sendable {
     func revoke() throws
 }
 
-enum QMplusCredentialStorageError: Error { case invalidRecord, verificationFailed, keychain(OSStatus) }
+enum QMplusCredentialStorageError: Error { case invalidRecord, verificationFailed, unsupportedDistribution, keychain(OSStatus) }
 
 enum QMplusCredentialSaveDisposition: Equatable, Sendable { case unchanged, replaced, failed }
+
+// Synchronous boundary permits deterministic tests without real Keychain access.
+protocol QMplusKeychainAccessing: Sendable {
+    func copyMatching(_ query: CFDictionary, result: inout CFTypeRef?) -> OSStatus
+    func update(_ query: CFDictionary, attributes: CFDictionary) -> OSStatus
+    func add(_ attributes: CFDictionary) -> OSStatus
+    func delete(_ query: CFDictionary) -> OSStatus
+}
+
+private struct QMplusSystemKeychainAccess: QMplusKeychainAccessing {
+    func copyMatching(_ query: CFDictionary, result: inout CFTypeRef?) -> OSStatus { SecItemCopyMatching(query, &result) }
+    func update(_ query: CFDictionary, attributes: CFDictionary) -> OSStatus { SecItemUpdate(query, attributes) }
+    func add(_ attributes: CFDictionary) -> OSStatus { SecItemAdd(attributes, nil) }
+    func delete(_ query: CFDictionary) -> OSStatus { SecItemDelete(query) }
+}
 
 struct QMplusKeychainCredentialStore: QMplusCredentialStoring {
     static let service = "com.nemoyu.wheretostudy.native.qmplus.microsoft-credentials"
     static let account = "qmplus-microsoft"
-    private var query: [String: Any] {
+    let backend: QMplusCredentialBackend
+    private let access: any QMplusKeychainAccessing
+
+    init(backend: QMplusCredentialBackend = .dataProtection, access: (any QMplusKeychainAccessing)? = nil) {
+        #if os(macOS)
+        self.backend = backend
+        #else
+        self.backend = .dataProtection
+        #endif
+        self.access = access ?? QMplusSystemKeychainAccess()
+    }
+
+    var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: Self.service, kSecAttrAccount as String: Self.account,
-         kSecUseDataProtectionKeychain as String: true, kSecAttrSynchronizable as String: false]
+         kSecAttrService as String: backend == .dataProtection ? Self.service : Self.service + "." + backend.rawValue,
+         kSecAttrAccount as String: Self.account,
+         kSecUseDataProtectionKeychain as String: backend == .dataProtection,
+         kSecAttrSynchronizable as String: false]
+    }
+
+    private func requireSupportedBackend() throws {
+        guard backend.isSupported else { throw QMplusCredentialStorageError.unsupportedDistribution }
     }
 
     func authorizationMarker() throws -> QMplusCredentialAuthorizationMarker? {
+        try requireSupportedBackend()
         var request = query
         request[kSecReturnAttributes as String] = true
         request[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(request as CFDictionary, &result)
+        let status = access.copyMatching(request as CFDictionary, result: &result)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw QMplusCredentialStorageError.keychain(status) }
         guard let attributes = result as? [String: Any], let data = attributes[kSecAttrGeneric as String] as? Data,
@@ -59,11 +151,12 @@ struct QMplusKeychainCredentialStore: QMplusCredentialStoring {
     }
 
     func load() throws -> QMplusSavedCredentials? {
+        try requireSupportedBackend()
         var request = query
         request[kSecReturnData as String] = true
         request[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: CFTypeRef?
-        let status = SecItemCopyMatching(request as CFDictionary, &result)
+        let status = access.copyMatching(request as CFDictionary, result: &result)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw QMplusCredentialStorageError.keychain(status) }
         guard let data = result as? Data, data.count <= 16_384 else { throw QMplusCredentialStorageError.invalidRecord }
@@ -73,22 +166,28 @@ struct QMplusKeychainCredentialStore: QMplusCredentialStoring {
     }
 
     func save(_ credentials: QMplusSavedCredentials) throws {
+        try requireSupportedBackend()
         guard credentials.isValid else { throw QMplusCredentialStorageError.invalidRecord }
         let data = try JSONEncoder().encode(credentials)
         guard data.count <= 16_384 else { throw QMplusCredentialStorageError.invalidRecord }
-        let updates: [String: Any] = [kSecValueData as String: data,
-            kSecAttrGeneric as String: try JSONEncoder().encode(credentials.marker),
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
-        let status = SecItemUpdate(query as CFDictionary, updates as CFDictionary)
+        var updates: [String: Any] = [kSecValueData as String: data,
+            kSecAttrGeneric as String: try JSONEncoder().encode(credentials.marker)]
+        if backend == .dataProtection {
+            updates[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        }
+        // File-based macOS Keychain keeps the system's normal item ACL. Do not
+        // create an unrestricted SecAccess or modify trusted applications.
+        let status = access.update(query as CFDictionary, attributes: updates as CFDictionary)
         if status == errSecSuccess { return }
         guard status == errSecItemNotFound else { throw QMplusCredentialStorageError.keychain(status) }
         let attributes = query.merging(updates) { _, value in value }
-        let added = SecItemAdd(attributes as CFDictionary, nil)
+        let added = access.add(attributes as CFDictionary)
         guard added == errSecSuccess else { throw QMplusCredentialStorageError.keychain(added) }
     }
 
     func clear() throws {
-        let status = SecItemDelete(query as CFDictionary)
+        try requireSupportedBackend()
+        let status = access.delete(query as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else { throw QMplusCredentialStorageError.keychain(status) }
     }
 }
@@ -97,18 +196,32 @@ struct QMplusKeychainCredentialStore: QMplusCredentialStoring {
 struct QMplusDefaultsAuthorizationJournal: QMplusCredentialAuthorizationJournaling, @unchecked Sendable {
     static let key = "qmplusCredentialAutofillAuthorization"
     let defaults: UserDefaults
+    var backend: QMplusCredentialBackend = .dataProtection
+    private struct TaggedMarker: Codable {
+        let backend: QMplusCredentialBackend
+        let marker: QMplusCredentialAuthorizationMarker
+    }
+    private var key: String { backend.preferenceKey(Self.key) }
     func load() throws -> QMplusCredentialAuthorizationMarker? {
-        guard let data = defaults.data(forKey: Self.key) else { return nil }
+        guard backend.isSupported else { throw QMplusCredentialStorageError.unsupportedDistribution }
+        guard let data = defaults.data(forKey: key) else { return nil }
         guard data.count <= 1024 else { throw QMplusCredentialStorageError.invalidRecord }
-        return try JSONDecoder().decode(QMplusCredentialAuthorizationMarker.self, from: data)
+        if backend == .dataProtection { return try JSONDecoder().decode(QMplusCredentialAuthorizationMarker.self, from: data) }
+        let record = try JSONDecoder().decode(TaggedMarker.self, from: data)
+        guard record.backend == backend else { throw QMplusCredentialStorageError.verificationFailed }
+        return record.marker
     }
     func authorize(_ marker: QMplusCredentialAuthorizationMarker) throws {
-        defaults.set(try JSONEncoder().encode(marker), forKey: Self.key)
+        guard backend.isSupported else { throw QMplusCredentialStorageError.unsupportedDistribution }
+        let data = try backend == .dataProtection ? JSONEncoder().encode(marker)
+            : JSONEncoder().encode(TaggedMarker(backend: backend, marker: marker))
+        defaults.set(data, forKey: key)
         guard try load() == marker else { throw QMplusCredentialStorageError.verificationFailed }
     }
     func revoke() throws {
-        defaults.removeObject(forKey: Self.key)
-        guard defaults.object(forKey: Self.key) == nil else { throw QMplusCredentialStorageError.verificationFailed }
+        guard backend.isSupported else { throw QMplusCredentialStorageError.unsupportedDistribution }
+        defaults.removeObject(forKey: key)
+        guard defaults.object(forKey: key) == nil else { throw QMplusCredentialStorageError.verificationFailed }
     }
 }
 
@@ -288,25 +401,27 @@ final class QMplusCredentialAuthorization: ObservableObject {
 final class QMplusCredentialDraft: ObservableObject {
     static let preferenceKey = "qmplusCredentialSavePreference"
     private let defaults: UserDefaults?
+    private let preferenceKey: String
     private var persistsPreference = true
     @Published var account = ""
     @Published var password = ""
     // A selected editing preference is not an authorization or saved record.
     // Only the explicit save action can establish the secure-store binding.
     @Published var wantsToSave: Bool {
-        didSet { if persistsPreference { defaults?.set(wantsToSave, forKey: Self.preferenceKey) } }
+        didSet { if persistsPreference { defaults?.set(wantsToSave, forKey: preferenceKey) } }
     }
 
-    init(defaults: UserDefaults? = .standard) {
+    init(defaults: UserDefaults? = .standard, backend: QMplusCredentialBackend = .dataProtection) {
         self.defaults = defaults
-        wantsToSave = defaults?.object(forKey: Self.preferenceKey) as? Bool ?? true
+        preferenceKey = backend.preferenceKey(Self.preferenceKey)
+        wantsToSave = defaults?.object(forKey: preferenceKey) as? Bool ?? true
     }
 
     func clear() { account = ""; password = "" }
     func disableSaving() { wantsToSave = false; clear() }
     func resetSavingPreference() {
         clear()
-        defaults?.removeObject(forKey: Self.preferenceKey)
+        defaults?.removeObject(forKey: preferenceKey)
         persistsPreference = false
         wantsToSave = true
         persistsPreference = true

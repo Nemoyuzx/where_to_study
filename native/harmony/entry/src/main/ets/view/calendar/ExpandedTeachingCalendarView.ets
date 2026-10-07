@@ -471,7 +471,7 @@ export struct ExpandedTeachingCalendarView {
         .height('100%')
         .align(Alignment.Top)
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
       }
 
       if (this.presentedDay !== null) {
@@ -741,7 +741,7 @@ export struct ExpandedTeachingCalendarView {
         .layoutWeight(1)
         .scrollable(ScrollDirection.Vertical)
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
         .width('100%')
         .id('calendar.expanded.timeline-scroll')
       }
@@ -1024,7 +1024,7 @@ export struct ExpandedTeachingCalendarView {
       .align(Alignment.Top)
       .scrollable(ScrollDirection.Vertical)
       .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.None)
+      .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
       .id('calendar.expanded.month-scroll')
     }
     .width('100%')
@@ -1265,6 +1265,7 @@ export struct ExpandedTeachingCalendarView {
     }
     .layoutWeight(1)
     .width('100%')
+    .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
   }
 
   private yearColumnCount(): number {
@@ -1566,7 +1567,7 @@ export struct ExpandedTeachingCalendarView {
           .alignItems(HorizontalAlign.Start)
         }
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
         .constraintSize({ maxHeight: 360 })
         .width('100%')
       }
@@ -1609,7 +1610,7 @@ export struct ExpandedTeachingCalendarView {
         }
         .scrollable(ScrollDirection.Vertical)
         .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.None)
+        .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
         .layoutWeight(1)
         .width('100%')
         Row({ space: 8 }) {

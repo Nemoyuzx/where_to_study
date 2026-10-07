@@ -2184,7 +2184,7 @@ final class AppModel: ObservableObject {
     private static let widgetShowsTeacherKey = "widgetShowsTeacher"
     private static let widgetCourseLimitKey = "widgetCourseLimit"
     private static let weatherEnabledKey = "weatherEnabled"
-    static let qmplusEnabledKey = "qmplusEnabled"
+    static var qmplusEnabledKey: String { QMplusCredentialBackend.current.preferenceKey("qmplusEnabled") }
     private static let almanacEnabledKey = "almanacEnabled"
     private static let competitionDeadlinesEnabledKey = "competitionDeadlinesEnabled"
     private static let schoolContestNoticesEnabledKey = "schoolContestNoticesEnabled"
@@ -2197,11 +2197,13 @@ final class AppModel: ObservableObject {
     static let maximumFavoriteDeadlines = 500
 
     static func loadQMplusEnabled(defaults: UserDefaults) -> Bool {
+        let backend = QMplusCredentialBackend.current
+        guard backend.isSupported else { return false }
         if let enabled = defaults.object(forKey: qmplusEnabledKey) as? Bool { return enabled }
         // Upgrade evidence is non-secret metadata; never load a saved password.
-        let hadSession = defaults.string(forKey: "qmplusWebsiteDataStoreIdentifier")
+        let hadSession = defaults.string(forKey: backend.profileIdentifierKey)
             .flatMap(UUID.init(uuidString:)) != nil
-        let hadAuthorization = (try? QMplusDefaultsAuthorizationJournal(defaults: defaults).load()) != nil
+        let hadAuthorization = (try? QMplusDefaultsAuthorizationJournal(defaults: defaults, backend: backend).load()) != nil
         let enabled = hadSession || hadAuthorization
         defaults.set(enabled, forKey: qmplusEnabledKey)
         return enabled

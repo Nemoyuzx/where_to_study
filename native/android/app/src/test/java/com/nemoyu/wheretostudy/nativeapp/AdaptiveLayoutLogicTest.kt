@@ -264,6 +264,42 @@ class AdaptiveLayoutLogicTest {
         assertEquals(setOf("教1"), state.selectedBuildings)
     }
 
+    @Test fun plannerProvisionalDefaultsFollowLateScheduleAndSubsequentTermOrAccountBusySlots() {
+        val state = PlannerQueryState("01")
+        state.ensureSlotSelection(0..5, emptySet())
+        assertEquals((0..5).toSet(), state.selectedSlots)
+        state.ensureSlotSelection(0..5, setOf(1, 2))
+        assertEquals(setOf(0, 3, 4, 5), state.selectedSlots)
+        // A new term/account can free previous slots and occupy different ones.
+        state.ensureSlotSelection(0..5, setOf(4, 5))
+        assertEquals(setOf(0, 1, 2, 3), state.selectedSlots)
+        assertEquals(state.selectedSlots, state.effectiveSlotSelection(setOf(4, 5)))
+    }
+
+    @Test fun latePersonalSchedulePreservesManualIntentButBusySlotsNeverReachTheEffectiveQuery() {
+        val state = PlannerQueryState("01")
+        state.ensureSlotSelection(0..5, emptySet())
+        state.markSlotSelectionEdited()
+        state.selectedSlots.clear(); state.selectedSlots += setOf(0, 1, 3)
+        state.ensureSlotSelection(0..5, setOf(1, 2))
+        assertEquals(setOf(0, 1, 3), state.selectedSlots)
+        assertEquals(setOf(0, 3), state.effectiveSlotSelection(setOf(1, 2)))
+        state.ensureSlotSelection(0..5, setOf(0, 3))
+        assertEquals(setOf(1), state.effectiveSlotSelection(setOf(0, 3)))
+        state.usePersonalSchedule = false
+        assertEquals(setOf(0, 1, 3), state.effectiveSlotSelection(setOf(0, 3)))
+    }
+
+    @Test fun anExplicitClearStaysEmptyWhenTheScheduleArrivesOrTheAccountChanges() {
+        val state = PlannerQueryState("01")
+        state.ensureSlotSelection(0..5, emptySet())
+        state.markSlotSelectionEdited(); state.selectedSlots.clear()
+        state.ensureSlotSelection(0..5, setOf(1, 2))
+        state.ensureSlotSelection(0..5, emptySet())
+        assertTrue(state.selectedSlots.isEmpty())
+        assertTrue(state.effectiveSlotSelection(setOf(1, 2)).isEmpty())
+    }
+
     @Test
     fun compactYearCalendarAlwaysUsesTwoMonthColumns() {
         assertEquals(2, YearCalendarLogic.columns(320))

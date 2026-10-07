@@ -1,10 +1,12 @@
 // 全合成存储：不初始化 AppContext、不读取任何真实登录资料、不启动 ArkWeb。
 import { describe, it, expect } from '@ohos/hypium';
 import { QMPlusSavedLogin, QMPlusSavedLoginStoring } from '../main/ets/store/QMPlusSavedLoginStore';
-import { QMPlusAuthAttemptLedger, QMPlusAuthNavigationPolicy } from '../main/ets/view/QMPlusConnectionView';
+import { QMPlusAuthAttemptLedger, QMPlusAuthNavigationPolicy,
+  QMPlusAuthTransitionState } from '../main/ets/view/QMPlusConnectionView';
 import { QMPlusAuthorizationJournal, QMPlusLoginAuthorization, QMPlusSession } from '../main/ets/view/QMPlusSession';
 import { QMPlusSnapshot, QMPlusURLPolicy } from '../main/ets/net/QMPlusSnapshot';
 import { QMPlusWebProfileStoring } from '../main/ets/store/QMPlusWebProfileStore';
+import { CourseDTOCacheStore } from '../main/ets/store/CourseDTOCacheStore';
 
 class Gate {
   private finish: () => void = () => {};
@@ -79,6 +81,30 @@ class RetainedWebProfile implements QMPlusWebProfileStoring {
   }
 }
 
+class CacheWebProfile extends RetainedWebProfile {
+  scope: string = 'a'.repeat(32);
+  businessScope(): string { return this.scope; }
+}
+
+class FakeQMCache extends CourseDTOCacheStore {
+  loads: number = 0;
+  failNextLoad: boolean = false;
+  gate: Gate | null = null;
+  started: Gate = new Gate();
+  value: QMPlusSnapshot = new QMPlusSnapshot('2026-10-05T00:00:00Z', false, [], [], []);
+  constructor() { super('qmplus'); }
+  async loadQM(scope: string): Promise<QMPlusSnapshot | null> {
+    this.loads++;
+    const gate: Gate | null = this.gate;
+    this.gate = null;
+    this.started.release();
+    if (gate !== null) { await gate.promise; }
+    if (this.failNextLoad) { this.failNextLoad = false; throw new Error('synthetic cache read failed'); }
+    return this.value;
+  }
+  async clear(): Promise<void> {}
+}
+
 function session(store: FakeLoginStore, journal: FakeAuthorizationJournal): QMPlusSession {
   let sequence: number = 0;
   // Host-side Hypium on Darwin cannot call device CryptoFramework RNG. Every
@@ -98,6 +124,98 @@ async function authorization(current: QMPlusSession): Promise<QMPlusLoginAuthori
 
 export default function qmPlusSavedLoginTest() {
   describe('QMPlusSavedLoginTest', () => {
+    it('simultaneous_status_restores_share_one_asset_read_and_retired_reads_cannot_reauthorize', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const journal: FakeAuthorizationJournal = new FakeAuthorizationJournal();
+      store.login = new QMPlusSavedLogin('a'.repeat(32), 'student@example.org', 'synthetic-pass');
+      journal.value = store.login.recordID;
+      const gate: Gate = new Gate(); store.loadGate = gate;
+      const current: QMPlusSession = session(store, journal);
+      const first: Promise<void> = current.restoreSavedLoginStatus();
+      const second: Promise<void> = current.restoreSavedLoginStatus();
+      await store.loadStarted.promise;
+      expect(store.loadCount).assertEqual(1);
+      await current.deleteSavedLogin();
+      gate.release(); await first; await second;
+      expect(current.savedLoginAvailable).assertFalse();
+      expect(current.autoFillEnabled).assertFalse();
+      current.dispose();
+    });
+    it('cache_restore_is_single_flight_and_term_rejection_or_failure_can_retry', 0, async () => {
+      const cache: FakeQMCache = new FakeQMCache();
+      const profile: CacheWebProfile = new CacheWebProfile();
+      const current: QMPlusSession = new QMPlusSession((): void => {}, new FakeLoginStore(),
+        new FakeAuthorizationJournal(), (): string => 'b'.repeat(32), profile, cache);
+      current.termID = '2025-2026-2';
+      const gate: Gate = new Gate(); cache.gate = gate;
+      const first: Promise<void> = current.restoreBusinessCache();
+      const second: Promise<void> = current.restoreBusinessCache();
+      await cache.started.promise;
+      expect(cache.loads).assertEqual(1);
+      current.termID = '2026-2027-1';
+      gate.release(); await first; await second;
+      expect(current.snapshot === cache.value).assertTrue();
+      expect(cache.loads).assertEqual(2);
+      current.snapshot = null;
+      cache.failNextLoad = true;
+      let failed: boolean = false;
+      await current.restoreBusinessCache().catch(() => { failed = true; });
+      expect(failed).assertTrue();
+      await current.restoreBusinessCache();
+      expect(current.snapshot === cache.value).assertTrue();
+      expect(cache.loads).assertEqual(4);
+      current.dispose();
+    });
+    it('scope_change_and_disposal_retire_old_cache_callbacks', 0, async () => {
+      const cache: FakeQMCache = new FakeQMCache();
+      const profile: CacheWebProfile = new CacheWebProfile();
+      const current: QMPlusSession = new QMPlusSession((): void => {}, new FakeLoginStore(),
+        new FakeAuthorizationJournal(), (): string => 'b'.repeat(32), profile, cache);
+      const gate: Gate = new Gate(); cache.gate = gate;
+      const old: Promise<void> = current.restoreBusinessCache();
+      await cache.started.promise;
+      profile.scope = 'c'.repeat(32);
+      current.dispose(); gate.release(); await old;
+      expect(current.snapshot).assertNull();
+    });
+    it('disabled_warm_start_does_no_asset_work_and_concurrent_warm_calls_cannot_reopen_after_off', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const cache: FakeQMCache = new FakeQMCache();
+      const profile: CacheWebProfile = new CacheWebProfile();
+      const current: QMPlusSession = new QMPlusSession((): void => {}, store,
+        new FakeAuthorizationJournal(), (): string => 'b'.repeat(32), profile, cache);
+      current.termID = '2026-2027-1';
+      current.setFeatureEnabled(false); await current.startWarmRefresh();
+      expect(store.loadCount).assertEqual(0); expect(cache.loads).assertEqual(0);
+      current.setFeatureEnabled(true);
+      const gate: Gate = new Gate(); store.loadGate = gate;
+      const first: Promise<void> = current.startWarmRefresh();
+      const second: Promise<void> = current.startWarmRefresh();
+      await store.loadStarted.promise;
+      expect(store.loadCount).assertEqual(1);
+      current.setFeatureEnabled(false);
+      gate.release(); await first; await second;
+      expect(current.loginVisible).assertFalse(); expect(profile.reserves).assertEqual(0);
+      current.setFeatureEnabled(true); await current.startWarmRefresh();
+      expect(profile.reserves).assertEqual(1); expect(store.loadCount).assertEqual(1);
+      current.dispose();
+    });
+    it('a_new_term_retires_the_old_warm_owner_and_can_start_again_without_requerying_saved_status', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const cache: FakeQMCache = new FakeQMCache();
+      const profile: CacheWebProfile = new CacheWebProfile();
+      const current: QMPlusSession = new QMPlusSession((): void => {}, store,
+        new FakeAuthorizationJournal(), (): string => 'b'.repeat(32), profile, cache);
+      current.updateTermID('2025-2026-2'); await current.startWarmRefresh();
+      const old = current.loginOwner();
+      expect(current.loginVisible).assertTrue(); expect(profile.reserves).assertEqual(1);
+      current.updateTermID('2026-2027-1');
+      expect(current.isLoginOwnerCurrent(old)).assertFalse();
+      await current.startWarmRefresh();
+      expect(profile.reserves).assertEqual(2); expect(store.loadCount).assertEqual(1);
+      expect(current.termID).assertEqual('2026-2027-1');
+      current.dispose();
+    });
     it('the_first_chooser_wait_is_bounded_and_a_later_exact_match_keeps_its_single_claim', 0, () => {
       const ready: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger();
       ready.begin(); ready.beginDocument('document_1');
@@ -468,6 +586,131 @@ export default function qmPlusSavedLoginTest() {
       current.setLoginForeground(true);
       expect(ledger.passwordAttempted()).assertTrue();
       expect(ledger.claimPassword('document_1', true)).assertFalse();
+      current.dispose();
+    });
+
+    it('same_document_resume_routes_username_ack_form_and_absent_to_bounded_wait_then_one_matched_password', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const current: QMPlusSession = session(store, new FakeAuthorizationJournal());
+      expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
+      expect(await current.setAutoFillEnabled(true)).assertTrue();
+      current.openLogin('https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=1');
+      const old: QMPlusLoginAuthorization = await authorization(current);
+      let now: number = 1000;
+      const clock: () => number = (): number => now;
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger(clock);
+      ledger.begin(); ledger.beginDocument('document_1');
+      const firstRun: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_1', clock);
+      expect(ledger.claimUsername('document_1')).assertTrue();
+      expect(ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED')).assertTrue();
+      firstRun.restoreUsernameBudget();
+      current.cancelQuietLoginOnBackground(); now = 1350; current.setLoginForeground(true);
+      expect(current.isAuthorizationCurrent(old)).assertFalse();
+      const fresh: QMPlusLoginAuthorization = await authorization(current);
+      expect(current.isAuthorizationCurrent(fresh)).assertTrue();
+      // This is the settling state used by production runAuth, reconstructed
+      // with the same ledger/nonce after foreground authorization is renewed.
+      const resumed: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_1', clock);
+      const reads: number = store.loadCount;
+      expect(resumed.canWait('FORM_UNTRUSTED', ledger.usernameSubmitted('document_1'))).assertTrue();
+      now = 1850;
+      expect(resumed.canWait('KNOWN_FORM_ABSENT', ledger.usernameSubmitted('document_1'))).assertTrue();
+      expect(store.loadCount).assertEqual(reads); expect(ledger.passwordAttempted()).assertFalse();
+      expect(ledger.claimPassword('document_1', false)).assertFalse();
+      expect(store.loadCount).assertEqual(reads);
+      expect(await current.authorizedPasswordFor('student@example.org', fresh)).assertEqual('synthetic-pass');
+      expect(ledger.claimPassword('document_1', true)).assertTrue();
+      expect(ledger.claimUsername('document_1')).assertFalse();
+      expect(ledger.claimPassword('document_1', true)).assertFalse();
+      current.dispose();
+    });
+
+    it('same_document_mfa_is_presented_immediately_and_never_waits_or_reads_password', 0, async () => {
+      const store: FakeLoginStore = new FakeLoginStore();
+      const current: QMPlusSession = session(store, new FakeAuthorizationJournal());
+      expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
+      expect(await current.setAutoFillEnabled(true)).assertTrue();
+      current.openLogin('https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=1');
+      let now: number = 1000;
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger((): number => now);
+      ledger.begin(); ledger.beginDocument('document_1'); ledger.claimUsername('document_1');
+      ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED');
+      current.cancelQuietLoginOnBackground(); now = 1400; current.setLoginForeground(true);
+      const resumed: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_1', (): number => now);
+      const reads: number = store.loadCount;
+      for (const reason of ['MFA_REQUIRED', 'CAPTCHA_REQUIRED']) {
+        expect(resumed.canWait(reason, true)).assertFalse();
+        current.presentVerification();
+        expect(current.loginPresented).assertTrue(); expect(current.loginVisible).assertTrue();
+      }
+      expect(store.loadCount).assertEqual(reads); expect(ledger.passwordAttempted()).assertFalse();
+      current.dispose();
+    });
+
+    it('resuming_or_replaying_username_ack_never_renews_the_original_settling_deadline', 0, () => {
+      let now: number = 1000;
+      const clock: () => number = (): number => now;
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger(clock);
+      ledger.begin(); ledger.beginDocument('document_1'); ledger.claimUsername('document_1');
+      expect(ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED')).assertTrue();
+      expect(ledger.usernameTransitionDeadline('document_1')).assertEqual(3000);
+      for (const time of [1500, 2500, 2999]) {
+        now = time;
+        expect(ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED')).assertTrue();
+        const resumed: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_1', clock);
+        expect(resumed.canWait('FORM_UNTRUSTED', true)).assertTrue();
+        expect(ledger.usernameTransitionDeadline('document_1')).assertEqual(3000);
+      }
+      now = 3000;
+      const expired: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_1', clock);
+      for (const reason of ['FORM_UNTRUSTED', 'KNOWN_FORM_ABSENT', 'ALREADY_ATTEMPTED']) {
+        expect(expired.canWait(reason, true)).assertFalse();
+      }
+      expect(ledger.claimUsername('document_1')).assertFalse(); expect(ledger.passwordAttempted()).assertFalse();
+    });
+
+    it('username_settling_rejects_risk_reasons_new_documents_stopped_owners_and_wrong_ack', 0, () => {
+      let now: number = 1000;
+      const clock: () => number = (): number => now;
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger(clock);
+      ledger.begin(); ledger.beginDocument('document_1'); ledger.claimUsername('document_1');
+      expect(ledger.recordUsernameSubmission('document_1', 'REJECTED')).assertFalse();
+      const unacknowledged: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_1', clock);
+      expect(unacknowledged.canWait('FORM_UNTRUSTED', true)).assertFalse();
+      ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED');
+      const acknowledged: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_1', clock);
+      for (const reason of ['INTERFERENCE', 'ACCOUNT_MISMATCH', 'UNSUPPORTED_PAGE', 'UNTRUSTED_CONTEXT', 'STALE_DOCUMENT']) {
+        expect(acknowledged.canWait(reason, true)).assertFalse();
+      }
+      expect(acknowledged.canWait('FORM_UNTRUSTED', false)).assertFalse();
+      ledger.beginDocument('document_2');
+      expect(acknowledged.canWait('FORM_UNTRUSTED', true)).assertFalse();
+      const navigated: QMPlusAuthTransitionState = new QMPlusAuthTransitionState(ledger, 'document_2', clock);
+      expect(navigated.canWait('KNOWN_FORM_ABSENT', true)).assertFalse();
+      expect(ledger.claimUsername('document_2')).assertFalse();
+      ledger.stop(); now = 1500;
+      expect(acknowledged.canWait('FORM_UNTRUSTED', true)).assertFalse();
+      expect(ledger.claimPassword('document_2', true)).assertFalse();
+    });
+
+    it('resumed_transition_cannot_revive_replaced_credentials_or_a_closed_session_owner', 0, async () => {
+      const current: QMPlusSession = session(new FakeLoginStore(), new FakeAuthorizationJournal());
+      expect(await current.saveSavedLogin('student@example.org', 'synthetic-pass')).assertTrue();
+      expect(await current.setAutoFillEnabled(true)).assertTrue();
+      current.openLogin('https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=1');
+      const old: QMPlusLoginAuthorization = await authorization(current);
+      const ledger: QMPlusAuthAttemptLedger = new QMPlusAuthAttemptLedger((): number => 1000);
+      ledger.begin(); ledger.beginDocument('document_1'); ledger.claimUsername('document_1');
+      ledger.recordUsernameSubmission('document_1', 'USERNAME_SUBMITTED');
+      current.cancelQuietLoginOnBackground(); current.setLoginForeground(true);
+      const resumed: QMPlusLoginAuthorization = await authorization(current);
+      expect(current.isAuthorizationCurrent(old)).assertFalse();
+      expect(await current.saveSavedLogin('new@example.org', 'synthetic-new')).assertTrue();
+      expect(current.isAuthorizationCurrent(resumed)).assertFalse();
+      expect(await current.authorizedPasswordFor('student@example.org', resumed)).assertNull();
+      current.closeLogin();
+      expect(current.isLoginOwnerCurrent(resumed.owner)).assertFalse();
+      expect(await current.captureLoginAuthorization(resumed.owner)).assertNull();
       current.dispose();
     });
 

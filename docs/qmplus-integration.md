@@ -38,6 +38,10 @@ The shared script makes only allowlisted read-only requests to the official enro
 
 ## 会话和本地资料 / Sessions and local data
 
+原生 macOS 公共 DMG/ZIP 使用独立的本机系统 Keychain 记录，遵循系统默认访问控制，不放宽可信应用列表、不保存明文文件。仅公共打包脚本在待签名的副本中写入精确分发标记；iOS、TestFlight 和 App Store 默认仍使用原 Data Protection Keychain。未知标记会阻断 QMplus，不会因原后端失败而自动改用其它后端。公共渠道的授权 journal 带后端标签，保存偏好、功能开关、WebKit profile 标识和业务缓存目录／身份作用域也独立；不读取、迁移或删除商店渠道的 QMplus 密码记录、授权或网页会话。首次使用公共渠道需重新保存并授权一次，官方服务可能要求重新登录或 MFA。
+
+Native macOS public DMG/ZIP packages use a separate local system Keychain record with the default OS access controls, without broadening trusted applications or writing plaintext files. Only the public packaging script writes the exact distribution marker into the copy before signing. iOS, TestFlight and App Store retain the existing Data Protection Keychain by default. Unknown markers block QMplus, and a backend failure never triggers an automatic fallback. Public authorization journals carry a backend tag; save preferences, the feature switch, WebKit profile identifiers, and business-cache directories/identity scopes are separate. The public channel does not read, migrate or delete the Store channel's QMplus credentials, authorization or web session. First use requires saving and authorizing again; official sign-in or MFA may also be required.
+
 课程和活动业务快照经大小、字段、时间及官方链接校验后，绑定独立身份作用域保存在本机；不含登录秘密、Cookie、令牌或完整 HTML。重启先恢复缓存并保留原获取时间，启用功能时由应用数据层静默更新。缓存不证明网页登录有效；应用处于前台时，验证码／MFA 自动显示官方窗口；未知要求暂停，用户可手动继续，系统后台不抢占界面。身份变更或清除先撤销旧作用域，旧请求不得恢复已清除的数据；功能关闭保留缓存。
 
 Validated business snapshots are stored locally with an independent identity scope and original fetch times, never credentials, cookies, tokens or full HTML. Restart restores cached data before a data-owner-managed silent update when enabled. A cache does not establish a valid login. CAPTCHA/MFA reveals the official window while the app is active; unknown requirements pause for explicit manual continuation, and the OS background does not take focus. Identity changes or clearing revoke the old scope before stale requests can republish data. Disabling retains the cache.

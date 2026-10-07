@@ -75,3 +75,14 @@ test('Harmony retires same-document ACKs on navigation while preserving presenta
   assert.match(web, /this\.authLedger\.stop\(\);[\s\S]*?this\.invalidateAuth\(\);[\s\S]*?this\.session\.deferManualLogin\(\)/)
   assert.match(web, /afterPassword = true;[\s\S]*?await this\.waitForAuthStep\(\);[\s\S]*?continue/)
 })
+
+test('Harmony production auth loop uses the restored same-document settling state before manual fallback', () => {
+  const run = web.slice(web.indexOf('private async runAuth('), web.indexOf('private async runSync('))
+  assert.match(run, /new QMPlusAuthTransitionState\(this\.authLedger, nonce\)/)
+  assert.match(run, /this\.authLedger\.recordUsernameSubmission\(nonce, code\)[\s\S]*?transition\.restoreUsernameBudget\(\)/)
+  assert.match(run, /transition\.canWait\(state\.reason, afterUsername \|\| afterAccount \|\| afterPassword \|\| afterContinue\)/)
+  assert.ok(run.indexOf("state.stage === 'challenge'") < run.indexOf('transition.canWait('))
+  assert.match(web, /this\.submittedUsernameDocument !== document[\s\S]*?this\.submittedUsernameDeadline = this\.clock\(\) \+ 2000/)
+  assert.match(web, /this\.deadline = ledger\.usernameTransitionDeadline\(document\)/)
+  assert.match(web, /this\.ledger\.identityAcknowledged\(this\.document\) && this\.clock\(\) < this\.deadline/)
+})

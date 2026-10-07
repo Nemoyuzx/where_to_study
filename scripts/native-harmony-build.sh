@@ -85,6 +85,7 @@ verify_packed_version() {
 }
 
 cd "$HARMONY_DIR"
+node "$ROOT_DIR/scripts/sync-harmony-legal-assets.mjs"
 "$OHPM" install
 HVIGOR_RELEASE_OPTIONS=(--no-daemon --no-parallel --max-old-space-size=2048 --optimization-strategy=memory)
 "$HVIGOR" assembleHap -p buildMode=release "${HVIGOR_RELEASE_OPTIONS[@]}"
@@ -103,7 +104,8 @@ if [[ ! -f "$SIGNED_HAP" ]]; then
   exit 1
 fi
 verify_packed_version "$SIGNED_HAP"
-node "$ROOT_DIR/scripts/verify-harmony-release-package.mjs" "$SIGNED_HAP"
+COMPILED_ABC="$HARMONY_DIR/entry/build/default/intermediates/loader_out/default/ets/modules.abc"
+node "$ROOT_DIR/scripts/verify-harmony-release-package.mjs" "$SIGNED_HAP" --compiled-abc "$COMPILED_ABC"
 if unzip -p "$SIGNED_HAP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
   echo "HarmonyOS HAP contains the retired contest API host." >&2
   exit 1
@@ -123,7 +125,7 @@ if [[ ! -f "$SIGNED_APP" ]]; then
   exit 1
 fi
 verify_packed_version "$SIGNED_APP"
-node "$ROOT_DIR/scripts/verify-harmony-release-package.mjs" "$SIGNED_APP"
+node "$ROOT_DIR/scripts/verify-harmony-release-package.mjs" "$SIGNED_APP" --compiled-abc "$COMPILED_ABC"
 unzip -t "$SIGNED_APP" >/dev/null
 if unzip -p "$SIGNED_APP" | stream_contains_fixed_text "$LEGACY_CONTEST_HOST"; then
   echo "HarmonyOS APP contains the retired contest API host." >&2

@@ -91,6 +91,19 @@ PACKAGE_EXTENSION_BINARY="$PACKAGE_EXTENSION/Contents/MacOS/WhereToStudyWidget"
 strip -S "$PACKAGE_EXTENSION_BINARY"
 
 INFO_PLIST="$PACKAGE_APP/Contents/Info.plist"
+# This marker belongs only to the public package copy. App Store archives and
+# generated project inputs retain the default Data Protection Keychain backend.
+QMPLUS_DISTRIBUTION_KEY="WTSQMplusCredentialDistribution"
+QMPLUS_PUBLIC_DISTRIBUTION="public-macos-v1"
+if plutil -extract "$QMPLUS_DISTRIBUTION_KEY" raw "$SOURCE_APP/Contents/Info.plist" >/dev/null 2>&1; then
+  echo "Native macOS source app must not contain a public QMplus distribution marker." >&2
+  exit 1
+fi
+plutil -insert "$QMPLUS_DISTRIBUTION_KEY" -string "$QMPLUS_PUBLIC_DISTRIBUTION" "$INFO_PLIST"
+if [[ "$(plutil -extract "$QMPLUS_DISTRIBUTION_KEY" raw "$INFO_PLIST")" != "$QMPLUS_PUBLIC_DISTRIBUTION" ]]; then
+  echo "Native macOS public package is missing its QMplus distribution marker." >&2
+  exit 1
+fi
 for name_key in CFBundleName CFBundleDisplayName CFBundleExecutable; do
   if [[ "$(plutil -extract "$name_key" raw "$INFO_PLIST")" != "Where To Study" ]]; then
     echo "Native macOS package $name_key must be Where To Study." >&2
@@ -165,6 +178,10 @@ codesign --force --sign - --timestamp=none \
   "$PACKAGE_APP"
 codesign --verify --deep --strict --verbose=2 "$PACKAGE_APP"
 codesign --verify --strict --verbose=2 "$PACKAGE_EXTENSION"
+if [[ "$(plutil -extract "$QMPLUS_DISTRIBUTION_KEY" raw "$INFO_PLIST")" != "$QMPLUS_PUBLIC_DISTRIBUTION" ]]; then
+  echo "Native macOS signed public package has an unexpected QMplus distribution marker." >&2
+  exit 1
+fi
 
 APP_ENTITLEMENTS="$(codesign -d --entitlements :- "$PACKAGE_APP" 2>/dev/null)"
 WIDGET_ENTITLEMENTS="$(codesign -d --entitlements :- "$PACKAGE_EXTENSION" 2>/dev/null)"

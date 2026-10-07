@@ -343,6 +343,7 @@ export struct CourseView {
       .width('100%')
       .layoutWeight(1)
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       .opacity(this.tabContentOpacity)
     }
     .width('100%')

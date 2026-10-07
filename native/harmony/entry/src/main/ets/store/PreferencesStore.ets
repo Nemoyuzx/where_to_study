@@ -6,13 +6,19 @@ import { ColorThemePreferences } from './ColorThemeStore';
 
 export class PreferencesStore implements ColorThemePreferences {
   private readonly name: string;
+  private opening: Promise<preferences.Preferences> | null = null;
 
   constructor(name: string = 'where-to-study') {
     this.name = name;
   }
 
   private async open(): Promise<preferences.Preferences> {
-    return await preferences.getPreferences(AppContext.get(), { name: this.name });
+    if (this.opening === null) { this.opening = preferences.getPreferences(AppContext.get(), { name: this.name }); }
+    const work: Promise<preferences.Preferences> = this.opening;
+    try { return await work; } catch (e) {
+      if (this.opening === work) { this.opening = null; }
+      throw e as Error;
+    }
   }
 
   async getString(key: string): Promise<string | null> {

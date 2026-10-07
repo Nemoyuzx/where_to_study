@@ -10,12 +10,28 @@ import {
 } from '../../net/CalendarDailyInfoClient';
 import { AppContext } from '../../store/AppContext';
 import { AppLocalization, LocalizationValues } from '../../common/AppLocalization';
+import { TeachingCalendarLogic } from './CalendarLogic';
+import { ShuttleQueryLayout } from '../ShuttleQueryLayout';
 
 @ComponentV2
 export struct CalendarDailyInfoCards {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param day: DateParts = StrictDates.todayParts();
   private favoriteFeedbackRevision: number = 0;
+  @Local almanacAdviceWidth: number = 0;
+  @Local almanacFontScale: number = 1;
+
+  aboutToAppear(): void {
+    this.updateAlmanacFontScale();
+  }
+
+  private updateAlmanacFontScale(): void {
+    try {
+      this.almanacFontScale = ShuttleQueryLayout.fontScale(AppContext.get().config.fontSizeScale ?? 1);
+    } catch (e) {
+      this.almanacFontScale = 1;
+    }
+  }
 
   aboutToDisappear(): void {
     this.favoriteFeedbackRevision++;
@@ -264,24 +280,59 @@ export struct CalendarDailyInfoCards {
 
   @Builder
   almanacAdviceRow(label: string, value: string, color: ResourceColor) {
-    Row({ space: 8 }) {
-      Text(this.model.text(label))
-        .fontSize(12)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .width(24)
-        .height(24)
-        .textAlign(TextAlign.Center)
-        .borderRadius(12)
-        .backgroundColor(color)
-      Text(value)
-        .fontSize(12)
-        .fontColor(AppTheme.text())
-        .lineHeight(17)
-        .layoutWeight(1)
+    Column({ space: 0 }) {
+      if (TeachingCalendarLogic.almanacAdviceUsesVertical(this.almanacAdviceWidth,
+        this.measuredAlmanacLabelWidth(label), this.almanacFontScale)) {
+        Column({ space: 8 }) {
+          this.almanacAdviceLabel(label, color)
+          Text(value)
+            .fontSize(12)
+            .fontColor(AppTheme.text())
+            .lineHeight(17)
+            .width('100%')
+        }
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
+      } else {
+        Row({ space: 8 }) {
+          this.almanacAdviceLabel(label, color)
+          Text(value)
+            .fontSize(12)
+            .fontColor(AppTheme.text())
+            .lineHeight(17)
+            .layoutWeight(1)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Top)
+      }
     }
     .width('100%')
-    .alignItems(VerticalAlign.Top)
+    .onAreaChange((oldArea: Area, newArea: Area) => {
+      this.almanacAdviceWidth = Number(newArea.width);
+      this.updateAlmanacFontScale();
+    })
+  }
+
+  private measuredAlmanacLabelWidth(label: string): number {
+    return this.getUIContext().px2vp(this.getUIContext().getMeasureUtils().measureText({
+      textContent: this.model.text(label),
+      fontSize: (12 * this.almanacFontScale).toString() + 'vp',
+      fontWeight: FontWeight.Bold
+    }));
+  }
+
+  @Builder
+  almanacAdviceLabel(label: string, color: ResourceColor) {
+    Text(this.model.text(label))
+      .fontSize(12)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(Color.White)
+      .width(this.almanacAdviceWidth > 0 ? TeachingCalendarLogic.almanacAdviceLabelWidth(
+        this.almanacAdviceWidth, this.measuredAlmanacLabelWidth(label)) : '100%')
+      .padding({ left: 6, right: 6, top: 4, bottom: 4 })
+      .textAlign(TextAlign.Center)
+      .borderRadius(12)
+      .backgroundColor(color)
   }
 
   @Builder

@@ -44,13 +44,16 @@ object DailyClassroomRefreshScheduler {
     private const val SECONDARY_JOB_ID = 0x57545308
     private val jobIDs = setOf(PRIMARY_JOB_ID, SECONDARY_JOB_ID)
 
-    fun ensureScheduled(context: Context): Boolean = synchronized(this) {
+    fun ensureScheduled(context: Context, isActive: () -> Boolean = { !Thread.currentThread().isInterrupted }): Boolean = synchronized(this) {
+        if (!isActive()) return@synchronized false
         if (!PrivacyConsentStore(context).hasAcceptedCurrentPolicy) {
             return@synchronized cancel(context)
         }
         runCatching {
             val scheduler = context.getSystemService(JobScheduler::class.java)
-            when (scheduleAction(context, scheduler, forceReschedule = false)) {
+            val action = scheduleAction(context, scheduler, forceReschedule = false)
+            if (!isActive()) return@runCatching false
+            when (action) {
                 DailyClassroomScheduleAction.CANCEL -> cancelState(context, scheduler)
                 DailyClassroomScheduleAction.KEEP -> true
                 DailyClassroomScheduleAction.SCHEDULE -> schedule(context, PRIMARY_JOB_ID)

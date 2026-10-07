@@ -331,6 +331,7 @@ class QueryContentStabilityUiTest {
             beforeAssignmentPublication = beforeAssignments),
             ShuttleBusRepository(usesSampleData = true),
             ScheduleRepository(context, SecureCredentialStore(context), preferences), count)
+        fixture.schedules.awaitCacheRestoreForTest()
         // UI-only in-memory fixture. No credential or schedule cache is written.
         ScheduleRepository::class.java.getDeclaredField("schedule").apply { isAccessible = true }
             .set(fixture.schedules, ScheduleSnapshot("2026-2027-1", "2026-09-07", "synthetic", emptyList(),

@@ -17,6 +17,9 @@ export struct CalendarSectionView {
   @Consumer('appModel') model: AppModel = new AppModel();
   @Param containerWidth: number = 390;
   @Param qmPlusSession: QMPlusSession = new QMPlusSession();
+  @Param hasPhoneNavigation: boolean = false;
+  @Param phoneNavigationGlobalTop: number = -1;
+  @Param phoneNavigationGlobalBottom: number = -1;
   @Event onOpenCourse: (source: string, id: string) => boolean = () => false;
   @Local session: TeachingCalendarSession = new TeachingCalendarSession();
   private viewportPreloader: CalendarViewportPreloadController =
@@ -62,7 +65,11 @@ export struct CalendarSectionView {
     if (AdaptiveLayoutPolicy.useExpandedCalendar(this.containerWidth)) {
       ExpandedTeachingCalendarView({ session: this.session, qmPlusSession: this.qmPlusSession, onOpenCourse: this.onOpenCourse })
     } else {
-      MobileTeachingCalendarView({ session: this.session, qmPlusSession: this.qmPlusSession, onOpenCourse: this.onOpenCourse })
+      MobileTeachingCalendarView({ session: this.session, qmPlusSession: this.qmPlusSession,
+        hasPhoneNavigation: this.hasPhoneNavigation,
+        phoneNavigationGlobalTop: this.phoneNavigationGlobalTop,
+        phoneNavigationGlobalBottom: this.phoneNavigationGlobalBottom,
+        onOpenCourse: this.onOpenCourse })
     }
       }.width('100%').layoutWeight(1)
     }.width('100%').height('100%')

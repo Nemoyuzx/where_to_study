@@ -239,6 +239,36 @@ async function requireBranch(driver: Driver, expected: string): Promise<void> {
 
 export default function settingsPresentationDeviceTest() {
   describe('SettingsPresentationDevice', () => {
+    it('QM_header_arrow_is_trailing_and_expansion_keeps_its_natural_header_geometry', 0, async () => {
+      const driver: Driver = await launchReviewDemo();
+      try {
+        await openSettings(driver);
+        const arrow: Component = await scrollToSetting(driver, 'settings.qmplus.details-toggle');
+        const before: Rect = await arrow.getBounds();
+        const enabled: Component = await driver.findComponent(ON.id('settings.qmplus.enabled'));
+        const switchBounds: Rect = await enabled.getBounds();
+        expect((before.left + before.right) / 2 > switchBounds.left).assertTrue();
+        await arrow.click();
+        const deadline: number = Date.now() + 1800;
+        let stable: number = 0;
+        let previousBottom: number = -1;
+        while (Date.now() < deadline && stable < 2) {
+          const current: Rect = await (await driver.findComponent(ON.id('settings.qmplus.details-toggle'))).getBounds();
+          expect(Math.abs(current.top - before.top) <= 2).assertTrue();
+          expect(Math.abs((current.bottom - current.top) - (before.bottom - before.top)) <= 2).assertTrue();
+          if (await hasID(driver, 'settings.qmplus.connect')) {
+            const connect: Component = await driver.findComponent(ON.id('settings.qmplus.connect'));
+            const bounds: Rect = await connect.getBounds();
+            stable = Math.abs(bounds.bottom - previousBottom) <= 1 ? stable + 1 : 0;
+            previousBottom = bounds.bottom;
+            expect(bounds.top >= current.bottom).assertTrue();
+            expect(await connect.isEnabled()).assertFalse(); // Review mode never connects.
+          }
+          await driver.delayMs(16);
+        }
+        expect(stable >= 2).assertTrue();
+      } catch (e) { throw await withFailureEvidence(driver, 'qm-layout', e as Object); }
+    });
     it('privacy_open_close_preserves_the_underlying_settings_scroll_position', 0, async () => {
       const driver: Driver = await launchReviewDemo();
       try {

@@ -1,5 +1,6 @@
 import XCTest
 import Security
+import Combine
 #if os(macOS)
 @testable import WhereToStudyMac
 #else
@@ -10,6 +11,98 @@ import Security
 // These tests are not executed while local automation is prohibited.
 @MainActor
 final class QMplusCredentialAuthorizationTests: XCTestCase {
+    func testActivationRearmsAnExpiredPreparationWithoutCreatingAnOwnerOrReadingSecrets() async throws {
+        let suite = "QMplusExpiredPreparation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        let saved = fixture(); vault.record = saved; journal.marker = saved.marker
+        vault.markerError = .keychain(errSecNotAvailable)
+        let store = QMplusStore(defaults: defaults, credentialStore: vault,
+            authorizationJournal: journal, allowsCredentialStorage: true,
+            businessCache: .init(directory: nil, enabled: false), preparationWait: { await Task.yield() })
+        let expired = expectation(description: "The requested startup preparation exhausts its bounded wait")
+        let observation = store.$statusKey.sink { if $0 == "QMplus 官方网页登录失败，请重试" { expired.fulfill() } }
+        store.connect(sampleMode: false, background: true)
+        await fulfillment(of: [expired], timeout: 2)
+        XCTAssertFalse(store.isPreparingConnection)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView)
+        // This is also the macOS application-activation consumer; a scene ID
+        // change is not required to retry an unstarted preparation.
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertTrue(store.isPreparingConnection)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertEqual(vault.secretReads, 0)
+        XCTAssertEqual(vault.record, saved)
+        XCTAssertEqual(journal.marker, saved.marker)
+        store.endPresentation()
+        withExtendedLifetime(observation) {}
+    }
+
+    func testExplicitCloseAfterPreparationExpiryCannotBeRevivedByActivation() async throws {
+        let suite = "QMplusClosedPreparation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        journal.marker = fixture().marker; vault.markerError = .keychain(errSecNotAvailable)
+        let store = QMplusStore(defaults: defaults, credentialStore: vault,
+            authorizationJournal: journal, allowsCredentialStorage: true,
+            businessCache: .init(directory: nil, enabled: false), preparationWait: { await Task.yield() })
+        let expired = expectation(description: "Preparation expires before an explicit close")
+        let observation = store.$statusKey.sink { if $0 == "QMplus 官方网页登录失败，请重试" { expired.fulfill() } }
+        store.connect(sampleMode: false, background: true)
+        await fulfillment(of: [expired], timeout: 2)
+        store.endPresentation()
+        let reads = vault.markerReads
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertFalse(store.isPreparingConnection)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView)
+        XCTAssertEqual(vault.markerReads, reads)
+        XCTAssertEqual(vault.secretReads, 0)
+        withExtendedLifetime(observation) {}
+    }
+
+    func testInactiveSceneCancelsPreparationButItsRequestedIntentCanResumeOnceActive() throws {
+        let suite = "QMplusResumedPreparation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        journal.marker = fixture().marker; vault.markerError = .keychain(errSecNotAvailable)
+        let store = QMplusStore(defaults: defaults, credentialStore: vault,
+            authorizationJournal: journal, allowsCredentialStorage: true,
+            businessCache: .init(directory: nil, enabled: false))
+        store.connect(sampleMode: false, background: true)
+        XCTAssertTrue(store.isPreparingConnection)
+        store.stopAutomaticLoginForInactiveScene()
+        XCTAssertFalse(store.isPreparingConnection)
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertTrue(store.isPreparingConnection)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView)
+        XCTAssertEqual(vault.secretReads, 0)
+        store.setFeatureEnabled(false)
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertFalse(store.isPreparingConnection)
+    }
+
+    func testActivationWithoutAPreviousPreparationRequestDoesNotStartAConnection() throws {
+        let suite = "QMplusUnrequestedActivation.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vault = FakeQMCredentialVault(), journal = FakeQMAuthorizationJournal()
+        let store = QMplusStore(defaults: defaults, credentialStore: vault,
+            authorizationJournal: journal, allowsCredentialStorage: true,
+            businessCache: .init(directory: nil, enabled: false))
+        store.resumeAuthenticationRecognitionForActiveScene()
+        XCTAssertFalse(store.isPreparingConnection)
+        XCTAssertFalse(store.hasActiveConnection)
+        XCTAssertNil(store.webView)
+        XCTAssertEqual(vault.markerReads, 0)
+        XCTAssertEqual(vault.secretReads, 0)
+    }
+
     func testInactiveSceneCancelsPreparationBeforeItCanCreateALoginOwner() async throws {
         let suite = "QMplusInactivePreparation.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))

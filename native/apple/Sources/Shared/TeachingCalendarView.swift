@@ -2927,20 +2927,7 @@ struct TeachingCalendarView: View {
     }
 
     private func almanacAdvice(_ title: String, value: String, color: Color) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(title)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(theme.configuration.preset == .default ? color : theme.text)
-                .frame(width: 20, height: 20)
-                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
-            Text(value)
-                .font(.caption)
-                .foregroundStyle(theme.secondaryText)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(10)
-        .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.border, lineWidth: 1))
+        AlmanacAdviceCard(title: model.localized(title), value: value, color: color)
     }
 
     @ViewBuilder
@@ -4033,5 +4020,42 @@ struct TeachingCalendarView: View {
     ) -> DateFormatter {
         let format = model.appLanguage.dateFormat(chinese: chineseFormat, english: englishFormat)
         return dateFormatterCache.formatter(format: format, locale: model.appLanguage.locale)
+    }
+}
+
+// Only the UI label is localized by the caller. Provider advice remains raw.
+struct AlmanacAdviceCard: View {
+    @Environment(\.appTheme) private var theme
+    let title: String
+    let value: String
+    let color: Color
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 8) { badge; advice }
+            VStack(alignment: .leading, spacing: 8) { badge; advice }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(theme.background, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(theme.border, lineWidth: 1))
+    }
+
+    private var badge: some View {
+        Text(title)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(theme.configuration.preset == .default ? color : theme.text)
+            .fixedSize()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    private var advice: some View {
+        Text(value)
+            .font(.caption)
+            .foregroundStyle(theme.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

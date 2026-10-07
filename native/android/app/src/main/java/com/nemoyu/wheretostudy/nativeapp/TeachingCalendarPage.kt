@@ -29,6 +29,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewConfiguration
 import android.view.ViewOutlineProvider
+import android.view.ViewTreeObserver
 import android.view.Window
 import android.view.WindowManager
 import android.view.VelocityTracker
@@ -381,28 +382,61 @@ object TeachingCalendarLogic {
         verticalPaddingDp: Int,
         weekdayReservedHeightDp: Int,
         dragHandleReservedHeightDp: Int,
-    ): Int = (
+    ): Int =
         (monthViewHeightDp - verticalPaddingDp - weekdayReservedHeightDp -
             dragHandleReservedHeightDp).coerceAtLeast(0) / 6
-        ).coerceAtMost(monthCellHeightDp(expanded = true))
+
+    fun monthNavigationBottomInsetPx(
+        bodyHeightPx: Int,
+        navigationOverlapPx: Int?,
+        gapPx: Int,
+        fallbackInsetPx: Int,
+    ): Int {
+        val inset = when {
+            navigationOverlapPx == null -> fallbackInsetPx
+            navigationOverlapPx <= 0 -> 0
+            else -> navigationOverlapPx + gapPx.coerceAtLeast(0)
+        }
+        return inset.coerceIn(0, bodyHeightPx.coerceAtLeast(0))
+    }
 
     fun monthSheetDragPosition(
         deltaYDp: Float,
         startPosition: Float,
         travelDp: Float = (monthCellHeightDp(true) - monthCellHeightDp(false)) * 6f,
+        weekTravelDp: Float = travelDp,
     ): Float {
-        if (travelDp <= 0f) return startPosition.coerceIn(0f, 2f)
-        return (startPosition - deltaYDp / travelDp).coerceIn(0f, 2f)
+        val start = if (startPosition.isFinite()) startPosition.coerceIn(0f, 2f) else 0f
+        val first = if (travelDp.isFinite()) travelDp.coerceAtLeast(0f) else 0f
+        val second = if (weekTravelDp.isFinite()) weekTravelDp.coerceAtLeast(0f) else 0f
+        val total = first + second
+        if (!deltaYDp.isFinite() || deltaYDp == 0f || total <= 0f || !total.isFinite()) return start
+        val distance = (monthSheetPhysicalDistanceDp(start, first, second) - deltaYDp).coerceIn(0f, total)
+        return when {
+            distance <= 0f -> 0f
+            distance >= total -> 2f
+            distance < first && first > 0f -> distance / first
+            second > 0f -> 1f + (distance - first) / second
+            else -> 1f
+        }
     }
+
+    private fun monthSheetPhysicalDistanceDp(position: Float, first: Float, second: Float): Float =
+        position.coerceIn(0f, 1f) * first + (position - 1f).coerceIn(0f, 1f) * second
 
     fun monthDetailsDragOverflowDp(
         deltaYDp: Float,
         startPosition: Float,
         travelDp: Float = (monthCellHeightDp(true) - monthCellHeightDp(false)) * 6f,
+        weekTravelDp: Float = travelDp,
     ): Float {
-        if (deltaYDp >= 0f || travelDp <= 0f) return 0f
-        val distanceToDetails =
-            (monthSheetWeekPosition - startPosition.coerceIn(0f, 2f)) * travelDp
+        if (!deltaYDp.isFinite() || deltaYDp >= 0f) return 0f
+        val start = if (startPosition.isFinite()) startPosition.coerceIn(0f, 2f) else 0f
+        val first = if (travelDp.isFinite()) travelDp.coerceAtLeast(0f) else 0f
+        val second = if (weekTravelDp.isFinite()) weekTravelDp.coerceAtLeast(0f) else 0f
+        val total = first + second
+        if (total <= 0f || !total.isFinite()) return 0f
+        val distanceToDetails = total - monthSheetPhysicalDistanceDp(start, first, second)
         return (-deltaYDp - distanceToDetails).coerceAtLeast(0f)
     }
 
@@ -442,8 +476,8 @@ object TeachingCalendarLogic {
         // iOS. Individual week rows must not be squashed as details move up.
         val expandedProgress = monthCellExpansionProgress(position)
         return interpolateMonthMetric(
-            monthCellHeightDp(false),
-            expandedHeightDp,
+            minOf(monthCellHeightDp(false), expandedHeightDp.coerceAtLeast(0)),
+            expandedHeightDp.coerceAtLeast(0),
             expandedProgress,
         )
     }
@@ -608,6 +642,7 @@ private class CalendarSwipeContainer(
             sendAccessibilityEvent(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)
         }
     var onMonthSheetProgress: ((Float) -> Unit)? = null
+    var monthSheetTravelDp: (() -> Pair<Float, Float>)? = null
     var monthSheetPosition: Float = TeachingCalendarLogic.monthSheetExpandedPosition
         set(value) {
             field = value.coerceIn(
@@ -626,6 +661,8 @@ private class CalendarSwipeContainer(
     private var monthDetailsCouldScrollBackwardAtGestureStart = false
     private var monthDragStartPosition = TeachingCalendarLogic.monthSheetExpandedPosition
     private var monthDragPosition = TeachingCalendarLogic.monthSheetExpandedPosition
+    private var monthExpandedTravelDp = 0f
+    private var monthWeekTravelDp = 0f
     private var monthDetailsDragStartScrollY = 0
     private var velocityTracker: VelocityTracker? = null
     private val density = resources.displayMetrics.density
@@ -733,6 +770,9 @@ private class CalendarSwipeContainer(
                 childCancelled = false
                 monthDragStartPosition = monthSheetPosition
                 monthDragPosition = monthSheetPosition
+                val measuredTravel = monthSheetTravelDp?.invoke()
+                monthExpandedTravelDp = measuredTravel?.first ?: 0f
+                monthWeekTravelDp = measuredTravel?.second ?: 0f
                 val details = monthDetailsScrollView()
                 gestureStartedInMonthDetails = containsTouch(details, event.x, event.y)
                 monthDetailsCouldScrollBackwardAtGestureStart =
@@ -782,11 +822,15 @@ private class CalendarSwipeContainer(
                     monthDragPosition = TeachingCalendarLogic.monthSheetDragPosition(
                         deltaYDp = deltaY,
                         startPosition = monthDragStartPosition,
+                        travelDp = monthExpandedTravelDp,
+                        weekTravelDp = monthWeekTravelDp,
                     )
                     onMonthSheetProgress?.invoke(monthDragPosition)
                     val overflowDp = TeachingCalendarLogic.monthDetailsDragOverflowDp(
                         deltaYDp = deltaY,
                         startPosition = monthDragStartPosition,
+                        travelDp = monthExpandedTravelDp,
+                        weekTravelDp = monthWeekTravelDp,
                     )
                     if (overflowDp > 0f) {
                         monthDetailsScrollView()?.scrollTo(
@@ -850,7 +894,37 @@ internal fun buildAlmanacAdviceRow(
     label: String,
     value: String,
     color: Int,
-): LinearLayout = LinearLayout(context).apply {
+): LinearLayout = object : LinearLayout(context) {
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val labelView = findViewById<TextView>(R.id.calendar_almanac_advice_label)
+        val naturalLabelWidth = maxOf(
+            context.dp(24),
+            ceil(android.text.Layout.getDesiredWidth(labelView.text, labelView.paint)).toInt() +
+                labelView.compoundPaddingLeft + labelView.compoundPaddingRight,
+        )
+        val availableWidth = MeasureSpec.getSize(widthMeasureSpec) - paddingLeft - paddingRight
+        val gap = context.dp(7)
+        val stacked = MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED &&
+            AlmanacAdviceLayoutLogic.shouldStack(
+                availableWidth, naturalLabelWidth, gap,
+                ceil(context.dp(80) * resources.configuration.fontScale).toInt(),
+            )
+        orientation = if (stacked) VERTICAL else HORIZONTAL
+        val maximumLabelLines = if (stacked) Int.MAX_VALUE else 1
+        if (labelView.maxLines != maximumLabelLines) labelView.setSingleLine(!stacked)
+        (getChildAt(0).layoutParams as LinearLayout.LayoutParams).apply {
+            width = if (stacked) ViewGroup.LayoutParams.WRAP_CONTENT else naturalLabelWidth
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
+            marginEnd = if (stacked) 0 else gap
+        }
+        (getChildAt(1).layoutParams as LinearLayout.LayoutParams).apply {
+            width = if (stacked) ViewGroup.LayoutParams.MATCH_PARENT else 0
+            weight = if (stacked) 0f else 1f
+            topMargin = if (stacked) gap else 0
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+}.apply {
     id = R.id.calendar_almanac_advice_row
     orientation = LinearLayout.HORIZONTAL
     gravity = Gravity.TOP
@@ -861,14 +935,25 @@ internal fun buildAlmanacAdviceRow(
         ViewGroup.LayoutParams.MATCH_PARENT,
         ViewGroup.LayoutParams.WRAP_CONTENT,
     ).apply { topMargin = context.dp(7) }
+    val adviceRow = this
     addView(TextView(context).apply {
         id = R.id.calendar_almanac_advice_label
-        text = label
+        text = context.uiText(label)
         textSize = 12f
+        minWidth = context.dp(24)
+        minHeight = context.dp(24)
         gravity = Gravity.CENTER
         setThemeTextColor { color }
         setTypeface(typeface, Typeface.BOLD)
-    }, LinearLayout.LayoutParams(context.dp(24), context.dp(24)).apply {
+        addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) {
+                // Fixed-width TextView text replacement can otherwise only invalidate its old layout.
+                if (before != 0 || count != 0) adviceRow.requestLayout()
+            }
+            override fun afterTextChanged(value: android.text.Editable?) = Unit
+        })
+    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
         marginEnd = context.dp(7)
     })
     addView(TextView(context).apply {
@@ -993,6 +1078,19 @@ internal class TeachingCalendarPage(
             ?.getChildAt(surface.childCount - 1)
             ?: root
         return activePage.findViewById(R.id.calendar_month_view)
+    }
+
+    private fun measuredMonthSheetTravelDp(): Pair<Float, Float> {
+        val grid = activeMonthView()?.findViewById<ViewGroup>(R.id.calendar_month_grid)
+            ?: return 0f to 0f
+        if (!grid.isLaidOut || grid.childCount == 0) return 0f to 0f
+        val expandedPx = activity.dp(expandedMonthCellHeightDp.coerceAtLeast(0))
+        val compactPx = activity.dp(minOf(
+            TeachingCalendarLogic.monthCellHeightDp(false), expandedMonthCellHeightDp.coerceAtLeast(0),
+        ))
+        val density = activity.resources.displayMetrics.density
+        return (grid.childCount * (expandedPx - compactPx) / density) to
+            ((grid.childCount - 1) * compactPx / density)
     }
 
     private fun refreshSelectedMonthDetailsInPlace(expectedDateKey: String) {
@@ -1303,6 +1401,7 @@ internal class TeachingCalendarPage(
         }
         val pageSurface = CalendarSwipeContainer(activity).apply {
             id = R.id.calendar_swipe_surface
+            monthSheetTravelDp = ::measuredMonthSheetTravelDp
             setThemeBackgroundColor { Palette.background }
         }
         val tabs = mutableMapOf<Mode, TextView>()
@@ -1375,11 +1474,11 @@ internal class TeachingCalendarPage(
                         activity.dp(horizontalPadding),
                         activity.dp(topPadding),
                         activity.dp(horizontalPadding),
-                        activity.dp(
-                            TeachingCalendarLogic.calendarContentBottomInsetDp(
-                                usesBottomNavigation,
-                            ),
-                        ),
+                        activity.dp(if (fixedMonth && usesBottomNavigation) {
+                            PhoneNavigationLayoutLogic.CONTENT_INSET_DP
+                        } else {
+                            TeachingCalendarLogic.calendarContentBottomInsetDp(usesBottomNavigation)
+                        }),
                     )
                     holidayStatus()?.let { message ->
                         addView(TextView(activity).apply {
@@ -1399,6 +1498,7 @@ internal class TeachingCalendarPage(
                         if (fixedMonth) 0 else ViewGroup.LayoutParams.WRAP_CONTENT,
                         if (fixedMonth) 1f else 0f,
                     ))
+                    if (fixedMonth && usesBottomNavigation) observeMonthNavigationInset(this)
                 }
                 if (fixedMonth) {
                     body
@@ -2387,6 +2487,50 @@ internal class TeachingCalendarPage(
         )
     }
 
+    private fun observeMonthNavigationInset(body: View) {
+        val bodyBounds = Rect()
+        val navigationBounds = Rect()
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            if (body.isAttachedToWindow && body.getGlobalVisibleRect(bodyBounds)) {
+                val navigation = activity.findViewById<View?>(R.id.phone_navigation)
+                // Both bounds already include the root's system-bar fitting.
+                // Hidden bars reserve nothing even before their first layout.
+                // Null is startup only; visible geometry is already system-bar fitted.
+                val overlap = if (navigation != null && navigation.visibility != View.VISIBLE) {
+                    0
+                } else if (navigation == null || !navigation.isLaidOut) {
+                    null
+                } else if (navigation.getGlobalVisibleRect(navigationBounds) &&
+                    Rect.intersects(bodyBounds, navigationBounds)
+                ) {
+                    bodyBounds.bottom - navigationBounds.top
+                } else {
+                    0
+                }
+                val bottomInset = TeachingCalendarLogic.monthNavigationBottomInsetPx(
+                    bodyHeightPx = bodyBounds.height(),
+                    navigationOverlapPx = overlap,
+                    gapPx = activity.dp(PhoneNavigationLayoutLogic.CONTENT_GAP_DP),
+                    fallbackInsetPx = activity.dp(PhoneNavigationLayoutLogic.CONTENT_INSET_DP),
+                )
+                if (body.paddingBottom != bottomInset) {
+                    body.setPadding(body.paddingLeft, body.paddingTop, body.paddingRight, bottomInset)
+                }
+            }
+        }
+        var observer: ViewTreeObserver? = null
+        body.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(view: View) {
+                observer = view.viewTreeObserver.also { it.addOnGlobalLayoutListener(listener) }
+            }
+
+            override fun onViewDetachedFromWindow(view: View) {
+                observer?.takeIf { it.isAlive }?.removeOnGlobalLayoutListener(listener)
+                observer = null
+            }
+        })
+    }
+
     private fun monthView(
         onDateChanged: () -> Unit,
         onPositionChanged: (Float) -> Unit,
@@ -2505,14 +2649,15 @@ internal class TeachingCalendarPage(
             1f,
         ))
         if (compactMonth) {
-            post {
+            fun updateMeasuredMonthHeight() {
+                if (!isAttachedToWindow || activeMonthView() !== this) return
                 val density = resources.displayMetrics.density
                 val weekday = findViewById<View>(R.id.calendar_month_weekday_header)
                 val weekdayMargins = weekday.layoutParams as? ViewGroup.MarginLayoutParams
                 val weekdayReservedPx = weekday.height +
                     (weekdayMargins?.topMargin ?: 0) + (weekdayMargins?.bottomMargin ?: 0)
                 val dragHandle = findViewById<View>(R.id.calendar_month_drag_handle)
-                expandedMonthCellHeightDp = TeachingCalendarLogic.expandedMonthCellHeightDp(
+                val measuredHeightDp = TeachingCalendarLogic.expandedMonthCellHeightDp(
                     monthViewHeightDp = (height / density).toInt(),
                     verticalPaddingDp = ceil(
                         (paddingTop + paddingBottom) / density.toDouble(),
@@ -2524,8 +2669,15 @@ internal class TeachingCalendarPage(
                         dragHandle.height / density.toDouble(),
                     ).toInt(),
                 )
-                applyMonthSheetPosition(this, renderedMonthSheetPosition)
+                if (expandedMonthCellHeightDp != measuredHeightDp) {
+                    expandedMonthCellHeightDp = measuredHeightDp
+                    applyMonthSheetPosition(this, renderedMonthSheetPosition)
+                }
             }
+            addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+                if (bottom - top != oldBottom - oldTop) updateMeasuredMonthHeight()
+            }
+            post { updateMeasuredMonthHeight() }
         }
     }
 
@@ -4562,6 +4714,7 @@ internal class TeachingCalendarPage(
             this.monthSheetPosition = monthSheetPosition
             this.onMonthSheetSettled = onMonthSheetSettled
             this.onMonthSheetProgress = onMonthSheetProgress
+            this.monthSheetTravelDp = ::measuredMonthSheetTravelDp
             addView(view, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,

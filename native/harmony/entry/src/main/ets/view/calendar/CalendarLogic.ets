@@ -229,9 +229,49 @@ export class TeachingCalendarLogic {
   static readonly monthSheetWeekPosition: number = 2;
   static readonly monthExpandedCellHeight: number = 82;
   static readonly monthCollapsedCellHeight: number = 46;
+  static readonly monthNavigationGap: number = 8;
   static readonly courseSummaryRowHeight: number = 34;
   static readonly courseSummaryRowSpacing: number = 6;
   static readonly courseSummaryVerticalPadding: number = 14;
+
+  static monthNavigationBottomInset(contentTop: number, contentHeight: number,
+    navigationTop: number, navigationBottom: number, hasNavigation: boolean,
+    fallbackInset: number): number {
+    const height: number = Math.max(contentHeight, 0);
+    if (!hasNavigation || height === 0) {
+      return 0;
+    }
+    if (navigationTop < 0 || navigationBottom < 0) {
+      return Math.min(Math.max(fallbackInset, 0), height);
+    }
+    const bottom: number = contentTop + height;
+    if (navigationBottom <= contentTop || navigationTop >= bottom || navigationBottom <= navigationTop) {
+      return 0;
+    }
+    return Math.min(Math.max(bottom - navigationTop + TeachingCalendarLogic.monthNavigationGap, 0), height);
+  }
+
+  static measuredExpandedMonthCellHeight(contentHeight: number, navigationInset: number,
+    headerHeight: number, topPadding: number = 8, handleHeight: number = 28): number {
+    return Math.floor(Math.max(contentHeight - Math.max(navigationInset, 0) -
+      Math.max(headerHeight, 0) - Math.max(topPadding, 0) - Math.max(handleHeight, 0), 0) / 6);
+  }
+
+  static monthDetailsTopGap(position: number, availableHeight: number): number {
+    return Math.min(8 * Math.min(Math.max(position, 0), 1), Math.max(availableHeight, 0));
+  }
+
+  static almanacAdviceLabelWidth(availableWidth: number, measuredLabelWidth: number): number {
+    const natural: number = Math.max(measuredLabelWidth, 0) + 12;
+    return Math.max(Math.min(Math.max(natural, 24), Math.max(availableWidth, 0)), 0);
+  }
+
+  static almanacAdviceUsesVertical(availableWidth: number, measuredLabelWidth: number,
+    fontScale: number): boolean {
+    const scale: number = Number.isFinite(fontScale) && fontScale > 0 ? Math.max(fontScale, 1) : 1;
+    const labelWidth: number = TeachingCalendarLogic.almanacAdviceLabelWidth(availableWidth, measuredLabelWidth);
+    return availableWidth - labelWidth - 8 < 96 * scale;
+  }
 
   static courseSummaryViewportHeight(courseCount: number): number {
     if (courseCount <= 0) {
@@ -530,11 +570,21 @@ export class TeachingCalendarLogic {
 
   static monthSheetDragPosition(vertical: number, startPosition: number,
     travel: number = (TeachingCalendarLogic.monthExpandedCellHeight -
-      TeachingCalendarLogic.monthCollapsedCellHeight) * 6): number {
-    if (travel <= 0) {
-      return TeachingCalendarLogic.clampMonthSheetPosition(startPosition);
+      TeachingCalendarLogic.monthCollapsedCellHeight) * 6, weekTravel: number = travel): number {
+    const start: number = Number.isFinite(startPosition) ?
+      TeachingCalendarLogic.clampMonthSheetPosition(startPosition) : 0;
+    const first: number = Number.isFinite(travel) ? Math.max(travel, 0) : 0;
+    const second: number = Number.isFinite(weekTravel) ? Math.max(weekTravel, 0) : 0;
+    const total: number = first + second;
+    if (!Number.isFinite(vertical) || vertical === 0 || total <= 0 || !Number.isFinite(total)) {
+      return start;
     }
-    return TeachingCalendarLogic.clampMonthSheetPosition(startPosition - vertical / travel);
+    const startDistance: number = Math.min(start, 1) * first + Math.max(start - 1, 0) * second;
+    const distance: number = Math.min(Math.max(startDistance - vertical, 0), total);
+    if (distance <= 0) { return 0; }
+    if (distance >= total) { return 2; }
+    if (distance < first && first > 0) { return distance / first; }
+    return second > 0 ? 1 + (distance - first) / second : 1;
   }
 
   static settledMonthSheetPosition(position: number, velocityY: number): number {
@@ -576,7 +626,8 @@ export class TeachingCalendarLogic {
     // 第二段上划通过裁剪并平移完整月网格完成；每一周本身始终保持
     // 相同高度，避免日期小方框被逐行压扁。
     return TeachingCalendarLogic.interpolateMonthMetric(
-      TeachingCalendarLogic.monthCollapsedCellHeight, expandedHeight, expandedProgress);
+      Math.min(TeachingCalendarLogic.monthCollapsedCellHeight, Math.max(expandedHeight, 0)),
+      Math.max(expandedHeight, 0), expandedProgress);
   }
 
   static monthGridViewportHeight(position: number, rowCount: number, rowHeight: number): number {

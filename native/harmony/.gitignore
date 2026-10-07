@@ -13,3 +13,7 @@
 /.appanalyzer
 oh-package-lock.json5
 *.bak
+# Generated exact copies of the repository's public license inputs.
+/entry/src/main/resources/rawfile/LICENSE
+/entry/src/main/resources/rawfile/THIRD_PARTY_LICENSES.html
+/entry/src/main/resources/rawfile/THIRD_PARTY_NOTICES.md

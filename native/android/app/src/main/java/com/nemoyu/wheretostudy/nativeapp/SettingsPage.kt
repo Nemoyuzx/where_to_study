@@ -42,6 +42,7 @@ class SettingsPage internal constructor(
     private var refreshSchedulePresentation: (() -> Unit)? = null
     private var favoriteCountButton: TextView? = null
     private var scheduleRefreshButton: TextView? = null
+    private var accountIdentityReady = false
     private var customURLField: EditText? = null
     private var customSaveButton: TextView? = null
     private lateinit var pageRoot: ScrollView
@@ -71,7 +72,7 @@ class SettingsPage internal constructor(
         scheduleRefreshButton?.let { button ->
             val refreshing = scheduleRepository.isRefreshing
             button.text = activity.uiText(if (refreshing) "正在获取…" else "获取/刷新个人课表")
-            button.isEnabled = !refreshing
+            button.isEnabled = !refreshing && accountIdentityReady
         }
     }
 
@@ -317,7 +318,7 @@ class SettingsPage internal constructor(
         }
         addView(qmHeader)
         val notice = TextView(activity).apply {
-            text = activity.getString(R.string.qmplus_connection_notice); textSize = 12f
+            text = activity.uiText("登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。"); textSize = 12f
             setThemeTextColor { Palette.muted }; setLineSpacing(0f, 1.1f)
             setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
         }
@@ -346,14 +347,16 @@ class SettingsPage internal constructor(
         val stateText = TextView(activity).apply { textSize = 13f; setThemeTextColor { Palette.muted } }
         val connect = settingsActionButton(activity.getString(R.string.qmplus_connect), false) { activity.connectQmplus() }
             .apply { id = R.id.settings_qmplus_connect }
-        val savedLogin = settingsActionButton(activity.getString(R.string.qmplus_saved_login_title), false) {
-            QmplusSavedLoginDialog.show(activity, this)
-        }.apply { id = R.id.settings_qmplus_saved_login }
-        val savedLoginStatus = TextView(activity).apply { textSize = 12f; setThemeTextColor { Palette.muted } }
+        val credentialEditor = QmplusCredentialSettingsEditor(activity)
         val details = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            addView(notice); addView(stateText); addView(spacer(activity, 8)); addView(connect)
-            addView(spacer(activity, 8)); addView(savedLoginStatus); addView(savedLogin)
+            addView(notice); addView(stateText); addView(spacer(activity, 10)); addView(connect)
+            addView(spacer(activity, 10)); addView(credentialEditor.view())
+            addView(spacer(activity, 10))
+            addView(TextView(activity).apply {
+                text = activity.uiText("QMplus 会话与教务账号隔离；断开连接或清除本地数据会删除该会话和课程快照。")
+                textSize = 12f; setThemeTextColor { Palette.muted }; setLineSpacing(0f, 1.1f)
+            })
         }
         val detailViewport = NaturalDisclosureViewport(activity).apply {
             visibility = if (qmplusDetailsExpanded == true) View.VISIBLE else View.GONE
@@ -393,9 +396,7 @@ class SettingsPage internal constructor(
             })
             connect.isEnabled = repository.isFeatureEnabled && !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession && repository.connection == null
             connect.text = if (repository.manualContinuationRequired) activity.uiText("手动继续") else activity.getString(R.string.qmplus_connect)
-            savedLogin.isEnabled = !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession && repository.connection == null
-            savedLoginStatus.text = activity.uiText(if (repository.savedLoginStatus.enabled)
-                "已在本机安全保存 QMplus 登录资料。" else "尚未保存 QMplus 登录资料。")
+            credentialEditor.update()
         }
         indicator.setOnClickListener {
             qmplusDetailsExpanded = qmplusDetailsExpanded != true
@@ -577,16 +578,18 @@ class SettingsPage internal constructor(
 
     private fun accountSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
-        val savedIdentity = credentialStore.load()?.let {
-            Triple(it.account, it.password.isNotEmpty(), !it.teachingCloudPassword.isNullOrEmpty())
-        }
-        var persistedAccount = savedIdentity?.first.orEmpty()
-        var hasPersistedPassword = savedIdentity?.second == true
-        var hasPersistedCloudPassword = savedIdentity?.third == true
+        val savedIdentity = credentialStore.cachedIdentity()
+        accountIdentityReady = savedIdentity != null
+        var accountSaveButton: TextView? = null
+        var persistedAccount = savedIdentity?.account.orEmpty()
+        var hasPersistedPassword = savedIdentity?.hasPassword == true
+        var hasPersistedCloudPassword = savedIdentity?.hasTeachingCloudPassword == true
         var useAcademicPassword = restoredDraft?.useAcademicPassword ?: false
         captureAcademicPassword = { useAcademicPassword }
         addView(sectionTitle(activity, "个人账户", R.drawable.ic_settings_account))
         val account = field("教务账号", persistedAccount, false)
+        val accountIdentityRestore = AccountIdentityRestorePolicy(account.text.toString())
+        var applyingLoadedIdentity = false
         val password = field("教务密码", "", true)
         val cloudPassword = field("教学云平台密码（可选）", "", true)
         val cloudPasswordStatus = TextView(activity).apply {
@@ -624,6 +627,7 @@ class SettingsPage internal constructor(
             override fun beforeTextChanged(value: CharSequence?, start: Int, count: Int, after: Int) = Unit
 
             override fun onTextChanged(value: CharSequence?, start: Int, before: Int, count: Int) {
+                accountIdentityRestore.onTextChanged(value?.toString().orEmpty(), applyingLoadedIdentity)
                 updatePasswordStatus()
             }
 
@@ -638,6 +642,40 @@ class SettingsPage internal constructor(
             override fun afterTextChanged(value: Editable?) = Unit
         })
         updatePasswordStatus()
+        class AccountIdentityListener : View.OnAttachStateChangeListener {
+            private var attachedView = WeakReference<View>(null)
+            fun isAttached(): Boolean = attachedView.get()?.isAttachedToWindow == true
+            fun applyIdentity(identity: CredentialIdentity?) {
+                if (!isAttached()) return
+                persistedAccount = identity?.account.orEmpty()
+                hasPersistedPassword = identity?.hasPassword == true
+                hasPersistedCloudPassword = identity?.hasTeachingCloudPassword == true
+                val hasDraft = account.sessionKey()?.let { restoredDraft?.inputs?.containsKey(it) } == true
+                if (accountIdentityRestore.shouldReplaceText(
+                        account.text.toString(), persistedAccount, hasDraft,
+                    )) {
+                    applyingLoadedIdentity = true
+                    try {
+                        account.setText(persistedAccount)
+                    } finally {
+                        applyingLoadedIdentity = false
+                    }
+                }
+                accountIdentityReady = true
+                accountSaveButton?.isEnabled = true
+                refreshScheduleAction()
+                updatePasswordStatus()
+            }
+            override fun onViewAttachedToWindow(view: View) {
+                attachedView = WeakReference(view)
+                val weakListener = WeakReference(this)
+                scheduleRepository.loadCredentialIdentity({ weakListener.get()?.isAttached() == true }) { result ->
+                    result.onSuccess { identity -> weakListener.get()?.applyIdentity(identity) }
+                }
+            }
+            override fun onViewDetachedFromWindow(view: View) { attachedView.clear() }
+        }
+        addOnAttachStateChangeListener(AccountIdentityListener())
         addView(account)
         addView(spacer(activity, compactGap))
         addView(password)
@@ -787,6 +825,8 @@ class SettingsPage internal constructor(
 
         addView(TextView(activity).apply {
             text = "保存设置"
+            accountSaveButton = this
+            isEnabled = accountIdentityReady
             textSize = 15f
             gravity = Gravity.CENTER
             setThemeTextColor { Palette.onPrimary }
@@ -802,6 +842,7 @@ class SettingsPage internal constructor(
             )
             applyPhoneButtonStyle(primary = true)
             setOnClickListener {
+                if (!accountIdentityReady) return@setOnClickListener
                 activity.performControlHaptic(it)
                 saveSettings().onSuccess { credentials ->
                     applySavedCredentials(credentials)
@@ -820,7 +861,7 @@ class SettingsPage internal constructor(
         addView(TextView(activity).apply {
             text = activity.uiText(if (scheduleRepository.isRefreshing) "正在获取…" else "获取/刷新个人课表")
             scheduleRefreshButton = this
-            isEnabled = !scheduleRepository.isRefreshing
+            isEnabled = !scheduleRepository.isRefreshing && accountIdentityReady
             textSize = 15f
             gravity = Gravity.CENTER
             setThemeTextColor { Palette.primaryText }
@@ -836,6 +877,7 @@ class SettingsPage internal constructor(
             )
             applyPhoneButtonStyle()
             setOnClickListener {
+                if (!accountIdentityReady) return@setOnClickListener
                 activity.performControlHaptic(it)
                 val button = it as TextView
                 if (scheduleRepository.isRefreshing) {
@@ -883,15 +925,6 @@ class SettingsPage internal constructor(
     private fun semesterSurface(): LinearLayout = surface(activity, showsBorder = false).apply {
         applyCompactSurfacePadding()
         addView(sectionTitle(activity, "学期设置", R.drawable.ic_nav_calendar))
-        val examStatus = TextView(activity).apply {
-            text = AcademicScheduleLogic.statusText(scheduleRepository.schedule?.examSchedule)
-            textSize = 13f; setThemeTextColor { Palette.primaryText }
-            minimumHeight = activity.dp(48)
-            setPadding(0, activity.dp(8), 0, activity.dp(8))
-            isClickable = true; isFocusable = true
-            setOnClickListener { showAcademicExamSchedule(activity, scheduleRepository.schedule?.examSchedule) }
-        }
-        addView(examStatus)
         val termID = field("学期编号", preferences.termID, false)
         val termStartDate = field("第一周周一（YYYY-MM-DD）", preferences.termStartDate, false)
         var displayedTermID = termID.text.toString()
@@ -907,7 +940,6 @@ class SettingsPage internal constructor(
         }
         captureAutomaticTerm = { autoDetect.isChecked }
         refreshSchedulePresentation = {
-            examStatus.text = activity.uiText(AcademicScheduleLogic.statusText(scheduleRepository.schedule?.examSchedule))
             // A repository publication updates automatic/pristine fields only;
             // unsaved manual input and focused editors remain owned by this page.
             if (autoDetect.isChecked && !termID.hasFocus() && termID.text.toString() == displayedTermID) {

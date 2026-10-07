@@ -12,11 +12,61 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.ExecutorService
 
 /** Synthetic secrets in a separate Keystore/file domain; no browser, network, or user credentials. */
 @RunWith(AndroidJUnit4::class)
 class QmplusSavedLoginStoreUiTest {
     private val context get() = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test fun disablingSavedLoginRetiresTheLoginOwnerButPreservesCourseCacheAndOfficialSessionEvenAcrossFeatureOff() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val store = QmplusCredentialStore(context, "test_qm_saved_login_disable")
+        store.clear()
+        val prefs = context.getSharedPreferences("qm_saved_login_disable_test_only", android.content.Context.MODE_PRIVATE)
+        assertTrue(prefs.edit().clear().commit())
+        val cached = QmplusSnapshot("2026-10-03T10:00:00Z", emptyList(), emptyList(), emptyList())
+        assertTrue(prefs.edit().putString("snapshot_v1", String(QmplusSnapshotCodec.encode(cached), StandardCharsets.UTF_8)).commit())
+        val password = "synthetic-disable-only".toCharArray()
+        val loaded = CountDownLatch(1); val held = CountDownLatch(1); val release = CountDownLatch(1); val completed = CountDownLatch(1)
+        val result = AtomicReference<Result<Unit>>()
+        lateinit var repository: QmplusRepository
+        var repositoryCreated = false
+        try {
+            store.save("synthetic@example.invalid", password, true, store.status().revision)
+            instrumentation.runOnMainSync {
+                repository = QmplusRepository(context, prefs, credentialStoreOverride = store)
+                repositoryCreated = true
+                repository.addObserver(loaded) { if (!repository.isLoading) loaded.countDown() }
+            }
+            assertTrue(loaded.await(5, TimeUnit.SECONDS))
+            val worker = QmplusRepository::class.java.getDeclaredField("worker").apply { isAccessible = true }.get(repository) as ExecutorService
+            worker.execute { held.countDown(); check(release.await(5, TimeUnit.SECONDS)) }
+            assertTrue(held.await(5, TimeUnit.SECONDS))
+            instrumentation.runOnMainSync {
+                assertNotNull(repository.beginConnection())
+                repository.disableSavedLogin { result.set(it); completed.countDown() }
+                assertNull(repository.connection)
+                assertFalse(repository.savedLoginStatus.enabled)
+                assertTrue(repository.setFeatureEnabled(false))
+            }
+            release.countDown()
+            assertTrue(completed.await(5, TimeUnit.SECONDS))
+            assertTrue(result.get().isSuccess)
+            assertFalse(store.status().enabled)
+            instrumentation.runOnMainSync {
+                assertFalse(repository.isSavingLogin)
+                assertEquals(cached, repository.snapshot)
+                assertFalse(repository.cookiesNeedClearing)
+                assertNull(repository.pendingCookieClearAttempt)
+                assertEquals(cached, QmplusSnapshotCodec.decode(prefs.getString("snapshot_v1", null)!!.toByteArray(StandardCharsets.UTF_8)))
+            }
+        } finally {
+            release.countDown(); password.fill('\u0000')
+            if (repositoryCreated) instrumentation.runOnMainSync { repository.close() }
+            store.clear(); assertTrue(prefs.edit().clear().commit())
+        }
+    }
 
     @Test fun explicitOptInEncryptsBothFieldsAndFreshStoreReadsOnlyTheSavedRevision() {
         val domain = "test_qm_saved_login_crypto"
@@ -61,6 +111,19 @@ class QmplusSavedLoginStoreUiTest {
             assertThrows(IllegalStateException::class.java) { store.save("synthetic@example.invalid", secret, true, saved.revision) }
             assertFalse(QmplusCredentialStore(context, domain).status().enabled)
         } finally { secret.fill('\u0000'); store.clear() }
+    }
+
+    @Test fun delayedCredentialRemovalCannotDeleteAReplacementAuthorization() {
+        val store = QmplusCredentialStore(context, "test_qm_expected_clear")
+        store.clear()
+        val password = "synthetic-generation-only".toCharArray()
+        try {
+            val old = store.save("old@example.invalid", password, true, store.status().revision)
+            val replacement = store.save("new@example.invalid", password, true, old.revision)
+            assertThrows(IllegalStateException::class.java) { store.clear(expectedRevision = old.revision) }
+            assertEquals(replacement, store.status())
+            assertFalse(store.clear(expectedRevision = replacement.revision).enabled)
+        } finally { password.fill('\u0000'); store.clear() }
     }
 
     @Test fun separateDomainsNeverReuseOrClearEachOthersPasswords() {

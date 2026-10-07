@@ -175,6 +175,29 @@ class QmplusSnapshotCodecTest {
         assertTrue(QmplusActivityPresentation.timeFields(item.copy(opensAt = null, closesAt = null)).isEmpty())
     }
 
+    @Test fun courseDetailsUseShanghaiTimeAndKeepMissingPrimaryTimesVisibleLikeIos() {
+        val item = sample().activities.single()
+        assertEquals("2026-10-04 02:30", QmplusActivityPresentation.shanghaiTime("2026-10-03T18:30:00Z"))
+        assertEquals("2026-01-01 08:00", QmplusActivityPresentation.shanghaiTime("2026-01-01T00:00:00.123Z"))
+        assertNull(QmplusActivityPresentation.shanghaiTime(null))
+        assertNull(QmplusActivityPresentation.shanghaiTime("2026-02-30T12:00:00Z"))
+        assertEquals(listOf("开放时间" to null, "关闭时间" to null),
+            QmplusActivityPresentation.displayTimeFields(item.copy(opensAt = null, closesAt = null)))
+        assertEquals(listOf("截止时间" to null), QmplusActivityPresentation.displayTimeFields(
+            item.copy(kind = "assignment", dueAt = null, cutoffAt = null)))
+        assertEquals(listOf("截止时间", "最终提交时间"), QmplusActivityPresentation.displayTimeFields(
+            item.copy(kind = "assignment", cutoffAt = "2026-10-03T18:30:00Z")).map { it.first })
+    }
+
+    @Test fun unknownTermCoursesRemainInTheDefaultCourseListAndOnlyConfirmedOtherTermsAreHidden() {
+        val base = sample().courses.single()
+        val courses = listOf(base.copy(id = "current", currentTermStatus = "current"),
+            base.copy(id = "unknown", currentTermStatus = "unknown"),
+            base.copy(id = "other", currentTermStatus = "other"))
+        assertEquals(listOf("current", "unknown"), QmplusActivityPresentation.currentCourses(courses).map { it.id })
+        assertEquals(courses.map { it.currentTermStatus }, listOf("current", "unknown", "other"))
+    }
+
     @Test fun onlyTheExactAdministrativeAssignmentTitleIsExcludedWithConservativeNormalization() {
         val excluded = listOf("COURSEWORK MARK REVIEW REQUEST", " coursework\tmark  review\nrequest ",
             "Coursework-Mark/Review_Request:Form", "COURSEWORK\u0085MARK\u202FREVIEW\u00A0REQUEST",

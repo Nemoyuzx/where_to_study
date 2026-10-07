@@ -1,5 +1,8 @@
 import SwiftUI
 import WebKit
+#if os(macOS)
+import AppKit
+#endif
 
 struct QMplusConnectionPresentationHost: View {
     @Environment(\.scenePhase) private var scenePhase
@@ -21,6 +24,11 @@ struct QMplusConnectionPresentationHost: View {
             if $0 == .active { store.resumeAuthenticationRecognitionForActiveScene() }
             else { store.stopAutomaticLoginForInactiveScene() }
         }
+        #if os(macOS)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            store.resumeAuthenticationRecognitionForActiveScene()
+        }
+        #endif
         .onDisappear { store.endPresentation() }
     }
 }

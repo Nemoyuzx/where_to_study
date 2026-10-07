@@ -15,24 +15,29 @@ export class JsonFile {
   static readonly defaultMaxBytes: number = 8 * 1024 * 1024;
 
   static async readText(path: string, maxBytes: number = JsonFile.defaultMaxBytes): Promise<string | null> {
-    // 注意：模拟器上 fs.accessSync 对缺失文件不抛异常，因此统一用 statSync 判断存在性。
+    // API24 SDK exposes Promise-based stat/readText. A Promise wrapper around
+    // readTextSync still blocks ArkUI during a cold cache restore.
     let stat: fs.Stat;
     try {
-      stat = fs.statSync(path);
+      stat = await fs.stat(path);
     } catch (e) {
       const err: BusinessError = e as BusinessError;
       if (err.code === FS_NO_SUCH_FILE) {
         return null;
       }
-      hilog.error(0x0000, 'JsonFile', 'statSync failed for %{public}s code=%{public}d msg=%{public}s',
-        path, err.code, err.message);
+      hilog.error(0x0000, 'JsonFile', 'cache stat failed code=%{public}d', err.code);
       throw new Error('无法读取本地缓存。');
     }
     if (stat.size > maxBytes) {
       throw new Error('本地缓存过大。');
     }
     try {
-      const text: string = fs.readTextSync(path);
+      // Bound the read itself as well as stat, including a file that grows
+      // between operations. Parsing remains on ArkTS and is size-bounded.
+      const text: string = await fs.readText(path, { length: maxBytes + 1 });
+      if (text.length > maxBytes || (await fs.stat(path)).size > maxBytes) {
+        throw new Error('本地缓存过大。');
+      }
       if (text.length === 0) {
         return null;
       }

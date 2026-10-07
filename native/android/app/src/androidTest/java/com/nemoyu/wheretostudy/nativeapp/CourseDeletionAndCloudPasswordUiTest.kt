@@ -78,6 +78,7 @@ class CourseDeletionAndCloudPasswordUiTest {
         store.save(emptyList())
         val repository = ScheduleRepository(context, SecureCredentialStore(context), AppPreferences(context))
         try {
+            repository.awaitCacheRestoreForTest()
             assertTrue(context.filesDir.setWritable(false, true))
             try {
                 assertThrows(Exception::class.java) {
@@ -92,7 +93,7 @@ class CourseDeletionAndCloudPasswordUiTest {
             val effective = repository.schedule
             assertNotEquals(snapshot, effective)
             val reloaded = ScheduleRepository(context, SecureCredentialStore(context), AppPreferences(context))
-            try { assertEquals(effective, reloaded.schedule) } finally { reloaded.close() }
+            try { reloaded.awaitCacheRestoreForTest(); assertEquals(effective, reloaded.schedule) } finally { reloaded.close() }
             SecureCredentialStore(context).save(Credentials("another-fictional-account", "fictional"))
             assertEquals(snapshot, loadUsableSchedule(context))
             SecureCredentialStore(context).save(Credentials("course-cloud-test-only", "fictional"))
@@ -115,6 +116,7 @@ class CourseDeletionAndCloudPasswordUiTest {
         prepare(AppLanguage.SIMPLIFIED_CHINESE)
         val credentials = SecureCredentialStore(context)
         val repository = ScheduleRepository(context, credentials, AppPreferences(context))
+        repository.awaitCacheRestoreForTest()
         val deletionStore = ScheduleRepository::class.java.getDeclaredField("deletionStore")
             .apply { isAccessible = true }.get(repository) as CourseDeletionStore
         val observed = ObservedAtomicFile(File(context.filesDir, "course_deletions_v1.json"))

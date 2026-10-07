@@ -55,6 +55,6 @@ internal fun ScrollView.restoreAnchor(anchor: ScrollAnchor) {
 }
 
 internal fun captureInputDrafts(root: View): Map<String, InputDraft> = uiDescendants(root)
-    .filterIsInstance<EditText>().mapNotNull { field -> field.sessionKey()?.let { key ->
+    .filterIsInstance<EditText>().filter { it.id != R.id.qmplus_saved_login_password }.mapNotNull { field -> field.sessionKey()?.let { key ->
         key to InputDraft(field.text.toString(), field.selectionStart, field.selectionEnd, field.hasFocus())
     } }.toMap()

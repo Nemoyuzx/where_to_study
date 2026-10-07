@@ -9,6 +9,7 @@ import { ScheduleStoring } from '../main/ets/store/ScheduleStore';
 import { ClassroomStoring } from '../main/ets/store/ClassroomStore';
 import { HolidayStoring } from '../main/ets/store/HolidayStore';
 import { CourseRemovalStoring } from '../main/ets/store/CourseRemovalStore';
+import { CourseDTOCacheStore } from '../main/ets/store/CourseDTOCacheStore';
 import { PreferencesStore } from '../main/ets/store/PreferencesStore';
 import { ScheduleFetching } from '../main/ets/net/SjdScheduleClient';
 import { ClassroomFetching } from '../main/ets/net/SjdClassroomClient';
@@ -186,13 +187,16 @@ function favorite(index: number): PublicDeadlineItem {
 }
 
 export function testModel(preferences: RecordingFavoritePreferences,
-  scheduler: DailyCourseNotificationScheduling = new FavoriteReminderScheduler()): AppModel {
-  return new AppModel(AppRuntimeMode.live(), new FavoriteCredentials(), new FavoriteSchedules(),
+  scheduler: DailyCourseNotificationScheduling = new FavoriteReminderScheduler(),
+  schedules: ScheduleStoring = new FavoriteSchedules(),
+  credentials: CredentialStoring = new FavoriteCredentials(),
+  courseDTOStore: CourseDTOCacheStore = new CourseDTOCacheStore()): AppModel {
+  return new AppModel(AppRuntimeMode.live(), credentials, schedules,
     new FavoriteScheduleClient(), new FavoriteClassrooms(), new FavoriteClassroomClient(),
     new FavoriteHolidays(), new FavoriteHolidayClient(), new FavoriteCalendarImporter(),
     scheduler, 'favorite-limit-tests', new FavoriteWeatherClient(),
     new FavoriteAssignmentClient(), preferences, new FavoriteCourseRemovals(),
-    new FavoriteGradeClient(), new FavoriteExamClient());
+    new FavoriteGradeClient(), new FavoriteExamClient(), courseDTOStore);
 }
 
 export default function favoriteDeadlineLimitTest() {

@@ -515,6 +515,20 @@ internal class InformationQueryPage(
         ) renderMode(animate = false)
     }
 
+    internal fun credentialsDidRestore() {
+        if (!::root.isInitialized || !root.isAttachedToWindow) return
+        gradesRepository.reconcile()
+        if (sessionState.selectedMode == InformationQueryMode.COURSES) {
+            if (activity.allowsAutomaticPageLoads() && gradesRepository.hasCredentials && !sessionState.automaticCourseLoadAttempted) {
+                sessionState.automaticCourseLoadAttempted = true
+                dailyInfoRepository.loadCurrentCourses()
+            }
+            renderMode(animate = false)
+        } else if (sessionState.selectedMode == InformationQueryMode.GRADES || sessionState.selectedMode == InformationQueryMode.ASSIGNMENTS) {
+            renderMode(animate = false)
+        }
+    }
+
     private fun queryHeader(): LinearLayout = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
@@ -993,9 +1007,10 @@ internal class InformationQueryPage(
         val repository = qmplusRepository
         if (repository?.isFeatureEnabled != true) { qmplusRows = emptyList(); return@privateQueryContent }
         val snapshot = repository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
-        val current = snapshot?.courses?.filter { it.currentTermStatus == "current" }
-        val others = snapshot?.courses?.filter { it.currentTermStatus != "current" }.orEmpty()
-        addView(courseSectionHeader("QMplus · EBU", current?.size, R.id.course_qmplus_refresh,
+        val current = snapshot?.courses?.let(QmplusActivityPresentation::currentCourses)
+        val others = snapshot?.courses?.filter { it.currentTermStatus == "other" }.orEmpty()
+        val visible = current?.let { it + if (sessionState.showsOtherQmCourses) others else emptyList() }
+        addView(courseSectionHeader("QMplus · EBU", visible?.size, R.id.course_qmplus_refresh,
             repository != null && !repository.isLoading && !repository.isClearingSession && repository.connection == null,
             if (repository?.manualContinuationRequired == true) activity.uiText("手动继续") else activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() })
         repository?.error?.let { addView(statusCard(activity.uiText(it))) }
@@ -1003,17 +1018,31 @@ internal class InformationQueryPage(
             if (repository?.isLoading == true) R.string.qmplus_loading else R.string.qmplus_not_connected)))
         else {
             if (snapshot.partial) addView(statusCard(activity.getString(R.string.qmplus_partial)))
-            val visible = current.orEmpty() + if (sessionState.showsOtherQmCourses) others else emptyList()
-            qmplusRows = visible.map { it to null }
-            if (visible.isEmpty()) addView(statusCard(activity.getString(R.string.qmplus_no_courses)))
+            qmplusRows = visible.orEmpty().map { it to null }
+            if (others.isNotEmpty()) addView(Switch(activity).apply {
+                id = R.id.course_qmplus_other_terms
+                text = activity.uiText("显示其他学期／历史课程"); textSize = 15f
+                setThemeTextColor { Palette.text }
+                isChecked = sessionState.showsOtherQmCourses
+                minHeight = activity.dp(UiMetrics.controlHeightDp)
+                setPadding(0, 0, 0, 0)
+                if (isCompact) {
+                    minWidth = activity.dp(UiMetrics.controlHeightDp)
+                    switchPadding = activity.dp(12)
+                }
+                // Same native Switch/theme binding as featureSwitch; only the local view filter changes.
+                setOnCheckedChangeListener { button, checked ->
+                    if (sessionState.showsOtherQmCourses != checked) {
+                        activity.performControlHaptic(button)
+                        sessionState.showsOtherQmCourses = checked
+                        renderMode(animate = false)
+                    }
+                }
+            })
+            if (visible.orEmpty().isEmpty()) addView(statusCard(activity.getString(R.string.qmplus_no_courses)))
             addView(LinearLayout(activity).apply {
                 id = R.id.course_qmplus_list; orientation = LinearLayout.VERTICAL
                 appendQmplusCourseRows(this, false)
-            })
-            if (others.isNotEmpty()) addView(gradeAction(activity.getString(
-                if (sessionState.showsOtherQmCourses) R.string.qmplus_hide_other_courses else R.string.qmplus_show_other_courses, others.size)) {
-                sessionState.showsOtherQmCourses = !sessionState.showsOtherQmCourses
-                renderMode(animate = false)
             })
         }
     }
@@ -1068,7 +1097,7 @@ internal class InformationQueryPage(
             list.addView(inlineCourseRow(key, course.name, emptyList(),
                 CourseDirectoryLogic.qmplusCounts(course.id, snapshot.activities), term))
         }
-        sessionState.visibleQmplusRowCount = maxOf(20, target)
+        sessionState.visibleQmplusRowCount = maxOf(sessionState.visibleQmplusRowCount, 20, target)
     }
 
     private fun inlineCourseRow(key: String, name: String, teachers: List<String>,
@@ -1117,8 +1146,13 @@ internal class InformationQueryPage(
         val visible = sessionState.inlineCourseCounts[key] ?: 20
         if (cloud != null && cloudItems == null) body.addView(statusCard(activity.getString(R.string.course_assignments_not_loaded)))
         else if (cloudItems.orEmpty().isEmpty() && qmItems.isEmpty()) body.addView(statusCard(activity.getString(R.string.course_no_cached_assignments)))
-        cloudItems.orEmpty().take(visible).forEach { body.addView(cloudAssignmentCard(it)) }
-        qmItems.take(visible).forEach { body.addView(qmplusActivityCard(it)) }
+        var cardIndex = 0
+        fun addActivityCard(card: View) {
+            body.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { if (cardIndex++ > 0) topMargin = activity.dp(10) })
+        }
+        cloudItems.orEmpty().take(visible).forEach { addActivityCard(cloudAssignmentCard(it)) }
+        qmItems.take(visible).forEach { addActivityCard(qmplusActivityCard(it)) }
         if (cloudItems.orEmpty().size + qmItems.size > visible) body.addView(gradeAction("加载更多") {
             if (body.isAttachedToWindow && key in sessionState.expandedCourseKeys) {
                 sessionState.inlineCourseCounts[key] = visible + 20
@@ -1257,27 +1291,34 @@ internal class InformationQueryPage(
 
     private fun qmplusActivityCard(item: QmplusActivityItem): LinearLayout = querySurface().apply {
         tag = "course.detail.qmplus.${item.kind}.${item.id}"
+        setPadding(activity.dp(10), activity.dp(10), activity.dp(10), activity.dp(10))
+        background = themedRoundedBackground(activity, {
+            ColorUtils.blendARGB(Palette.surface, Palette.assignment, 0.08f)
+        }, radius = 10)
         addView(TextView(activity).apply {
             text = item.title; UiText.preserveRawText(this); textSize = 17f
-            setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
+            setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.primaryText }
+            isClickable = true; isFocusable = true
+            minimumHeight = activity.dp(UiMetrics.controlHeightDp)
+            setOnClickListener { activity.performControlHaptic(it); activity.connectQmplus(item.url) }
         })
         val metadata = buildList {
-          add(activity.getString(if (item.kind == "quiz") R.string.qmplus_quiz else R.string.qmplus_assignment))
-          QmplusActivityPresentation.timeFields(item).forEach { (field, value) ->
-            val label = when (field) {
-                "due_at" -> R.string.qmplus_due; "cutoff_at" -> R.string.qmplus_cutoff
-                "opens_at" -> R.string.qmplus_opens; else -> R.string.qmplus_closes
+            add(if (item.kind == "quiz") "Quiz" else "Assignment")
+            QmplusActivityPresentation.displayTimeFields(item).forEach { (label, value) ->
+                add(activity.uiText(label) + ": " + (QmplusActivityPresentation.shanghaiTime(value) ?: activity.uiText("未公布")))
             }
-            add(activity.getString(label) + ": " + value.replace('T', ' ').removeSuffix("Z") + " UTC")
+            if (item.kind == "quiz") item.timeLimitSeconds?.let {
+                add(activity.uiText("时间限制（秒）") + ": " + it)
+            }
+            item.status?.takeIf { it.isNotBlank() && it != "unknown" }?.let(::add)
         }
-        if (item.kind == "quiz") item.timeLimitSeconds?.let {
-            add(activity.getString(R.string.qmplus_time_limit, it))
+        fun detail(value: String): TextView = eventDetailText(value, Int.MAX_VALUE).apply {
+            setPadding(0, activity.dp(8), 0, 0)
         }
-          item.status?.takeIf { it.isNotBlank() && it != "unknown" }?.let(::add)
-          item.rawTimeText?.takeIf { it.isNotBlank() }?.let(::add)
-        }
-        addView(eventDetailText(metadata.joinToString(" · "), Int.MAX_VALUE))
-        addView(gradeAction(activity.getString(R.string.qmplus_open_activity), R.drawable.ic_shuttle_external) { activity.connectQmplus(item.url) })
+        addView(detail(metadata.joinToString(" · ")))
+        if (item.kind == "quiz") addView(detail(activity.uiText("Quiz 开放区间不是固定考试时段。")))
+        if (item.detailStatus != "available") addView(detail(activity.uiText("活动详情受限或暂不可用，请以官方页面为准。")))
+        item.rawTimeText?.takeIf { it.isNotBlank() }?.let { addView(detail(it)) }
     }
 
     private fun qmplusContent(): LinearLayout = privateQueryContent {
@@ -1314,34 +1355,22 @@ internal class InformationQueryPage(
             else sessionState.visibleQmplusRowCount.coerceAtMost(qmplusRows.size)
         for (index in list.childCount until target) {
             val (course, item) = qmplusRows[index]
-            list.addView(querySurface().apply {
-                tag = if (item == null) "qmplus.course.${course.id}" else "qmplus.activity.${item.kind}.${item.id}"
+            val card = if (item != null) qmplusActivityCard(item).apply {
+                tag = "qmplus.activity.${item.kind}.${item.id}"
+                addView(eventDetailText(course.name, 2), 1)
+            } else querySurface().apply {
+                tag = "qmplus.course.${course.id}"
                 addView(TextView(activity).apply {
-                    text = item?.title ?: course.name; UiText.preserveRawText(this); textSize = 17f
+                    text = course.name; UiText.preserveRawText(this); textSize = 17f
                     setTypeface(typeface, Typeface.BOLD); setThemeTextColor { Palette.text }
                 })
-                if (item == null) {
                     addView(eventDetailText(activity.getString(when (course.currentTermStatus) {
                         "current" -> R.string.qmplus_term_current; "other" -> R.string.qmplus_term_other
                         else -> R.string.qmplus_term_unknown
                     }), 2))
                     addView(gradeAction(activity.getString(R.string.qmplus_open_course), R.drawable.ic_shuttle_external) { activity.connectQmplus(course.url) })
-                } else {
-                    addView(eventDetailText(course.name, 2))
-                    addView(eventDetailText(activity.getString(if (item.kind == "quiz") R.string.qmplus_quiz else R.string.qmplus_assignment), 2))
-                    listOf(R.string.qmplus_due to item.dueAt, R.string.qmplus_opens to item.opensAt,
-                        R.string.qmplus_closes to item.closesAt, R.string.qmplus_cutoff to item.cutoffAt).forEach { (label, value) ->
-                        addView(eventDetailText(activity.getString(label) + ": " +
-                            (value?.let { it.replace('T', ' ').removeSuffix("Z") + " UTC" }
-                                ?: activity.getString(R.string.qmplus_not_published)), 3))
-                    }
-                    item.timeLimitSeconds?.let { addView(eventDetailText(activity.getString(R.string.qmplus_time_limit, it), 2)) }
-                    item.status?.let { addView(eventDetailText(it, 2)) }
-                    if (item.detailStatus != "available") addView(eventDetailText(activity.getString(R.string.qmplus_detail_unavailable), 3))
-                    item.rawTimeText?.takeIf { it.isNotBlank() }?.let { addView(eventDetailText(it, 6)) }
-                    addView(gradeAction(activity.getString(R.string.qmplus_open_activity), R.drawable.ic_shuttle_external) { activity.connectQmplus(item.url) })
-                }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
+            list.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
                 .apply { if (index > 0) topMargin = activity.dp(10) })
         }
         sessionState.visibleQmplusRowCount = maxOf(20, target)

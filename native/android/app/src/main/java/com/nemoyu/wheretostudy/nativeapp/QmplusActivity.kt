@@ -15,9 +15,11 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.os.ResultReceiver
+import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
@@ -69,7 +71,7 @@ class QmplusActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
         window.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         Palette.configure(this)
         generation = intent.getLongExtra(EXTRA_GENERATION, -1)
@@ -99,13 +101,15 @@ class QmplusActivity : Activity() {
             if (intent.getBooleanExtra(EXTRA_CLEAR_FIRST, false)) clearSession(thenOpen = true)
             else browser?.loadUrl(startURL())
         }.onFailure {
+            reportDiagnosticPhase("WEB_SETUP_FAILED")
             setResult(RESULT_CANCELED, resultIntent().putExtra(EXTRA_SYNC_FAILED, true))
             revealOfficialWindow()
             if (closing) return@onFailure
-            setContentView(TextView(this).apply {
+            val errorView = TextView(this).apply {
                 text = getString(R.string.qmplus_web_unavailable); textSize = 15f
                 setThemeTextColor { Palette.muted }; setPadding(dp(20), dp(20), dp(20), dp(20))
-            })
+            }
+            applySystemInsets(errorView); setContentView(errorView); errorView.requestApplyInsets()
         }
     }
 
@@ -119,6 +123,7 @@ class QmplusActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(8))
             addView(TextView(this@QmplusActivity).apply {
+                id = R.id.qmplus_window_title
                 text = "QMplus"; textSize = 17f; setThemeTextColor { Palette.text }
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             reconnectButton = TextView(this@QmplusActivity).apply {
@@ -134,12 +139,14 @@ class QmplusActivity : Activity() {
             addView(reconnectButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         })
         status = TextView(this).apply {
+            id = R.id.qmplus_window_notice
             text = getString(R.string.qmplus_web_login_notice); textSize = 13f
             setThemeTextColor { Palette.muted }; setPadding(dp(16), 0, dp(16), dp(8))
         }
         root.addView(status)
         val weakOwner = WeakReference(this)
         val webView = WebView(this).apply {
+            id = R.id.qmplus_official_web_view
             WebView.setWebContentsDebuggingEnabled(false)
             settings.javaScriptEnabled = true; settings.domStorageEnabled = true
             settings.allowFileAccess = false; settings.allowContentAccess = false
@@ -177,10 +184,22 @@ class QmplusActivity : Activity() {
                 }
                 override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
                     handler.cancel()
-                    weakOwner.get()?.let { owner -> owner.authFlow?.manualRequired(); owner.status.setText(R.string.qmplus_web_error) }
+                    weakOwner.get()?.let { owner ->
+                        owner.reportDiagnosticPhase("WEB_SSL_REJECTED")
+                        owner.authFlow?.manualRequired(); owner.status.setText(R.string.qmplus_web_error)
+                    }
                 }
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                    if (request.isForMainFrame) weakOwner.get()?.authFlow?.manualRequired()
+                    if (request.isForMainFrame) weakOwner.get()?.let { owner ->
+                        owner.reportDiagnosticPhase(when (error.errorCode) {
+                            ERROR_HOST_LOOKUP -> "WEB_MAIN_FRAME_HOST_LOOKUP"
+                            ERROR_CONNECT -> "WEB_MAIN_FRAME_CONNECT"
+                            ERROR_TIMEOUT -> "WEB_MAIN_FRAME_TIMEOUT"
+                            ERROR_FAILED_SSL_HANDSHAKE -> "WEB_MAIN_FRAME_SSL_HANDSHAKE"
+                            else -> "WEB_MAIN_FRAME_OTHER"
+                        })
+                        owner.authFlow?.manualRequired()
+                    }
                 }
             }
             webChromeClient = object : WebChromeClient() {
@@ -189,7 +208,8 @@ class QmplusActivity : Activity() {
         }
         browser = webView
         root.addView(webView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        browserRoot = root; setContentView(root)
+        applySystemInsets(root)
+        browserRoot = root; setContentView(root); root.requestApplyInsets()
         val weakBrowser = WeakReference(webView)
         val credentialWorker = QmplusAuthCredentialWorker(QmplusCredentialStore(applicationContext))
         val renderer = object : QmplusAuthRenderer {
@@ -221,7 +241,6 @@ class QmplusActivity : Activity() {
         }
         val explicitManual = intent.getBooleanExtra(EXTRA_MANUAL_CONTINUATION, false)
         val savedOptIn = intent.getBooleanExtra(EXTRA_SAVED_LOGIN_ENABLED, false) && !explicitManual
-        val diagnosticsEnabled = BuildConfig.DEBUG && intent.getBooleanExtra(EXTRA_AUTH_DIAGNOSTICS, false)
         val authScript = runCatching {
             assets.open("qmplus-auth.js").bufferedReader().use { it.readText() }
         }.getOrDefault("")
@@ -232,10 +251,8 @@ class QmplusActivity : Activity() {
             verificationRequired = { weakOwner.get()?.revealOfficialWindow(verification = true) },
             verificationFinished = { weakOwner.get()?.hideForSync() },
             authenticated = { weakOwner.get()?.beginSync() },
-            reportPhase = { phase ->
-                if (diagnosticsEnabled)
-                    weakOwner.get()?.status?.contentDescription = "qmplus.auth.$phase"
-            }, quietConnection = quietConnection, requestedTarget = startURL(),
+            reportPhase = { phase -> weakOwner.get()?.reportDiagnosticPhase(phase) },
+            quietConnection = quietConnection, requestedTarget = startURL(),
             featureEnabled = { weakOwner.get()?.isFeatureCurrent() == true }, pageScript = pageScript,
             manualContinuation = { weakOwner.get()?.deferManualContinuation() },
             pageObserved = { kind -> weakOwner.get()?.let { owner ->
@@ -250,6 +267,36 @@ class QmplusActivity : Activity() {
     private fun inspectFinishedDocument(url: String) {
         if (closing || !foreground || syncing || !documentFinished || browser?.url != url) return
         authFlow?.pageReady(url)
+    }
+
+    private fun applySystemInsets(root: View) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Match MainActivity's root-listener approach, extending it to cutout/IME.
+            // One owner fits all child content; the WebView must not fit these insets again.
+            @Suppress("DEPRECATION")
+            window.setDecorFitsSystemWindows(false)
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+            val baseLeft = root.paddingLeft; val baseTop = root.paddingTop
+            val baseRight = root.paddingRight; val baseBottom = root.paddingBottom
+            root.setOnApplyWindowInsetsListener { view, insets ->
+                val safe = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout() or WindowInsets.Type.ime())
+                // Type union uses per-edge maxima; never sum keyboard and navigation-bar heights.
+                view.setPadding(baseLeft + safe.left, baseTop + safe.top, baseRight + safe.right, baseBottom + safe.bottom)
+                WindowInsets.CONSUMED
+            }
+        } else {
+            // Older decor already fits bars/cutouts; let resize handle IME without a second padding owner.
+            @Suppress("DEPRECATION")
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+    }
+
+    private fun reportDiagnosticPhase(phase: String) {
+        if (!BuildConfig.DEBUG || !intent.getBooleanExtra(EXTRA_AUTH_DIAGNOSTICS, false)) return
+        val allowed = QmplusAuthResultCodec.diagnosticPhase(phase) ?: return
+        // Fixed allowlist only: never a URL, account, nonce, description, DOM or exception.
+        if (::status.isInitialized) status.contentDescription = "qmplus.auth.$allowed"
+        Log.i(AUTH_DIAGNOSTIC_TAG, allowed)
     }
 
     private fun deferManualContinuation() {
@@ -422,16 +469,19 @@ class QmplusActivity : Activity() {
 
     override fun onResume() {
         super.onResume(); foreground = true
+        reportDiagnosticPhase("ACTIVITY_RESUME")
         if (documentFinished) browser?.url?.let(::inspectFinishedDocument)
     }
 
     override fun onStop() {
+        reportDiagnosticPhase("ACTIVITY_STOP")
         foreground = false
         authFlow?.suspend(); invalidateSync(resumeInterrupted = true)
         super.onStop()
     }
 
     override fun onPause() {
+        reportDiagnosticPhase("ACTIVITY_PAUSE")
         foreground = false
         persistOfficialWebSession()
         authFlow?.suspend(); invalidateSync(resumeInterrupted = true)
@@ -452,6 +502,7 @@ class QmplusActivity : Activity() {
         internal const val EXTRA_SAVED_LOGIN_REVISION = "qmplus_saved_login_revision"
         // DEBUG-only fixed phase codes; never an account, URL, form value, or script result.
         internal const val EXTRA_AUTH_DIAGNOSTICS = "qmplus_auth_diagnostics"
+        internal const val AUTH_DIAGNOSTIC_TAG = "WTSQmAuthPhase"
         internal const val EXTRA_FEATURE_REVISION = "qmplus_feature_revision"
         internal const val EXTRA_OWNER_EXPIRED = "qmplus_owner_expired"
         internal const val EXTRA_RECONNECT_REQUEST = "qmplus_reconnect_request"
@@ -513,6 +564,9 @@ internal object QmplusWebProfile {
     fun attach(owner: QmplusActivity) { activity = WeakReference(owner) }
     fun detach(owner: QmplusActivity) { if (activity.get() === owner) activity.clear() }
     fun closeCurrentActivity() { activity.get()?.closeForLogout() }
+    fun stopSavedLoginOwner(token: String) {
+        activity.get()?.takeIf { it.acceptsFeatureStop(token, -1) }?.closeForFeatureDisabled()
+    }
     fun stopFeatureOwner(token: String?, revision: Long) {
         // Also fence a launch still queued when Off arrives before its Activity
         // exists. This process marker is useful when the durable write failed.
@@ -533,6 +587,11 @@ internal object QmplusWebProfile {
 class QmplusClearService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.getBooleanExtra(EXTRA_STOP_SAVED_LOGIN_ONLY, false) == true) {
+            intent.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN)?.let(QmplusWebProfile::stopSavedLoginOwner)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (intent?.getBooleanExtra(EXTRA_STOP_ONLY, false) == true) {
             // Feature Off must not initialize a Web profile or clear any storage.
             QmplusWebProfile.stopFeatureOwner(intent.getStringExtra(QmplusActivity.EXTRA_CONNECTION_TOKEN),
@@ -560,6 +619,7 @@ class QmplusClearService : Service() {
     companion object {
         internal const val EXTRA_RECEIVER = "qmplus_clear_receiver"
         internal const val EXTRA_STOP_ONLY = "qmplus_stop_only"
+        internal const val EXTRA_STOP_SAVED_LOGIN_ONLY = "qmplus_stop_saved_login_only"
         internal const val RESULT_CLEARED = 1
         internal const val RESULT_FAILED = 2
     }

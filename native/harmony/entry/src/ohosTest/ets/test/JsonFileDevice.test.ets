@@ -5,6 +5,21 @@ import { JsonFile } from '../../../main/ets/store/JsonFile';
 
 export default function jsonFileDeviceTest() {
   describe('JsonFileDeviceTest', () => {
+    it('async_read_retains_missing_empty_and_byte_limit_semantics', 0, async () => {
+      const context = AbilityDelegatorRegistry.getAbilityDelegator().getAppContext();
+      const directory: string = context.filesDir + '/WhereToStudyNative-read-limit-test';
+      const path: string = directory + '/bounded.json';
+      try {
+        expect(await JsonFile.readText(path, 16)).assertNull();
+        await JsonFile.writeTextAtomic(path, '');
+        expect(await JsonFile.readText(path, 16)).assertNull();
+        await JsonFile.writeTextAtomic(path, '🎓🎓🎓🎓');
+        expect(await JsonFile.readText(path, 16)).assertEqual('🎓🎓🎓🎓');
+        let rejected: boolean = false;
+        await JsonFile.readText(path, 15).catch(() => { rejected = true; });
+        expect(rejected).assertTrue();
+      } finally { await JsonFile.removeDirectory(directory); }
+    });
     it('atomic_write_reuses_existing_cache_directory', 0, async () => {
       const context = AbilityDelegatorRegistry.getAbilityDelegator().getAppContext();
       const directory: string = context.filesDir + '/WhereToStudyNative-device-test';

@@ -184,8 +184,33 @@ class HolidayLoadState {
   }
 }
 
+// Cosmetic/general preferences may fail independently. Security consent and
+// ASSET remain on their explicit fail-closed paths, never this fallback reader.
+class LaunchPreferenceReader {
+  private readonly store: PreferencesStore;
+  private readonly failed: () => void;
+  constructor(store: PreferencesStore, failed: () => void) { this.store = store; this.failed = failed; }
+  private async read<T>(work: () => Promise<T>, fallback: T): Promise<T> {
+    try { return await work(); } catch (e) { this.failed(); return fallback; }
+  }
+  getString(key: string): Promise<string | null> {
+    return this.read<string | null>((): Promise<string | null> => this.store.getString(key), null);
+  }
+  getBool(key: string, fallback: boolean): Promise<boolean> {
+    return this.read<boolean>((): Promise<boolean> => this.store.getBool(key, fallback), fallback);
+  }
+  getNumber(key: string, fallback: number): Promise<number> {
+    return this.read<number>((): Promise<number> => this.store.getNumber(key, fallback), fallback);
+  }
+  getNumberArray(key: string): Promise<number[]> {
+    return this.read<number[]>((): Promise<number[]> => this.store.getNumberArray(key), []);
+  }
+}
+
 @ObservedV2
 export class AppModel implements CalendarViewportPreloadTarget {
+  @Trace localHydrationReady: boolean = false;
+  @Trace isSavingAccountSettings: boolean = false;
   @Trace newAssignmentNotice: NewAssignmentNotice | null = null;
   @Trace assignmentMomentCatalog: AssignmentDeadlineItem[] = [];
   @Trace assignmentNoticeEpoch: number = 0;
@@ -354,6 +379,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
   private statusMessageRevision: number = 0;
   private statusMessageDismissTimer: number | null = null;
   private savedCredentialAccount: string | null = null;
+  private credentialDraftRevision: number = 0;
+  private accountSettingsSaveWork: Promise<boolean> | null = null;
   private launched: boolean = false;
   private launchPromise: Promise<void> | null = null;
   private readonly preferencesName: string;
@@ -427,7 +454,20 @@ export class AppModel implements CalendarViewportPreloadTarget {
     if (this.launchPromise !== null) {
       return this.launchPromise;
     }
-    this.launchPromise = this.performLaunch();
+    const generation: number = this.localDataGeneration;
+    const draftRevision: number = this.credentialDraftRevision;
+    this.launchPromise = this.performLaunch().catch(async (): Promise<void> => {
+      if (generation !== this.localDataGeneration || this.localDataClearWork !== null) { return; }
+      // A nonessential preference failure cannot hide the last valid local
+      // schedule. Unexpected failures remain visible and never authorize QM.
+      this.localHydrationReady = false;
+      this.qmplusEnabled = false;
+      await this.loadCredentials(draftRevision, generation);
+      await this.loadSchedule();
+      await this.loadClassrooms();
+      this.synchronizeSelectedSlots();
+      throw new Error('数据暂时无法读取。');
+    });
     return this.launchPromise;
   }
 
@@ -436,50 +476,57 @@ export class AppModel implements CalendarViewportPreloadTarget {
       return;
     }
     this.launched = true;
+    const dataGeneration: number = this.localDataGeneration;
+    const draftRevision: number = this.credentialDraftRevision;
     const languageGeneration: number = this.languageClearGeneration;
     const languageRevision: number = this.languageSettingRevision;
     const cellularGeneration: number = this.cellularAssistClearGeneration;
     const cellularRevision: number = this.cellularAssistRevision;
     const qmplusGeneration: number = this.qmplusClearGeneration;
     const qmplusRevision: number = this.qmplusPreferenceRevision;
+    const preferences: LaunchPreferenceReader = new LaunchPreferenceReader(this.preferences, (): void => {
+      this.statusMessage = '数据暂时无法读取。';
+    });
     // BUG-039 修复：UI 测试偏好域每次启动清空，避免跨测试残留状态。
     await this.prepareForLaunch();
     await this.restoreColorTheme();
     if (!this.isSampleMode()) { await this.restoreQMplusPreference(qmplusGeneration, qmplusRevision); }
-    const savedTermID: string | null = await this.preferences.getString('termID');
-    const savedTermStart: string | null = await this.preferences.getString('termStartDate');
-    const savedCampusID: string | null = await this.preferences.getString('campusID');
-    const savedLanguage: string | null = await this.preferences.getString('appLanguage');
-    const notificationsEnabled: boolean = await this.preferences.getBool(
+    const savedTermID: string | null = await preferences.getString('termID');
+    const savedTermStart: string | null = await preferences.getString('termStartDate');
+    const savedCampusID: string | null = await preferences.getString('campusID');
+    const savedLanguage: string | null = await preferences.getString('appLanguage');
+    const notificationsEnabled: boolean = await preferences.getBool(
       DailyCourseNotificationSettings.enabledKey, false);
     this.dailyCourseNotificationMinutes = DailyCourseNotificationSettings.normalizeMinutes(
-      await this.preferences.getNumber(DailyCourseNotificationSettings.minutesKey,
+      await preferences.getNumber(DailyCourseNotificationSettings.minutesKey,
         DailyCourseNotificationSettings.defaultMinutes));
-    this.preClassNotificationsEnabled = await this.preferences.getBool(PreClassNotificationSettings.enabledKey, false);
+    this.preClassNotificationsEnabled = await preferences.getBool(PreClassNotificationSettings.enabledKey, false);
     this.preClassNotificationLeadMinutes = PreClassNotificationSettings.normalized(
-      await this.preferences.getNumberArray(PreClassNotificationSettings.minutesKey));
-    this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
-    this.widgetShowsLocation = await this.preferences.getBool('widgetShowsLocation', true);
-    this.widgetShowsTeacher = await this.preferences.getBool('widgetShowsTeacher', true);
+      await preferences.getNumberArray(PreClassNotificationSettings.minutesKey));
+    this.automaticTermDetection = await preferences.getBool('automaticTermDetection', true);
+    this.widgetShowsLocation = await preferences.getBool('widgetShowsLocation', true);
+    this.widgetShowsTeacher = await preferences.getBool('widgetShowsTeacher', true);
     this.widgetCourseLimit = Math.min(Math.max(
-      await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
+      await preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
       1), WidgetCoursePreferences.maximumLimit);
-    this.weatherEnabled = await this.preferences.getBool('weatherEnabled', true);
-    const savedCellularAssist: boolean = await this.preferences.getBool(CellularAssist.preferenceKey, false);
-    this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
-    this.competitionDeadlinesEnabled = await this.preferences.getBool(
+    this.weatherEnabled = await preferences.getBool('weatherEnabled', true);
+    const savedCellularAssist: boolean = await preferences.getBool(CellularAssist.preferenceKey, false);
+    this.almanacEnabled = await preferences.getBool('almanacEnabled', true);
+    this.competitionDeadlinesEnabled = await preferences.getBool(
       'competitionDeadlinesEnabled', true);
-    this.conferenceDeadlinesEnabled = await this.preferences.getBool(
+    this.conferenceDeadlinesEnabled = await preferences.getBool(
       'conferenceDeadlinesEnabled', true);
-    this.schoolContestNoticesEnabled = await this.preferences.getBool(
+    this.schoolContestNoticesEnabled = await preferences.getBool(
       'schoolContestNoticesEnabled', true);
-    this.summerCampDeadlinesEnabled = await this.preferences.getBool(
+    this.summerCampDeadlinesEnabled = await preferences.getBool(
       'summerCampDeadlinesEnabled', true);
-    this.hackathonDeadlinesEnabled = await this.preferences.getBool(
+    this.hackathonDeadlinesEnabled = await preferences.getBool(
       'hackathonDeadlinesEnabled', true);
-    this.customDeadlinesEnabled = await this.preferences.getBool('customDeadlinesEnabled', false);
-    this.customDeadlinesURL = (await this.preferences.getString('customDeadlinesURL') ?? '').trim();
-    await this.restoreFavoriteDeadlines();
+    this.customDeadlinesEnabled = await preferences.getBool('customDeadlinesEnabled', false);
+    this.customDeadlinesURL = (await preferences.getString('customDeadlinesURL') ?? '').trim();
+    try { await this.restoreFavoriteDeadlines(); } catch (e) {
+      this.statusMessage = '数据暂时无法读取。';
+    }
     this.publicDeadlinePreferencesLoaded = true;
     this.prewarmPublicDeadlines();
     if (languageGeneration === this.languageClearGeneration &&
@@ -507,14 +554,18 @@ export class AppModel implements CalendarViewportPreloadTarget {
     this.campusID = savedCampusID !== null && savedCampusID.length > 0 ? savedCampusID : '01';
     this.queryCampusID = this.campusID;
     this.dailyCourseNotificationsEnabled = notificationsEnabled;
-    await this.loadCredentials();
+    await this.loadCredentials(draftRevision, dataGeneration);
     if (!this.isSampleMode() && this.hasSavedPassword) {
-      try { await this.assignmentCredentialsForRequest(); } catch (e) { /* Cache restore is optional. */ }
+      try { await this.assignmentCredentialsForRequest(); } catch (e) {
+        this.statusMessage = '数据暂时无法读取。';
+      }
     }
     await this.loadSchedule();
     this.refreshScheduleAutomaticallyAtLaunch();
     await this.loadClassrooms();
     this.synchronizeSelectedSlots();
+    this.localHydrationReady = dataGeneration === this.localDataGeneration && this.localDataClearWork === null &&
+      SemesterLogic.isValidTermID(this.termID);
     this.prefetchCurrentYearCalendarMarkers();
     if (!this.isSampleMode() && this.hasSavedPassword && !this.warmCourseRefreshStarted) {
       this.warmCourseRefreshStarted = true;
@@ -774,6 +825,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       return;
     }
     this.invalidatePendingOperations();
+    this.localHydrationReady = false;
     this.cancelDailyCourseNotifications().catch(() => {});
     this.runtimeMode = AppRuntimeMode.sample(true);
     this.qmplusPreferenceRevision++;
@@ -839,7 +891,13 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   private async restorePersistedSettings(): Promise<void> {
+    this.localHydrationReady = false;
+    const dataGeneration: number = this.localDataGeneration;
+    const draftRevision: number = this.credentialDraftRevision;
     try {
+      const preferences: LaunchPreferenceReader = new LaunchPreferenceReader(this.preferences, (): void => {
+        this.statusMessage = '数据暂时无法读取。';
+      });
       const languageGeneration: number = this.languageClearGeneration;
       const languageRevision: number = this.languageSettingRevision;
       const cellularGeneration: number = this.cellularAssistClearGeneration;
@@ -851,39 +909,39 @@ export class AppModel implements CalendarViewportPreloadTarget {
       await this.cellularAssistPreferenceWrite.catch(() => {});
       await this.restoreColorTheme();
       await this.restoreQMplusPreference(qmplusGeneration, qmplusRevision);
-      const savedTermID: string | null = await this.preferences.getString('termID');
-      const savedTermStart: string | null = await this.preferences.getString('termStartDate');
-      const savedCampusID: string | null = await this.preferences.getString('campusID');
-      const savedLanguage: string | null = await this.preferences.getString('appLanguage');
-      const notificationsEnabled: boolean = await this.preferences.getBool(
+      const savedTermID: string | null = await preferences.getString('termID');
+      const savedTermStart: string | null = await preferences.getString('termStartDate');
+      const savedCampusID: string | null = await preferences.getString('campusID');
+      const savedLanguage: string | null = await preferences.getString('appLanguage');
+      const notificationsEnabled: boolean = await preferences.getBool(
         DailyCourseNotificationSettings.enabledKey, false);
       this.dailyCourseNotificationMinutes = DailyCourseNotificationSettings.normalizeMinutes(
-        await this.preferences.getNumber(DailyCourseNotificationSettings.minutesKey,
+        await preferences.getNumber(DailyCourseNotificationSettings.minutesKey,
           DailyCourseNotificationSettings.defaultMinutes));
-      this.preClassNotificationsEnabled = await this.preferences.getBool(PreClassNotificationSettings.enabledKey, false);
+      this.preClassNotificationsEnabled = await preferences.getBool(PreClassNotificationSettings.enabledKey, false);
       this.preClassNotificationLeadMinutes = PreClassNotificationSettings.normalized(
-        await this.preferences.getNumberArray(PreClassNotificationSettings.minutesKey));
-      this.automaticTermDetection = await this.preferences.getBool('automaticTermDetection', true);
-      this.widgetShowsLocation = await this.preferences.getBool('widgetShowsLocation', true);
-      this.widgetShowsTeacher = await this.preferences.getBool('widgetShowsTeacher', true);
+        await preferences.getNumberArray(PreClassNotificationSettings.minutesKey));
+      this.automaticTermDetection = await preferences.getBool('automaticTermDetection', true);
+      this.widgetShowsLocation = await preferences.getBool('widgetShowsLocation', true);
+      this.widgetShowsTeacher = await preferences.getBool('widgetShowsTeacher', true);
       this.widgetCourseLimit = Math.min(Math.max(
-        await this.preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
+        await preferences.getNumber('widgetCourseLimit', WidgetCoursePreferences.defaultLimit),
         1), WidgetCoursePreferences.maximumLimit);
-      this.weatherEnabled = await this.preferences.getBool('weatherEnabled', true);
-      const savedCellularAssist: boolean = await this.preferences.getBool(CellularAssist.preferenceKey, false);
-      this.almanacEnabled = await this.preferences.getBool('almanacEnabled', true);
-      this.competitionDeadlinesEnabled = await this.preferences.getBool(
+      this.weatherEnabled = await preferences.getBool('weatherEnabled', true);
+      const savedCellularAssist: boolean = await preferences.getBool(CellularAssist.preferenceKey, false);
+      this.almanacEnabled = await preferences.getBool('almanacEnabled', true);
+      this.competitionDeadlinesEnabled = await preferences.getBool(
         'competitionDeadlinesEnabled', true);
-      this.conferenceDeadlinesEnabled = await this.preferences.getBool(
+      this.conferenceDeadlinesEnabled = await preferences.getBool(
         'conferenceDeadlinesEnabled', true);
-      this.schoolContestNoticesEnabled = await this.preferences.getBool(
+      this.schoolContestNoticesEnabled = await preferences.getBool(
         'schoolContestNoticesEnabled', true);
-      this.summerCampDeadlinesEnabled = await this.preferences.getBool(
+      this.summerCampDeadlinesEnabled = await preferences.getBool(
         'summerCampDeadlinesEnabled', true);
-      this.hackathonDeadlinesEnabled = await this.preferences.getBool(
+      this.hackathonDeadlinesEnabled = await preferences.getBool(
         'hackathonDeadlinesEnabled', true);
-      this.customDeadlinesEnabled = await this.preferences.getBool('customDeadlinesEnabled', false);
-      this.customDeadlinesURL = (await this.preferences.getString('customDeadlinesURL') ?? '').trim();
+      this.customDeadlinesEnabled = await preferences.getBool('customDeadlinesEnabled', false);
+      this.customDeadlinesURL = (await preferences.getString('customDeadlinesURL') ?? '').trim();
       await this.restoreFavoriteDeadlines();
       if (languageGeneration === this.languageClearGeneration &&
         languageRevision === this.languageSettingRevision && this.localDataClearWork === null) {
@@ -911,10 +969,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.queryCampusID = this.campusID;
       this.dailyCourseNotificationsEnabled = notificationsEnabled;
     } catch (e) {
-      // 偏好读取失败时保留默认值（BUG-006 修复）。
+      this.statusMessage = '数据暂时无法读取。';
     }
     try {
-      await this.loadCredentials();
+      await this.loadCredentials(draftRevision, dataGeneration);
     } catch (e) {
     }
     try {
@@ -928,6 +986,8 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
     // 串行完成后再同步节次，避免与 loadSchedule 的写回竞态（BUG-007/009 修复）。
     this.synchronizeSelectedSlots();
+    this.localHydrationReady = dataGeneration === this.localDataGeneration && this.localDataClearWork === null &&
+      SemesterLogic.isValidTermID(this.termID);
     const year: number = StrictDates.todayParts().year;
     this.ensureHolidays(year, false);
     this.loadWeather(this.queryCampusID);
@@ -969,19 +1029,77 @@ export class AppModel implements CalendarViewportPreloadTarget {
     }
   }
 
+  editAccount(value: string): void {
+    if (value === this.account) { return; }
+    this.credentialDraftRevision++;
+    if (value.trim() !== this.account.trim()) {
+      this.cloudPassword = '';
+      this.useAcademicPasswordForCloud = false;
+    }
+    this.account = value;
+  }
+
+  editPassword(value: string): void {
+    if (value === this.password) { return; }
+    this.credentialDraftRevision++;
+    this.password = value;
+  }
+
+  editCloudPassword(value: string): void {
+    if (value === this.cloudPassword && !this.useAcademicPasswordForCloud) { return; }
+    this.credentialDraftRevision++;
+    this.cloudPassword = value;
+    this.useAcademicPasswordForCloud = false;
+  }
+
+  selectAcademicPasswordForCloud(): void {
+    if (this.cloudPassword.length === 0 && this.useAcademicPasswordForCloud) { return; }
+    this.credentialDraftRevision++;
+    this.cloudPassword = '';
+    this.useAcademicPasswordForCloud = true;
+  }
+
   async saveSettings(): Promise<boolean> {
     if (this.isSampleMode()) {
       this.statusMessage = '示例模式不会保存账户或设置';
       return false;
     }
+    if (this.accountSettingsSaveWork !== null || this.localDataClearWork !== null) { return false; }
+    this.isSavingAccountSettings = true;
+    const work: Promise<boolean> = this.saveSubmittedSettings();
+    this.accountSettingsSaveWork = work;
+    try { return await work; } finally {
+      if (this.accountSettingsSaveWork === work) {
+        this.accountSettingsSaveWork = null;
+        this.isSavingAccountSettings = false;
+      }
+    }
+  }
+
+  private async saveSubmittedSettings(): Promise<boolean> {
+    // Own exactly the input submitted by Save. Later edits remain unsaved
+    // drafts and must not change this transaction or be erased by its result.
+    const inputAccount: string = this.account;
+    const inputPassword: string = this.password;
+    const inputCloudPassword: string = this.cloudPassword;
+    const useAcademicPassword: boolean = this.useAcademicPasswordForCloud;
+    const inputCampusID: string = this.campusID;
+    const automaticDetection: boolean = this.automaticTermDetection;
+    const draftRevision: number = ++this.credentialDraftRevision;
+    let generation: number = this.localDataGeneration;
+    const current: () => boolean = (): boolean => generation === this.localDataGeneration &&
+      this.localDataClearWork === null && !this.isSampleMode();
+    const ensureCurrent: () => void = (): void => {
+      if (!current()) { throw new Error('数据暂时无法读取。'); }
+    };
     try {
       const normalizedTermID: string = this.termID.trim();
       const normalizedTermStartDate: string = this.termStartDate.trim();
       const automaticTerm: SemesterSuggestion = SemesterLogic.resolveAutomaticLaunchTerm(
         this.schedule?.termID ?? null, this.schedule?.termStartDate ?? null, StrictDates.todayParts());
-      const nextTermID: string = this.automaticTermDetection ? automaticTerm.termID :
+      const nextTermID: string = automaticDetection ? automaticTerm.termID :
         normalizedTermID;
-      const nextTermStartDate: string = this.automaticTermDetection ? automaticTerm.termStartDate :
+      const nextTermStartDate: string = automaticDetection ? automaticTerm.termStartDate :
         normalizedTermStartDate;
       if (!SemesterLogic.isValidTermID(nextTermID)) {
         throw CredentialSettingsError.invalidTermID();
@@ -989,18 +1107,19 @@ export class AppModel implements CalendarViewportPreloadTarget {
       if (StrictDates.parseDateString(nextTermStartDate) === null) {
         throw CredentialSettingsError.invalidTermStartDate();
       }
-      if (this.account.trim().length === 0 && this.cloudPassword.length > 0) {
+      if (inputAccount.trim().length === 0 && inputCloudPassword.length > 0) {
         throw CredentialSettingsError.accountRequired();
       }
       const storedCredentials: Credentials | null = await this.credentialStore.load();
+      ensureCurrent();
       let credentialAction: CredentialSaveAction = CredentialSettingsLogic.saveAction(
-        this.account, this.password, storedCredentials?.account ?? null,
+        inputAccount, inputPassword, storedCredentials?.account ?? null,
         storedCredentials !== null && storedCredentials.password.length > 0);
       let nextCredentials: Credentials | null = credentialAction.kind === CredentialSaveActionKind.preserve ?
         storedCredentials : credentialAction.credentials;
       if (nextCredentials !== null) {
         nextCredentials = Credentials.withCloudPasswordDraft(nextCredentials.account,
-          nextCredentials.password, storedCredentials, this.cloudPassword, this.useAcademicPasswordForCloud);
+          nextCredentials.password, storedCredentials, inputCloudPassword, useAcademicPassword);
         credentialAction = CredentialSaveAction.replace(nextCredentials);
       }
       const cloudIdentityChanged: boolean = storedCredentials?.account !== nextCredentials?.account ||
@@ -1021,42 +1140,59 @@ export class AppModel implements CalendarViewportPreloadTarget {
         this.newAssignmentStore.clear();
         this.invalidateCourseDTOCache();
         await this.courseDTOStore.clear();
+        ensureCurrent();
       }
-      if (!accountChanged && academicPasswordChanged) { this.invalidatePendingAccountRequests(); }
+      if (!accountChanged && academicPasswordChanged) {
+        this.invalidatePendingAccountRequests(); generation++; ensureCurrent();
+      }
       if (accountChanged) {
         if (this.isImportingCalendar) {
           throw CredentialSettingsError.calendarImportInProgress();
         }
+        generation++;
         await this.clearAccountScopedData();
+        ensureCurrent();
       }
       if (credentialAction.kind === CredentialSaveActionKind.preserve) {
-        this.updateSavedCredentialState(storedCredentials);
+        this.updateSavedCredentialState(storedCredentials, draftRevision !== this.credentialDraftRevision);
       } else if (credentialAction.kind === CredentialSaveActionKind.replace &&
         credentialAction.credentials !== null) {
         await this.credentialStore.save(credentialAction.credentials);
-        this.updateSavedCredentialState(credentialAction.credentials);
+        ensureCurrent();
+        this.updateSavedCredentialState(credentialAction.credentials, draftRevision !== this.credentialDraftRevision);
       } else {
         await this.credentialStore.clear();
-        this.updateSavedCredentialState(null);
+        ensureCurrent();
+        this.updateSavedCredentialState(null, draftRevision !== this.credentialDraftRevision);
       }
-      this.account = CredentialSettingsLogic.normalizedAccount(this.account);
-      this.password = '';
-      this.cloudPassword = '';
-      this.useAcademicPasswordForCloud = false;
+      const submittedDraftUnchanged: boolean = draftRevision === this.credentialDraftRevision;
+      if (submittedDraftUnchanged) {
+        this.account = CredentialSettingsLogic.normalizedAccount(inputAccount);
+        this.password = '';
+        this.cloudPassword = '';
+        this.useAcademicPasswordForCloud = false;
+      }
+      const completionDraftRevision: number = ++this.credentialDraftRevision;
       if (cloudIdentityChanged) {
         this.resetCalendarDailyInfoState();
       }
       this.termID = nextTermID;
       this.termStartDate = nextTermStartDate;
-      await this.preferences.setString('campusID', this.campusID);
-      await this.preferences.setString('termID', this.termID);
-      await this.preferences.setString('termStartDate', this.termStartDate);
-      await this.preferences.setBool('automaticTermDetection', this.automaticTermDetection);
+      await this.preferences.setString('campusID', inputCampusID);
+      ensureCurrent();
+      await this.preferences.setString('termID', nextTermID);
+      ensureCurrent();
+      await this.preferences.setString('termStartDate', nextTermStartDate);
+      ensureCurrent();
+      await this.preferences.setBool('automaticTermDetection', automaticDetection);
+      ensureCurrent();
       this.statusMessage = '设置已保存';
-      this.refreshScheduleAutomaticallyAtLaunch();
+      if (submittedDraftUnchanged && completionDraftRevision === this.credentialDraftRevision) {
+        this.refreshScheduleAutomaticallyAtLaunch();
+      }
       return true;
     } catch (e) {
-      this.statusMessage = e instanceof Error ? e.message : '设置保存失败。';
+      if (current()) { this.statusMessage = e instanceof Error ? e.message : '设置保存失败。'; }
       return false;
     }
   }
@@ -1240,6 +1376,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     try { await work; } catch (e) {
       if (generation === this.qmplusClearGeneration && revision === this.qmplusPreferenceRevision) {
         this.qmplusEnabled = false;
+        this.statusMessage = '数据暂时无法读取。';
       }
     }
   }
@@ -1867,6 +2004,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
     if (this.localDataClearWork !== null) {
       return this.localDataClearWork;
     }
+    this.localHydrationReady = false;
     this.favoriteDeadlineClearInProgress = true;
     this.favoriteDeadlineClearGeneration++;
     this.languageClearGeneration++;
@@ -1894,6 +2032,9 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   private async clearLocalDataAfterFavoriteWrites(): Promise<void> {
+    // Clearing already advanced localDataGeneration. Drain an in-progress
+    // secure/pref write before deletion, so it cannot recreate cleared data.
+    await this.accountSettingsSaveWork?.catch(() => false);
     // 先排空已开始的收藏写入，再删 key；旧 Promise 不可能在删除后重建它。
     await this.favoriteDeadlinePreferenceWrite.catch(() => {});
     await this.qmplusPreferenceWrite.catch(() => {});
@@ -3108,9 +3249,14 @@ export class AppModel implements CalendarViewportPreloadTarget {
 
   // ---------- 内部实现 ----------
 
-  private async loadCredentials(): Promise<void> {
+  private async loadCredentials(draftRevision: number = this.credentialDraftRevision,
+    generation: number = this.localDataGeneration): Promise<void> {
+    if (generation !== this.localDataGeneration || this.localDataClearWork !== null ||
+      draftRevision !== this.credentialDraftRevision) { return; }
     try {
       const credentials: Credentials | null = await this.credentialStore.load();
+      if (generation !== this.localDataGeneration || this.localDataClearWork !== null ||
+        draftRevision !== this.credentialDraftRevision) { return; }
       if (credentials === null) {
         this.password = '';
         this.updateSavedCredentialState(null);
@@ -3120,6 +3266,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
       this.password = '';
       this.updateSavedCredentialState(credentials);
     } catch (e) {
+      if (generation !== this.localDataGeneration || draftRevision !== this.credentialDraftRevision) { return; }
       this.password = '';
       this.updateSavedCredentialState(null);
       this.statusMessage = e instanceof Error ? e.message : '';
@@ -3207,12 +3354,14 @@ export class AppModel implements CalendarViewportPreloadTarget {
       .then((saved: boolean): void => { if (!saved) { warn(); } }).catch(warn);
   }
 
-  private updateSavedCredentialState(credentials: Credentials | null): void {
+  private updateSavedCredentialState(credentials: Credentials | null, preserveDraft: boolean = false): void {
     this.savedCredentialAccount = credentials !== null ? credentials.account : null;
     this.hasSavedPassword = credentials !== null && credentials.password.length > 0;
     this.hasSavedCloudPassword = credentials !== null && credentials.cloudPassword.length > 0;
-    this.cloudPassword = '';
-    this.useAcademicPasswordForCloud = false;
+    if (!preserveDraft) {
+      this.cloudPassword = '';
+      this.useAcademicPasswordForCloud = false;
+    }
   }
 
   private async clearAccountScopedData(): Promise<void> {
@@ -3275,9 +3424,11 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   private async loadSchedule(): Promise<void> {
+    const generation: number = this.localDataGeneration;
     try {
       await this.loadCourseRemovals();
       const loaded: ScheduleSnapshot | null = await this.scheduleStore.load();
+      if (generation !== this.localDataGeneration || this.localDataClearWork !== null) { return; }
       let shouldClearLoaded: boolean = false;
       if (this.isSampleMode()) {
         this.schedule = loaded;
@@ -3294,8 +3445,13 @@ export class AppModel implements CalendarViewportPreloadTarget {
           loaded?.termID ?? null, loaded?.termStartDate ?? null, StrictDates.todayParts());
         this.termID = resolved.termID;
         this.termStartDate = resolved.termStartDate;
-        await this.preferences.setString('termID', this.termID);
-        await this.preferences.setString('termStartDate', this.termStartDate);
+        // The validated cache and its term are authoritative for this launch;
+        // preference writeback failure must not skip applying that cache.
+        try {
+          await this.preferences.setString('termID', this.termID);
+          await this.preferences.setString('termStartDate', this.termStartDate);
+        } catch (e) { this.statusMessage = '无法保存本地偏好。'; }
+        if (generation !== this.localDataGeneration || this.localDataClearWork !== null) { return; }
         shouldClearLoaded = loaded !== null && !canUseLoaded;
       } else {
         // 手动模式继续展示并使用用户明确配置时保存的缓存。
@@ -3319,6 +3475,7 @@ export class AppModel implements CalendarViewportPreloadTarget {
         await this.schedulePersistence.clear();
       }
     } catch (e) {
+      if (generation !== this.localDataGeneration) { return; }
       this.statusMessage = '本地课表读取失败：' + (e instanceof Error ? e.message : '');
     }
   }
@@ -3333,8 +3490,10 @@ export class AppModel implements CalendarViewportPreloadTarget {
   }
 
   private async loadClassrooms(): Promise<void> {
+    const generation: number = this.localDataGeneration;
     try {
       const cached: ClassroomsCache | null = await this.classroomStore.load();
+      if (generation !== this.localDataGeneration || this.localDataClearWork !== null) { return; }
       if (cached !== null && cached.targetDate === AppModel.todayString()) {
         this.classroomsCache = cached;
       }

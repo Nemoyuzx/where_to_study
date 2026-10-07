@@ -39,6 +39,7 @@ import favoriteDeadlineLimitTest from './FavoriteDeadlineLimit.test';
 import widgetFileQueueTest from './WidgetFileQueue.test';
 import academicQueryTest from './AcademicQuery.test';
 import authenticatedSessionTest from './AuthenticatedSession.test';
+import launchHydrationTest from './LaunchHydration.test';
 
 export default function testsuite() {
   strictDatesTest();
@@ -77,6 +78,7 @@ export default function testsuite() {
   widgetFileQueueTest();
   academicQueryTest();
   authenticatedSessionTest();
+  launchHydrationTest();
   newAssignmentTrackerTest();
   newAssignmentNoticeTest();
   calendarDeadlineMomentsTest();

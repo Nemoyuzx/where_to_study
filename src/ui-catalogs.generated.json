@@ -1,5 +1,10 @@
 {
   "zh-Hans": {
+    "鼠尾草": "鼠尾草",
+    "陶土": "陶土",
+    "梅子": "梅子",
+    "石墨": "石墨",
+    "夜蓝": "夜蓝",
     "新作业提醒": "新作业提醒",
     "未提供截止时间": "未提供截止时间",
     "发现新作业": "发现新作业",
@@ -1551,6 +1556,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。"
   },
   "en": {
+    "鼠尾草": "Sage",
+    "陶土": "Terracotta",
+    "梅子": "Plum",
+    "石墨": "Graphite",
+    "夜蓝": "Navy",
     "新作业提醒": "New assignment alert",
     "未提供截止时间": "Deadline not provided",
     "发现新作业": "New assignments",
@@ -3102,6 +3112,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Course data was fetched, but the local cache was not updated. Earlier cached data may appear after restarting."
   },
   "zh-Hant": {
+    "鼠尾草": "鼠尾草",
+    "陶土": "陶土",
+    "梅子": "梅子",
+    "石墨": "石墨",
+    "夜蓝": "夜藍",
     "新作业提醒": "新作業提醒",
     "未提供截止时间": "未提供截止時間",
     "发现新作业": "發現新作業",
@@ -4653,6 +4668,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "本次課程資料已讀取，但本機快取未更新。重新啟動後可能顯示先前的快取。"
   },
   "ja": {
+    "鼠尾草": "セージ",
+    "陶土": "テラコッタ",
+    "梅子": "プラム",
+    "石墨": "グラファイト",
+    "夜蓝": "ネイビー",
     "新作业提醒": "新しい課題の通知",
     "未提供截止时间": "締切日時は未設定です",
     "发现新作业": "新しい課題が見つかりました",
@@ -6204,6 +6224,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "コースデータを取得しましたが、ローカルキャッシュを更新できませんでした。再起動後は以前のキャッシュが表示される場合があります。"
   },
   "es": {
+    "鼠尾草": "Salvia",
+    "陶土": "Terracota",
+    "梅子": "Ciruela",
+    "石墨": "Grafito",
+    "夜蓝": "Azul marino",
     "新作业提醒": "Aviso de nuevas tareas",
     "未提供截止时间": "Fecha límite no indicada",
     "发现新作业": "Nuevas tareas encontradas",
@@ -7755,6 +7780,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Se obtuvieron los datos de los cursos, pero no se actualizó la caché local. Al reiniciar podrían aparecer datos anteriores."
   },
   "pt": {
+    "鼠尾草": "Sálvia",
+    "陶土": "Terracota",
+    "梅子": "Ameixa",
+    "石墨": "Grafite",
+    "夜蓝": "Azul-marinho",
     "新作业提醒": "Aviso de novas tarefas",
     "未提供截止时间": "Prazo não informado",
     "发现新作业": "Novas tarefas encontradas",
@@ -9306,6 +9336,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Os dados dos cursos foram obtidos, mas o cache local não foi atualizado. Dados anteriores podem aparecer após reiniciar."
   },
   "ar": {
+    "鼠尾草": "أخضر الميرمية",
+    "陶土": "الطين المحروق",
+    "梅子": "لون البرقوق",
+    "石墨": "الغرافيت",
+    "夜蓝": "أزرق كحلي",
     "新作业提醒": "تنبيه بواجبات جديدة",
     "未提供截止时间": "لم يُحدد موعد التسليم",
     "发现新作业": "تم العثور على واجبات جديدة",
@@ -10857,6 +10892,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "تم جلب بيانات المقررات، لكن لم تُحدَّث ذاكرة التخزين المؤقت المحلية. قد تظهر بيانات سابقة بعد إعادة التشغيل."
   },
   "ru": {
+    "鼠尾草": "Шалфей",
+    "陶土": "Терракота",
+    "梅子": "Слива",
+    "石墨": "Графит",
+    "夜蓝": "Тёмно-синий",
     "新作业提醒": "Уведомление о новых заданиях",
     "未提供截止时间": "Срок сдачи не указан",
     "发现新作业": "Найдены новые задания",
@@ -12408,6 +12448,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Данные курсов получены, но локальный кэш не обновлён. После перезапуска могут отображаться прежние данные."
   },
   "tr": {
+    "鼠尾草": "Adaçayı",
+    "陶土": "Terakota",
+    "梅子": "Erik",
+    "石墨": "Grafit",
+    "夜蓝": "Lacivert",
     "新作业提醒": "Yeni ödev bildirimi",
     "未提供截止时间": "Son teslim tarihi belirtilmedi",
     "发现新作业": "Yeni ödevler bulundu",
@@ -13959,6 +14004,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Ders verileri alındı, ancak yerel önbellek güncellenemedi. Yeniden başlatıldıktan sonra önceki veriler görünebilir."
   },
   "th": {
+    "鼠尾草": "สีเซจ",
+    "陶土": "สีดินเผา",
+    "梅子": "สีพลัม",
+    "石墨": "สีกราไฟต์",
+    "夜蓝": "สีน้ำเงินกรมท่า",
     "新作业提醒": "แจ้งเตือนงานใหม่",
     "未提供截止时间": "ไม่ได้ระบุกำหนดส่ง",
     "发现新作业": "พบงานใหม่",
@@ -15510,6 +15560,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "ดึงข้อมูลรายวิชาแล้ว แต่ไม่ได้อัปเดตแคชในเครื่อง หลังเริ่มแอปใหม่อาจแสดงข้อมูลจากแคชเดิม"
   },
   "ms": {
+    "鼠尾草": "Hijau sage",
+    "陶土": "Terakota",
+    "梅子": "Plum",
+    "石墨": "Grafit",
+    "夜蓝": "Biru laut",
     "新作业提醒": "Makluman tugasan baharu",
     "未提供截止时间": "Tarikh akhir tidak dinyatakan",
     "发现新作业": "Tugasan baharu ditemui",
@@ -17061,6 +17116,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Data kursus telah diperoleh, tetapi cache setempat tidak dikemas kini. Data terdahulu mungkin dipaparkan selepas aplikasi dimulakan semula."
   },
   "vi": {
+    "鼠尾草": "Xanh xô thơm",
+    "陶土": "Đất nung",
+    "梅子": "Mận",
+    "石墨": "Than chì",
+    "夜蓝": "Xanh hải quân",
     "新作业提醒": "Thông báo bài tập mới",
     "未提供截止时间": "Chưa cung cấp hạn nộp",
     "发现新作业": "Đã tìm thấy bài tập mới",
@@ -18612,6 +18672,11 @@
     "本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。": "Đã tải dữ liệu môn học nhưng chưa cập nhật bộ nhớ đệm cục bộ. Dữ liệu cũ có thể xuất hiện sau khi khởi động lại."
   },
   "id": {
+    "鼠尾草": "Hijau sage",
+    "陶土": "Terakota",
+    "梅子": "Plum",
+    "石墨": "Grafit",
+    "夜蓝": "Biru dongker",
     "新作业提醒": "Pemberitahuan tugas baru",
     "未提供截止时间": "Batas waktu tidak diberikan",
     "发现新作业": "Tugas baru ditemukan",

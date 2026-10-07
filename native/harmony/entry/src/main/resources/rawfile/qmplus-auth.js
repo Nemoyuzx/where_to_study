@@ -103,10 +103,18 @@
     return {form, submit};
   }
 
-  function matchingDisplayName(key) {
+  function displayNameReason(key) {
     const displayName = exactlyOne('#displayName');
-    return !!key && !!displayName && visible(displayName, 1, 1, true) &&
-      accountKey(displayName.textContent) === key;
+    // Missing, hidden or occluded identity is not proof of another account.
+    // Keep the same hit guard: no password may fill until layout is trusted.
+    if (!key || !displayName || !visible(displayName, 1, 1, true)) return reasons.absent;
+    const displayedKey = accountKey(displayName.textContent);
+    if (!displayedKey) return reasons.absent;
+    return displayedKey === key ? reasons.ready : reasons.mismatch;
+  }
+
+  function matchingDisplayName(key) {
+    return displayNameReason(key) === reasons.ready;
   }
 
   function hasIdentityAcknowledgement(key, acknowledgement) {
@@ -331,11 +339,8 @@
       if (!knownContinuation()) return result('manual', nonce, false, reasons.interference);
       const hint = accountKey(accountHint);
       if (!hint) return result('manual', nonce, false, reasons.hint);
-      const identity = exactlyOne('#displayName');
-      if (!identity || !visible(identity, 1, 1, true) || !accountKey(identity.textContent)) {
-        return result('manual', nonce, false, reasons.absent);
-      }
-      if (accountKey(identity.textContent) !== hint) return result('manual', nonce, false, reasons.mismatch);
+      const identityReason = displayNameReason(hint);
+      if (identityReason !== reasons.ready) return result('manual', nonce, false, identityReason);
       if (continueAttempted) return result('manual', nonce, true, reasons.attempted);
       return result('continue', nonce, true, hasIdentityAcknowledgement(hint, identityAcknowledged) ?
         reasons.ready : reasons.currentAccount);
@@ -382,8 +387,8 @@
       }
       if (password.value) return result('manual', nonce, false, reasons.interference);
       const hint = accountKey(accountHint);
-      const accountMatch = matchingDisplayName(hint);
-      if (!accountMatch) return result('manual', nonce, false, reasons.mismatch);
+      const identityReason = displayNameReason(hint);
+      if (identityReason !== reasons.ready) return result('manual', nonce, false, identityReason);
       if (passwordAttempted) return result('manual', nonce, true, reasons.attempted);
       if (!hasIdentityAcknowledgement(hint, identityAcknowledged)) {
         // A valid official cookie may enter directly at the password screen.

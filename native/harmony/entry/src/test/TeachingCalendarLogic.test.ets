@@ -269,6 +269,127 @@ export default function teachingCalendarLogicTest() {
       expect(TeachingCalendarLogic.monthGridTranslationY(2, 3, rowHeight)).assertEqual(-138);
     });
 
+    it('month_navigation_reserve_tracks_actual_global_bounds_and_startup_fallback', 0, () => {
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 720, -1, -1, true, 96)).assertEqual(96);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 720, 732, 792, true, 96)).assertEqual(96);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 720, 700, 760, true, 96)).assertEqual(128);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 720, 732, 792, false, 96)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 720, 732, 732, true, 96)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 720, 0, 60, true, 96)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 720, 900, 960, true, 96)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(40, 320, 284, 344, true, 96)).assertEqual(84);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 36, 0, 150, true, 96)).assertEqual(36);
+      expect(TeachingCalendarLogic.monthNavigationBottomInset(100, 36, -1, -1, true, 96)).assertEqual(36);
+    });
+
+    it('month_measured_rows_fill_tall_short_and_large_font_header_capacity', 0, () => {
+      for (const height of [120, 240, 360, 456, 720, 1020]) {
+        for (const header of [26, 74, 132]) {
+          const capacity: number = Math.max(height - 96 - header - 8 - 28, 0);
+          const row: number = TeachingCalendarLogic.measuredExpandedMonthCellHeight(height, 96, header);
+          expect(row * 6 <= capacity).assertTrue();
+          expect(capacity - row * 6 < 6).assertTrue();
+        }
+      }
+      expect(TeachingCalendarLogic.measuredExpandedMonthCellHeight(1020, 96, 26)).assertEqual(143);
+      expect(TeachingCalendarLogic.measuredExpandedMonthCellHeight(240, 96, 26)).assertEqual(13);
+      expect(TeachingCalendarLogic.measuredExpandedMonthCellHeight(36, 36, 132)).assertEqual(0);
+    });
+
+    it('month_short_viewport_keeps_all_sheet_stages_inside_the_available_grid', 0, () => {
+      for (const expanded of [0, 13, 46, 93, 143]) {
+        for (const position of [0, 0.001, 0.5, 1, 1.001, 1.5, 2]) {
+          const row: number = TeachingCalendarLogic.monthRowHeight(position, 0, 3, expanded);
+          const viewport: number = TeachingCalendarLogic.monthGridViewportHeight(position, 6, row);
+          expect(viewport <= expanded * 6).assertTrue();
+          expect(row >= 0).assertTrue();
+          expect(TeachingCalendarLogic.monthRowHeight(position, 5, 3, expanded)).assertEqual(row);
+        }
+        const compact: number = Math.min(expanded, 46);
+        expect(TeachingCalendarLogic.monthGridViewportHeight(1, 6, compact)).assertEqual(compact * 6);
+        expect(TeachingCalendarLogic.monthGridViewportHeight(2, 6, compact)).assertEqual(compact);
+        expect(TeachingCalendarLogic.monthGridTranslationY(2, 3, compact)).assertEqual(-3 * compact);
+      }
+    });
+
+    it('month_details_gap_appears_continuously_and_never_exceeds_remaining_height', 0, () => {
+      expect(TeachingCalendarLogic.monthDetailsTopGap(0, 100)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthDetailsTopGap(0.001, 100)).assertEqual(0.008);
+      expect(TeachingCalendarLogic.monthDetailsTopGap(0.5, 100)).assertEqual(4);
+      expect(TeachingCalendarLogic.monthDetailsTopGap(1, 100)).assertEqual(8);
+      expect(TeachingCalendarLogic.monthDetailsTopGap(2, 3)).assertEqual(3);
+      expect(TeachingCalendarLogic.monthDetailsTopGap(0.5, 0)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthDetailsTopGap(-1, 100)).assertEqual(0);
+    });
+
+    it('month_progress_has_no_geometry_jump_at_expanded_details_or_selected_week_endpoints', 0, () => {
+      const expanded: number = 143;
+      for (const anchor of [0, 1, 2]) {
+        const before: number = Math.max(anchor - 0.001, 0);
+        const after: number = Math.min(anchor + 0.001, 2);
+        const beforeRow: number = TeachingCalendarLogic.monthRowHeight(before, 0, 3, expanded);
+        const afterRow: number = TeachingCalendarLogic.monthRowHeight(after, 0, 3, expanded);
+        expect(Math.abs(beforeRow - afterRow) <= 1).assertTrue();
+        expect(Math.abs(TeachingCalendarLogic.monthGridViewportHeight(before, 6, beforeRow) -
+          TeachingCalendarLogic.monthGridViewportHeight(after, 6, afterRow)) <= 1).assertTrue();
+        expect(Math.abs(TeachingCalendarLogic.monthGridTranslationY(before, 3, beforeRow) -
+          TeachingCalendarLogic.monthGridTranslationY(after, 3, afterRow)) <= 1).assertTrue();
+      }
+    });
+
+    it('month_drag_uses_two_measured_physical_segments_across_anchors', 0, () => {
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-161.5, 0, 323, 230)).assertEqual(0.5);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-323, 0, 323, 230)).assertEqual(1);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-438, 0, 323, 230)).assertEqual(1.5);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-553, 0, 323, 230)).assertEqual(2);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(115, 1.5, 323, 230)).assertEqual(1);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(276.5, 1.5, 323, 230)).assertEqual(0.5);
+      for (const start of [0, 0.25, 0.75, 1, 1.25, 1.75, 2]) {
+        const startDistance: number = Math.min(start, 1) * 323 + Math.max(start - 1, 0) * 230;
+        for (const delta of [-600, -300, -25, 0, 25, 300, 600]) {
+          const position: number = TeachingCalendarLogic.monthSheetDragPosition(delta, start, 323, 230);
+          const distance: number = Math.min(position, 1) * 323 + Math.max(position - 1, 0) * 230;
+          expect(Math.abs(distance - Math.min(Math.max(startDistance - delta, 0), 553)) < 0.001).assertTrue();
+        }
+      }
+    });
+
+    it('month_drag_zero_and_nonfinite_travel_remain_bounded', 0, () => {
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-100, 0.5, 0, 0)).assertEqual(0.5);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-115, 0, 0, 230)).assertEqual(1.5);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-1, 1, 323, 0)).assertEqual(2);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(1, 1, 0, 230)).assertEqual(0);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(Number.NaN, 1, 323, 230)).assertEqual(1);
+      expect(TeachingCalendarLogic.monthSheetDragPosition(-1, Number.NaN, Number.NaN, 0)).assertEqual(0);
+    });
+
+    it('almanac_translated_label_uses_measured_natural_width_not_fixed_badge_width', 0, () => {
+      expect(TeachingCalendarLogic.almanacAdviceLabelWidth(300, 80)).assertEqual(92);
+      expect(TeachingCalendarLogic.almanacAdviceLabelWidth(300, 12)).assertEqual(24);
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(300, 80, 1)).assertFalse();
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(160, 80, 1)).assertTrue();
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(160, 12, 1)).assertFalse();
+    });
+
+    it('almanac_real_available_width_and_font_scale_choose_wrapped_vertical_layout', 0, () => {
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(120, 80, 1)).assertTrue();
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(300, 128, 1.6)).assertTrue();
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(300, 160, 2)).assertTrue();
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(0, 80, 1)).assertTrue();
+      expect(TeachingCalendarLogic.almanacAdviceUsesVertical(300, 80, Number.NaN)).assertFalse();
+    });
+
+    it('almanac_remeasurement_tracks_new_label_and_never_exceeds_parent_width', 0, () => {
+      for (const width of [0, 24, 120, 160, 300]) {
+        for (const measuredLabel of [12, 32, 80, 160, 320]) {
+          expect(TeachingCalendarLogic.almanacAdviceLabelWidth(width, measuredLabel) <= width).assertTrue();
+        }
+      }
+      expect(TeachingCalendarLogic.almanacAdviceLabelWidth(300, 32)).assertEqual(44);
+      expect(TeachingCalendarLogic.almanacAdviceLabelWidth(300, 80)).assertEqual(92);
+      expect(TeachingCalendarLogic.almanacAdviceLabelWidth(120, 160)).assertEqual(120);
+    });
+
     it('animated_target_mode_drives_the_compact_date_strip', 0, () => {
       expect(TeachingCalendarLogic.showsCompactDateStrip(CalendarMode.day)).assertTrue();
       expect(TeachingCalendarLogic.showsCompactDateStrip(CalendarMode.week)).assertTrue();

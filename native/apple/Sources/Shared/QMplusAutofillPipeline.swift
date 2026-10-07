@@ -1,5 +1,8 @@
 import Foundation
 import WebKit
+#if DEBUG
+import OSLog
+#endif
 
 enum QMplusAuthStage: String, Hashable, Sendable {
     case loading, authenticated, account, username, password, manual, challenge
@@ -127,12 +130,12 @@ enum QMplusAutofillPolicy {
         }
     }
     static func accountKey(_ account: String) -> String? {
-        let key = account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !key.isEmpty, key.utf16.count <= 320,
-              !key.unicodeScalars.contains(where: { CharacterSet.whitespacesAndNewlines.contains($0) }),
-              key.split(separator: "@", omittingEmptySubsequences: false).count == 2,
-              !key.hasPrefix("@"), !key.hasSuffix("@") else { return nil }
-        return key
+        let normalizedAccount = account.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedAccount.isEmpty, normalizedAccount.utf16.count <= 320,
+              !normalizedAccount.unicodeScalars.contains(where: { CharacterSet.whitespacesAndNewlines.contains($0) }),
+              normalizedAccount.split(separator: "@", omittingEmptySubsequences: false).count == 2,
+              !normalizedAccount.hasPrefix("@"), !normalizedAccount.hasSuffix("@") else { return nil }
+        return normalizedAccount
     }
 }
 
@@ -346,6 +349,55 @@ final class QMplusWebKitAutofillEvaluator: QMplusAutofillEvaluating {
             }
     }
     #if DEBUG
+    private static let qaLayoutLogger = Logger(subsystem: "com.nemoyu.wheretostudy.qa.qm-auth", category: "layout")
+
+    // Read-only QA metadata: DOM identity text is reduced to equality in-page.
+    // Styles and hit ownership are closed enums, never arbitrary DOM strings.
+    static let identityLayoutTraceScript = """
+        const key = accountHint.trim().toLowerCase();
+        const count = selector => Math.min(document.querySelectorAll(selector).length, 999);
+        const identities = document.querySelectorAll('#displayName');
+        const identity = identities.length === 1 ? identities[0] : null;
+        const submits = document.querySelectorAll('input#idSIButton9[type="submit"]');
+        const submit = submits.length === 1 ? submits[0] : null;
+        const metric = value => Number.isFinite(value) ? Math.round(Math.max(-100000, Math.min(100000, value))) : 0;
+        const rectangle = node => {
+            const r = node?.getBoundingClientRect();
+            return r ? [r.x, r.y, r.width, r.height].map(metric) : [];
+        };
+        const choice = (value, allowed) => allowed.includes(value) ? value : 'other';
+        const style = node => {
+            const s = window.getComputedStyle(node);
+            const opacity = Number(s.opacity);
+            return {display:choice(s.display, ['none','block','inline','inline-block','flex','inline-flex','grid','inline-grid','contents']),
+                visibility:choice(s.visibility, ['visible','hidden','collapse']),
+                pointerEvents:choice(s.pointerEvents, ['auto','none']),
+                opacity:!Number.isFinite(opacity) ? 'invalid' : opacity <= 0.01 ? 'transparent' : opacity < 1 ? 'translucent' : 'opaque',
+                hidden:node.hidden === true, inert:node.inert === true, ariaHidden:node.getAttribute('aria-hidden') === 'true'};
+        };
+        const hitKind = node => {
+            if (!node) return 'missing';
+            const r = node.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left+r.width/2, r.top+r.height/2);
+            if (!hit) return 'none';
+            if (hit === node) return 'self';
+            if (node.contains(hit)) return 'descendant';
+            if (hit === node.parentElement) return 'parent';
+            if (hit.contains(node)) return 'ancestor';
+            return 'unrelated';
+        };
+        const ancestors = [];
+        for (let node = identity; node && ancestors.length < 12; node = node.parentElement) {
+            ancestors.push({rect:rectangle(node), style:style(node)});
+        }
+        return JSON.stringify({ready:choice(document.readyState, ['loading','interactive','complete']),
+            viewport:[metric(innerWidth),metric(innerHeight)], identities:Math.min(identities.length,999),
+            forms:count('form#i0281'), submits:Math.min(submits.length,999),
+            passwords:count('input#i0118[name="passwd"][type="password"]'), usernames:count('#i0116'),
+            identityMatches:!!key && !!identity && typeof identity.textContent === 'string' && identity.textContent.trim().toLowerCase() === key,
+            identityHit:hitKind(identity), submitHit:hitKind(submit), ancestors});
+        """
+
     // Opt-in simulator diagnostics contain only fixed status codes, counts,
     // geometry and equality booleans. Never return DOM text, identities or URLs.
     private func traceAccountLayout(_ state: QMplusAuthInspection?, hint: String) {
@@ -353,6 +405,14 @@ final class QMplusWebKitAutofillEvaluator: QMplusAutofillEvaluating {
               let browser, let state else { return }
         FileHandle.standardError.write(Data("WTS_QM_AUTH stage=\(state.stage.rawValue) reason=\(state.reason.rawValue) match=\(state.accountMatch) savedHint=\(!hint.isEmpty)\n".utf8))
         guard QMplusAutofillPolicy.isInspectableMicrosoftDocument(browser.url) else { return }
+        if state.stage == .manual && state.reason == .mismatch {
+            browser.callAsyncJavaScript(Self.identityLayoutTraceScript, arguments: ["accountHint": hint], in: nil, in: world) { result in
+                guard case let .success(value) = result, let text = value as? String, text.utf8.count <= 4096 else { return }
+                FileHandle.standardError.write(Data("WTS_QM_IDENTITY_LAYOUT \(text)\n".utf8))
+                Self.qaLayoutLogger.notice("WTS_QM_IDENTITY_LAYOUT \(text, privacy: .public)")
+            }
+            return
+        }
         guard state.stage == .account || state.reason == .chooser || state.stage == .loading else { return }
         browser.callAsyncJavaScript("""
             const key = accountHint.trim().toLowerCase();

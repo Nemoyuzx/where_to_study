@@ -289,6 +289,10 @@ object DailyCourseSummaryScheduler : DailyCourseSummaryScheduling {
             revoke(appContext)
             return@runCatching true
         }
+        if (!preferences.dailyCourseNotificationsEnabled) {
+            cancel(appContext)
+            return@runCatching true
+        }
         val credentials = SecureCredentialStore(appContext).load()
         val schedule = loadUsableSchedule(appContext)
         if (!isActive()) return@runCatching false

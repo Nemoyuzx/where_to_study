@@ -206,6 +206,21 @@ internal object QmplusSnapshotCodec {
 }
 
 internal object QmplusActivityPresentation {
+    fun currentCourses(courses: List<QmplusCourse>): List<QmplusCourse> =
+        courses.filter { it.currentTermStatus != "other" }
+
+    fun displayTimeFields(item: QmplusActivityItem): List<Pair<String, String?>> =
+        if (item.kind == "assignment") buildList {
+            add("截止时间" to item.dueAt)
+            item.cutoffAt?.let { add("最终提交时间" to it) }
+        } else listOf("开放时间" to item.opensAt, "关闭时间" to item.closesAt)
+
+    fun shanghaiTime(value: String?): String? = value?.let(QmplusSnapshotCodec::parseUTCDate)?.let { date ->
+        SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("Asia/Shanghai")
+        }.format(date)
+    }
+
     fun timeFields(item: QmplusActivityItem): List<Pair<String, String>> =
         (if (item.kind == "assignment") listOf("due_at" to item.dueAt, "cutoff_at" to item.cutoffAt)
         else listOf("opens_at" to item.opensAt, "closes_at" to item.closesAt))

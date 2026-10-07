@@ -58,6 +58,7 @@ class ScheduleRepository(
     private val preferences: AppPreferences,
     private val client: SjdScheduleClient = SjdScheduleClient(),
     private val store: ScheduleStore = ScheduleStore(context.applicationContext),
+    private val beforeCacheRead: (() -> Unit)? = null,
 ) {
     private val appContext = context.applicationContext
     private val worker = Executors.newSingleThreadExecutor()
@@ -67,6 +68,9 @@ class ScheduleRepository(
     private val closed = AtomicBoolean(false)
     private val deletionStore = CourseDeletionStore(appContext)
     private var activeRefreshToken: Long? = null
+    private var launchRefreshKey: Pair<Long, AutomaticScheduleLaunchRefreshKey>? = null
+    private var cacheRestored = false
+    private val cacheRestoreCallbacks = mutableListOf<() -> Unit>()
     @Volatile private var rawSchedule: ScheduleSnapshot? = null
 
     @Volatile
@@ -74,17 +78,43 @@ class ScheduleRepository(
         private set
 
     init {
-        rawSchedule = loadUsableCachedSchedule()?.let {
-            AcademicScheduleLogic.usableExams(it, credentialStore.load()?.account.orEmpty())
+        val generation = LocalDataCoordinator.snapshot()
+        worker.execute {
+            runCatching {
+                beforeCacheRead?.invoke()
+                LocalDataCoordinator.withCurrent(generation) {
+                    if (closed.get()) return@withCurrent
+                    val account = credentialStore.load()?.account.orEmpty()
+                    rawSchedule = loadUsableCachedSchedule()?.let { AcademicScheduleLogic.usableExams(it, account) }
+                    schedule = rawSchedule?.let { effectiveSchedule(it, account) }
+                    reconcileAutomaticTermAfterLaunch()
+                }
+            }
+            mainHandler.post {
+                if (closed.get()) return@post
+                cacheRestored = true
+                cacheRestoreCallbacks.toList().also { cacheRestoreCallbacks.clear() }.forEach { it() }
+            }
         }
-        schedule = runCatching { rawSchedule?.let(::effectiveSchedule) }.getOrNull()
-        reconcileAutomaticTermAfterLaunch()
+    }
+
+    /** Cached data is published before the launch network refresh, without Keystore/file IO on the UI thread. */
+    internal fun whenCacheRestored(onComplete: () -> Unit) {
+        if (closed.get()) return
+        if (cacheRestored) onComplete() else cacheRestoreCallbacks += onComplete
     }
 
     val isRefreshing: Boolean
         get() = synchronized(refreshLock) { activeRefreshToken != null }
 
-    fun refresh(onComplete: (Result<ScheduleSnapshot>) -> Unit): Boolean {
+    fun refresh(onComplete: (Result<ScheduleSnapshot>) -> Unit): Boolean =
+        enqueueRefresh(automatic = false, oncePerLaunch = false, onComplete)
+
+    private fun enqueueRefresh(
+        automatic: Boolean,
+        oncePerLaunch: Boolean,
+        onComplete: (Result<ScheduleSnapshot>) -> Unit,
+    ): Boolean {
         val refreshGeneration = LocalDataCoordinator.snapshot()
         if (closed.get()) {
             mainHandler.post {
@@ -92,7 +122,10 @@ class ScheduleRepository(
             }
             return false
         }
-        val refreshToken = beginRefresh() ?: return false
+        // Automatic eligibility needs a decrypted credential record. Resolve it
+        // on the worker before claiming a refresh; a skipped launch must not
+        // leave the Settings refresh button in a loading state.
+        var refreshToken = if (automatic) null else beginRefresh() ?: return false
 
         try {
             worker.execute {
@@ -101,8 +134,8 @@ class ScheduleRepository(
                         throw ScheduleClientException("个人课表获取服务已关闭。")
                     }
                     val request = LocalDataCoordinator.withCurrent(refreshGeneration) {
-                        val automatic = preferences.automaticTermDetectionEnabled
-                        val fallback = if (automatic) {
+                        val detectsTermAutomatically = preferences.automaticTermDetectionEnabled
+                        val fallback = if (detectsTermAutomatically) {
                             // A refresh always targets the current Shanghai
                             // period. A same-term cache may retain the real
                             // first-week Monday; old persisted values cannot.
@@ -114,8 +147,29 @@ class ScheduleRepository(
                             credentials = credentialStore.load() ?: Credentials("", ""),
                             termID = fallback.termId,
                             termStartDate = fallback.termStartDate,
-                            automaticTermDetectionEnabled = automatic,
+                            automaticTermDetectionEnabled = detectsTermAutomatically,
                         )
+                    }
+                    if (automatic && !SemesterLogic.shouldRefreshAutomatically(
+                            request.automaticTermDetectionEnabled, request.credentials,
+                        )) {
+                        return@execute
+                    }
+                    if (refreshToken == null) refreshToken = beginRefresh() ?: return@execute
+                    if (oncePerLaunch) {
+                        val key = ProcessAutomaticScheduleLaunchRefreshGate.begin(request.credentials.account,
+                            SemesterLogic.suggestTermForDate().termId)
+                        if (key == null) {
+                            mainHandler.post { refreshToken?.let(::finishRefresh) }
+                            return@execute
+                        }
+                        synchronized(refreshLock) {
+                            if (closed.get() || activeRefreshToken != refreshToken) {
+                                ProcessAutomaticScheduleLaunchRefreshGate.finish(key, succeeded = false)
+                                throw LocalDataInvalidatedException()
+                            }
+                            launchRefreshKey = checkNotNull(refreshToken) to key
+                        }
                     }
                     if (!request.automaticTermDetectionEnabled) {
                         if (!SemesterLogic.isValidTermId(request.termID)) {
@@ -133,12 +187,12 @@ class ScheduleRepository(
                                 examSchedule = fetched.examSchedule?.takeIf { it.termID == request.termID })
                         }
                         LocalDataCoordinator.withCurrent(refreshGeneration) {
-                            if (closed.get() || !isActiveRefresh(refreshToken)) {
+                            if (closed.get() || refreshToken?.let(::isActiveRefresh) != true) {
                                 throw ScheduleClientException("个人课表获取服务已关闭。")
                             }
                             check(credentialStore.load() == request.credentials) { "账号凭据已更新，请重新刷新课表。" }
                             val resolved = AcademicScheduleLogic.mergeFailure(termResolved, rawSchedule)
-                            val effective = effectiveSchedule(resolved)
+                            val effective = effectiveSchedule(resolved, request.credentials.account)
                             store.save(resolved)
                             rawSchedule = resolved
                             schedule = effective
@@ -150,7 +204,13 @@ class ScheduleRepository(
                     }
                 }
                 mainHandler.post {
-                    finishRefresh(refreshToken)
+                    synchronized(refreshLock) {
+                        launchRefreshKey?.takeIf { it.first == refreshToken }?.let {
+                            ProcessAutomaticScheduleLaunchRefreshGate.finish(it.second, result.isSuccess && LocalDataCoordinator.isCurrent(refreshGeneration))
+                            launchRefreshKey = null
+                        }
+                    }
+                    refreshToken?.let(::finishRefresh)
                     if (!closed.get()) {
                         val delivered = if (LocalDataCoordinator.isCurrent(refreshGeneration)) {
                             result
@@ -162,7 +222,7 @@ class ScheduleRepository(
                 }
             }
         } catch (_: RejectedExecutionException) {
-            finishRefresh(refreshToken)
+            refreshToken?.let(::finishRefresh)
             mainHandler.post {
                 if (!closed.get()) {
                     onComplete(Result.failure(ScheduleClientException("个人课表获取服务已关闭。")))
@@ -173,19 +233,11 @@ class ScheduleRepository(
         return true
     }
 
-    fun refreshAutomatically(onComplete: (Result<ScheduleSnapshot>) -> Unit): Boolean {
-        val credentials = credentialStore.load()
-        if (!SemesterLogic.shouldRefreshAutomatically(
-                preferences.automaticTermDetectionEnabled,
-                credentials,
-            )
-        ) {
-            return false
-        }
-        // refresh() owns the in-flight token, so a simultaneous user refresh
-        // and launch refresh cannot issue duplicate requests.
-        return refresh(onComplete)
-    }
+    fun refreshAutomatically(onComplete: (Result<ScheduleSnapshot>) -> Unit): Boolean =
+        enqueueRefresh(automatic = true, oncePerLaunch = false, onComplete)
+
+    internal fun refreshAtStartup(onComplete: (Result<ScheduleSnapshot>) -> Unit): Boolean =
+        enqueueRefresh(automatic = true, oncePerLaunch = true, onComplete)
 
     fun clearLocalData() {
         LocalDataCoordinator.clear(::clearLocalDataCoordinated)
@@ -214,6 +266,14 @@ class ScheduleRepository(
         isActive: () -> Boolean = { true },
         onComplete: (Result<List<CourseDeletion>>) -> Unit,
     ): Boolean = runLocalCourseOperation(isActive, ::deletedCourses, onComplete)
+
+    internal fun loadCredentialIdentity(
+        isActive: () -> Boolean,
+        onComplete: (Result<CredentialIdentity?>) -> Unit,
+    ): Boolean = runLocalCourseOperation(isActive, {
+        credentialStore.load()
+        credentialStore.cachedIdentity()
+    }, onComplete)
 
     internal fun restoreCourseAsync(
         deletionID: String,
@@ -314,9 +374,9 @@ class ScheduleRepository(
         runCatching { TodayCourseWidgetProvider.refresh(appContext) }
     }
 
-    private fun effectiveSchedule(raw: ScheduleSnapshot): ScheduleSnapshot = CourseDeletionLogic.apply(
-        AcademicScheduleLogic.usableExams(raw, credentialStore.load()?.account.orEmpty()),
-        credentialStore.load()?.account.orEmpty(),
+    private fun effectiveSchedule(raw: ScheduleSnapshot, account: String): ScheduleSnapshot = CourseDeletionLogic.apply(
+        AcademicScheduleLogic.usableExams(raw, account),
+        account,
         deletionStore.load(),
     )
 
@@ -329,7 +389,12 @@ class ScheduleRepository(
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         mainHandler.removeCallbacksAndMessages(null)
-        synchronized(refreshLock) { activeRefreshToken = null }
+        synchronized(refreshLock) {
+            activeRefreshToken = null
+            launchRefreshKey?.let { ProcessAutomaticScheduleLaunchRefreshGate.finish(it.second, succeeded = false) }
+            launchRefreshKey = null
+        }
+        cacheRestoreCallbacks.clear()
         worker.shutdownNow()
     }
 

@@ -41,19 +41,42 @@ class ClassroomRepository(
     private val client: SjdClassroomClient = SjdClassroomClient(),
     private val store: ClassroomStore = ClassroomStore(context.applicationContext),
     loadCachedData: Boolean = true,
+    private val beforeCacheRead: (() -> Unit)? = null,
 ) {
     private val worker = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val ownedRefreshToken = AtomicLong(NO_REFRESH_TOKEN)
     private val closed = AtomicBoolean(false)
+    private var cacheRestored = !loadCachedData
+    private val cacheRestoreCallbacks = mutableListOf<() -> Unit>()
 
     @Volatile
-    var cache: ClassroomsCache? = if (loadCachedData) {
-        loadCachedClassrooms()?.takeIf { it.targetDate == today() }
-    } else {
-        null
-    }
+    var cache: ClassroomsCache? = null
         private set
+
+    init {
+        if (loadCachedData) {
+            val generation = LocalDataCoordinator.snapshot()
+            worker.execute {
+                runCatching {
+                    beforeCacheRead?.invoke()
+                    LocalDataCoordinator.withCurrent(generation) {
+                        if (!closed.get()) cache = store.load()?.takeIf { it.targetDate == today() }
+                    }
+                }
+                mainHandler.post {
+                    if (closed.get()) return@post
+                    cacheRestored = true
+                    cacheRestoreCallbacks.toList().also { cacheRestoreCallbacks.clear() }.forEach { it() }
+                }
+            }
+        }
+    }
+
+    internal fun whenCacheRestored(onComplete: () -> Unit) {
+        if (closed.get()) return
+        if (cacheRestored) onComplete() else cacheRestoreCallbacks += onComplete
+    }
 
     val isRefreshing: Boolean
         get() = ClassroomRefreshProcessState.isRefreshing()
@@ -66,9 +89,11 @@ class ClassroomRepository(
         onComplete: (Result<ClassroomsCache>) -> Unit,
     ) {
         val refreshGeneration = LocalDataCoordinator.snapshot()
-        val current = cache
-        if (!force && current?.targetDate == today()) {
-            mainHandler.post { onComplete(Result.success(current)) }
+        if (!cacheRestored && !closed.get()) {
+            whenCacheRestored {
+                if (LocalDataCoordinator.isCurrent(refreshGeneration)) refresh(force, onComplete)
+                else onComplete(Result.failure(LocalDataInvalidatedException()))
+            }
             return
         }
         if (closed.get()) {
@@ -77,21 +102,32 @@ class ClassroomRepository(
             }
             return
         }
+        val current = cache
+        if (!force && current?.targetDate == today()) {
+            mainHandler.post {
+                if (!closed.get()) onComplete(if (LocalDataCoordinator.isCurrent(refreshGeneration)) Result.success(current)
+                    else Result.failure(LocalDataInvalidatedException()))
+            }
+            return
+        }
         val joinedCompletion: (Result<ClassroomsCache>) -> Unit = { result ->
             if (!closed.get()) {
+                // Completion runs on the fetch worker. Only the UI callback is
+                // posted to main; it must never wait for another repository's IO lock.
+                val publication = result.fold(
+                    onSuccess = { fetched -> runCatching {
+                        LocalDataCoordinator.withCurrent(refreshGeneration) {
+                            check(!closed.get()) { "空教室获取服务已关闭。" }
+                            cache = fetched
+                            fetched
+                        }
+                    } },
+                    onFailure = { Result.failure(it) },
+                )
                 mainHandler.post {
                     if (!closed.get()) {
-                        val delivered = result.fold(
-                            onSuccess = { fetched ->
-                                runCatching {
-                                    LocalDataCoordinator.withCurrent(refreshGeneration) {
-                                        cache = fetched
-                                        fetched
-                                    }
-                                }
-                            },
-                            onFailure = { Result.failure(it) },
-                        )
+                        val delivered = if (LocalDataCoordinator.isCurrent(refreshGeneration)) publication
+                            else Result.failure(LocalDataInvalidatedException())
                         onComplete(delivered)
                     }
                 }
@@ -130,6 +166,7 @@ class ClassroomRepository(
                             throw ClassroomClientException("空教室获取服务已关闭。")
                         }
                         LocalDataCoordinator.withCurrent(refreshGeneration) {
+                            check(credentialStore.load() == credentials) { "账号凭据已更新，请重新刷新空教室。" }
                             store.save(fetched)
                         }
                     }
@@ -163,6 +200,7 @@ class ClassroomRepository(
     fun close() {
         if (!closed.compareAndSet(false, true)) return
         mainHandler.removeCallbacksAndMessages(null)
+        cacheRestoreCallbacks.clear()
         val token = ownedRefreshToken.getAndSet(NO_REFRESH_TOKEN)
         if (token != NO_REFRESH_TOKEN) {
             ClassroomRefreshProcessState.cancel(
@@ -177,13 +215,6 @@ class ClassroomRepository(
         if (ownedRefreshToken.compareAndSet(token, NO_REFRESH_TOKEN)) {
             ClassroomRefreshProcessState.complete(token, result)
         }
-    }
-
-    private fun loadCachedClassrooms(): ClassroomsCache? {
-        val generation = LocalDataCoordinator.snapshot()
-        return runCatching {
-            LocalDataCoordinator.withCurrent(generation, store::load)
-        }.getOrNull()
     }
 
     companion object {

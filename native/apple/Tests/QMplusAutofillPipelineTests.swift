@@ -399,6 +399,87 @@ final class QMplusAutofillPipelineTests: XCTestCase {
         XCTAssertEqual(fixture.waits, [.milliseconds(250), .milliseconds(500), .milliseconds(250), .milliseconds(500)])
     }
 
+    func testUsernameACKWaitsThroughFormAndAbsentBeforeOneMatchedPasswordSubmission() async {
+        let fixture = Fixture()
+        let completed = expectation(description: "Username ACK survives transient same-document form replacement")
+        fixture.onManual = { completed.fulfill() }
+        fixture.evaluator.states = [state(.username), state(.manual, reason: .form),
+                                    state(.manual, reason: .absent), state(.password, match: true),
+                                    state(.manual, reason: .unsupported)]
+        var readsAfterUsername: Int?
+        fixture.onWait = { _ in
+            if !fixture.ledger.passwordAttempted {
+                if let readsAfterUsername { XCTAssertEqual(fixture.credentialReads, readsAfterUsername) }
+                else { readsAfterUsername = fixture.credentialReads }
+                XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+                XCTAssertEqual(fixture.ledger.usernameSubmittedDocument, "nonceA123")
+                XCTAssertEqual(fixture.progressCount, 2, "Only username-stage and ACK progress precede the password")
+            }
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [completed], timeout: 2)
+        XCTAssertNotNil(readsAfterUsername)
+        XCTAssertEqual(fixture.evaluator.submissions.count, 2)
+        guard case .username = fixture.evaluator.submissions[0],
+              case .password = fixture.evaluator.submissions[1] else {
+            return XCTFail("Only one username and the later matched password may be submitted")
+        }
+        XCTAssertEqual(fixture.progressCount, 4, "Each accepted stage reports submission and ACK progress")
+        XCTAssertEqual(fixture.challengeCount, 0)
+        XCTAssertEqual(fixture.identityMismatchCount, 0, "Transient form/header absence cannot invalidate cached identity")
+        XCTAssertEqual(fixture.manualCount, 1)
+        fixture.pipeline.cancel()
+    }
+
+    func testUsernameACKFormAndAbsentSettlingExpiresWithoutPasswordReadOrRepeatedSubmit() async {
+        for reason in [QMplusAuthReason.form, .absent] {
+            let fixture = Fixture()
+            let completed = expectation(description: "Username ACK settling is finite for \(reason.rawValue)")
+            fixture.onManual = { completed.fulfill() }
+            fixture.evaluator.states = [state(.username)]
+            fixture.evaluator.fallbackState = state(.manual, reason: reason)
+            var readsAfterUsername: Int?
+            fixture.onWait = { _ in
+                if let readsAfterUsername { XCTAssertEqual(fixture.credentialReads, readsAfterUsername) }
+                else { readsAfterUsername = fixture.credentialReads }
+                XCTAssertEqual(fixture.progressCount, 2, "Read-only settling never adds progress")
+            }
+            fixture.pipeline.start(source: "synthetic source")
+            await fulfillment(of: [completed], timeout: 2)
+            XCTAssertEqual(fixture.waits.count, 36)
+            XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+            XCTAssertTrue(fixture.ledger.usernameAttempted)
+            XCTAssertFalse(fixture.ledger.passwordAttempted)
+            XCTAssertEqual(fixture.progressCount, 2)
+            XCTAssertEqual(fixture.manualCount, 1)
+            fixture.pipeline.cancel()
+        }
+    }
+
+    func testUsernameACKTransientFormsDoNotDelayOrSubmitIntoTheFollowingMFA() async {
+        let fixture = Fixture()
+        let presented = expectation(description: "MFA is recognized immediately after username settling")
+        fixture.evaluator.states = [state(.username), state(.manual, reason: .form),
+                                    state(.manual, reason: .absent), state(.challenge, reason: .mfaRequired)]
+        var readsAfterUsername: Int?
+        fixture.onWait = { _ in
+            if let readsAfterUsername { XCTAssertEqual(fixture.credentialReads, readsAfterUsername) }
+            else { readsAfterUsername = fixture.credentialReads }
+            if fixture.challengeCount == 1 {
+                presented.fulfill()
+                fixture.pipeline.cancel()
+            }
+        }
+        fixture.pipeline.start(source: "synthetic source")
+        await fulfillment(of: [presented], timeout: 2)
+        XCTAssertEqual(fixture.challengeCount, 1)
+        XCTAssertEqual(fixture.manualCount, 0)
+        XCTAssertEqual(fixture.evaluator.submissions.count, 1)
+        XCTAssertFalse(fixture.ledger.passwordAttempted)
+        XCTAssertEqual(fixture.waits.last, .seconds(1))
+        fixture.pipeline.cancel()
+    }
+
     func testAccountSelectionBridgePayloadContainsOnlyAccountAndDocumentNonce() {
         let call = QMplusWebKitAutofillEvaluator.submissionCall(.account(document: "nonceA123", account: "synthetic@example.invalid"))
         XCTAssertEqual(Set(call.arguments.keys), ["documentNonce", "account"])

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="qmplus_window_title" type="id" />
+    <item name="qmplus_window_notice" type="id" />
+    <item name="qmplus_official_web_view" type="id" />
+</resources>

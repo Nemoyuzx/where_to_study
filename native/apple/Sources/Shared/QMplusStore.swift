@@ -26,7 +26,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
     let credentialAuthorization: QMplusCredentialAuthorization
     let credentialDraft: QMplusCredentialDraft
-    private static let identifierKey = "qmplusWebsiteDataStoreIdentifier"
+    let credentialBackend: QMplusCredentialBackend
+    private var identifierKey: String { credentialBackend.profileIdentifierKey }
     private static var warmedBusinessScopes = Set<CourseBusinessCacheScope>()
     private let businessCache: CourseBusinessCacheStorage
     private var businessCacheRevision: UInt64 = 0
@@ -82,6 +83,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     private var authenticationProbeTask: Task<Void, Never>?
     private var quietPreflightTimeoutTask: Task<Void, Never>?
     private var connectionPreparationTask: Task<Void, Never>?
+    private var connectionPreparationRequested = false
+    private let preparationWait: @MainActor @Sendable () async throws -> Void
     private var foregroundReadinessTask: Task<Void, Never>?
     private var urlObservation: NSKeyValueObservation?
     private var loadingObservation: NSKeyValueObservation?
@@ -143,15 +146,23 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     init(defaults: UserDefaults = .standard,
-         credentialStore: any QMplusCredentialStoring = QMplusKeychainCredentialStore(),
+         credentialStore: (any QMplusCredentialStoring)? = nil,
          authorizationJournal: (any QMplusCredentialAuthorizationJournaling)? = nil,
          allowsCredentialStorage: Bool = !AppLaunchConfiguration.isXCTestRunning && !AppLaunchConfiguration.isUITesting && !AppLaunchConfiguration.isReviewDemo,
-         businessCache: CourseBusinessCacheStorage = .shared) {
+         businessCache: CourseBusinessCacheStorage? = nil,
+         credentialBackend: QMplusCredentialBackend = .current,
+         preparationWait: @escaping @MainActor @Sendable () async throws -> Void = {
+             try await Task.sleep(for: .milliseconds(250))
+         }) {
         self.defaults = defaults
-        self.businessCache = businessCache
-        credentialDraft = QMplusCredentialDraft(defaults: allowsCredentialStorage ? defaults : nil)
-        credentialAuthorization = QMplusCredentialAuthorization(storage: credentialStore,
-            journal: authorizationJournal ?? QMplusDefaultsAuthorizationJournal(defaults: defaults), allowsStorage: allowsCredentialStorage)
+        self.credentialBackend = credentialBackend
+        self.preparationWait = preparationWait
+        self.businessCache = businessCache ?? credentialBackend.makeBusinessCache()
+        let allowsStorage = allowsCredentialStorage && credentialBackend.isSupported
+        credentialDraft = QMplusCredentialDraft(defaults: allowsStorage ? defaults : nil, backend: credentialBackend)
+        credentialAuthorization = QMplusCredentialAuthorization(storage: credentialStore ?? credentialBackend.makeCredentialStore(),
+            journal: authorizationJournal ?? QMplusDefaultsAuthorizationJournal(defaults: defaults, backend: credentialBackend), allowsStorage: allowsStorage)
+        businessCacheBlocked = !credentialBackend.isSupported
         super.init()
         businessCacheRestoreTask = Task { [weak self] in
             guard let self else { return }
@@ -176,14 +187,15 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     private func currentBusinessScope() throws -> CourseBusinessCacheScope {
         guard !businessCacheBlocked else { throw CancellationError() }
-        let owner = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:))?.uuidString ?? "legacy"
+        let owner = credentialBackend.businessOwner(profileIdentifier: defaults.string(forKey: identifierKey))
         return try businessCache.scope(kind: .qmplus, owner: owner)
     }
 
     private func restoreCachedBusinessSnapshot() async {
+        guard credentialBackend.isSupported else { return }
         let revision = businessCacheRevision
         let storage = businessCache
-        let owner = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:))?.uuidString ?? "legacy"
+        let owner = credentialBackend.businessOwner(profileIdentifier: defaults.string(forKey: identifierKey))
         let value = await Task.detached(priority: .utility) { () -> CourseBusinessCachedValue<QMplusSnapshot>? in
             guard let scope = try? storage.scope(kind: .qmplus, owner: owner),
                   let cached = try? storage.load(kind: .qmplus, scope: scope,
@@ -211,6 +223,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     /// official page and its navigation intact; never reload or submit a form.
     @discardableResult
     func invalidateBusinessCacheForIdentityChange() -> Bool {
+        guard credentialBackend.isSupported else { return false }
         businessCacheRevision &+= 1
         businessCacheRestoreTask?.cancel(); businessCacheRestoreTask = nil
         endPendingSync(stopLoading: false)
@@ -247,6 +260,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     func connect(sampleMode: Bool, background: Bool = false) {
         guard featureEnabled, !sampleMode else { return }
+        guard credentialBackend.isSupported else { statusKey = "QMplus 同步组件不可用"; return }
         if hasActiveConnection {
             if background { return }
             // Upgrade interaction permission on the same active owner. Do not
@@ -286,6 +300,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
 
     private func prepareConnectionWhenReady() {
         guard connectionPreparationTask == nil, featureEnabled else { return }
+        connectionPreparationRequested = true
         statusKey = "正在确认 QMplus 登录状态…"
         connectionPreparationTask = Task { [weak self] in
             for _ in 0..<40 {
@@ -298,7 +313,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
                         return
                     }
                 }
-                do { try await Task.sleep(for: .milliseconds(250)) } catch { return }
+                do { try await self.preparationWait() } catch { return }
             }
             guard let self, !Task.isCancelled else { return }
             self.connectionPreparationTask = nil
@@ -312,6 +327,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         // The dashboard and ordinary official Login entry never require a
         // user gesture. Reveal the same web view only at a manual step.
         guard beginConnectionOwner(quiet: true) else { return }
+        connectionPreparationRequested = false
         scheduleQuietPreflightTimeout()
         navigationFailureCode = nil
         canSynchronize = false
@@ -319,8 +335,8 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
             let configuration = WKWebViewConfiguration()
             let store: WKWebsiteDataStore
             if #available(iOS 17, macOS 14, *) {
-                let identifier = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:)) ?? UUID()
-                defaults.set(identifier.uuidString, forKey: Self.identifierKey)
+                let identifier = defaults.string(forKey: identifierKey).flatMap(UUID.init(uuidString:)) ?? UUID()
+                defaults.set(identifier.uuidString, forKey: identifierKey)
                 store = WKWebsiteDataStore(forIdentifier: identifier)
             } else { store = .nonPersistent() }
             configuration.websiteDataStore = store
@@ -346,7 +362,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     // same pure boundary lets tests exercise quiet cancellation without WK.
     @discardableResult
     func beginConnectionOwner(quiet: Bool) -> Bool {
-        guard featureEnabled, !hasActiveConnection else { return false }
+        guard credentialBackend.isSupported, featureEnabled, !hasActiveConnection else { return false }
         if quiet { loginGate.beginQuietConnection() } else { loginGate.beginPresentation() }
         automaticLoginSuspended = false
         authenticationRecognitionSuspended = false
@@ -502,6 +518,13 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     // Returning to the foreground may inspect the current official session.
     // Keep prior stage claims; never reload or resubmit the MFA page.
     func resumeAuthenticationRecognitionForActiveScene() {
+        if !hasActiveConnection {
+            // macOS application activation can follow an already-active SwiftUI
+            // scene. Resume only an explicitly requested, not-yet-started
+            // preparation; never retry an attempted dashboard/login here.
+            if featureEnabled && connectionPreparationRequested { prepareConnectionWhenReady() }
+            return
+        }
         guard hasActiveConnection, authenticationRecognitionSuspended else { return }
         if let browser = popupWebView ?? webView, isAutofillApplicationInactive(browser) {
             waitForForegroundReadiness(); return
@@ -739,6 +762,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         foregroundReadinessTask?.cancel(); foregroundReadinessTask = nil
         automaticLoginDiagnostic = nil
         connectionPreparationTask?.cancel(); connectionPreparationTask = nil
+        connectionPreparationRequested = false
         backgroundOnly = false
         requiresManualContinuation = false
         manualContinuationRequested = false
@@ -783,6 +807,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
     }
 
     private func clearOfficialSession() {
+        guard credentialBackend.isSupported else { return }
         _ = invalidateBusinessCacheForIdentityChange()
         endPresentation()
         isShowingConnection = false
@@ -794,7 +819,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         navigationFailureCode = nil
         var previousStore = dataStore
         if #available(iOS 17, macOS 14, *), previousStore == nil,
-           let identifier = defaults.string(forKey: Self.identifierKey).flatMap(UUID.init(uuidString:)) {
+           let identifier = defaults.string(forKey: identifierKey).flatMap(UUID.init(uuidString:)) {
             previousStore = WKWebsiteDataStore(forIdentifier: identifier)
         }
         webView?.navigationDelegate = nil
@@ -803,7 +828,7 @@ final class QMplusStore: NSObject, ObservableObject, WKNavigationDelegate, WKUID
         dataStore = nil
         // Rotate the isolated store before asynchronous erasure, so an old
         // browser/late completion can never become the next connection owner.
-        defaults.removeObject(forKey: Self.identifierKey)
+        defaults.removeObject(forKey: identifierKey)
         previousStore?.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
     }
 
