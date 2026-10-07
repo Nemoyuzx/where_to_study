@@ -170,7 +170,8 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
                   if (revision.get() != token) return@Runnable
                   completionDelay = null; phase = "revealing"
                   animate(token, 1f, 0f, if (reducedMotion) 0 else 220, { progress ->
-                    if (nativeBlur) setNativeBlur(progress) else cover?.alpha = progress
+                    if (nativeBlur) setNativeBlur(progress)
+                    cover?.alpha = progress
                   }) { if (revision.get() == token) cleanup() }
                 }.also { handler.postDelayed(it, 600) }
             } else root.postInvalidateOnAnimation()
@@ -182,6 +183,7 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
     private fun applyPending() { val change = pendingApply; pendingApply = null; change?.invoke() }
 
     private fun playSuccessHaptics(token: Long) {
+        if (reducedMotion) return
         fun pulse() {
             host.get()?.takeIf { revision.get() == token && phase == "complete" &&
                 it.isAttachedToWindow && it.hasWindowFocus() }?.performHapticFeedback(
@@ -258,8 +260,9 @@ internal class LanguageChangeTransition(private val forceLegacyBlur: Boolean = f
     }
 
     @TargetApi(31) private fun setNativeBlur(progress: Float) {
+        val radius = 18f * (content.get()?.resources?.displayMetrics?.density ?: 1f) * progress
         content.get()?.setRenderEffect(if (progress <= 0f) null else
-            RenderEffect.createBlurEffect(18f * progress, 18f * progress, Shader.TileMode.CLAMP))
+            RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP))
     }
 
     private fun captureOwnedDecor(root: ViewGroup): Bitmap? {

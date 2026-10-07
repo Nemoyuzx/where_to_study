@@ -287,11 +287,13 @@ class LanguageSessionUiTest {
         val page = checkNotNull(MainActivity::class.java.getDeclaredField("settingsPage")
             .apply { isAccessible = true }.get(activity))
         val dialog = checkNotNull(page.javaClass.getDeclaredField("languagePickerDialog")
-            .apply { isAccessible = true }.get(page)) as android.app.AlertDialog
+            .apply { isAccessible = true }.get(page)) as android.app.Dialog
         assertTrue(dialog.isShowing)
-        assertEquals(14, dialog.listView.adapter.count)
-        val position = AppLanguage.entries.indexOf(language)
-        assertTrue(dialog.listView.performItemClick(null, position, dialog.listView.adapter.getItemId(position)))
+        val panel = dialog.window!!.decorView.findViewWithTag<ViewGroup>("settings.language.picker")
+        assertEquals(14, (0 until AppLanguage.entries.size).count { index ->
+            panel.findViewWithTag<View?>("settings.language.option.${AppLanguage.entries[index].code}") != null
+        })
+        assertTrue(panel.findViewWithTag<View>("settings.language.option.${language.code}").performClick())
     }
     private fun session(activity: MainActivity): Any = checkNotNull(MainActivity::class.java.getDeclaredMethod("getActivitySession")
         .apply { isAccessible = true }.invoke(activity))

@@ -575,6 +575,11 @@ button:disabled {
   min-width: 0;
 }
 
+/* Separate setting categories more clearly than each title/description pair. */
+.settings-daily-info > .settings-switch-row {
+  padding-block: 12px;
+}
+
 .settings-switch-row strong {
   color: var(--text-primary);
   font-size: 14px;
@@ -985,7 +990,7 @@ button:disabled {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.55;
-  margin: -4px 0 10px;
+  margin: 6px 0 10px;
 }
 
 .account-action-button,
@@ -6346,6 +6351,22 @@ input:disabled {
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
 }
 .language-blur-overlay.revealing {visibility: visible; transition-duration: 220ms}
+/* Software WebKit can accept backdrop-filter without painting its blur.
+   Blur the existing frame only while this presentation transaction owns it;
+   the overlay is its sibling, so the status and completion drawing stay sharp. */
+@supports (filter: blur(1px)) {
+  .app-shell:is([data-language-transition="covering"], [data-language-transition="waiting"], [data-language-transition="completed"]) > .app-frame {
+    filter: blur(12px);
+    transition: filter 120ms ease-out;
+  }
+  .app-shell[data-language-transition="revealing"] > .app-frame {
+    filter: blur(0px);
+    transition: filter 220ms ease-out;
+  }
+  .language-blur-overlay.covering, .language-blur-overlay.waiting, .language-blur-overlay.completed {
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+}
 .language-transition-status { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--text-primary); }
 .language-transition-status > strong { padding: 8px 14px; border-radius: 12px; background: var(--surface); box-shadow: var(--shadow-soft); font-size: 16px; }
 .language-transition-status > svg { color: var(--primary-text); }
@@ -6358,7 +6379,14 @@ input:disabled {
   .language-completion-ring, .language-completion-check { animation: none; stroke-dashoffset: 0; }
   .shuttle-subsection-chevron { transition: none; }
 }
-@media (prefers-reduced-motion: reduce) {.language-blur-overlay {transition: none}}
+@media (prefers-reduced-motion: reduce) {
+  .language-blur-overlay {transition: none}
+  .app-shell[data-language-transition] > .app-frame {filter: none; transition: none}
+}
 @media (prefers-reduced-transparency: reduce) {
-  .language-blur-overlay.covering, .language-blur-overlay.waiting, .language-blur-overlay.completed {background: var(--app-background)}
+  .language-blur-overlay.covering, .language-blur-overlay.waiting, .language-blur-overlay.completed {
+    background: var(--app-background);
+    -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+  .app-shell[data-language-transition] > .app-frame {filter: none; transition: none}
 }

@@ -122,7 +122,9 @@ test('a real linked worktree hook cannot redirect nested test repositories or we
       nestedTests++;
       // Exercise both real disposable-repository tests with the environment a
       // pre-push check supplies. The name filter prevents recursive execution.
-      const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=CLI scans tracked files|stable generated hook blocks', fileURLToPath(new URL('./security-fixture-policy.test.js', import.meta.url)), fileURLToPath(import.meta.url)], { ...options, stdio: 'pipe' });
+      // This replaces npm.cmd with the Node executable, so its arguments must
+      // bypass the npm-only Windows shell (the name filter contains a pipe).
+      const result = spawnSync(process.execPath, ['--test', '--test-name-pattern=CLI scans tracked files|stable generated hook blocks', fileURLToPath(new URL('./security-fixture-policy.test.js', import.meta.url)), fileURLToPath(import.meta.url)], { ...options, shell: false, stdio: 'pipe' });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       return result;
     }

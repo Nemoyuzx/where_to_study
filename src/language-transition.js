@@ -1,5 +1,31 @@
 // A bounded presentation transaction, not a data/loading transaction. It holds
 // no screenshot, browser cookies, business cache, or historical page tree.
+export function createLanguageTransitionFocusGuard({owner, hasFocus,
+  schedule = (action,ms) => globalThis.setTimeout(action,ms),
+  cancel = id => globalThis.clearTimeout(id)}) {
+  let timer = null
+  const clear = () => {
+    if (timer !== null) cancel(timer)
+    timer = null
+  }
+  return {
+    blur() {
+      clear()
+      if (owner.phase === 'idle') return
+      const revision = owner.revision
+      // Native select popups can return focus after the cover has committed.
+      // Their transient blur must not cancel the readiness/paint transaction.
+      timer = schedule(() => {
+        timer = null
+        if (owner.revision === revision && !hasFocus()) owner.finish()
+      },400)
+    },
+    focus: clear,
+    finish() { clear(); owner.finish() },
+    dispose: clear,
+  }
+}
+
 export class LanguageTransition {
   constructor({apply, publish, layoutReady, reducedMotion,
     schedule = (action,ms) => globalThis.setTimeout(action,ms),

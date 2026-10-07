@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {LanguageTransition} from '../src/language-transition.js'
+import {readFileSync} from 'node:fs'
+import {LanguageTransition, createLanguageTransitionFocusGuard} from '../src/language-transition.js'
 
 function fixture() {
   let now=0, nextID=0
@@ -13,7 +14,7 @@ function fixture() {
     reducedMotion:()=>state.reduced, schedule, cancel:id=>tasks.delete(id),
     frame:action=>schedule(action,16), cancelFrame:id=>tasks.delete(id),
   })
-  return {owner,state,applied,published,tasks,
+  return {owner,state,applied,published,tasks,schedule,cancel:id=>tasks.delete(id),
     advance(ms) {
       const limit=now+ms
       while(true) {
@@ -131,4 +132,71 @@ test('a late native rejection cannot cancel a new choice before its language com
   f.owner.finish(false,currentRevision)
   assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
   assert.equal(f.published.some(value=>value.completed),false)
+})
+
+test('native picker focus returning after120ms retains readiness and the completion paint',()=>{
+  const f=fixture();f.state.ready=false
+  let focused=false
+  const guard=createLanguageTransitionFocusGuard({owner:f.owner,hasFocus:()=>focused,
+    schedule:f.schedule,cancel:f.cancel})
+  f.owner.request('en','en','zh-Hans');guard.blur()
+  f.advance(250)
+  assert.equal(f.phase(),'waiting');assert.deepEqual(f.applied,['en'])
+  assert.equal(f.published.some(value=>value.completed),false)
+  focused=true;guard.focus();f.advance(300)
+  assert.equal(f.phase(),'waiting')
+  f.state.ready=true;f.advance(60)
+  assert.equal(f.phase(),'completed')
+  guard.dispose();f.advance(1100)
+  assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+})
+
+test('persistent focus loss cancels at400ms without acknowledging an unready language',()=>{
+  const f=fixture();f.state.ready=false
+  const guard=createLanguageTransitionFocusGuard({owner:f.owner,hasFocus:()=>false,
+    schedule:f.schedule,cancel:f.cancel})
+  f.owner.request('en','en','zh-Hans');guard.blur();f.advance(399)
+  assert.equal(f.phase(),'waiting')
+  f.advance(1)
+  assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+  assert.equal(f.published.some(value=>value.completed),false)
+  assert.deepEqual(f.applied,['en'])
+})
+
+test('hide or pagehide immediately releases blur work and never draws a completion check',()=>{
+  const f=fixture();f.state.ready=false
+  const guard=createLanguageTransitionFocusGuard({owner:f.owner,hasFocus:()=>false,
+    schedule:f.schedule,cancel:f.cancel})
+  f.owner.request('en','en','zh-Hans');guard.blur();f.advance(30);guard.finish()
+  assert.equal(f.phase(),'idle');assert.equal(f.tasks.size,0)
+  assert.deepEqual(f.applied,['en'])
+  f.advance(6000)
+  assert.equal(f.published.some(value=>value.completed),false)
+})
+
+test('an old popup blur cannot cancel a newer locale and disposal releases its timer',()=>{
+  const f=fixture();f.state.ready=false
+  const guard=createLanguageTransitionFocusGuard({owner:f.owner,hasFocus:()=>false,
+    schedule:f.schedule,cancel:f.cancel})
+  f.owner.request('en','en','zh-Hans');guard.blur();f.advance(140)
+  f.owner.request('zh-Hant','zh-Hant','en');f.advance(300)
+  assert.equal(f.phase(),'waiting');assert.equal(f.owner.target,'zh-Hant')
+  guard.blur();guard.dispose();f.owner.finish(false);f.advance(6000)
+  assert.equal(f.tasks.size,0);assert.equal(f.published.some(value=>value.completed),false)
+})
+
+test('desktop blur owns only active frame phases and preserves accessibility fallbacks',()=>{
+  const css=readFileSync(new URL('../src/App.css',import.meta.url),'utf8')
+  const app=readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
+  assert.match(app,/data-language-transition=\{languageTransition\.overlay\.phase\}/)
+  const frame=css.match(/\.app-frame\s*\{([^}]*)\}/)[1]
+  assert.doesNotMatch(frame,/filter|will-change|transform/)
+  const fallback=css.slice(css.indexOf('@supports (filter: blur(1px))'),css.indexOf('.language-transition-status'))
+  assert.match(fallback,/data-language-transition="covering".*data-language-transition="waiting".*data-language-transition="completed"/)
+  assert.match(fallback,/> \.app-frame\s*\{\s*filter: blur\(12px\)/)
+  assert.match(fallback,/data-language-transition="revealing"[^}]*filter: blur\(0px\)/)
+  assert.doesNotMatch(fallback,/data-language-transition="idle"|will-change|backdrop-filter: blur/)
+  const accessibility=css.slice(css.lastIndexOf('@media (prefers-reduced-motion: reduce)'))
+  assert.match(accessibility,/prefers-reduced-motion: reduce[^]*filter: none; transition: none/)
+  assert.match(accessibility,/prefers-reduced-transparency: reduce[^]*background: var\(--app-background\)[^]*filter: none; transition: none/)
 })

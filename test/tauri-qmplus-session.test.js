@@ -58,3 +58,19 @@ test('a retired native sync owner never fetches or publishes a new snapshot',asy
   assert.equal(f.syncs,0)
   assert.deepEqual(f.calls.map(call=>call.command),['begin_qmplus_sync'])
 })
+
+test('background Connect recovers cleanup first and never prepares an absent profile',()=>{
+  const connect=native.slice(native.indexOf('pub async fn connect_qmplus('),native.indexOf('pub struct ConnectRequest'))
+  const prefix=connect.slice(0,connect.indexOf('let (sent, received)'))
+  assert.match(prefix,/recover_pending\(&app\)\.await\?;\s*(?:\/\/[^\r\n]*\r?\n\s*)*if request\.background && !crate::qmplus_profile::active_profile_ready\(&app\)\s*\{\s*return Ok\(\(\)\);\s*\}/)
+  assert.doesNotMatch(prefix,/prepare\(|qmplus_login::|credential_store|authorize\(/)
+  assert.match(connect,/run_on_main_thread[\s\S]*connect_qmplus_on_main\([\s\S]*request\.background,[\s\S]*request\.manual,/)
+  const condition=prefix.match(/if (request\.background[^\{]+)\{/)[1]
+    .replace('crate::qmplus_profile::active_profile_ready(&app)','activeProfileReady()')
+  const skips=new Function('request','activeProfileReady',`return ${condition}`)
+  for(const background of [false,true])for(const active of [false,true])for(const manual of [false,true]){
+    let reads=0
+    assert.equal(skips({background,manual},()=>{reads++;return active}),background&&!active)
+    assert.equal(reads,background?1:0)
+  }
+})

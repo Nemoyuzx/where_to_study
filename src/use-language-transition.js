@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react'
-import {LanguageTransition} from './language-transition.js'
+import {LanguageTransition, createLanguageTransitionFocusGuard} from './language-transition.js'
 
 export function useLanguageTransition({rootRef, apply, currentLanguage, activePage, resolve, ready=()=>true}) {
   const [overlay,setOverlay] = useState({phase:'idle',revision:0})
@@ -49,16 +49,9 @@ export function useLanguageTransition({rootRef, apply, currentLanguage, activePa
   useEffect(() => {
     owner.current.publish = setOverlay
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
-    let blurTimer
-    const finish = () => owner.current.finish()
-    // Native select popups can transfer focus briefly while closing. Defer
-    // genuine app-background cancellation instead of repainting the picker.
-    const blur = () => {
-      clearTimeout(blurTimer)
-      if(owner.current.phase==='idle')return
-      blurTimer=setTimeout(()=>{if(!document.hasFocus())finish()},80)
-    }
-    const focus = () => { clearTimeout(blurTimer) }
+    const focusGuard = createLanguageTransitionFocusGuard({owner:owner.current,
+      hasFocus:() => document.hasFocus()})
+    const {blur,focus,finish} = focusGuard
     const visibility = () => { if(document.hidden) finish() }
     const motion = () => { if(media.matches) finish() }
     document.addEventListener('visibilitychange',visibility)
@@ -71,7 +64,7 @@ export function useLanguageTransition({rootRef, apply, currentLanguage, activePa
       window.removeEventListener('pagehide',finish)
       window.removeEventListener('blur',blur)
       window.removeEventListener('focus',focus)
-      clearTimeout(blurTimer)
+      focusGuard.dispose()
       media.removeEventListener('change',motion)
       // No late state publication during React unmount.
       owner.current.publish = () => {}

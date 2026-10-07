@@ -1,6 +1,7 @@
 package com.nemoyu.wheretostudy.nativeapp
 
 import android.app.AlertDialog
+import android.app.Dialog
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
@@ -53,7 +54,7 @@ class SettingsPage internal constructor(
     private var captureReminderOffsets: () -> List<String>? = { null }
     private var pendingLanguageCommit: Runnable? = null
     private var pendingLanguageSource: WeakReference<View>? = null
-    private var languagePickerDialog: AlertDialog? = null
+    private var languagePickerDialog: Dialog? = null
     private var languageRevision = 0
     private var qmplusDetailsExpanded: Boolean? = restoredDraft?.qmplusDetailsExpanded
 
@@ -275,20 +276,76 @@ class SettingsPage internal constructor(
             activity.performControlHaptic(source)
             languagePickerDialog?.dismiss()
             val selected = languages.indexOfFirst { it.code == preferences.languageCode }.coerceAtLeast(0)
-            val dialog = AlertDialog.Builder(activity)
-                .setTitle(activity.uiText("语言"))
-                .setSingleChoiceItems(languages.map { AppLocale.displayName(activity, it) }.toTypedArray(), selected) { picker, position ->
-                    if (source.isAttachedToWindow && activity.isCurrentUiOwner()) selectLanguage(position, source)
-                    picker.dismiss()
+            val dialog = Dialog(activity)
+            dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+            val panel = LinearLayout(activity).apply {
+                tag = "settings.language.picker"
+                orientation = LinearLayout.VERTICAL
+                setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16))
+                background = themedRoundedBackground(activity, { Palette.surface }, radius = UiMetrics.phoneSurfaceRadiusDp)
+                addView(sectionTitle(activity, activity.uiText("语言"), R.drawable.ic_settings_language))
+            }
+            val options = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+            languages.forEachIndexed { position, language ->
+                options.addView(LinearLayout(activity).apply {
+                    tag = "settings.language.option.${language.code}"
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    minimumHeight = activity.dp(UiMetrics.controlHeightDp)
+                    isSelected = position == selected
+                    isClickable = true; isFocusable = true
+                    val title = AppLocale.displayName(activity, language)
+                    contentDescription = title
+                    setPadding(activity.dp(12), activity.dp(6), activity.dp(12), activity.dp(6))
+                    background = themedRoundedBackground(activity, {
+                        if (isSelected) Palette.selectionSurface else Palette.surface
+                    }, radius = UiMetrics.phoneControlRadiusDp)
+                    addView(TextView(activity).apply {
+                        text = title; textSize = 15f; includeFontPadding = false
+                        UiText.preserveRawText(this)
+                        textDirection = View.TEXT_DIRECTION_FIRST_STRONG
+                        setThemeTextColor { if (position == selected) Palette.primaryText else Palette.text }
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(TextView(activity).apply {
+                        text = if (position == selected) "✓" else ""
+                        textSize = 16f; gravity = Gravity.CENTER
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                        setThemeTextColor { Palette.primaryText }
+                    }, LinearLayout.LayoutParams(activity.dp(24), ViewGroup.LayoutParams.WRAP_CONTENT))
+                    setOnClickListener {
+                        if (source.isAttachedToWindow && activity.isCurrentUiOwner()) selectLanguage(position, source)
+                        dialog.dismiss()
+                    }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    if (position > 0) topMargin = activity.dp(4)
+                })
+            }
+            val availableHeight = activity.window.decorView.height.takeIf { it > 0 }
+                ?: activity.resources.displayMetrics.heightPixels
+            panel.addView(object : ScrollView(activity) {
+                override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                    val limit = (availableHeight * .6f).toInt()
+                    val height = if (View.MeasureSpec.getMode(heightMeasureSpec) == View.MeasureSpec.UNSPECIFIED)
+                        limit else minOf(limit, View.MeasureSpec.getSize(heightMeasureSpec))
+                    super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST))
                 }
-                .setNegativeButton(activity.uiText("取消"), null)
-                .create()
+            }.apply { addView(options) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            panel.addView(settingsActionButton(activity.uiText("取消"), false) {
+                dialog.dismiss()
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = activity.dp(12)
+            })
+            dialog.setContentView(panel)
             languagePickerDialog = dialog
             dialog.setOnDismissListener {
                 weakPage.get()?.let { page -> if (page.languagePickerDialog === dialog) page.languagePickerDialog = null }
             }
             dialog.show()
-            dialog.window?.let { bindWindowColorTheme(it, modal = true) }
+            dialog.window?.apply {
+                setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+                val width = minOf(activity.dp(360), activity.window.decorView.width - activity.dp(32))
+                setLayout(width.coerceAtLeast(activity.dp(160)), ViewGroup.LayoutParams.WRAP_CONTENT)
+            }
         }
         languageControl.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(view: View) = Unit

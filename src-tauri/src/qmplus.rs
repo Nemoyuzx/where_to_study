@@ -1552,6 +1552,11 @@ pub async fn connect_qmplus(
 ) -> Result<(), String> {
     let request = payload.unwrap_or_default();
     crate::qmplus_profile::recover_pending(&app).await?;
+    // Quiet refresh only resumes an existing profile. Creating an empty one
+    // before the first credential save would immediately require its cleanup.
+    if request.background && !crate::qmplus_profile::active_profile_ready(&app) {
+        return Ok(());
+    }
     let (sent, received) = tokio::sync::oneshot::channel();
     let owner = app.clone();
     app.run_on_main_thread(move || {
@@ -1873,6 +1878,21 @@ fn arm_quiet_deadline(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_connect_defaults_do_not_become_background_refreshes() {
+        let default = ConnectRequest::default();
+        assert!(!default.background && !default.manual);
+        for manual in [false, true] {
+            let explicit: ConnectRequest =
+                serde_json::from_value(serde_json::json!({ "manual": manual })).unwrap();
+            assert!(!explicit.background);
+            assert_eq!(explicit.manual, manual);
+        }
+        let background: ConnectRequest =
+            serde_json::from_value(serde_json::json!({ "background": true })).unwrap();
+        assert!(background.background && !background.manual);
+    }
 
     #[test]
     fn parking_retires_connection_callbacks_without_deleting_the_verified_snapshot() {

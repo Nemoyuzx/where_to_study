@@ -4018,7 +4018,8 @@ function App() {
   }
 
   return (
-    <main ref={appShellRef} className="app-shell" lang={uiLanguage} dir={uiDirection(uiLanguage)}>
+    <main ref={appShellRef} className="app-shell" lang={uiLanguage} dir={uiDirection(uiLanguage)}
+      data-language-transition={languageTransition.overlay.phase}>
       <div className="app-frame">
         <aside className="side-nav">
           <div className="side-brand">
@@ -5013,9 +5014,6 @@ function App() {
 
           {activePage === 'settings' && !favoriteManagerOpen ? (
         <section className="settings-layout">
-          <QmplusLoginSettings language={uiLanguage} command={command} native={hasTauriRuntime()}
-            enabled={settings.qmplusEnabled} onEnabledChange={setQMplusEnabled}
-            featureBusy={qmplusFeatureSaving || !settingsLoaded}/>
           <section className="panel settings-reference-notice" aria-label={t('数据参考提示')}>
             <strong>{t('显示数据仅供参考，请以实际情况为准。')}</strong>
             <span>{uiLanguage === 'en' ? '显示数据仅供参考，请以实际情况为准。' : 'Displayed data is for reference only; please rely on the actual official information.'}</span>
@@ -5087,6 +5085,10 @@ function App() {
               </button>
               {settingsSaved ? <span className="settings-saved-note">{t('已保存')}</span> : null}
             </section>
+
+            <QmplusLoginSettings language={uiLanguage} command={command} native={hasTauriRuntime()}
+              enabled={settings.qmplusEnabled} onEnabledChange={setQMplusEnabled}
+              featureBusy={qmplusFeatureSaving || !settingsLoaded}/>
 
             <section className="panel course-recovery-settings">
               <div className="panel-title"><CalendarDays size={18} /><h2>{t('已删除课程')}</h2></div>

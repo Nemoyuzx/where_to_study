@@ -54,6 +54,15 @@ test('desktop QMplus setting defaults off and explicit off survives unrelated sa
   assert.equal(savedSettingsToState({ qmplus_enabled: true }).qmplusEnabled, true)
 })
 
+test('desktop QMplus account card stays inside the primary settings column below Account and above Recovery', () => {
+  const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8')
+  assert.equal((app.match(/<QmplusLoginSettings\b/g) || []).length, 1)
+  assert.match(app, /<section className="settings-layout">\s*<section className="panel settings-reference-notice"[\s\S]*?<\/section>\s*<div className="settings-column settings-primary-column">/)
+  const primary = app.match(/<div className="settings-column settings-primary-column">([\s\S]*?)<\/div>\s*<div className="settings-column settings-secondary-column">/)?.[1]
+  assert.ok(primary, 'settings must retain separate primary and secondary columns')
+  assert.match(primary, /<h2>\{t\('个人账号'\)\}<\/h2>[\s\S]*?<\/section>\s*<QmplusLoginSettings\b[\s\S]*?\/>\s*<section className="panel course-recovery-settings">/)
+})
+
 test('Harmony migration keeps new users off and preserves non-secret legacy consent', async () => {
   for (const legacy of [false, true]) {
     const prefs = new SyntheticPreferences()

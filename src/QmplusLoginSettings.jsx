@@ -3,6 +3,7 @@ import {ExternalLink, KeyRound, Trash2, ChevronDown} from 'lucide-react'
 import {uiText} from './ui-text.js'
 import {listen} from '@tauri-apps/api/event'
 import AnimatedDisclosure from './AnimatedDisclosure.jsx'
+import {qmplusSettingsErrorKey} from './qmplus-settings-errors.js'
 
 // Secret drafts never enter App settings, localStorage, URL, diagnostics or cache.
 export default function QmplusLoginSettings({language, command, native, enabled = false, onEnabledChange, featureBusy = false}) {
@@ -45,11 +46,8 @@ export default function QmplusLoginSettings({language, command, native, enabled 
       const value=await command(name,request)
       if(owner.current===generation)setStatus(value)
     } catch (failure) {
-      // These native commands expose only fixed, non-sensitive error strings.
-      const fixedError=typeof failure==='string'?failure:failure?.message
-      if(owner.current===generation)setError(typeof fixedError==='string'&&fixedError.length<=180
-        ? fixedError
-        : 'QMplus 安全设置未能保存，请重试。')
+      // Only allowlisted native reasons become static localized UI keys.
+      if(owner.current===generation)setError(qmplusSettingsErrorKey(failure))
       // A cleanup barrier may have saved/removed vault data without authorizing
       // a new web identity. Read the fixed status instead of keeping stale UI.
       try {
@@ -58,6 +56,16 @@ export default function QmplusLoginSettings({language, command, native, enabled 
       }catch{}
     } finally {
       if(owner.current===generation){setBusy(false);setAccount('');setPassword('')}
+    }
+  }
+  async function connect(manual = false) {
+    if(!native||busy||!enabled||featureBusy)return
+    const generation=owner.current
+    setError('')
+    try {
+      await command('connect_qmplus',manual?{manual:true}:undefined)
+    } catch(failure) {
+      if(owner.current===generation)setError(qmplusSettingsErrorKey(failure))
     }
   }
   // Only app-owned phases select static localized UI text. Fixed QA reason
@@ -102,9 +110,9 @@ export default function QmplusLoginSettings({language, command, native, enabled 
       <button type="button" className="settings-switch" role="switch" aria-checked={status.saved?status.enabled:draftAutofill}
         aria-label={text('自动填写 QMplus 登录资料','Autofill QMplus credentials')} disabled={busy||!native||!statusReady}
         onClick={()=>status.saved?perform('set_qmplus_autofill',{enabled:!status.enabled}):setDraftAutofill(value=>!value)}><span/></button></div>
-    <div className="query-action-row"><button type="button" disabled={!native||busy||!enabled||featureBusy} onClick={()=>command('connect_qmplus').catch(()=>setError('无法打开 QMplus。'))}>
+    <div className="query-action-row"><button type="button" disabled={!native||busy||!enabled||featureBusy} onClick={()=>connect()}>
       <ExternalLink size={16}/>{text('连接／同步 QMplus','Connect / sync QMplus')}</button>
-      <button type="button" disabled={!native||busy||!enabled||featureBusy} onClick={()=>command('connect_qmplus',{manual:true}).catch(()=>setError('无法打开 QMplus。'))}>
+      <button type="button" disabled={!native||busy||!enabled||featureBusy} onClick={()=>connect(true)}>
         {text('手动继续','Continue manually')}</button>
       <button type="button" disabled={!native||busy} onClick={()=>perform('clear_qmplus_login')}>
         {text('退出并清除 QMplus 数据','Disconnect and clear QMplus data')}</button></div>
