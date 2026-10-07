@@ -1,6 +1,6 @@
 # Where To Study v0.4.0（预发布）
 
-这是0.4.0预发布测试版，不是正式稳定版。Android67、Apple121、HarmonyOS1002044；0.4.0未提交商店正式审核，0.3.2的审核及GitHub草稿保持独立。
+这是0.4.0预发布测试版，不是正式稳定版。Android67、Apple121、HarmonyOS1002044；0.4.0未提交商店正式审核。需要稳定版时请选择正式发布的0.3.2，各商店状态与GitHub发布相互独立。
 
 ## 下载哪个文件？
 
@@ -48,7 +48,7 @@
 - 在原全天和课程布局之外增加主题色截止细条及明确未交红点，修复带小数秒的官方截止时间遗漏。
 - 同步十三种语言、十款主题、按时段／方向折叠的完整班车时刻表及可选只读移动网络备用。
 
-签名测试包0.4.0（1002044，build1）已通过DevEco仅测试渠道上传，云测试通过。鸿蒙安装包不放GitHub，未提交正式审核。
+Release签名包0.4.0（1002044，build1）已通过DevEco“测试和发布”补传，云测试通过；AGC已确认“测试和正式上架”用途，原仅测试副本保留。鸿蒙安装包不放GitHub，0.4.0仍未提交正式审核。
 
 ## Windows
 
@@ -78,7 +78,7 @@
 - **iOS / iPadOS:** Courses centralizes coursework, grades and exams. Authorized QMplus autofill and persistent sessions retain user-controlled MFA. Shared caches and newly discovered coursework notices avoid duplicate queries and first-sync alerts. Theme-colored deadline strips preserve all-day content and course geometry. Thirteen languages, ten themes and custom colors; iPhone Duo layout continuity. Build121 uploaded for testing only.
 - **macOS:** Courses, official QMplus sessions, shared caches and bounded new-task notices. Fixed headers and course geometry retained. Additional deadline strips, thirteen languages and ten themes. Build121 uploaded for testing only; the public DMG is ad-hoc signed, not Developer ID notarized.
 - **Android:** Courses and expanded tasks, secure optional QMplus autofill, shared data and new-task notices. Additional deadline strips and explicit pending dots preserve course sizes. API24 retained. Thirteen languages, ten themes, timetable disclosures and optional read-only cellular fallback. Signed APK67, no public AAB or replacement of the0.3.2 review.
-- **HarmonyOS:** Equivalent course/task features, official QMplus sessions, shared caches and notices. Theme deadline strips also accept fractional official timestamps. Thirteen languages, ten themes, timetable disclosures and optional read-only cellular fallback. Build1002044 was uploaded testing-only through DevEco and passed cloud testing; no GitHub Harmony package.
+- **HarmonyOS:** Equivalent course/task features, official QMplus sessions, shared caches and notices. Theme deadline strips also accept fractional official timestamps. Thirteen languages, ten themes, timetable disclosures and optional read-only cellular fallback. Release-signed build1002044/build1 was additionally uploaded through DevEco for testing and formal-release eligibility and passed cloud testing. The original test-only copy remains; no formal app-review submission or GitHub Harmony package.
 - **Windows:** Shared course queries, official QMplus sessions, persistent caches, notices and Beijing-time deadline strips. Ten themes with ambient gradients and thirteen languages. Installer delivery verification passed, including version, GUI subsystem, legal files and SHA-256.
 - **Linux / Ubuntu:** Equivalent desktop features and x86_64/aarch64 DEB/AppImage builds. Package delivery verification passed, including architecture, version, safe paths, legal files and SHA-256.
 - **CLI / TUI:** Shared data boundaries and legal files; five new TUI themes, not native calendar UI. Dependency PRs merged and tar packaging repaired. Four Linux terminal archives verified; remote CodeQL closure is not yet confirmed.
