@@ -692,6 +692,15 @@ async fn fetch_all_classrooms_with_token(
 
 #[cfg(test)]
 mod tests {
+    fn temporary_password(label: &str) -> String {
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
+    }
     use super::*;
 
     #[test]
@@ -753,7 +762,7 @@ mod tests {
         let result = sessions
             .run(
                 "synthetic",
-                "fixture-only",
+                &temporary_password("fixture-only"),
                 || async {
                     logins.fetch_add(1, Ordering::SeqCst);
                     Ok(("synthetic-token", Duration::from_secs(60)))
@@ -775,7 +784,7 @@ mod tests {
             let result = sessions
                 .run(
                     "synthetic",
-                    "fixture-only",
+                    &temporary_password("fixture-only"),
                     || async { panic!("ordinary failures must reuse the existing token") },
                     |_| async {
                         parse_sjd_response_bytes(
@@ -793,7 +802,7 @@ mod tests {
         let result = sessions
             .run(
                 "synthetic",
-                "fixture-only",
+                &temporary_password("fixture-only"),
                 || async {
                     logins.fetch_add(1, Ordering::SeqCst);
                     Ok(("replacement-token", Duration::from_secs(60)))

@@ -329,6 +329,16 @@ pub fn save(_credentials: &Credentials) -> ServiceResult<()> {
 
 #[cfg(test)]
 mod tests {
+    fn temporary_password(label: &str) -> String {
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
+    }
+
     use super::Credentials;
     use zeroize::Zeroizing;
 
@@ -336,7 +346,7 @@ mod tests {
     fn credential_payload_round_trips_as_structured_json() {
         let credentials = Credentials {
             account: "fixture-account".to_string(),
-            password: "fixture-password".to_string(),
+            password: temporary_password("payload"),
             teaching_cloud_password: None,
             account_scope:
                 "opaque-v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

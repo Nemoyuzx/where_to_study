@@ -32,12 +32,14 @@ test('compact grade cards preserve zero, text, unpublished and all optional meta
 })
 
 test('missing grade metadata creates no blank spacer and names remain escaped', () => {
-  const html = renderToStaticMarkup(createElement(GradeCard, {
-    item: { name: '<script>Grade</script>', score: 'A', credits: null }, words,
-  }))
-  assert.match(html, /&lt;script&gt;Grade&lt;\/script&gt;/)
-  assert.ok(html.includes('学分 · —'))
-  assert.doesNotMatch(html, /<script>|<small>|<span><\/span>/)
+  for (const tag of ['script', 'SCRIPT', 'ScRiPt']) {
+    const html = renderToStaticMarkup(createElement(GradeCard, {
+      item: { name: `<${tag}>Grade</${tag}>`, score: 'A', credits: null }, words,
+    }))
+    assert.ok(html.includes(`&lt;${tag}&gt;Grade&lt;/${tag}&gt;`))
+    assert.ok(html.includes('学分 · —'))
+    assert.doesNotMatch(html, /<script\b|<small>|<span><\/span>/i)
+  }
 })
 
 test('grade density remains natural-height and independent of data retrieval', () => {

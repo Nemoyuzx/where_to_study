@@ -409,6 +409,15 @@ fn set_desktop_notification_preferences(
 
 #[cfg(test)]
 mod local_data_coordination_tests {
+    fn temporary_password(label: &str) -> String {
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
+    }
     use super::*;
     use std::fs;
     use std::sync::atomic::AtomicUsize;
@@ -422,7 +431,11 @@ mod local_data_coordination_tests {
         let generation = coordinator.begin();
         let (account, password, epoch) = coordinator
             .with_current_account(generation, || {
-                Ok(("synthetic-account", "old-fixture", sessions.epoch()))
+                Ok((
+                    "synthetic-account",
+                    temporary_password("old-fixture"),
+                    sessions.epoch(),
+                ))
             })
             .unwrap();
         // A same-account password change does not change LOCAL_DATA generation.
@@ -438,7 +451,7 @@ mod local_data_coordination_tests {
             .run_at(
                 epoch,
                 account,
-                password,
+                &password,
                 || async { panic!("old credentials must not be sent after settings save") },
                 |token| async move { Ok(token) },
             )
@@ -452,7 +465,7 @@ mod local_data_coordination_tests {
                 .run_at(
                     replacement_epoch,
                     account,
-                    "new-fixture",
+                    &temporary_password("new-fixture"),
                     || async { Ok((42, std::time::Duration::from_secs(60))) },
                     |token| async move { Ok(token) }
                 )
@@ -487,7 +500,7 @@ mod local_data_coordination_tests {
             .run_at(
                 epoch,
                 "old",
-                "fixture",
+                &temporary_password("fixture"),
                 || async { panic!("cleared account must not restore its session") },
                 |token| async move { Ok(token) }
             )

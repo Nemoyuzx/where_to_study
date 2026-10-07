@@ -1252,6 +1252,7 @@ mod tests {
             id: "synthetic".into(),
             title: "课程作业示例".into(),
             course_name: Some("示例课程".into()),
+            course_id: None,
             deadline: "2026-09-20 18:00:00".into(),
             status: Some("未提交".into()),
         };
@@ -1279,6 +1280,7 @@ mod tests {
             id: "old".into(),
             title: "old".into(),
             course_name: None,
+            course_id: None,
             deadline: "2026-09-20 18:00:00".into(),
             status: None,
         }]);

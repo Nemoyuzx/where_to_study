@@ -687,6 +687,7 @@ mod tests {
             id: "synthetic".into(),
             title: "合成作业".into(),
             course_name: Some("合成课程".into()),
+            course_id: None,
             deadline: "2026-09-20 18:00:00".into(),
             status: Some("未提交".into()),
         }]);

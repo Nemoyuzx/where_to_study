@@ -1213,18 +1213,28 @@ fn activate_tab(app: &mut App, index: usize, tx: &mpsc::Sender<Message>) {
 
 #[cfg(test)]
 mod tests {
+    fn temporary_password(label: &str) -> String {
+        static SEED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        let seed = SEED.get_or_init(|| {
+            let mut bytes = [0_u8; 16];
+            getrandom::fill(&mut bytes).expect("generate isolated synthetic test seed");
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        });
+        format!("synthetic-{label}-{seed}")
+    }
+
     use super::*;
 
     #[test]
     fn academic_password_change_cancels_grades_even_when_cloud_password_is_unchanged() {
         let saved = Credentials {
             account: "synthetic-account".into(),
-            password: "fixture-old".into(),
-            teaching_cloud_password: Some("fixture-cloud".into()),
+            password: temporary_password("old"),
+            teaching_cloud_password: Some(temporary_password("cloud")),
             account_scope: "fixture-scope".into(),
         };
         let mut changed = saved.clone();
-        changed.password = "fixture-new".into();
+        changed.password = temporary_password("new");
         assert_eq!(
             saved.teaching_cloud_password,
             changed.teaching_cloud_password
@@ -1394,22 +1404,25 @@ mod tests {
 
     #[test]
     fn cloud_password_edits_preserve_academic_password_and_isolate_accounts() {
+        let academic = temporary_password("academic");
+        let cloud = temporary_password("cloud");
+        let new_cloud = temporary_password("new-cloud");
         let saved = Credentials {
             account: "a".into(),
-            password: "academic".into(),
-            teaching_cloud_password: Some("cloud".into()),
+            password: academic.clone(),
+            teaching_cloud_password: Some(cloud),
             account_scope: where_to_study_lib::scoped_cache::new_account_scope().unwrap(),
         };
         let edited = credentials_for_edit(
             Some(&saved),
             "a".into(),
             Zeroizing::new(String::new()),
-            Zeroizing::new("new-cloud".into()),
+            Zeroizing::new(new_cloud.clone()),
             false,
         )
         .unwrap();
-        assert_eq!(edited.password, "academic");
-        assert_eq!(edited.assignment_password(), "new-cloud");
+        assert_eq!(edited.password, academic);
+        assert_eq!(edited.assignment_password(), new_cloud);
         assert_eq!(edited.account_scope, saved.account_scope);
         let fallback = credentials_for_edit(
             Some(&saved),
@@ -1419,12 +1432,12 @@ mod tests {
             true,
         )
         .unwrap();
-        assert_eq!(fallback.assignment_password(), "academic");
+        assert_eq!(fallback.assignment_password(), academic);
         assert!(fallback.teaching_cloud_password.is_none());
         let changed = credentials_for_edit(
             Some(&saved),
             "b".into(),
-            Zeroizing::new("new-academic".into()),
+            Zeroizing::new(temporary_password("new-academic")),
             Zeroizing::new(String::new()),
             false,
         )

@@ -101,6 +101,8 @@ export BUPT_PASSWORD=你的教务密码
 
 ## 代码风格约定
 
+推送前运行 `npm run security:preflight`：使用已安装的 gitleaks 8（日志脱敏）扫描 HEAD 提交及 tracked 工作区差异，随后执行全部 Node 测试、前端构建、Rust fmt、locked lib 测试及严格 clippy（最多两项并行）。缺少工具或任一检查失败会阻止通过；`npm run security:tools` 仅检查工具，不代表质量检查通过。可自行运行 `npm run hooks:install` 安装本仓库本地 pre-push 钩子；安装器拒绝覆盖其它钩子配置。钩子扫描真实待推提交范围（新远端 ref 扫描完整可达历史），要求待推提交就是当前 HEAD，且除 Markdown 外工作区干净，避免测试错分支或未提交源码。ignored 签名文件及产物不会作为工作区扫描输入；不要用忽略规则掩盖应提交源码。这些自检不等于完整 CodeQL；如需 CodeQL，另用外部工具独立分析，不自动安装或改变 GitHub 设置。
+
 - **前端（React / JS）**：组件位于 `src/`，遵循现有的命名和文件组织风格，保持函数式组件写法。
 - **后端（Rust）**：源码位于 `src-tauri/src/`，提交前请运行：
 
