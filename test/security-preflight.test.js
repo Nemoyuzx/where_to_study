@@ -11,6 +11,7 @@ import { installHooks, OWNED_HOOK_MARKER } from '../scripts/install-git-hooks.mj
 const head = 'a'.repeat(40), base = 'b'.repeat(40), nil = '0'.repeat(40);
 const localNames = execFileSync('git', ['rev-parse', '--local-env-vars'], { encoding: 'utf8' }).trim().split(/\r?\n/);
 const fixtureEnvironment = withoutLocalGitEnvironment(process.env, localNames);
+const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 function harness({ dirty = '', untracked = '', commit = head, fail = '', version = '8.30.1', environmentNames = localNames } = {}) {
   const calls = [];
   const exec = (command, args, options) => {
@@ -36,9 +37,9 @@ test('strict ref parsing supports sha1/sha256 and deletes only', () => {
 test('hook scans actual outgoing range and all proportional checks', () => {
   const h = harness(); runPreflight({ ...h, hook: true, input: record(), log() {} });
   assert.ok(h.calls.some(c => c.command === 'gitleaks' && c.args.includes(`${base}..${head}`) && c.args.includes('--redact=100')));
-  assert.ok(h.calls.some(c => c.command === 'npm' && c.args[0] === 'test'));
-  assert.ok(h.calls.findIndex(c => c.args[0] === 'scripts/check-test-credentials.mjs') < h.calls.findIndex(c => c.command === 'npm' && c.args[0] === 'test'));
-  assert.ok(h.calls.some(c => c.command === 'npm' && c.args.join(' ') === 'run build'));
+  assert.ok(h.calls.some(c => c.command === npmCommand && c.args[0] === 'test'));
+  assert.ok(h.calls.findIndex(c => c.args[0] === 'scripts/check-test-credentials.mjs') < h.calls.findIndex(c => c.command === npmCommand && c.args[0] === 'test'));
+  assert.ok(h.calls.some(c => c.command === npmCommand && c.args.join(' ') === 'run build'));
   const rust = h.calls.filter(c => c.command === 'cargo' && c.args.includes('--manifest-path'));
   assert.equal(rust.length, 3);
   assert.ok(rust.slice(1).every(c => c.args.includes('--locked') && c.args.includes('2')));
@@ -52,7 +53,7 @@ test('new refs scan full reachable history; delete refs perform no work', () => 
 test('wrong outgoing worktree and dirty source fail closed; Markdown only allowed', () => {
   for (const config of [{ commit: base }, { dirty: 'src/a.js\0' }, { untracked: 'new.rs\0' }]) {
     const h = harness(config); assert.throws(() => runPreflight({ ...h, hook: true, input: record(), log() {} }));
-    assert.ok(!h.calls.some(c => c.command === 'npm' && c.args[0] === 'test'));
+    assert.ok(!h.calls.some(c => c.command === npmCommand && c.args[0] === 'test'));
   }
   runPreflight({ ...harness({ dirty: 'docs/notes.md\0' }), hook: true, input: record(), log() {} });
 });
@@ -65,11 +66,11 @@ test('manual scans HEAD plus only tracked diff, Windows uses npm.cmd', () => {
   assert.ok(!h.calls.some(c => c.args[0] === 'ls-files'));
 });
 test('missing tools/old scanner fail, tool-only never silently runs as hook', () => {
-  for (const fail of ['git', 'gitleaks', 'npm', 'cargo']) assert.throws(() => runPreflight({ ...harness({ fail }), log() {} }));
+  for (const fail of ['git', 'gitleaks', npmCommand, 'cargo']) assert.throws(() => runPreflight({ ...harness({ fail }), log() {} }));
   assert.throws(() => runPreflight({ ...harness({ version: '7.0' }), log() {} }));
   assert.throws(() => runPreflight({ ...harness(), hook: true, input: record(), checkOnly: true, log() {} }));
   const h = harness(); runPreflight({ ...h, checkOnly: true, log() {} });
-  assert.ok(!h.calls.some(c => c.command === 'npm' && c.args[0] === 'test'));
+  assert.ok(!h.calls.some(c => c.command === npmCommand && c.args[0] === 'test'));
 });
 test('Git checks retain hook selectors while every check subprocess receives a clean environment and root cwd', () => {
   const environment = { PATH: '/tools', WTS_TEST_MARKER: 'retained', GIT_DIR: '/repo/.git', GIT_WORK_TREE: '/repo', GIT_INDEX_FILE: '/repo/.git/index', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.commentChar', GIT_CONFIG_VALUE_0: '#' };
@@ -115,9 +116,9 @@ test('a real linked worktree hook cannot redirect nested test repositories or we
   const exec = (command, args, options) => {
     calls.push({ command, args, options });
     if (command === 'git') return spawnSync(command, args, { ...options, cwd: linked });
-    assert.equal(options.cwd, linked);
+    assert.equal(fs.realpathSync.native(options.cwd), fs.realpathSync.native(linked));
     assert.deepEqual(options.env, fixtureEnvironment);
-    if (command === 'npm' && args[0] === 'test') {
+    if (command === npmCommand && args[0] === 'test') {
       nestedTests++;
       // Exercise both real disposable-repository tests with the environment a
       // pre-push check supplies. The name filter prevents recursive execution.
@@ -168,11 +169,15 @@ function hookFixture(t, initialHooks = '') {
 }
 test('installer writes identical executable hook to stable common-dir path, is idempotent and local only', t => {
   const h = hookFixture(t, 'scripts/git-hooks');
-  installHooks({ exec: h.exec }); installHooks({ exec: h.exec });
+  const permissions = [];
+  const adapter = { ...fs, chmodSync(file, mode) { permissions.push(mode); fs.chmodSync(file, mode); } };
+  installHooks({ exec: h.exec, fs: adapter }); installHooks({ exec: h.exec, fs: adapter });
   assert.equal(h.hooks(), h.directory);
   assert.equal(fs.readFileSync(h.target, 'utf8'), h.source);
   assert.ok(h.source.startsWith(OWNED_HOOK_MARKER));
-  assert.equal(fs.statSync(h.target).mode & 0o777, 0o755);
+  assert.match(fs.readFileSync(new URL('../.gitattributes', import.meta.url), 'utf8'), /^scripts\/git-hooks\/pre-push text eol=lf\r?$/m);
+  assert.deepEqual(permissions, [0o755, 0o755]);
+  assert.equal(fs.statSync(h.target).mode & 0o777, process.platform === 'win32' ? 0o666 : 0o755);
   assert.deepEqual(fs.readdirSync(h.directory), ['pre-push']);
   assert.ok(h.calls.filter(args => args[0] === 'config' && args[1] !== '--get').every(args => args[1] === '--local' && args.at(-1) === h.directory));
 });
@@ -188,7 +193,7 @@ test('installer refuses foreign hooksPath, foreign destination and any default n
   }
   for (const kind of ['empty', 'foreign', 'extra', 'symlink']) {
     const h = hookFixture(t, 'scripts/git-hooks');
-    if (kind === 'symlink') fs.symlinkSync(h.defaults, h.directory, 'dir');
+    if (kind === 'symlink') fs.symlinkSync(h.defaults, h.directory, process.platform === 'win32' ? 'junction' : 'dir');
     else {
       fs.mkdirSync(h.directory);
       if (kind !== 'empty') fs.writeFileSync(h.target, kind === 'foreign' ? '#!/bin/sh\nforeign' : h.source);

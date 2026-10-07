@@ -68,7 +68,8 @@ test('IDE and CLI both use the reviewed legal-asset step, with no private profil
   });
   const entry = module.exports.default;
   assert.equal(entry.system, builtin);
-  entry.plugins[0].apply({ getNodeDir: () => ({ getPath: () => '/fixture/native/harmony/entry' }) });
+  const fixtureRoot = path.resolve('/fixture');
+  entry.plugins[0].apply({ getNodeDir: () => ({ getPath: () => path.join(fixtureRoot, 'native/harmony/entry') }) });
   assert.equal(calls.length, 1); assert.equal(calls[0][0], '/runtime/node');
-  assert.deepEqual([...calls[0][1]], ['/fixture/scripts/sync-harmony-legal-assets.mjs']);
+  assert.deepEqual([...calls[0][1]], [path.join(fixtureRoot, 'scripts/sync-harmony-legal-assets.mjs')]);
 });

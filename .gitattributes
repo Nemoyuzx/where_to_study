@@ -1,3 +1,4 @@
 LICENSE text eol=lf
 THIRD_PARTY_LICENSES.html text eol=lf
 THIRD_PARTY_NOTICES.md text eol=lf
+scripts/git-hooks/pre-push text eol=lf

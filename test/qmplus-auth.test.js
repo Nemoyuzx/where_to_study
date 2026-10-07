@@ -12,7 +12,7 @@ const account = 'student@example.org'
 const secret = 'synthetic-password-not-real'
 
 test('Apple identity layout diagnostics remain DEBUG opt-in and never read secret or URL surfaces',()=>{
-  const swift=readFileSync(new URL('../native/apple/Sources/Shared/QMplusAutofillPipeline.swift',import.meta.url),'utf8')
+  const swift=readFileSync(new URL('../native/apple/Sources/Shared/QMplusAutofillPipeline.swift',import.meta.url),'utf8').replace(/\r\n/g,'\n')
   const debug=swift.slice(swift.indexOf('    #if DEBUG\n    private static let qaLayoutLogger'),swift.indexOf('    #endif\n    func submit'))
   assert.ok(debug.length>0)
   assert.match(debug,/environment\["WTS_QMPLUS_AUTH_TRACE"\] == "1"/)
@@ -28,7 +28,7 @@ test('Apple identity layout diagnostics remain DEBUG opt-in and never read secre
 })
 
 test('Apple mismatch diagnostics reduce synthetic noninteractive identity to bounded safe metadata',()=>{
-  const swift=readFileSync(new URL('../native/apple/Sources/Shared/QMplusAutofillPipeline.swift',import.meta.url),'utf8')
+  const swift=readFileSync(new URL('../native/apple/Sources/Shared/QMplusAutofillPipeline.swift',import.meta.url),'utf8').replace(/\r\n/g,'\n')
   const script=swift.match(/static let identityLayoutTraceScript = """\n([\s\S]*?)\n        """/)?.[1]
   const f=fixture({stage:'password'})
   f.displayName.style.pointerEvents='none'
