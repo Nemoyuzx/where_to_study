@@ -4,6 +4,11 @@ import { pathToFileURL } from 'node:url';
 
 const oid = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
 const zero = /^0+$/;
+export function withoutLocalGitEnvironment(environment, names) {
+  const local = new Set(names.map(name => name.toUpperCase()));
+  return Object.fromEntries(Object.entries(environment).filter(([name]) =>
+    !local.has(name.toUpperCase()) && !/^GIT_CONFIG_(?:KEY|VALUE)_\d+$/i.test(name)));
+}
 export function parseUpdates(input) {
   return input.split(/\r?\n/).filter(Boolean).map(line => {
     const fields = line.trim().split(/\s+/);
@@ -13,10 +18,12 @@ export function parseUpdates(input) {
   }).filter(update => !zero.test(update.local));
 }
 
-export function runPreflight({ hook = false, input = '', checkOnly = false, platform = process.platform, exec = spawnSync, log = console.log } = {}) {
+export function runPreflight({ hook = false, input = '', checkOnly = false, platform = process.platform, exec = spawnSync, log = console.log, environment = process.env } = {}) {
+  let childEnvironment = environment;
+  let childRoot;
   const run = (command, args, options = {}) => {
     // Windows requires a command shell for npm.cmd; all npm arguments below are fixed.
-    const result = exec(command, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, shell: platform === 'win32' && command === 'npm.cmd', ...options });
+    const result = exec(command, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, shell: platform === 'win32' && command === 'npm.cmd', env: command === 'git' ? environment : childEnvironment, ...(command === 'git' ? {} : { cwd: childRoot }), ...options });
     if (result.error || result.status !== 0) throw new Error(`${command} ${args[0] || ''} failed${result.error ? `: ${result.error.message}` : ` (exit ${result.status})`}. Install required tools or fix the reported check; nothing was skipped.`);
     return (result.stdout || '').trim();
   };
@@ -24,7 +31,12 @@ export function runPreflight({ hook = false, input = '', checkOnly = false, plat
   if (hook && !updates.length) { log('No non-deletion refs to check.'); return; }
   if (hook && checkOnly) throw new Error('--check-only is not allowed in the pre-push hook.');
   const npm = platform === 'win32' ? 'npm.cmd' : 'npm';
-  run('git', ['rev-parse', '--show-toplevel']);
+  childRoot = run('git', ['rev-parse', '--show-toplevel']);
+  const localNames = run('git', ['rev-parse', '--local-env-vars']).split(/\r?\n/).filter(Boolean);
+  if (!localNames.length || localNames.some(name => !/^GIT_[A-Z0-9_]+$/.test(name))) throw new Error('Cannot identify Git local environment variables.');
+  // Keep repository selectors for outgoing-ref checks, but never leak them into
+  // tools/tests that create their own repositories or invoke Git internally.
+  childEnvironment = withoutLocalGitEnvironment(environment, localNames);
   const version = run('gitleaks', ['version']);
   if (!/^v?8\./.test(version)) throw new Error('gitleaks version 8 is required.');
   run(npm, ['--version']);
