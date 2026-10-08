@@ -1,6 +1,7 @@
 // 全平台“查询”入口的 HarmonyOS 原生页面：班车查询 + 重要事件。
 import { deviceInfo, settings } from '@kit.BasicServicesKit';
 import { accessibility } from '@kit.AccessibilityKit';
+import { LengthMetrics } from '@kit.ArkUI';
 import { AppModel } from '../model/AppModel';
 import { AppTheme } from '../common/AppTheme';
 import { ControlMetrics } from '../common/ControlMetrics';
@@ -1047,49 +1048,53 @@ export struct QueryView {
       .width('100%')
       .height(32)
       .alignItems(VerticalAlign.Center)
-      if (this.model.isLoadingImportantEvents && this.model.importantEventsCatalog.length === 0) {
-        this.loadingMessage('正在读取重要事件')
-      } else if (this.model.importantEventsError.length > 0 &&
-        this.model.importantEventsCatalog.length === 0 &&
-        this.model.favoriteDeadlines.length === 0) {
-        this.errorMessage(this.model.importantEventsError,
-          (): void => this.model.loadImportantEvents(true))
-      } else if (this.visibleEvents().length === 0) {
-        Column({ space: 6 }) {
-          Text(this.model.text('没有符合条件的重要事件'))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(AppTheme.text())
-          Text(this.model.text('请调整搜索关键词或分类筛选。'))
-            .fontSize(13)
-            .fontColor(AppTheme.secondaryText())
-        }
-        .layoutWeight(1)
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
-      } else {
-        List({ space: 9, scroller: this.eventScroller }) {
+      List({ space: 9, scroller: this.eventScroller }) {
+        if (this.model.isLoadingImportantEvents && this.model.importantEventsCatalog.length === 0) {
+          ListItem() { this.loadingMessage('正在读取重要事件', true) }
+        } else if (this.model.importantEventsError.length > 0 &&
+          this.model.importantEventsCatalog.length === 0 &&
+          this.model.favoriteDeadlines.length === 0) {
+          ListItem() {
+            this.errorMessage(this.model.importantEventsError,
+              (): void => this.model.loadImportantEvents(true), true)
+          }
+        } else if (this.visibleEvents().length === 0) {
+          ListItem() {
+            Column({ space: 6 }) {
+              Text(this.model.text('没有符合条件的重要事件'))
+                .fontSize(15)
+                .fontWeight(FontWeight.Medium)
+                .fontColor(AppTheme.text())
+              Text(this.model.text('请调整搜索关键词或分类筛选。'))
+                .fontSize(13)
+                .fontColor(AppTheme.secondaryText())
+            }
+            .width('100%')
+            .padding({ top: 16, bottom: 16 })
+            .alignItems(HorizontalAlign.Start)
+          }
+        } else {
           ForEach(this.visibleEvents(), (item: PublicDeadlineItem) => {
             ListItem() {
               this.eventRow(item)
             }
           }, (item: PublicDeadlineItem) => this.model.favoriteDeadlineKey(item))
         }
-        .layoutWeight(1)
-        .width('100%')
-        .scrollBar(BarState.Off)
-        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
-        .onScrollIndex((start: number, end: number, center: number) => {
-          if (this.tabContentOpacity >= 0.99) {
-            this.session.eventFirstVisibleIndex = start;
-          }
-          this.appendEventPage(end);
-        })
+        ListItem() { this.publicEventSourceNotice() }
       }
-      this.sourceCard('第三方来源：Contest DDL 主源、较新镜像及备用 API；校内通知由脚本从学校内部网站公开通知页提取整理。',
-        CalendarDailyInfoSources.deadlinePrimaryPage)
-      this.sourceCard('Contest DDL 较新镜像数据', CalendarDailyInfoSources.deadlineMirror)
-      this.sourceCard('Contest DDL 备用 API', CalendarDailyInfoSources.deadlineBackup)
+      .layoutWeight(1)
+      .width('100%')
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+      .onScrollIndex((start: number, end: number, center: number) => {
+        const eventCount: number = this.visibleEvents().length;
+        if (eventCount === 0) { return; }
+        if (this.tabContentOpacity >= 0.99) {
+          // 来源页脚不是事件，不把其索引写入事件的恢复位置。
+          this.session.eventFirstVisibleIndex = Math.min(start, eventCount - 1);
+        }
+        this.appendEventPage(end);
+      })
     }
     .layoutWeight(1)
     .width('100%')
@@ -1192,7 +1197,7 @@ export struct QueryView {
   }
 
   @Builder
-  loadingMessage(message: string) {
+  loadingMessage(message: string, inList: boolean = false) {
     Column({ space: 8 }) {
       Text(this.model.text(message))
         .fontSize(15)
@@ -1202,13 +1207,14 @@ export struct QueryView {
         .fontSize(13)
         .fontColor(AppTheme.secondaryText())
     }
-    .layoutWeight(1)
+    .layoutWeight(inList ? 0 : 1)
+    .padding({ top: inList ? 16 : 0, bottom: inList ? 16 : 0 })
     .width('100%')
     .justifyContent(FlexAlign.Center)
   }
 
   @Builder
-  errorMessage(message: string, retry: () => void) {
+  errorMessage(message: string, retry: () => void, inList: boolean = false) {
     Column({ space: 10 }) {
       Text(this.model.text(message.length > 0 ? message : '数据暂时无法读取。'))
         .fontSize(14)
@@ -1223,7 +1229,8 @@ export struct QueryView {
           retry();
         })
     }
-    .layoutWeight(1)
+    .layoutWeight(inList ? 0 : 1)
+    .padding({ top: inList ? 16 : 0, bottom: inList ? 16 : 0 })
     .width('100%')
     .justifyContent(FlexAlign.Center)
     .alignItems(HorizontalAlign.Center)
@@ -1255,16 +1262,50 @@ export struct QueryView {
   }
 
   @Builder
-  sourceCard(message: string, url: string) {
-    Text(this.model.text(message))
-      .fontSize(11)
-      .fontColor(AppTheme.secondaryText())
-      .lineHeight(16)
+  publicEventSourceNotice() {
+    Column({ space: 8 }) {
+      Row({ space: 9 }) {
+        SymbolGlyph($r('sys.symbol.info_circle'))
+          .fontSize(16)
+          .fontColor([AppTheme.textOnPrimaryBlend(0.08, AppTheme.state.dark)])
+        Text(this.model.text('第三方来源：Contest DDL 主源、较新镜像及备用 API；校内通知由脚本从学校内部网站公开通知页提取整理。'))
+          .fontSize(11)
+          .lineHeight(16)
+          .fontColor(AppTheme.textOnPrimaryBlend(0.08, AppTheme.state.dark, true))
+          .layoutWeight(1)
+      }
       .width('100%')
-      .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-      .onClick(() => {
-        this.openURL(url);
-      })
+      .alignItems(VerticalAlign.Top)
+      Flex({ wrap: FlexWrap.Wrap,
+        space: { main: LengthMetrics.vp(12), cross: LengthMetrics.vp(5) } }) {
+        this.publicEventSourceLink('GitHub 主源', CalendarDailyInfoSources.deadlinePrimaryPage, 'primary')
+        this.publicEventSourceLink('站点镜像', CalendarDailyInfoSources.deadlineMirror, 'mirror')
+        this.publicEventSourceLink('备用 API', CalendarDailyInfoSources.deadlineBackup, 'backup')
+      }
+      .width('100%')
+    }
+    .id('query.events.sources')
+    .padding(12)
+    .width('100%')
+    .borderRadius(10)
+    .backgroundColor(AppTheme.primaryWithAlpha(0.08, AppTheme.state.dark))
+    .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  publicEventSourceLink(label: string, url: string, key: string) {
+    Button() {
+      Text(this.model.text(label))
+        .fontSize(12)
+        .fontColor(AppTheme.textOnPrimaryBlend(0.08, AppTheme.state.dark))
+    }
+      .type(ButtonType.Normal)
+      .backgroundColor(Color.Transparent)
+      .padding({ left: 0, right: 0, top: 2, bottom: 2 })
+      .constraintSize({ minHeight: ControlMetrics.height, maxWidth: '100%' })
+      .id('query.events.source.' + key)
+      .accessibilityText(this.model.text(label))
+      .onClick(() => this.openURL(url))
   }
 
   private routePeriodLabel(schedule: ShuttleBusSchedule): string {

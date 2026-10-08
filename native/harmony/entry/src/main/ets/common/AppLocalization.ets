@@ -516,6 +516,8 @@ export class AppLocalization {
     '暂无 DDL 信息': 'No deadline information',
     '第三方来源：Contest DDL': 'Third-party source: Contest DDL',
     '备用 API': 'Backup API',
+    'GitHub 主源': 'GitHub primary',
+    '站点镜像': 'Site mirror',
     '校内竞赛通知': 'Campus Contest Notice',
     '校内竞赛通知由脚本从学校内部网站公开通知页提取整理，仅供参考。':
       'Campus contest notices are extracted by a script from public notices on an internal school website and are for reference only.',
