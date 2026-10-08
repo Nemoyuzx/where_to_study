@@ -995,6 +995,10 @@ button:disabled {
 
 .account-action-button,
 .external-action-button,
+.course-hub > .query-action-button,
+.course-inline-body > .query-action-button,
+.course-detail-body > .query-action-button,
+.query-grades > .query-action-button,
 .query-grade-status .query-action-button {
   align-items: center;
   background: var(--primary-surface);
@@ -1016,6 +1020,10 @@ button:disabled {
 
 .account-action-button:hover,
 .external-action-button:hover,
+.course-hub > .query-action-button:hover,
+.course-inline-body > .query-action-button:hover,
+.course-detail-body > .query-action-button:hover,
+.query-grades > .query-action-button:hover,
 .query-grade-status .query-action-button:hover {
   background: var(--primary-fill);
   color: var(--on-primary);
@@ -1023,6 +1031,10 @@ button:disabled {
 
 .account-action-button:focus-visible,
 .external-action-button:focus-visible,
+.course-hub > .query-action-button:focus-visible,
+.course-inline-body > .query-action-button:focus-visible,
+.course-detail-body > .query-action-button:focus-visible,
+.query-grades > .query-action-button:focus-visible,
 .query-grade-status .query-action-button:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -6312,6 +6324,16 @@ input:disabled {
 .qmplus-settings-disclosure { margin-inline-start: auto; }
 .qmplus-settings-body { display: grid; gap: 12px; padding-top: 12px; min-width: 0; }
 .qmplus-settings-body p { margin: 0; }
+.qmplus-settings-actions { min-width: 0; }
+.qmplus-settings-actions > button {
+  height: auto;
+  min-height: 36px;
+  max-width: 100%;
+  padding: 8px 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.qmplus-settings-actions > button > svg { flex: 0 0 auto; }
 .qmplus-settings-panel .settings-switch-row { min-width: 0; max-width: 100%; }
 .qmplus-settings-panel .settings-switch-row > div { flex: 1 1 0; overflow-wrap: anywhere; }
 .qmplus-settings-panel .settings-switch { flex: 0 0 44px; max-width: 44px; box-sizing: border-box; }

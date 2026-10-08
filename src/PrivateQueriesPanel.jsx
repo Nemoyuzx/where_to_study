@@ -1,7 +1,7 @@
 import { uiText } from './ui-text.js'
 import { uiDateLocale } from './ui-languages.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarClock, ClipboardList, ExternalLink, RefreshCw, Settings2 } from 'lucide-react'
+import { CalendarClock, ClipboardList, ExternalLink, RefreshCw, Settings2, ChevronDown } from 'lucide-react'
 import { filterAssignmentQueries } from './query-domain.js'
 import {courseActivityKey} from './course-domain.js'
 import {useCourseData} from './use-course-data.js'
@@ -66,7 +66,7 @@ export default function PrivateQueriesPanel({ kind, enabled, command, language, 
         {assignments ? <><p>{item.course_name}</p><strong>{item.deadline}</strong><small>{item.status || (text('状态未提供', 'Status not provided'))}</small></>
           : <><p>{item.date || (text('日期待定', 'Date pending'))} · {item.start_time ? `${item.start_time}–${item.end_time}` : item.time_text || (text('时间待定', 'Time pending'))}</p><small>{item.room || (text('地点待定', 'Room pending'))}{item.seat ? ` · ${text('座位', 'Seat')} ${item.seat}` : ''}</small></>}
       </article>)}</div>
-      {limit < filtered.length && <button type="button" onClick={() => setLimit(v => v + 30)}>{text('加载更多', 'Show more')}</button>}
+      {limit < filtered.length && <button type="button" className="query-action-button" onClick={() => setLimit(v => v + 30)}><ChevronDown size={16}/>{text('加载更多', 'Show more')}</button>}
       {(assignments?shared.fetchedAt:updated)&&<small>{text('更新于','Updated')} {new Intl.DateTimeFormat(uiDateLocale(language),{dateStyle:'short',timeStyle:'short',timeZone:'Asia/Shanghai'}).format(new Date(assignments?shared.fetchedAt:updated))}</small>}
     </>}
     <p className="query-source">{assignments ? (text('第三方来源：学校教学云平台。使用已保存账户直接查询，不上传至本应用服务端。', 'Source: university Teaching Cloud. Assignments are queried directly using your saved account and are not uploaded to this app’s server.')) : (text('第三方来源：学校教务服务。考试安排也会随个人课表一起同步。', 'Source: university academic service. Exam arrangements are also synchronized when refreshing the timetable.'))} {text('显示数据仅供参考，请以学校实际安排为准。', 'For reference only; confirm against the official platform.')}</p>

@@ -1,8 +1,8 @@
 # Where To Study v0.4.0（预发布）
 
-这是0.4.0预发布测试版，不是正式稳定版。本轮构建为Android68、Apple122、HarmonyOS1002045；0.4.0不提交商店正式审核。需要稳定版时请选择正式发布的0.3.2，各商店状态与GitHub发布相互独立。
+0.4.0保持预发布状态，更新集中在[同一预发布页面](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease)，不替换[0.3.2正式版](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。本说明记录分平台功能与已验证限制；附件批次、构建来源、最终CI结果和可下载文件以预发布页面为准，不据此宣称新批次已上传。
 
-本轮替换正在进行：Apple122两端已上传、服务器处理中；Android68与鸿蒙1002045最终签名包已生成，渠道上传和GitHub附件替换尚未全部完成。Windows／Linux／终端新包仍需按最终提交构建。
+本轮原生构建为Android69、Apple122、HarmonyOS1002046。各商店、TestFlight与GitHub相互独立；0.4.0不提交商店正式审核或新的外部Beta审核，审核锁定的平台本轮跳过。
 
 ## 下载哪个文件？
 
@@ -13,7 +13,7 @@
 - 其它Linux：可选择相应架构的AppImage，赋予执行权限后打开。`x86_64`代表Intel／AMD64位，`aarch64`代表ARM64。
 - CLI／TUI压缩包是Linux终端工具，不是图形安装程序；解压后先运行相应程序的 `--help`。`Source code`是源码，也不是安装包。
 
-公开附件共11个，不含Android AAB、鸿蒙APP/HAP或iOS IPA。Windows目前没有平台信任的Authenticode签名，公共macOS DMG为ad-hoc签名且未公证；哈希和CI记录不能替代平台签名。遇到系统安全提示请核对来源，不建议关闭系统保护。
+公开附件范围为11个文件：Android APK、macOS Universal DMG、Windows x64安装程序、两种架构各一份Linux DEB和AppImage，以及两种架构各一份CLI和TUI归档。不含Android AAB、鸿蒙APP/HAP、iOS IPA或校验旁文件；文件选择说明不表示新批次已公开。Windows目前没有平台信任的Authenticode签名，公共macOS DMG为ad-hoc签名且未公证；哈希和CI记录不能替代平台签名。遇到系统安全提示请阅读[下载文件验证说明](./code-signing.md)。
 
 ## iOS / iPadOS
 
@@ -25,7 +25,7 @@
 - 增加iPhone Duo开合布局与状态连续性适配，保留iPad导航体验。
 - 黄历“宜／忌”标签按翻译后的长度排版，窄卡片可纵向展示，保留接口正文原文。
 
-0.4.0（122）已取得Apple原生上传成功回执；后续处理／测试可用状态另行核对，未提交正式审核。
+0.4.0（122）上传成功，已关联既有内部测试组，0.4.0草稿已关联122并保存。未提交正式审核或新的外部Beta审核，外部可安装版本以TestFlight页面为准；iPhone、iPad及Duo更新截图的验收尚未完成。
 
 ## macOS
 
@@ -35,7 +35,7 @@
 - 公共DMG使用独立的本机系统钥匙串及QMplus会话、授权和缓存，不迁移商店渠道的登录资料；首次使用公共渠道需要重新保存并授权。商店渠道继续使用原安全存储。
 - 改善启动准备阶段的前台恢复；未知或尚未完成布局的登录标题不再被误判为账号变更而清除课程缓存。黄历标签适配长译文。
 
-0.4.0（122）已上传Apple测试渠道，服务器处理中。公共Universal DMG为本地ad-hoc签名包，不等同于Developer ID公证包。
+macOS正式0.3.2已可分发；0.4.0（122）上传成功并关联既有内部测试组。独立0.4.0草稿关联122，已保存平台更新内容、中英审核说明及4张新的真实运行截图，并刷新确认。未提交正式审核或新的外部Beta审核；外部可安装版本以TestFlight页面为准。公共Universal DMG为本地ad-hoc签名包，未经过Apple公证。
 
 ## Android
 
@@ -43,12 +43,13 @@
 - QMplus支持可选安全保存与官方页面自动填写、会话恢复；新增作业提醒复用共享查询结果。
 - 日／周视图保留全天区域和课程尺寸，增加主题色截止细条与明确未交红点；时间计算继续兼容Android API24。
 - 同步十三种语言、十款预设主题与自定义颜色。完整班车时刻表按时段／方向折叠，提供节假日提醒。
+- 语言选择改为跟随当前主题的自定义面板，保留“跟随系统”和全部语言；修复全屏模糊强度及完成勾整层淡出，等待本地任务与布局就绪后才显示完成。
 - 设置可选择在平台支持时尝试移动网络备用，仅作用于允许的只读数据请求，不重放凭据提交。
 - 启动时在后台恢复本机缓存，避免安全存储和缓存读取阻塞主界面；保存账号时保护尚未提交的输入。
 - 月视图按实际可用高度和导航条位置布局，去掉82dp行高上限；拖动按两段实测距离计算，保留非今日周的正确折叠位置。
 - 黄历英文标签不再挤入固定小方框；窄屏、大字体和语言文字变化后会重新测量。QMplus作业卡片之间留出间隔，历史学期使用开关。
 
-最终签名APK为0.4.0（68）。本轮Debug／Release各450项单元测试、5项隔离原生界面测试通过；包内脚本、法律文件、证书和16KiB对齐核验通过。渠道上传尚待完成；AAB不放GitHub，不覆盖0.3.2。
+签名APK为0.4.0（69），Release单元测试450/450、语言展示原生测试5/5通过；包内脚本、法律文件、证书和16KiB对齐核验通过。Lint无错误，既有警告未宣称清零。保留真实账号有效会话的隔离模拟器冷启动后，无需点击连接或重新输入凭据，官方会话自动恢复并产生更新的课程快照；本次未清Cookie、未触发MFA，不能代替过期会话或首次MFA验证。华为新包草稿已保存，未提交审核；vivo的0.3.2审核锁定，本轮跳过。AAB不公开。
 
 ## HarmonyOS
 
@@ -57,38 +58,56 @@
 - 同步十三种语言、十款主题、按时段／方向折叠的完整班车时刻表及可选只读移动网络备用。
 - 本机缓存异步读取，保护启动期间的账号输入；月视图按实际导航、标题及内容区域高度排版，折叠详情不再占用隐藏空间。
 - 月视图拖动使用实测两段距离；黄历标签按当前语言和字体测量。公开法律声明随软件包一起交付。
+- 1002046将手机日／周时间轴的边界反馈改为弹性回弹；宽屏日历、日期选择器、控件尺寸、课程几何及月视图拖动保持原状。
 
-最终Release签名包0.4.0（1002045）已生成，405项Hypium规格通过；独立HAP及完整APP验签、当前字节码和包内脚本／法律文件核验通过。新包尚未上传及完成云测。此前1002044的95项云测有1项体验警告，不代表本次新包的结果。上传继续使用“测试和正式上架”用途，但不提交正式审核；鸿蒙安装包不放GitHub。
+0.4.0（1002046/build1）的完整Release HAP／APP、405项测试、签名及包体门禁通过，构建前后217项源码输入一致。模拟器升级安装确认日／周时间轴回弹和释放后的布局恢复；SDK验证包与实际上传包的217项源码输入一致，但不是同一包哈希。该验证未登录或输入凭据，不能代替QMplus真实MFA／重启验收。
+
+1002046已通过DevEco上传，保留“测试和正式上架”用途，合法性达标；正式及测试草稿已保存，测试草稿已回读确认。未提交审核、发布测试或通知／邀请测试者。新包自检最终结果尚未复核，旧1002045的云测报告不能作为新包通过的证据。鸿蒙安装包不放GitHub。
 
 ## Windows
 
 - 新增课程及集中成绩／考试／作业查询、QMplus独立官方会话和共享缓存。
 - 新作业提示复用单一同步入口，时间轴额外显示北京时间截止细条、主题色及明确未交红点。
 - 十款主题及自定义颜色，非默认主题增加柔和渐变背景；十三种语言保留用户校对。
+- QMplus设置移至Account下方，密码说明及数据类别间距更清晰；切换语言增加全屏模糊、切换中提示及完成勾过渡，结束后释放滤镜，保留页面位置和草稿。
+- QMplus设置及课程页的账号、刷新、更多和私有详情按钮统一跟随当前主题。
+- 后台刷新只复用已有QMplus会话，不在首次保存前建立空会话；清理屏障显示明确提示。
 - 修复跨平台CRLF测试及较新Rust编译告警，保留严格质量检查。
 
-本轮最终源码的新安装包尚待独立构建，并核对安装程序版本、GUI子系统、法律文件和SHA-256；Windows真实登录测试机不在本轮范围内。
+Windows本轮验收范围为构建、安装及包体检查，包括安装程序版本、安装后主程序GUI子系统、HTTPS数据源、法律文件和SHA-256。最终安装包的构建来源及CI结果记录在预发布页面；真实账号登录／MFA测试机不在本轮范围内，安装门禁不代替运行登录验收。
 
 ## Linux / Ubuntu
 
 - 同步桌面课程、QMplus、共享缓存、新作业提示、截止细条、十三种语言及主题。
-- 保留x86_64、aarch64的DEB和AppImage构建及Ubuntu安装门禁。
+- 同步QMplus设置顺序与间距、语言切换模糊和完成过渡，以及后台空会话和明确错误提示修复。
+- 同步QMplus设置及课程页账号、刷新、更多和私有详情按钮的主题样式修复。
+- 提供x86_64、aarch64的DEB和AppImage构建，安装验证限定为Ubuntu 24.04 x86_64 DEB，不扩写为aarch64安装验收。
 
-本轮最终源码的DEB／AppImage仍待独立构建。Ubuntu本地虚拟机中的隔离Debug候选已编译，真实登录／重启验证尚未完成；这不等于公共安装包验收通过。
+此前版本完成过真实MFA并取得新业务快照。后续多个候选的普通冷启动仅恢复原缓存，获取时间未前进；即使认证求值已经返回，静默同步仍出现`QUIET_TIMEOUT`。冷启动后台取得新数据尚未通过，保留缓存不代表本次登录或刷新成功。GTK及认证诊断实验留在本地，未作为本轮发布修复；最终包的构建来源及CI结果记录在预发布页面。
 
 ## CLI / TUI 与工程
 
 - 共享课程数据边界和法律文件同步；TUI新增五套配色。终端不宣称拥有原生日历时间轴功能。
 - PR72／73依赖更新已合并，保留现有glib补丁，更新第三方许可清单。
-- 原CI的tar管道提前关闭问题已修。本轮四个Linux终端归档待按最终提交重新构建、核对架构、权限、安全路径及许可。
-- 修正旧CodeQL结果对应的测试形态，不忽略或直接关闭告警；远端告警状态仍需新扫描确认。
+- 原CI的tar管道提前关闭问题已修。四个Linux终端归档的架构、权限、安全路径、版本和法律文件验证通过，保留原Actions字节及提交`da7a166`来源，不宣称按本轮桌面提交重建；最终输入一致性检查记录在预发布页面。
+
+## 已知限制
+
+- Linux冷启动QMplus后台刷新尚未取得新数据，真实MFA曾成功不代表后续冷启动已通过；缓存仍标记原获取时间，不能当作本次刷新成功的证据。
+- Android69仅验证已有有效官方会话的冷启动自动更新，首次登录及会话过期后的MFA不在该次验证范围。
+- HarmonyOS1002046新包自检最终结果尚未复核，QMplus真实重启验收未通过，个人运行截图尚未补齐；旧云测结果不可替代。iPhone、iPad及Duo更新截图仍需完成验收。
+- Windows本轮仅覆盖构建及安装验收。公共DMG未公证，Windows安装程序未获Authenticode签名。
+
+每个公开附件的源码提交、CI或本地原生构建来源及SHA-256在发布正文中记录。发布核对使用本地文件与远端附件元数据，不从Release回下载；这些记录不能替代真实账号运行验收。
 
 ## English — by platform
 
-- **iOS / iPadOS:** Courses centralizes coursework, grades and exams. Authorized QMplus autofill and persistent sessions retain user-controlled MFA. Shared caches and newly discovered coursework notices avoid duplicate queries and first-sync alerts. Theme-colored deadline strips preserve all-day content and course geometry. Thirteen languages, ten themes, custom colors and iPhone Duo layout continuity. Almanac labels adapt to translated text. Build122 upload succeeded; processing/testing availability is checked separately. No formal review submission.
-- **macOS:** Courses, official QMplus sessions, shared caches and bounded new-task notices. Fixed headers and course geometry retained. Additional deadline strips, thirteen languages and ten themes. The public DMG has an independent local system Keychain/session/cache namespace, with no Store-data migration; first use needs separate save and authorization. Deferred foreground preparation resumes, and unready login headings no longer falsely invalidate cached courses. Build122 upload succeeded and is processing. The public DMG is ad-hoc signed, not Developer ID notarized.
-- **Android:** Courses, expanded tasks, optional secure QMplus autofill and shared data. API24, thirteen languages, ten themes and read-only cellular fallback retained. Startup cache restoration avoids main-thread I/O. Month rows fill the measured viewport with actual navigation avoidance and two-stage physical drag distances. Almanac labels remeasure for English, narrow widths and large fonts; task cards and the historical-term switch are aligned. Signed APK68 passes450Debug/450Release unit tests and5isolated native UI tests plus package gates; channel upload is pending. No public AAB or replacement of0.3.2.
-- **HarmonyOS:** Course/task features, independent QMplus sessions, shared caches and notices. Theme deadline strips, thirteen languages, ten themes and timetable disclosures retained. Async cache reads and measured month/header/navigation geometry improve startup and folding. Almanac labels adapt to language/font size, and public legal notices are bundled. Final release-signed1002045 passes405Hypium specifications, signatures, current bytecode and script/legal byte checks; new upload/cloud testing is pending. The prior1002044 cloud report had one UX warning and does not validate this package. Preserve testing-and-formal-release package purpose without submitting formal review; no public Harmony package.
-- **Windows:** Shared queries, official QMplus sessions, caches, notices and Beijing-time deadline strips; ten themes and thirteen languages. The new final-source installer still requires independent build and delivery verification. A Windows native login test host is excluded from this round.
-- **Linux / Ubuntu:** Equivalent desktop features and x86_64/aarch64 DEB/AppImage targets. New final-source public packages are pending. An isolated local Ubuntu Debug candidate compiled; actual login/restart remains unverified and is not a public-package acceptance result.
-- **CLI / TUI:** Shared data boundaries and legal files; five new TUI themes, not native calendar UI. Dependency PRs merged and tar packaging repaired. Four terminal archives still require final-source rebuild and checks; old remote CodeQL closure is excluded from this round.
+- **iOS / iPadOS:** Courses centralizes coursework, grades and exams, with independent official QMplus login, authorized autofill and persistent sessions. Shared caches and new-task notices avoid duplicate queries and first-sync alerts. Deadline strips retain all-day content and course geometry. Thirteen languages, ten themes, adaptive Almanac labels and iPhone Duo layout continuity. Build 122 uploaded and linked to existing internal groups and the saved 0.4.0 draft. Updated iPhone/iPad/Duo screenshot validation remains incomplete.
+- **macOS:** Shared Courses/QMplus features, multi-window notice deduplication, fixed calendar headers, deadline strips, thirteen languages and ten themes. The public DMG has separate system Keychain, session and cache storage and requires separate initial authorization. Build 122 uploaded and linked to existing internal groups; the saved 0.4.0 draft includes updated platform notes and four real screenshots. The public DMG is ad-hoc signed and unnotarized.
+- **Android:** Courses, optional secure QMplus autofill, shared data, API 24 support and read-only cellular fallback. Async startup restoration, measured month geometry, adaptive Almanac labels and themed language transitions. APK 69 passes 450 Release unit tests, five native language tests and package gates; lint retains existing warnings. A real-account cold launch with an existing valid session produced a newer snapshot automatically. No cookie clearing or MFA occurred, so this does not validate first-time or expired-session MFA. Huawei draft saved without submission; review-locked vivo 0.3.2 skipped. No public AAB.
+- **HarmonyOS:** Shared course/task features, notices, deadline strips, thirteen languages and ten themes, async caches and measured calendar geometry. Build 1002046 adds spring feedback to mobile day/week timelines. Release HAP/APP, 405 tests, signatures and package gates passed; 217 source inputs match between SDK-tested and uploaded packages, whose hashes differ. DevEco upload and package legality passed; formal and test drafts saved without review submission or test release. Final self-check results are unverified; old 1002045 cloud results do not validate this build. Real QMplus restart acceptance and personal screenshots remain incomplete. No public Harmony package.
+- **Windows:** Shared course queries, official QMplus sessions, caches, notices and deadline strips; themed controls, revised settings and language transitions. This round covers build and installation gates, excluding real-account login/MFA validation. No Authenticode signature.
+- **Linux / Ubuntu:** Shared desktop features and UI fixes, with x86_64/aarch64 DEB/AppImage targets; installation validation is limited to Ubuntu 24.04 x86_64 DEB. Real MFA previously fetched a fresh snapshot, but later ordinary cold starts restored only cached data and quiet refresh timed out. Fresh background sync has not passed. Local GTK/authentication experiments are excluded from this release.
+- **CLI / TUI:** Shared data boundaries, legal files, five new TUI themes and repaired tar packaging. Four verified original Actions archives retain source commit `da7a166`; they are not relabeled as new desktop-commit builds.
+
+Version 0.4.0 remains prerelease only; stable 0.3.2 is unchanged. No formal or new external Beta review is submitted. The same prerelease page records the actual 11 public files, source commits, CI/local build provenance and hashes. It excludes AAB, Harmony packages, IPA and checksum sidecars; verification uses local files and remote metadata without Release re-download.

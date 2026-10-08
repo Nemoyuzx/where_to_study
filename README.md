@@ -6,9 +6,9 @@
 
 最新 GitHub 正式版是 [Where To Study v0.3.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。下表提供这个正式版的 Windows、Linux、macOS 和 Android 安装包。
 
-0.4.0 仍为预发布：Apple 两端最新122已上传，服务器正在处理；Android68和HarmonyOS1002045的新签名包已生成，正在更新测试渠道及GitHub附件。HarmonyOS0.3.2已上架。各商店、TestFlight与GitHub相互独立，能否安装及具体版本以对应页面为准；0.4.0不提交正式审核。
+0.4.0 仅通过同一个 [GitHub 预发布页面](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease) 更新，保持预发布状态，不替换 0.3.2 正式版，也不提交商店正式或新的外部 Beta 审核。附件批次、构建来源和可下载文件以该页面为准；各商店、TestFlight 与 GitHub 相互独立。
 
-0.3.2 包含竞赛镜像、账户说明和班车完整时刻表，详见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。另有已公开的 [0.4.0 预发布测试版及分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease)，包含新课程页、QMplus、新作业提醒及主题等改进；它不是正式稳定版。
+0.4.0 新增课程页、QMplus 课程与作业、十三种语言和十款主题，各平台功能与验证边界见[分平台预发布说明](./docs/release-v0.4.0-prerelease-notes.md)。其中 Linux 冷启动后台取得新 QMplus 数据仍未通过验收，恢复缓存不代表本次登录成功；Windows 本轮仅验收构建及安装，未验证真实账号登录。0.3.2 的竞赛镜像、账户说明和完整班车时刻表见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。
 
 | 设备 | 下载或测试渠道 | 安装方式 |
 | --- | --- | --- |
@@ -88,7 +88,9 @@ Android 原生客户端在用户已授权系统日历访问时，可从设备自
 
 用户还可以启用[自定义日程接口](./docs/custom-schedule-api.md)。客户端只接受不含凭据、片段、回环地址或私网字面量的公开 HTTPS JSON 地址，拒绝重定向并限制响应大小、条目数与查询频率；API 返回的文字保持原文。收藏操作会把单条日程的完整快照保存在当前设备，不上传也不跨设备同步；来源关闭、失败或移除条目后仍会在教学日历中显示，取消收藏或“清除本地数据”才会删除。
 
-课程作业解析以[北邮云课堂官方作业页](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)的真实 `records` / `undoneList` 响应契约为准。查询作业或打开日期详情中的作业卡时，图形客户端从系统安全存储临时读取已保存的学号和教学云平台密码；未单独设置云密码时使用教务密码。仅通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再以内存中的一次性票据换取云课堂访问令牌并读取当前课程和作业；不会读取浏览器 Cookie/token，也不会把密码发送给 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn`。票据、Cookie 和令牌不写入磁盘；用于跨日期查询的全量作业结果最多复用 10 分钟，已显示的日期结果只保留在当前进程内，并在凭据改变、切换账号或清除本地数据时失效。旧凭据发起的请求不能覆盖新凭据的数据。
+课程作业解析以[北邮云课堂官方作业页](https://ucloud.bupt.edu.cn/uclass/course.html#/student/studentAssignmentListPage?ind=3)的真实 `records` / `undoneList` 响应契约为准。需要刷新时，图形客户端从系统安全存储临时读取已保存的学号和教学云平台密码；未单独设置云密码时使用教务密码。仅通过 HTTPS 提交给 `auth.bupt.edu.cn` 完成统一认证，再以内存中的一次性票据换取云课堂访问令牌并读取当前课程和作业；不会读取浏览器 Cookie/token，也不会把密码发送给 `ucloud.bupt.edu.cn` 或 `apiucloud.bupt.edu.cn`。这条教学云认证链的票据、Cookie 和令牌不写入磁盘。
+
+从 0.4.0 起，校验后的课程和作业业务快照会绑定本地账户作用域保存，重启先显示原获取时间的缓存，再在后台更新；缓存不证明本次登录或刷新已经成功。凭据改变、切换账号或清除本地数据时，对应旧缓存失效，旧请求不能覆盖新账户的数据。业务快照不含密码、Cookie 或令牌；它与 QMplus 独立的官方网页会话不是同一种存储，详见[QMplus 会话说明](./docs/qmplus-integration.md)。
 
 QMplus 只在用户主动连接后，通过独立的应用内官方网页登录会话读取课程及当前课程中已发布的 Assignment/Quiz 业务信息。应用只读取白名单内的官方 HTTPS 页面和同源 AJAX，不提交作业、开始测验或使用第三方 Worker 转发账号；本项目服务器不接收 QMplus 凭据或课程快照。各平台本地会话是否跨重启保留不同，断开连接或清除本地数据会清除应用管理的 QMplus 会话与快照；详见 [QMplus 接入说明](./docs/qmplus-integration.md)和[隐私声明](./PRIVACY.md)。
 
@@ -185,7 +187,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 ./scripts/native-harmony-build.sh
 ```
 
-`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙0.3.2已上架；0.4.0最新1002045签名包已生成，新包的上传与云测状态见[分平台更新说明](./docs/release-v0.4.0-prerelease-notes.md)。此前1002044的云测结果不能代替新包验证；软件包具备正式用途不等于已提交正式审核。
+`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙 0.3.2 已上架；0.4.0（1002046）的本地 Release 测试、签名及包体门禁通过，已上传并保存正式及测试草稿，未提交审核或发布测试。该包自检最终结果尚未复核，旧 1002045 云测报告不能代替新包验证；详见[分平台更新说明](./docs/release-v0.4.0-prerelease-notes.md)。
 
 Android 主界面仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri；QMplus 官方 SSO/MFA 在独立进程的 WebView 中完成，不读取系统浏览器 Cookie。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 

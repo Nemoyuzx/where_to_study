@@ -1093,7 +1093,7 @@ export struct MobileTeachingCalendarView {
       .layoutWeight(1)
       .scrollable(ScrollDirection.Vertical)
       .scrollBar(BarState.Off)
-      .edgeEffect(EdgeEffect.Fade, { alwaysEnabled: true })
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       .width('100%')
       .id('calendar.mobile.timeline-scroll')
       .onAppear(() => {

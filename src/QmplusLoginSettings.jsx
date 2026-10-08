@@ -28,9 +28,25 @@ export default function QmplusLoginSettings({language, command, native, enabled 
     }).catch(()=>{if(owner.current===generation)setError('无法读取 QMplus 安全存储。')})
     let release
     if(native) {
-      command('load_qmplus_connection_status').then(value=>{if(owner.current===generation)setConnection(value)}).catch(()=>{})
-      listen('qmplus:connection-status',event=>{if(owner.current===generation)setConnection(event.payload)})
-        .then(unlisten=>{if(owner.current===generation)release=unlisten;else unlisten()}).catch(()=>{})
+      let eventRevision=0
+      const readConnection=async()=>{
+        const revision=eventRevision
+        try {
+          const value=await command('load_qmplus_connection_status')
+          if(owner.current===generation&&eventRevision===revision)setConnection(value)
+        }catch{}
+      }
+      // Subscribe before reading so a completed sync cannot fall in the gap.
+      // A newer event also wins over an already-in-flight initial status read.
+      listen('qmplus:connection-status',event=>{
+        if(owner.current===generation){eventRevision++;setConnection(event.payload)}
+      }).then(unlisten=>{
+        if(owner.current!==generation){unlisten();return}
+        release=unlisten
+        return readConnection()
+      },()=>{
+        if(owner.current===generation)return readConnection()
+      }).catch(()=>{})
     }
     return()=>{owner.current++;release?.()}
     // Locale updates keep this editor and its transaction alive.
@@ -80,6 +96,7 @@ export default function QmplusLoginSettings({language, command, native, enabled 
     if(['checking','username','password','submitted'].includes(connection.phase))return text('正在确认 QMplus 登录状态…','Checking QMplus sign-in status…')
     return ''
   })()
+  const requiresManualContinuation=native&&enabled&&['manual','challenge'].includes(connection.phase)
   return <section className="panel qmplus-settings-panel">
     <div className="panel-title qmplus-title"><KeyRound size={18}/><h2>QMplus</h2><small>{text('仅适用国院','For the International School only')}</small>
       <button type="button" className="qmplus-settings-disclosure" aria-label="QMplus" aria-expanded={expanded} aria-controls={bodyID} onClick={()=>setExpanded(value=>!value)}><ChevronDown size={18} aria-hidden="true"/></button></div>
@@ -99,10 +116,10 @@ export default function QmplusLoginSettings({language, command, native, enabled 
     <label>{text('QMplus 密码','QMplus password')}
       <input type="password" autoComplete="new-password" value={password} disabled={busy||!native}
         onChange={event=>setPassword(event.target.value)} maxLength={2048}/></label>
-    <div className="query-action-row">
-      <button type="button" disabled={busy||!native||!statusReady||!account.trim()||!password} onClick={()=>perform('save_qmplus_login',{account,password})}>
+    <div className="settings-actions qmplus-settings-actions">
+      <button type="button" className="primary" disabled={busy||!native||!statusReady||!account.trim()||!password} onClick={()=>perform('save_qmplus_login',{account,password})}>
         <KeyRound size={16}/>{text('安全保存 QMplus 登录资料','Save QMplus credentials securely')}</button>
-      <button type="button" disabled={busy||!native||!status.saved} onClick={()=>perform('clear_qmplus_login')}>
+      <button type="button" className="danger" disabled={busy||!native||!status.saved} onClick={()=>perform('clear_qmplus_login')}>
         <Trash2 size={16}/>{text('删除 QMplus 登录资料','Delete QMplus credentials')}</button>
     </div>
     <div className="settings-switch-row"><div><strong>{text('自动填写 QMplus 登录资料','Autofill QMplus credentials')}</strong>
@@ -110,12 +127,10 @@ export default function QmplusLoginSettings({language, command, native, enabled 
       <button type="button" className="settings-switch" role="switch" aria-checked={status.saved?status.enabled:draftAutofill}
         aria-label={text('自动填写 QMplus 登录资料','Autofill QMplus credentials')} disabled={busy||!native||!statusReady}
         onClick={()=>status.saved?perform('set_qmplus_autofill',{enabled:!status.enabled}):setDraftAutofill(value=>!value)}><span/></button></div>
-    <div className="query-action-row"><button type="button" disabled={!native||busy||!enabled||featureBusy} onClick={()=>connect()}>
+    <div className="settings-actions qmplus-settings-actions"><button type="button" className="secondary" disabled={!native||busy||!enabled||featureBusy} onClick={()=>connect()}>
       <ExternalLink size={16}/>{text('连接／同步 QMplus','Connect / sync QMplus')}</button>
-      <button type="button" disabled={!native||busy||!enabled||featureBusy} onClick={()=>connect(true)}>
-        {text('手动继续','Continue manually')}</button>
-      <button type="button" disabled={!native||busy} onClick={()=>perform('clear_qmplus_login')}>
-        {text('退出并清除 QMplus 数据','Disconnect and clear QMplus data')}</button></div>
+      {requiresManualContinuation&&<button type="button" className="secondary" disabled={busy||featureBusy} onClick={()=>connect(true)}>
+        <ExternalLink size={16}/>{text('手动继续','Continue manually')}</button>}</div>
     {!native&&<small>{text('请使用原生客户端的官方 QMplus 登录窗口。','Use the official QMplus sign-in window in a native client.')}</small>}
     </div></AnimatedDisclosure>
     {status.saved&&<small>{text('QMplus 登录资料已安全保存','QMplus credentials are securely saved')}</small>}

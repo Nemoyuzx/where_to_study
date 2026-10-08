@@ -3,7 +3,7 @@ import { uiDateLocale } from './ui-languages.js'
 import {useEffect,useState,useRef,useId,useMemo} from 'react'
 import {useCourseData} from './use-course-data.js'
 import AnimatedDisclosure from './AnimatedDisclosure.jsx'
-import {BookOpen,CheckCircle2,CalendarClock,Clock3,RefreshCw,ExternalLink,ChevronDown,Info,X} from 'lucide-react'
+import {BookOpen,CheckCircle2,CalendarClock,Clock3,RefreshCw,ExternalLink,ChevronDown,Info,Settings2,X} from 'lucide-react'
 import GradesPanel from './GradesPanel.jsx'
 import PrivateQueriesPanel from './PrivateQueriesPanel.jsx'
 import {assignmentsForCourse,groupTeachingCloudCourses,teachingCloudCourseIDs,isEbuCourse,qmplusActivitiesForCourse,submissionCounts,courseTimestamp,courseActivityKey,CourseRequestOwner} from './course-domain.js'
@@ -71,7 +71,7 @@ function CourseActivityBody({course,source,items,language,busy,error,onRefresh})
       </div>
       {item.url&&<a href={item.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{source==='qmplus' ? text('打开 QMplus 官方活动页', 'Open official QMplus activity') : text('打开教学云平台', 'Open Teaching Cloud Platform')}</a>}
     </article>)}
-    {items?.length>limit&&<button type="button" onClick={()=>setLimit(value=>value+30)}>{text('加载更多', 'Show more')}</button>}
+    {items?.length>limit&&<button type="button" className="query-action-button" onClick={()=>setLimit(value=>value+30)}><ChevronDown size={16}/>{text('加载更多', 'Show more')}</button>}
     <p className="query-source">{text('数量仅统计已同步且明确提交状态的作业。时间按北京时间展示，伦敦时间遵守夏令时。', 'Counts refer only to synchronized assignments with explicit submission states. Dates use Beijing time; London daylight saving is respected.')}</p>
     {course.url&&<a className="external-action-button" href={course.url} target="_blank" rel="noreferrer"><ExternalLink size={16}/>{source==='qmplus'?(text('QMplus 课程页', 'QMplus course page')):(text('打开教学云平台', 'Open Teaching Cloud Platform'))}</a>}
   </>
@@ -178,7 +178,7 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
     {['exams','assignments'].map(kind=><PrivateQueriesPanel key={kind} kind={kind} enabled={tab===kind} command={command} courseDataOwner={courseDataOwner} language={language} hasAccount={hasAcademicAccount} onOpenAccount={onOpenAccount} examSnapshot={examSnapshot} assignmentSnapshot={assignmentItems}/>)}
     {tab==='courses'&&<>
       <header className="query-section-header"><div><h2>{text('教学云平台课程', 'Teaching Cloud courses')}</h2>{courses!==null&&<small>{cloudCourses.length} {text('门', 'courses')}</small>}</div><button disabled={busy} onClick={()=>reload(true)}><RefreshCw size={16}/>{text('刷新', 'Refresh')}</button></header>
-      {(error||cloudError)&&<p role="alert">{text(error||cloudError,error||cloudError)}</p>}{!hasAcademicAccount&&<button onClick={onOpenAccount}>{text('前往个人账户', 'Configure academic account')}</button>}
+      {(error||cloudError)&&<p role="alert">{text(error||cloudError,error||cloudError)}</p>}{!hasAcademicAccount&&<button className="query-action-button" onClick={onOpenAccount}><Settings2 size={16}/>{text('前往个人账户', 'Configure academic account')}</button>}
       {data.fetchedAt&&<small>{text('最近同步','Last synchronized')}：{time(data.fetchedAt,language)}</small>}
       {data.cacheWarning&&<p role="status">{text('本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。','Course data was loaded, but the local cache was not updated. A restart may show the previous cache.')}</p>}
       <div className="course-list">{cloudCourses.map(course=><CourseRow key={course.presentation_key} course={course} items={cloudActivities(course)} language={language} source="ucloud" busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onOpen={()=>open('ucloud',course)}/>)}</div>
