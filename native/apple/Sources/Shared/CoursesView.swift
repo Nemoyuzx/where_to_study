@@ -204,7 +204,11 @@ struct CoursesView: View {
                 if let fetchedAt = teachingCloud.fetchedAt {
                     Text(fetchedAt, style: .time).font(.caption).foregroundStyle(theme.secondaryText)
                 }
-                Link(model.localized("打开教学云平台"), destination: CalendarDeadlineSources.assignments)
+                Link(destination: CalendarDeadlineSources.assignments) {
+                    Label(model.localized("打开教学云平台"), systemImage: "arrow.up.right.square")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             }
     }
 }

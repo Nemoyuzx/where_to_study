@@ -105,7 +105,7 @@ export struct PrivacyPolicyView {
           }
           .type(ButtonType.Normal)
           .borderRadius(6)
-          .border({ width: 1, color: AppTheme.border() })
+          .border({ radius: 6, width: 1, color: AppTheme.border() })
           .backgroundColor(AppTheme.background())
           .width('100%')
           .height(36)

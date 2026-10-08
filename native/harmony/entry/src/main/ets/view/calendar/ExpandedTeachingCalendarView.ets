@@ -527,7 +527,7 @@ export struct ExpandedTeachingCalendarView {
         .height(24)
         .padding(2)
         .borderRadius(8)
-        .border({ width: 1, color: AppTheme.border() })
+        .border({ radius: 8, width: 1, color: AppTheme.border() })
         .backgroundColor(AppTheme.background())
       }
       .width(this.model.resolvedLanguage() === AppLanguage.simplifiedChinese ||
@@ -564,7 +564,7 @@ export struct ExpandedTeachingCalendarView {
         .height(32)
         .textAlign(TextAlign.Center)
         .borderRadius(6)
-        .border({ width: 1, color: AppTheme.border() })
+        .border({ radius: 6, width: 1, color: AppTheme.border() })
         .onClick(() => {
           this.moveDate(-1);
         })
@@ -582,7 +582,7 @@ export struct ExpandedTeachingCalendarView {
       .height(32)
       .padding({ left: 10, right: 10 })
       .borderRadius(7)
-      .border({ width: 1, color: AppTheme.border() })
+      .border({ radius: 7, width: 1, color: AppTheme.border() })
       .backgroundColor(AppTheme.background())
 
       Text(this.model.text('今天'))
@@ -592,7 +592,7 @@ export struct ExpandedTeachingCalendarView {
         .height(32)
         .textAlign(TextAlign.Center)
         .borderRadius(6)
-        .border({ width: 1, color: AppTheme.border() })
+        .border({ radius: 6, width: 1, color: AppTheme.border() })
         .onClick(() => {
           this.animateSelectedDate(StrictDates.todayParts());
         })
@@ -604,7 +604,7 @@ export struct ExpandedTeachingCalendarView {
         .height(32)
         .textAlign(TextAlign.Center)
         .borderRadius(6)
-        .border({ width: 1, color: AppTheme.border() })
+        .border({ radius: 6, width: 1, color: AppTheme.border() })
         .onClick(() => {
           this.moveDate(1);
         })
@@ -627,7 +627,7 @@ export struct ExpandedTeachingCalendarView {
             .height(24)
             .padding({ left: 12, right: 12 })
             .borderRadius(6)
-            .border({ width: 1, color: AppTheme.border() })
+            .border({ radius: 6, width: 1, color: AppTheme.border() })
             .backgroundColor(AppTheme.background())
             .onClick(() => {
               if (!this.model.isRefreshingSchedule && !this.model.isImportingCalendar) {
@@ -648,7 +648,7 @@ export struct ExpandedTeachingCalendarView {
             .height(24)
             .padding({ left: 12, right: 12 })
             .borderRadius(6)
-            .border({ width: 1, color: AppTheme.border() })
+            .border({ radius: 6, width: 1, color: AppTheme.border() })
             .backgroundColor(AppTheme.background())
             .onClick(() => {
               if (this.model.schedule !== null && !this.model.isRefreshingSchedule &&
@@ -671,7 +671,7 @@ export struct ExpandedTeachingCalendarView {
           .height(24)
           .padding({ left: 12, right: 12 })
           .borderRadius(6)
-          .border({ width: 1, color: AppTheme.border() })
+          .border({ radius: 6, width: 1, color: AppTheme.border() })
           .backgroundColor(AppTheme.background())
           .opacity(this.model.favoriteDeadlines.length > 0 && !this.model.isImportingCalendar ? 1 : 0.55)
           .onClick(() => {
@@ -1575,7 +1575,7 @@ export struct ExpandedTeachingCalendarView {
       .width(360)
       .constraintSize({ maxHeight: 440 })
       .borderRadius(10)
-      .border({ width: 1, color: AppTheme.border() })
+      .border({ radius: 10, width: 1, color: AppTheme.border() })
       .backgroundColor(AppTheme.elevated())
       .shadow({ radius: 18, color: '#33000000', offsetX: 0, offsetY: 8 })
       .position({ x: '50%', y: '50%' })
@@ -1622,7 +1622,7 @@ export struct ExpandedTeachingCalendarView {
               .layoutWeight(1)
               .height(32)
               .borderRadius(6)
-              .border({ width: 1, color: AppTheme.border() })
+              .border({ radius: 6, width: 1, color: AppTheme.border() })
               .backgroundColor(AppTheme.background())
               .onClick(() => {
                 this.setSelectedDate(this.presentedDay as DateParts);

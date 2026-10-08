@@ -957,6 +957,7 @@ export struct MobileTeachingCalendarView {
     .backgroundColor(day.equals(this.selectedDate()) ? AppTheme.selectedDate() : Color.Transparent)
     .borderRadius(10)
     .border({
+      radius: 10,
       width: day.equals(StrictDates.todayParts()) ? 2 : 0,
       color: day.equals(StrictDates.todayParts()) ?
         AppTheme.nowIndicator() : Color.Transparent
@@ -1265,7 +1266,7 @@ export struct MobileTeachingCalendarView {
           Text('+' + (this.allDayItemsOn(renderDate).length - 3).toString())
             .fontSize(10.5).fontWeight(FontWeight.Bold).fontColor(AppTheme.primary())
             .height(30).padding({ left: 10, right: 10 }).borderRadius(6)
-            .backgroundColor(AppTheme.background()).border({ width: 1, color: AppTheme.border() })
+            .backgroundColor(AppTheme.background()).border({ radius: 6, width: 1, color: AppTheme.border() })
             .onClick(() => { if (interactive) { this.presentAllDayDialog(renderDate, CalendarMode.day); } })
         }
       }
@@ -2239,7 +2240,7 @@ export struct MobileTeachingCalendarView {
       .width(Math.min(360, Math.max(this.rootWidth - 32, 240)))
       .constraintSize({ maxHeight: Math.max(this.rootHeight - 48, 220) })
       .borderRadius(12)
-      .border({ width: 1, color: AppTheme.border() })
+      .border({ radius: 12, width: 1, color: AppTheme.border() })
       .backgroundColor(AppTheme.elevated())
       .shadow({ radius: 18, color: '#33000000', offsetX: 0, offsetY: 8 })
       .position({ x: '50%', y: '50%' })
@@ -2300,7 +2301,7 @@ export struct MobileTeachingCalendarView {
       .width(this.dayDetailWidth())
       .height(this.dayDetailHeight(this.presentedDay as DateParts))
       .borderRadius(8)
-      .border({ width: 1, color: AppTheme.border() })
+      .border({ radius: 8, width: 1, color: AppTheme.border() })
       .backgroundColor(AppTheme.elevated())
       .shadow({ radius: 18, color: '#33000000', offsetX: 0, offsetY: 8 })
       .alignItems(HorizontalAlign.Start)
@@ -2350,7 +2351,7 @@ export struct MobileTeachingCalendarView {
           .layoutWeight(1)
           .height(32)
           .borderRadius(6)
-          .border({ width: 1, color: AppTheme.border() })
+          .border({ radius: 6, width: 1, color: AppTheme.border() })
           .backgroundColor(AppTheme.background())
           .onClick(() => {
             this.performCalendarHaptic();
@@ -2418,7 +2419,7 @@ export struct MobileTeachingCalendarView {
     .width('100%')
     .alignItems(HorizontalAlign.Start)
     .borderRadius(framed ? 10 : 0)
-    .border({ width: framed ? 1 : 0, color: AppTheme.border() })
+    .border({ radius: framed ? 10 : 0, width: framed ? 1 : 0, color: AppTheme.border() })
     .backgroundColor(framed ? AppTheme.surface() : Color.Transparent)
   }
 

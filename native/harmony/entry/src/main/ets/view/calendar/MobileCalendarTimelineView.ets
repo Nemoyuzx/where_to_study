@@ -655,7 +655,7 @@ export struct MobileCalendarTimelineView {
       .padding({ left: 6, right: 6, top: 3, bottom: 3 })
       .borderRadius(9)
       .backgroundColor(AppTheme.surface())
-      .border({ width: 0.5, color: AppTheme.border() })
+      .border({ radius: 9, width: 0.5, color: AppTheme.border() })
       .position({
         x: 8,
         y: this.slotGuideY(slot)
@@ -752,7 +752,7 @@ export struct MobileCalendarTimelineView {
     .width(this.blockDayWidth(dayIndex, placement))
     .height(this.blockHeight(placement.course))
     .borderRadius(6)
-    .border({ width: { left: 3 }, color: AppTheme.accent() })
+    .border({ radius: 6, width: { left: 3 }, color: AppTheme.accent() })
     .backgroundColor(AppTheme.primaryFill())
     .zIndex(MobileCalendarTimelineLayout.courseBlockLayerZ)
     .hitTestBehavior(HitTestMode.Block)
@@ -800,7 +800,7 @@ export struct MobileCalendarTimelineView {
     .width(this.blockWeekWidth(dayIndex, placement))
     .height(this.blockHeight(placement.course))
     .borderRadius(6)
-    .border({ width: { left: 3 }, color: AppTheme.accent() })
+    .border({ radius: 6, width: { left: 3 }, color: AppTheme.accent() })
     .backgroundColor(AppTheme.primaryFill())
     .zIndex(MobileCalendarTimelineLayout.courseBlockLayerZ)
     .hitTestBehavior(HitTestMode.Block)

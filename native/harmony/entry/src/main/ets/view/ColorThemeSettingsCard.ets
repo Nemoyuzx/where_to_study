@@ -117,13 +117,16 @@ export struct ColorThemeSettingsCard {
         .fontColor(AppTheme.text())
       TextInput({ text: value, placeholder: '#RRGGBB' })
         .id(identifier)
-        .fontSize(16)
+        .fontSize(ControlMetrics.inputFontSize)
+        .placeholderFont({ size: ControlMetrics.inputFontSize })
         .fontFamily('monospace')
         .fontColor(AppTheme.text())
         .backgroundColor(this.model.colorTheme.selection.preset === 'default' ?
           AppTheme.background() : AppTheme.inputSurface())
         .borderRadius(8)
         .height(ControlMetrics.height)
+        .padding({ left: 16, right: 16, top: 0, bottom: 0 })
+        .align(Alignment.Center)
         .width('100%')
         .enableKeyboardOnFocus(!this.seedOnlyScene)
         .accessibilityText(this.text(chinese, english) + ' HEX RGB')
@@ -175,7 +178,7 @@ export struct ColorThemeSettingsCard {
           .borderRadius(8)
           .backgroundColor(this.model.colorTheme.selection.preset === seed.id ?
             AppTheme.selectionSurface() : AppTheme.background())
-          .border({ width: this.model.colorTheme.selection.preset === seed.id ? 2 : 1,
+          .border({ width: this.model.colorTheme.selection.preset === seed.id ? 2 : 1, radius: 8,
             color: this.model.colorTheme.selection.preset === seed.id ? AppTheme.primary() : AppTheme.border() })
           .accessibilityText(this.text(seed.nameZh, seed.nameEn) +
             (this.model.colorTheme.selection.preset === seed.id ? this.text('，已选中', ', selected') : ''))
@@ -224,7 +227,7 @@ export struct ColorThemeSettingsCard {
           .padding(8)
           .borderRadius(8)
           .backgroundColor(this.previewLayer('surfaceVariant'))
-          .border({ width: 1, color: this.previewLayer('border') })
+          .border({ width: 1, radius: 8, color: this.previewLayer('border') })
           .width('100%')
           Text(this.text('日程详情浮层', 'Event Details Panel')).fontSize(12)
             .fontColor(this.previewLayer('secondaryText')).padding(8).width('100%')

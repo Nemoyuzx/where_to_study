@@ -59,6 +59,9 @@ export struct GradeQueryView {
           Row({ space: 8 }) {
           Select(this.termOptions())
             .height(ControlMetrics.height)
+            .backgroundColor(AppTheme.inputSurface())
+            .borderRadius(8)
+            .border({ width: 1, radius: 8, color: AppTheme.border() })
             .value(this.termName()).layoutWeight(1).font({ size: 15 })
             .enabled(!this.model.gradeLoading && this.model.gradeTerms.length > 0)
             .id('query.grades.term')
@@ -73,6 +76,9 @@ export struct GradeQueryView {
           Select([{ value: this.model.text('最好成绩') }, { value: this.model.text('首次成绩') },
             { value: this.model.text('全部记录') }])
             .height(ControlMetrics.height)
+            .backgroundColor(AppTheme.inputSurface())
+            .borderRadius(8)
+            .border({ width: 1, radius: 8, color: AppTheme.border() })
             .value(this.recordTypeName()).width('100%').font({ size: 15 })
             .enabled(!this.model.gradeLoading).id('query.grades.type')
             .onSelect((index: number) => this.model.selectGradeRecordType(['1', '0', ''][index]))

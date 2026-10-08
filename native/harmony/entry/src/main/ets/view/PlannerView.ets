@@ -308,7 +308,7 @@ export struct PlannerView {
     })
     .width('100%')
     .borderRadius(8)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ radius: 8, width: 1, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -330,7 +330,7 @@ export struct PlannerView {
         .height(this.isCompact() ? 48 : 56)
         .width('100%')
         .borderRadius(7)
-        .border({ width: 1, color: AppTheme.border() })
+        .border({ radius: 7, width: 1, color: AppTheme.border() })
         .backgroundColor(AppTheme.surfaceVariant())
         .onClick(() => {
           this.model.loadWeather(this.model.queryCampusID, true);
@@ -415,7 +415,7 @@ export struct PlannerView {
     .width('100%')
     .padding({ left: 10, right: 10, top: 9, bottom: 9 })
     .borderRadius(7)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ radius: 7, width: 1, color: AppTheme.border() })
     .backgroundColor(AppTheme.surfaceVariant())
     .alignItems(VerticalAlign.Center)
   }
@@ -543,7 +543,7 @@ export struct PlannerView {
           .height(32)
           .padding({ left: 10, right: 10 })
           .borderRadius(6)
-          .border({ width: 1, color: AppTheme.border() })
+          .border({ radius: 6, width: 1, color: AppTheme.border() })
           .backgroundColor(AppTheme.surface())
           .onClick(() => {
             this.model.selectFreeSlots();
@@ -555,7 +555,7 @@ export struct PlannerView {
           .height(32)
           .padding({ left: 10, right: 10 })
           .borderRadius(6)
-          .border({ width: 1, color: AppTheme.border() })
+          .border({ radius: 6, width: 1, color: AppTheme.border() })
           .backgroundColor(AppTheme.surface())
           .onClick(() => {
             this.model.clearSelectedSlots();
@@ -601,6 +601,7 @@ export struct PlannerView {
       (this.busySlotsValue.has(slot.index) ? '#73E2BC62' : AppTheme.surface()))
     .borderRadius(6)
     .border({
+      radius: 6,
       width: 1,
       color: this.model.selectedSlots.has(slot.index) ? AppTheme.primaryFill() : AppTheme.border()
     })
@@ -709,6 +710,7 @@ export struct PlannerView {
     .backgroundColor(this.model.selectedBuildings.has(building) ? AppTheme.primaryFill() : AppTheme.surface())
     .borderRadius(6)
     .border({
+      radius: 6,
       width: 1,
       color: this.model.selectedBuildings.has(building) ? AppTheme.primaryFill() : AppTheme.border()
     })

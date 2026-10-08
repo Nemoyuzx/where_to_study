@@ -407,6 +407,7 @@ class SettingsPage internal constructor(
         val credentialEditor = QmplusCredentialSettingsEditor(activity)
         val details = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
+            setPadding(0, activity.dp(10), 0, 0)
             addView(notice); addView(stateText); addView(spacer(activity, 10)); addView(connect)
             addView(spacer(activity, 10)); addView(credentialEditor.view())
             addView(spacer(activity, 10))

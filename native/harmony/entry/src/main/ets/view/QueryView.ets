@@ -662,7 +662,7 @@ export struct QueryView {
     .padding(16)
     .width('100%')
     .borderRadius(10)
-    .border({ width: 0.5, color: AppTheme.border() })
+    .border({ radius: 10, width: 0.5, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -684,7 +684,7 @@ export struct QueryView {
       .padding(18)
       .width('100%')
       .borderRadius(10)
-      .border({ width: 1, color: AppTheme.border() })
+      .border({ radius: 10, width: 1, color: AppTheme.border() })
       .backgroundColor(AppTheme.surface())
     } else {
       Column({ space: ShuttleQueryLayout.routeGapVp }) {
@@ -828,7 +828,7 @@ export struct QueryView {
       .padding(16)
       .width('100%')
       .borderRadius(10)
-      .border({ width: 0.5, color: AppTheme.border() })
+      .border({ radius: 10, width: 0.5, color: AppTheme.border() })
       .backgroundColor(AppTheme.surface())
       .alignItems(HorizontalAlign.Start)
       .id('query.shuttle.full-timetable')
@@ -906,7 +906,7 @@ export struct QueryView {
     .padding(ShuttleQueryLayout.cardPaddingVp)
     .width('100%')
     .borderRadius(10)
-    .border({ width: 0.5, color: AppTheme.border() })
+    .border({ radius: 10, width: 0.5, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -949,14 +949,16 @@ export struct QueryView {
       TextInput({ placeholder: this.model.text('搜索名称、主办方、分类、地点或来源'), text: this.session.searchText })
         .id('query.events.search')
         .type(InputType.Normal)
-        .fontSize(14)
+        .fontSize(ControlMetrics.inputFontSize)
+        .placeholderFont({ size: ControlMetrics.inputFontSize })
         .fontColor(AppTheme.text())
         .placeholderColor(AppTheme.secondaryText())
         .backgroundColor(AppTheme.inputSurface())
         .border({ width: 1, color: AppTheme.border() })
         .borderRadius(8)
         .height(38)
-        .padding({ left: 12, right: 12 })
+        .padding({ left: 12, right: 12, top: 0, bottom: 0 })
+        .align(Alignment.Center)
         .width('100%')
         .enableKeyboardOnFocus(true)
         .onChange((value: string) => {
@@ -1184,7 +1186,7 @@ export struct QueryView {
     .padding(14)
     .width('100%')
     .borderRadius(10)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ radius: 10, width: 1, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(VerticalAlign.Center)
   }

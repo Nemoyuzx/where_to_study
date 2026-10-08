@@ -1013,11 +1013,9 @@ internal class InformationQueryPage(
         addView(courseSectionHeader("QMplus · EBU", visible?.size, R.id.course_qmplus_refresh,
             repository != null && !repository.isLoading && !repository.isClearingSession && repository.connection == null,
             if (repository?.manualContinuationRequired == true) activity.uiText("手动继续") else activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() })
-        repository?.error?.let { addView(statusCard(activity.uiText(it))) }
         if (snapshot == null) addView(statusCard(activity.getString(
             if (repository?.isLoading == true) R.string.qmplus_loading else R.string.qmplus_not_connected)))
         else {
-            if (snapshot.partial) addView(statusCard(activity.getString(R.string.qmplus_partial)))
             qmplusRows = visible.orEmpty().map { it to null }
             if (others.isNotEmpty()) addView(Switch(activity).apply {
                 id = R.id.course_qmplus_other_terms
@@ -1044,6 +1042,22 @@ internal class InformationQueryPage(
                 id = R.id.course_qmplus_list; orientation = LinearLayout.VERTICAL
                 appendQmplusCourseRows(this, false)
             })
+        }
+        repository?.error?.let { addView(statusCard(activity.uiText(it))) }
+        if (snapshot != null) {
+            if (snapshot.partial) addView(statusCard(activity.getString(R.string.qmplus_partial)))
+            QmplusActivityPresentation.shanghaiTime(snapshot.fetchedAt)?.let { fetchedAt ->
+                addView(TextView(activity).apply {
+                    tag = "courses.qmplus.snapshot.footer"
+                    text = activity.getString(R.string.qmplus_fetched_at, fetchedAt)
+                    UiText.preserveRawText(this)
+                    textSize = if (isCompact) 12f else 11f
+                    setThemeTextColor { Palette.muted }
+                    isSingleLine = false
+                    ellipsize = null
+                    setPadding(0, activity.dp(8), 0, 0)
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }
         }
     }
 

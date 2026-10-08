@@ -58,6 +58,9 @@ export struct AssignmentQueryView {
         }.width('100%')
         TextInput({ text: this.searchText, placeholder: this.model.text('搜索课程或作业') })
           .height(ControlMetrics.height).width('100%').id('query.assignments.search')
+          .fontSize(ControlMetrics.inputFontSize).placeholderFont({ size: ControlMetrics.inputFontSize })
+          .padding({ left: 16, right: 16, top: 0, bottom: 0 }).align(Alignment.Center)
+          .backgroundColor(AppTheme.inputSurface()).borderRadius(8).border({ width: 1, radius: 8, color: AppTheme.border() })
           .onChange((value: string) => { this.searchText = value; this.visibleCount = 50; })
         if (this.model.assignmentCatalogError.length > 0) {
           Text(this.model.text(this.model.assignmentCatalogError)).fontSize(14).fontColor(AppTheme.danger())
@@ -127,6 +130,7 @@ export struct ExamQueryView {
       } else {
         if (this.model.examTerms.length > 0) {
           Select(this.termOptions()).height(ControlMetrics.height).width('100%')
+            .backgroundColor(AppTheme.inputSurface()).borderRadius(8).border({ width: 1, radius: 8, color: AppTheme.border() })
             .value(this.model.examTerms.find((term: AcademicTerm) => term.id === this.model.examQueryTermID)?.name ?? this.model.examQueryTermID)
             .enabled(!this.model.examQueryLoading).id('query.exams.term')
             .onSelect((index: number) => this.model.selectExamQueryTerm(this.model.examTerms[index].id))

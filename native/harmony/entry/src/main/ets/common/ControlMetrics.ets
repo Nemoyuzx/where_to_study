@@ -2,4 +2,5 @@
 // This does not apply to calendar cells, two-line course periods or safe areas.
 export class ControlMetrics {
   static readonly height: number = 32;
+  static readonly inputFontSize: number = 14;
 }

@@ -60,9 +60,27 @@ test('Harmony fixed draft seed is DEBUG review-only and physical IME test is opt
   assert.match(session, /seedOnlyScene: boolean = false/)
   assert.match(session, /seedReviewPresentationDraftsOnce\(\): boolean \{[\s\S]*?this\.seedOnlyScene = true/)
   assert.match(read(`${harmony}view/SettingsView.ets`), /enableKeyboardOnFocus\(!\(this\.session\.seedOnlyScene && accessibilityID === 'settings_custom_deadline_url'\)\)/)
-  assert.match(read(`${harmony}view/SettingsView.ets`), /TextInput\(\{ text: value, placeholder: '1–1440' \}\)[\s\S]{0,400}?enableKeyboardOnFocus\(!this\.session\.seedOnlyScene\)/)
+  const settings = read(`${harmony}view/SettingsView.ets`)
+  const minutesInputStart = settings.indexOf("TextInput({ text: value, placeholder: '1–1440' })")
+  assert.ok(minutesInputStart >= 0)
+  const minutesHandlerStart = settings.indexOf('.onChange(', minutesInputStart)
+  const nextInputStart = settings.indexOf('TextInput(', minutesInputStart + 1)
+  assert.ok(minutesHandlerStart > minutesInputStart &&
+    (nextInputStart < 0 || minutesHandlerStart < nextInputStart))
+  // Inspect this input's modifier chain, not a character budget that changes
+  // when independent theme or accessibility modifiers are added.
+  assert.match(settings.slice(minutesInputStart, minutesHandlerStart),
+    /\.enableKeyboardOnFocus\(!this\.session\.seedOnlyScene\)/)
   assert.match(read(`${harmony}view/ColorThemeSettingsCard.ets`), /@Param seedOnlyScene: boolean = false/)
-  assert.match(read(`${harmony}view/ColorThemeSettingsCard.ets`), /TextInput\(\{ text: value, placeholder: '#RRGGBB' \}\)[\s\S]{0,500}?enableKeyboardOnFocus\(!this\.seedOnlyScene\)/)
+  const theme = read(`${harmony}view/ColorThemeSettingsCard.ets`)
+  const hexInputStart = theme.indexOf("TextInput({ text: value, placeholder: '#RRGGBB' })")
+  assert.ok(hexInputStart >= 0)
+  const hexHandlerStart = theme.indexOf('.onChange(', hexInputStart)
+  const nextThemeInputStart = theme.indexOf('TextInput(', hexInputStart + 1)
+  assert.ok(hexHandlerStart > hexInputStart &&
+    (nextThemeInputStart < 0 || hexHandlerStart < nextThemeInputStart))
+  assert.match(theme.slice(hexInputStart, hexHandlerStart),
+    /\.enableKeyboardOnFocus\(!this\.seedOnlyScene\)/)
   assert.equal((read(`${harmony}view/SettingsView.ets`).match(/ColorThemeSettingsCard\(\{ seedOnlyScene: this\.session\.seedOnlyScene \}\)/g) || []).length, 2)
   assert.match(device, /seeded_unsaved_drafts_survive_real_phone_sidebar_rotation_both_ways/)
   assert.match(device, /display\.getDefaultDisplaySync\(\)\.densityPixels/)

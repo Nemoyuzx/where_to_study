@@ -317,7 +317,6 @@ export struct SettingsView {
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')
-    .padding({ bottom: this.isCompact() ? 12 : 18 })
   }
 
   @Builder
@@ -506,13 +505,13 @@ export struct SettingsView {
 
   @Builder
   qmPlusConnectionSurface() {
-    Column({ space: 9 }) {
+    Column({ space: 12 }) {
       Row({ space: 8 }) {
         Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Baseline }) {
-        Text('QMplus')
-          .fontSize(17).fontWeight(FontWeight.Bold).fontColor(AppTheme.text())
-        Text(this.model.text('仅适用国院'))
-          .fontSize(12).fontColor(AppTheme.secondaryText()).margin({ left: 8 })
+          Text('QMplus')
+            .fontSize(17).fontWeight(FontWeight.Bold).fontColor(AppTheme.text())
+          Text(this.model.text('仅适用国院'))
+            .fontSize(12).fontColor(AppTheme.secondaryText()).margin({ left: 8 })
         }.layoutWeight(1)
         Button() { SymbolGlyph($r('sys.symbol.chevron_down')).fontSize(16).fontColor([AppTheme.secondaryText()])
           .rotate({ angle: this.session.qmplusDetailsExpanded ? 180 : 0 }) }
@@ -526,6 +525,7 @@ export struct SettingsView {
       Row({ space: 10 }) {
         Text(this.model.text('启用 QMplus')).fontSize(15).fontColor(AppTheme.text()).layoutWeight(1)
         Toggle({ type: ToggleType.Switch, isOn: this.qmplusFeatureSwitchValue })
+          .selectedColor(AppTheme.primaryFill())
           .enabled(!this.model.isSampleMode() && !this.qmplusFeatureSaving)
           .id('settings.qmplus.enabled')
           .onChange((enabled: boolean): void => {
@@ -543,135 +543,153 @@ export struct SettingsView {
       }
       .width('100%')
       DisclosureClip({ expanded: this.session.qmplusDetailsExpanded }) {
-      Text(this.model.text('登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。'))
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .width('100%')
-      if (this.model.isSampleMode()) {
-        Text(this.model.text('示例模式不展示或连接真实 QMplus 数据。'))
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
+        Column({ space: 16 }) {
+          Column({ space: 8 }) {
+            Text(this.model.text('登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。'))
+              .fontSize(12)
+              .fontColor(AppTheme.secondaryText())
+              .width('100%')
+            if (this.model.isSampleMode()) {
+              Text(this.model.text('示例模式不展示或连接真实 QMplus 数据。'))
+                .fontSize(12)
+                .fontColor(AppTheme.secondaryText())
+                .width('100%')
+            }
+            if (!this.model.isSampleMode() && this.qmPlusSession.snapshot !== null) {
+              Text(this.model.text('上次同步：') + (this.qmPlusSession.snapshot?.fetchedAt ?? ''))
+                .fontSize(12)
+                .fontColor(AppTheme.secondaryText())
+                .width('100%')
+            }
+            if (!this.model.isSampleMode() && this.qmPlusSession.showingStalePartial) {
+              Text(this.model.text('本次仅部分同步成功，继续显示上次完整资料；时间仍以上次同步为准，仅供对照。'))
+                .fontSize(12)
+                .fontColor(AppTheme.secondaryText())
+                .width('100%')
+            }
+            if (!this.model.isSampleMode() && this.qmPlusSession.error.length > 0) {
+              Text(this.model.text(this.qmPlusSession.error) + (this.qmPlusSession.errorCode.length > 0 &&
+                this.qmPlusSession.errorCode !== 'QM_LOGIN_REQUIRED' ? ' (' + this.qmPlusSession.errorCode + ')' : ''))
+                .fontSize(12)
+                .fontColor(AppTheme.danger())
+                .width('100%')
+            }
+          }
           .width('100%')
-      }
-      if (!this.model.isSampleMode() && this.qmPlusSession.snapshot !== null) {
-        Text(this.model.text('上次同步：') + (this.qmPlusSession.snapshot?.fetchedAt ?? ''))
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
-          .width('100%')
-      }
-      if (!this.model.isSampleMode() && this.qmPlusSession.showingStalePartial) {
-        Text(this.model.text('本次仅部分同步成功，继续显示上次完整资料；时间仍以上次同步为准，仅供对照。'))
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
-          .width('100%')
-      }
-      if (!this.model.isSampleMode() && this.qmPlusSession.error.length > 0) {
-        Text(this.model.text(this.qmPlusSession.error) + (this.qmPlusSession.errorCode.length > 0 &&
-          this.qmPlusSession.errorCode !== 'QM_LOGIN_REQUIRED' ? ' (' + this.qmPlusSession.errorCode + ')' : ''))
-          .fontSize(12)
-          .fontColor(AppTheme.danger())
-          .width('100%')
-      }
-      Button(this.model.text(this.qmPlusSession.manualContinuationRequired ? '手动继续' :
-        this.qmPlusSession.snapshot === null ? '连接 QMplus' : '重新同步 QMplus'))
-        .type(ButtonType.Normal)
-        .height(ControlMetrics.height)
-        .width('100%')
-        .borderRadius(6)
-        .backgroundColor(AppTheme.surfaceVariant())
-        .fontColor(AppTheme.primary())
-        .id('settings.qmplus.connect')
-        .enabled(!this.model.isSampleMode() && this.model.qmplusEnabled)
-        .onClick(() => this.qmPlusSession.openLogin())
-      if (!this.model.isSampleMode()) {
-        Row({ space: 8 }) {
-          Text(this.model.text('允许官方登录页自动填写'))
-            .fontSize(13)
-            .fontColor(AppTheme.text())
-            .layoutWeight(1)
-          Toggle({ type: ToggleType.Switch, isOn: this.qmPlusSession.savedLoginAvailable ?
-            this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected })
-            .selectedColor(AppTheme.primaryFill())
-            .width(48)
-            .enabled(!this.qmPlusSession.loginSettingsBusy)
-            .id('settings.qmplus.autofill')
-            .onChange((enabled: boolean): void => {
-              const selected: boolean = this.qmPlusSession.savedLoginAvailable ?
-                this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected;
-              if (enabled === selected) { return; }
-              void this.session.updateQMPlusSaveSelection(enabled).then((saved: boolean): void => {
-                if (!saved) { this.qmPlusSession.loginSettingsError = '无法保存本地偏好。'; }
-              });
-              if (this.qmPlusSession.savedLoginAvailable) { void this.qmPlusSession.setAutoFillEnabled(enabled); }
-            })
-        }
-        .width('100%')
-        Text(this.model.text(this.qmPlusSession.savedLoginAvailable ?
-          '已在本机安全保存 QMplus 登录资料。' : '尚未保存 QMplus 登录资料。'))
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
-          .width('100%')
-        if (this.qmPlusSession.savedLoginAvailable) {
-          Text(this.model.text('已保存的密码不会回显。仅更新登录资料时需要重新填写。'))
-            .fontSize(12)
-            .fontColor(AppTheme.secondaryText())
+          .alignItems(HorizontalAlign.Start)
+          Button(this.model.text(this.qmPlusSession.manualContinuationRequired ? '手动继续' :
+            this.qmPlusSession.snapshot === null ? '连接 QMplus' : '重新同步 QMplus'))
+            .type(ButtonType.Normal)
+            .height(ControlMetrics.height)
             .width('100%')
-        }
-        if (this.qmPlusSession.savedLoginAvailable ? this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected) {
-        this.field('QMplus Microsoft 登录邮箱', this.session.qmPlusAccountDraft, InputType.Normal,
-          (value: string): void => { this.session.qmPlusAccountDraft = value; },
-          !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.account')
-        this.field('QMplus 密码（仅在本机安全保存）', this.session.qmPlusPasswordDraft, InputType.Password,
-          (value: string): void => { this.session.qmPlusPasswordDraft = value; },
-          !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.password')
-        Button(this.model.text('安全保存 QMplus 登录资料'))
-          .type(ButtonType.Normal)
-          .height(ControlMetrics.height)
-          .width('100%')
-          .borderRadius(6)
-          .backgroundColor(AppTheme.surfaceVariant())
-          .fontColor(AppTheme.primary())
-          .enabled(!this.qmPlusSession.loginSettingsBusy &&
-            this.session.qmPlusAccountDraft.trim().length > 0 && this.session.qmPlusPasswordDraft.length > 0)
-          .id('settings.qmplus.save-login')
-          .onClick(() => {
-            const account: string = this.session.qmPlusAccountDraft;
-            const password: string = this.session.qmPlusPasswordDraft;
-            const autoFillSelected: boolean = this.qmPlusSession.savedLoginAvailable ?
-              this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected;
-            this.session.qmPlusPasswordDraft = '';
-            void this.qmPlusSession.saveSavedLogin(account, password).then(async (saved: boolean): Promise<void> => {
-              if (saved && autoFillSelected) { await this.qmPlusSession.setAutoFillEnabled(true); }
-            });
-          })
-
-        }
-        Text(this.model.text('关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。'))
-          .fontSize(11)
-          .fontColor(AppTheme.secondaryText())
-          .width('100%')
-        Text(this.model.text('已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。'))
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
-          .width('100%')
-        if (this.qmPlusSession.loginSettingsError.length > 0) {
-          Text(this.model.text(this.qmPlusSession.loginSettingsError))
-            .fontSize(12)
-            .fontColor(AppTheme.danger())
+            .borderRadius(6)
+            .backgroundColor(AppTheme.surfaceVariant())
+            .fontColor(AppTheme.primary())
+            .id('settings.qmplus.connect')
+            .enabled(!this.model.isSampleMode() && this.model.qmplusEnabled)
+            .onClick(() => this.qmPlusSession.openLogin())
+          if (!this.model.isSampleMode()) {
+            Column({ space: 8 }) {
+              Row({ space: 8 }) {
+                Text(this.model.text('允许官方登录页自动填写'))
+                  .fontSize(13)
+                  .fontColor(AppTheme.text())
+                  .layoutWeight(1)
+                Toggle({ type: ToggleType.Switch, isOn: this.qmPlusSession.savedLoginAvailable ?
+                  this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected })
+                  .selectedColor(AppTheme.primaryFill())
+                  .width(48)
+                  .enabled(!this.qmPlusSession.loginSettingsBusy)
+                  .id('settings.qmplus.autofill')
+                  .onChange((enabled: boolean): void => {
+                    const selected: boolean = this.qmPlusSession.savedLoginAvailable ?
+                      this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected;
+                    if (enabled === selected) { return; }
+                    void this.session.updateQMPlusSaveSelection(enabled).then((saved: boolean): void => {
+                      if (!saved) { this.qmPlusSession.loginSettingsError = '无法保存本地偏好。'; }
+                    });
+                    if (this.qmPlusSession.savedLoginAvailable) { void this.qmPlusSession.setAutoFillEnabled(enabled); }
+                  })
+              }
+              .width('100%')
+              Text(this.model.text(this.qmPlusSession.savedLoginAvailable ?
+                '已在本机安全保存 QMplus 登录资料。' : '尚未保存 QMplus 登录资料。'))
+                .fontSize(12)
+                .fontColor(AppTheme.secondaryText())
+                .width('100%')
+              if (this.qmPlusSession.savedLoginAvailable) {
+                Text(this.model.text('已保存的密码不会回显。仅更新登录资料时需要重新填写。'))
+                  .fontSize(12)
+                  .fontColor(AppTheme.secondaryText())
+                  .width('100%')
+              }
+            }
             .width('100%')
+            .alignItems(HorizontalAlign.Start)
+            if (this.qmPlusSession.savedLoginAvailable ? this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected) {
+              Column({ space: 12 }) {
+                this.field('QMplus Microsoft 登录邮箱', this.session.qmPlusAccountDraft, InputType.Normal,
+                  (value: string): void => { this.session.qmPlusAccountDraft = value; },
+                  !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.account')
+                this.field('QMplus 密码（仅在本机安全保存）', this.session.qmPlusPasswordDraft, InputType.Password,
+                  (value: string): void => { this.session.qmPlusPasswordDraft = value; },
+                  !this.qmPlusSession.loginSettingsBusy, 'settings.qmplus.password')
+              }
+              .width('100%')
+              .alignItems(HorizontalAlign.Start)
+              Button(this.model.text('安全保存 QMplus 登录资料'))
+                .type(ButtonType.Normal)
+                .height(ControlMetrics.height)
+                .width('100%')
+                .borderRadius(6)
+                .backgroundColor(AppTheme.surfaceVariant())
+                .fontColor(AppTheme.primary())
+                .enabled(!this.qmPlusSession.loginSettingsBusy &&
+                  this.session.qmPlusAccountDraft.trim().length > 0 && this.session.qmPlusPasswordDraft.length > 0)
+                .id('settings.qmplus.save-login')
+                .onClick(() => {
+                  const account: string = this.session.qmPlusAccountDraft;
+                  const password: string = this.session.qmPlusPasswordDraft;
+                  const autoFillSelected: boolean = this.qmPlusSession.savedLoginAvailable ?
+                    this.qmPlusSession.autoFillEnabled : this.session.qmPlusSaveLoginSelected;
+                  this.session.qmPlusPasswordDraft = '';
+                  void this.qmPlusSession.saveSavedLogin(account, password).then(async (saved: boolean): Promise<void> => {
+                    if (saved && autoFillSelected) { await this.qmPlusSession.setAutoFillEnabled(true); }
+                  });
+                })
+            }
+            Column({ space: 8 }) {
+              Text(this.model.text('关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。'))
+                .fontSize(11)
+                .fontColor(AppTheme.secondaryText())
+                .width('100%')
+              Text(this.model.text('已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。'))
+                .fontSize(12)
+                .fontColor(AppTheme.secondaryText())
+                .width('100%')
+              if (this.qmPlusSession.loginSettingsError.length > 0) {
+                Text(this.model.text(this.qmPlusSession.loginSettingsError))
+                  .fontSize(12)
+                  .fontColor(AppTheme.danger())
+                  .width('100%')
+              }
+            }
+            .width('100%')
+            .alignItems(HorizontalAlign.Start)
+            Button(this.model.text('删除已保存的 QMplus 登录资料'))
+              .type(ButtonType.Normal)
+              .height(ControlMetrics.height)
+              .width('100%')
+              .borderRadius(6)
+              .backgroundColor(AppTheme.surfaceVariant())
+              .fontColor(AppTheme.danger())
+              .enabled(this.qmPlusSession.savedLoginAvailable && !this.qmPlusSession.loginSettingsBusy)
+              .id('settings.qmplus.delete-login')
+              .onClick(() => { void this.qmPlusSession.deleteSavedLogin(); })
+          }
         }
-        Button(this.model.text('删除已保存的 QMplus 登录资料'))
-          .type(ButtonType.Normal)
-          .height(ControlMetrics.height)
-          .width('100%')
-          .borderRadius(6)
-          .backgroundColor(AppTheme.surfaceVariant())
-          .fontColor(AppTheme.danger())
-          .enabled(this.qmPlusSession.savedLoginAvailable && !this.qmPlusSession.loginSettingsBusy)
-          .id('settings.qmplus.delete-login')
-          .onClick(() => { void this.qmPlusSession.deleteSavedLogin(); })
-      }
-
+        .width('100%')
+        .alignItems(HorizontalAlign.Start)
       }
     }
     .padding(16)
@@ -683,172 +701,181 @@ export struct SettingsView {
 
   @Builder
   accountSurface() {
-    Column() {
-      this.sectionTitle('个人账户')
-
-      this.field('教务账号', this.model.account, InputType.Normal, (value: string): void => {
-        this.model.editAccount(value);
-      }, true, 'settings_account_input')
-      Blank().height(7)
-      this.field('教务密码', this.model.password, InputType.Password, (value: string): void => {
-        this.model.editPassword(value);
-      }, true, 'settings_password_input')
-      if (this.model.canPreserveSavedPassword()) {
-        Text(this.model.text('密码已安全保存，留空保持不变'))
+    Column({ space: 16 }) {
+      Column({ space: 0 }) {
+        this.sectionTitle('个人账户')
+        this.field('教务账号', this.model.account, InputType.Normal, (value: string): void => {
+          this.model.editAccount(value);
+        }, true, 'settings_account_input')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      Column({ space: 8 }) {
+        this.field('教务密码', this.model.password, InputType.Password, (value: string): void => {
+          this.model.editPassword(value);
+        }, true, 'settings_password_input')
+        if (this.model.canPreserveSavedPassword()) {
+          Text(this.model.text('密码已安全保存，留空保持不变'))
+            .fontSize(12)
+            .fontColor(AppTheme.secondaryText())
+            .width('100%')
+            .padding({ left: 2, right: 2 })
+        }
+        Text(this.model.text('用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。'))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
-          .padding({ left: 2, right: 2, top: 7 })
+          .padding({ left: 2, right: 2 })
       }
-      Text(this.model.text('用于移动教务登录和查询课表、成绩及考试安排；可能与统一身份认证密码不同。部分账号的初始密码可能是八位出生日期（YYYYMMDD），请以本人实际设置为准。'))
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .width('100%')
-        .padding({ left: 2, right: 2, top: 5 })
-      Blank().height(10)
-      this.field('教学云平台密码', this.model.cloudPassword, InputType.Password, (value: string): void => {
-        this.model.editCloudPassword(value);
-      }, true, 'settings_cloud_password_input')
-      Text(this.model.text(this.model.hasSavedCloudPassword && this.model.canPreserveSavedPassword() &&
-        !this.model.useAcademicPasswordForCloud ? '独立密码已安全保存，留空保持不变' :
-        '未设置独立密码时使用教务密码'))
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .width('100%')
-        .padding({ top: 7 })
-      Text(this.model.text('用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。'))
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .width('100%')
-        .padding({ top: 4 })
-      Button() {
-        Row({ space: 6 }) {
-          SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
-            .fontSize(15)
-            .fontColor([AppTheme.primary()])
-          Text(this.model.text('改用教务密码'))
-            .fontSize(13)
-            .fontColor(AppTheme.primary())
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      Column({ space: 8 }) {
+        this.field('教学云平台密码', this.model.cloudPassword, InputType.Password, (value: string): void => {
+          this.model.editCloudPassword(value);
+        }, true, 'settings_cloud_password_input')
+        Text(this.model.text(this.model.hasSavedCloudPassword && this.model.canPreserveSavedPassword() &&
+          !this.model.useAcademicPasswordForCloud ? '独立密码已安全保存，留空保持不变' :
+          '未设置独立密码时使用教务密码'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+        Text(this.model.text('用于课程作业 DDL 查询，通常是统一身份认证密码；未单独设置时使用教务密码。已保存的独立密码留空不变；修改后请保存设置。'))
+          .fontSize(12)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+        Button() {
+          Row({ space: 6 }) {
+            SymbolGlyph($r('sys.symbol.arrow_left_arrow_right'))
+              .fontSize(15)
+              .fontColor([AppTheme.primary()])
+            Text(this.model.text('改用教务密码'))
+              .fontSize(13)
+              .fontColor(AppTheme.primary())
+          }
+        }
+          .type(ButtonType.Normal)
+          .height(ControlMetrics.height)
+          .padding({ left: 12, right: 12 })
+          .borderRadius(8)
+          .backgroundColor(AppTheme.surfaceVariant())
+          .accessibilityText(this.model.text('改用教务密码'))
+          .id('settings.cloud.use-academic-password')
+          .enabled(!this.model.isSampleMode())
+          .onClick(() => {
+            this.model.selectAcademicPasswordForCloud();
+          })
+        if (this.model.useAcademicPasswordForCloud) {
+          Text(this.model.text('保存后将清除独立密码并使用教务密码'))
+            .fontSize(12)
+            .fontColor(AppTheme.secondaryText())
+            .width('100%')
         }
       }
-        .type(ButtonType.Normal)
-        .height(ControlMetrics.height)
-        .padding({ left: 12, right: 12 })
-        .borderRadius(8)
-        .backgroundColor(AppTheme.surfaceVariant())
-        .accessibilityText(this.model.text('改用教务密码'))
-        .id('settings.cloud.use-academic-password')
-        .enabled(!this.model.isSampleMode())
-        .onClick(() => {
-          this.model.selectAcademicPasswordForCloud();
-        })
-      if (this.model.useAcademicPasswordForCloud) {
-        Text(this.model.text('保存后将清除独立密码并使用教务密码'))
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      Column({ space: 8 }) {
+        Text(this.model.text('默认校区'))
+          .fontSize(13)
+          .fontColor(AppTheme.secondaryText())
+          .width('100%')
+        this.segmentedOptions(
+          [this.model.text('西土城'), this.model.text('沙河')],
+          () => this.model.campusID === '04' ? 1 : 0,
+          (index: number): void => {
+            this.model.campusID = index === 1 ? '04' : '01';
+          }, 'settings.campus')
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      Column({ space: 12 }) {
+        Button(this.model.text(this.model.isSavingAccountSettings ? '正在保存…' : '保存设置'))
+          .type(ButtonType.Normal)
+          .stateEffect(true)
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.onPrimary())
+          .borderRadius(6)
+          .backgroundColor(AppTheme.primaryFill())
+          .width('100%')
+          .height(ControlMetrics.height)
+          .enabled(!this.model.isSampleMode() && !this.model.isSavingAccountSettings)
+          .contentModifier(this.model.isSampleMode() || this.model.isSavingAccountSettings ?
+            new DisabledSettingsButtonContent() : undefined)
+          .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+          .onClick(() => {
+            const work: Promise<boolean> = this.model.saveSettings();
+            work.then((saved: boolean) => {
+              if (saved) {
+                this.dismissStatusMessageAfter(this.model.statusMessage);
+              }
+            }).catch(() => {
+              // 错误说明已由 AppModel 写入状态消息。
+            });
+          })
+        Button(this.model.isRefreshingSchedule ? this.model.text('正在获取…') :
+          this.model.text('获取/刷新个人课表'))
+          .type(ButtonType.Normal)
+          .stateEffect(true)
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.primary())
+          .borderRadius(6)
+          .border({ width: 1, radius: 6, color: this.model.isRefreshingSchedule || this.model.isSampleMode() ?
+            AppTheme.border() : AppTheme.primary() })
+          .backgroundColor(AppTheme.surface())
+          .width('100%')
+          .height(ControlMetrics.height)
+          .enabled(!this.model.isRefreshingSchedule && !this.model.isSampleMode() && !this.model.isSavingAccountSettings)
+          .contentModifier(this.model.isRefreshingSchedule || this.model.isSampleMode() || this.model.isSavingAccountSettings ?
+            new DisabledSettingsButtonContent() : undefined)
+          .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+          .onClick(() => {
+            const work: Promise<void> = (async (): Promise<void> => {
+              const saved: boolean = await this.model.saveSettings();
+              if (saved) {
+                await this.model.refreshSchedule();
+              }
+            })();
+            work.catch(() => {
+              // 错误说明已由 AppModel 写入状态消息。
+            });
+          })
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      Column({ space: 8 }) {
+        Text(this.model.text('账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。'))
           .fontSize(12)
           .fontColor(AppTheme.secondaryText())
           .width('100%')
-      }
-      Text(this.model.text('默认校区'))
-        .fontSize(13)
-        .fontColor(AppTheme.secondaryText())
-        .width('100%')
-        .padding({ top: this.isCompact() ? 10 : 16, bottom: this.isCompact() ? 5 : 7 })
-      this.segmentedOptions(
-        [this.model.text('西土城'), this.model.text('沙河')],
-        () => this.model.campusID === '04' ? 1 : 0,
-        (index: number): void => {
-          this.model.campusID = index === 1 ? '04' : '01';
-        }, 'settings.campus')
-
-      Blank().height(this.isCompact() ? 12 : 18)
-      Button(this.model.text(this.model.isSavingAccountSettings ? '正在保存…' : '保存设置'))
-        .type(ButtonType.Normal)
-        .stateEffect(true)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.onPrimary())
-        .borderRadius(6)
-        .backgroundColor(AppTheme.primaryFill())
-        .width('100%')
-        .height(ControlMetrics.height)
-        .enabled(!this.model.isSampleMode() && !this.model.isSavingAccountSettings)
-        .contentModifier(this.model.isSampleMode() || this.model.isSavingAccountSettings ?
-          new DisabledSettingsButtonContent() : undefined)
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onClick(() => {
-          const work: Promise<boolean> = this.model.saveSettings();
-          work.then((saved: boolean) => {
-            if (saved) {
-              this.dismissStatusMessageAfter(this.model.statusMessage);
-            }
-          }).catch(() => {
-            // 错误说明已由 AppModel 写入状态消息。
-          });
-        })
-
-      Blank().height(7)
-      Button(this.model.isRefreshingSchedule ? this.model.text('正在获取…') :
-        this.model.text('获取/刷新个人课表'))
-        .type(ButtonType.Normal)
-        .stateEffect(true)
-        .fontSize(15)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.primary())
-        .borderRadius(6)
-        .border({ width: 1, color: this.model.isRefreshingSchedule || this.model.isSampleMode() ?
-          AppTheme.border() : AppTheme.primary() })
-        .backgroundColor(AppTheme.surface())
-        .width('100%')
-        .height(ControlMetrics.height)
-        .enabled(!this.model.isRefreshingSchedule && !this.model.isSampleMode() && !this.model.isSavingAccountSettings)
-        .contentModifier(this.model.isRefreshingSchedule || this.model.isSampleMode() || this.model.isSavingAccountSettings ?
-          new DisabledSettingsButtonContent() : undefined)
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onClick(() => {
-          const work: Promise<void> = (async (): Promise<void> => {
-            const saved: boolean = await this.model.saveSettings();
-            if (saved) {
-              await this.model.refreshSchedule();
-            }
-          })();
-          work.catch(() => {
-            // 错误说明已由 AppModel 写入状态消息。
-          });
-        })
-
-      Text(this.model.text('账号和密码仅保存于本机，并由 HarmonyOS ASSET 安全存储保护。'))
-        .fontSize(12)
-        .fontColor(AppTheme.secondaryText())
-        .width('100%')
-        .padding({ top: this.isCompact() ? 8 : 12 })
-
-      Blank().height(7)
-      Button(this.model.text('阅读隐私政策'))
-        .type(ButtonType.Normal)
-        .stateEffect(true)
-        .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(AppTheme.primary())
-        .borderRadius(6)
-        .border({ width: 1, color: AppTheme.primary() })
-        .backgroundColor(AppTheme.surface())
-        .width('100%')
-        .height(ControlMetrics.height)
-        .id('settings_account_privacy_policy')
-        .accessibilityText(this.model.text('阅读隐私政策'))
-        .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
-        .onClick(() => {
-          this.setPrivacyPolicyVisible(true);
-        })
-
-      if (this.model.statusMessage.length > 0) {
-        Text(this.model.text(this.model.statusMessage))
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
+        Button(this.model.text('阅读隐私政策'))
+          .type(ButtonType.Normal)
+          .stateEffect(true)
+          .fontSize(14)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(AppTheme.primary())
+          .borderRadius(6)
+          .border({ width: 1, radius: 6, color: AppTheme.primary() })
+          .backgroundColor(AppTheme.surface())
           .width('100%')
-          .padding({ top: 7 })
-          .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut }))
+          .height(ControlMetrics.height)
+          .id('settings_account_privacy_policy')
+          .accessibilityText(this.model.text('阅读隐私政策'))
+          .clickEffect({ level: ClickEffectLevel.MIDDLE, scale: 0.98 })
+          .onClick(() => {
+            this.setPrivacyPolicyVisible(true);
+          })
+
+        if (this.model.statusMessage.length > 0) {
+          Text(this.model.text(this.model.statusMessage))
+            .fontSize(12)
+            .fontColor(AppTheme.secondaryText())
+            .width('100%')
+            .transition(TransitionEffect.OPACITY.animation({ duration: 160, curve: Curve.EaseOut }))
+        }
       }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
     }
     .padding(16)
     .width('100%')
@@ -864,13 +891,15 @@ export struct SettingsView {
     TextInput({ placeholder: this.model.text(placeholder), text: value })
       .id(accessibilityID)
       .type(inputType)
-      .fontSize(15)
+      .fontSize(ControlMetrics.inputFontSize)
+      .placeholderFont({ size: ControlMetrics.inputFontSize })
       .fontColor(AppTheme.text())
       .placeholderColor(AppTheme.secondaryText())
       .backgroundColor(AppTheme.inputSurface())
       .borderRadius(6)
-      .border({ width: 1, color: AppTheme.border() })
-      .padding({ left: 13, right: 13 })
+      .border({ width: 1, radius: 6, color: AppTheme.border() })
+      .padding({ left: 13, right: 13, top: 0, bottom: 0 })
+      .align(Alignment.Center)
       .width('100%')
       .height(ControlMetrics.height)
       .showPasswordIcon(false)
@@ -935,7 +964,7 @@ export struct SettingsView {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.primary())
         .borderRadius(6)
-        .border({ width: 1, color: AppTheme.primary() })
+        .border({ width: 1, radius: 6, color: AppTheme.primary() })
         .backgroundColor(AppTheme.surface())
         .width('100%')
         .height(ControlMetrics.height)
@@ -1051,7 +1080,7 @@ export struct SettingsView {
     .height(this.session.previewDimension === 4 ? 320 : 160)
     .borderRadius(16)
     .backgroundColor(AppTheme.surface())
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ width: 1, radius: 16, color: AppTheme.border() })
     .alignItems(HorizontalAlign.Start)
     .clip(true)
   }
@@ -1399,8 +1428,14 @@ export struct SettingsView {
             .accessibilityText(this.model.text('提前分钟') + ' ' + (index + 1).toString())
             .type(InputType.Number)
             .height(ControlMetrics.height)
+            .padding({ left: 16, right: 16, top: 0, bottom: 0 })
+            .align(Alignment.Center)
+            .backgroundColor(AppTheme.inputSurface())
+            .borderRadius(6)
+            .border({ width: 1, radius: 6, color: AppTheme.border() })
             .width(104)
-            .fontSize(14)
+            .fontSize(ControlMetrics.inputFontSize)
+            .placeholderFont({ size: ControlMetrics.inputFontSize })
             .enableKeyboardOnFocus(!this.session.seedOnlyScene)
             .onChange((text: string) => {
               const drafts: string[] = this.session.preClassLeadDrafts.slice();
@@ -1542,7 +1577,7 @@ export struct SettingsView {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.danger())
         .borderRadius(6)
-        .border({ width: 1, color: this.model.isSampleMode() ? AppTheme.border() : AppTheme.danger() })
+        .border({ width: 1, radius: 6, color: this.model.isSampleMode() ? AppTheme.border() : AppTheme.danger() })
         .backgroundColor('#14FF3B30')
         .width('100%')
         .height(ControlMetrics.height)
@@ -1741,7 +1776,7 @@ export struct SettingsView {
         .fontWeight(FontWeight.Bold)
         .fontColor(AppTheme.primary())
         .borderRadius(6)
-        .border({ width: 1, color: AppTheme.border() })
+        .border({ width: 1, radius: 6, color: AppTheme.border() })
         .backgroundColor(AppTheme.surface())
         .width('100%')
         .height(ControlMetrics.height)
@@ -1777,7 +1812,7 @@ export struct SettingsView {
       .fontWeight(FontWeight.Bold)
       .fontColor(AppTheme.primary())
       .borderRadius(6)
-      .border({ width: 1, color: AppTheme.border() })
+      .border({ width: 1, radius: 6, color: AppTheme.border() })
       .backgroundColor(AppTheme.surface())
       .width('100%')
       .height(ControlMetrics.height)

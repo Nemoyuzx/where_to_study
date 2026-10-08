@@ -7,6 +7,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class QmplusSnapshotCodecTest {
+    @Test fun restoredSnapshotFooterTimeKeepsItsOriginalMinuteUntilAnotherSnapshotArrives() {
+        val cached = sample().copy(fetchedAt = "2026-10-07T15:59:00Z")
+        val restored = QmplusSnapshotCodec.ebuOnly(QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(cached)))
+        assertEquals("2026-10-07 23:59", QmplusActivityPresentation.shanghaiTime(restored.fetchedAt))
+        val refreshed = restored.copy(fetchedAt = "2026-10-07T16:01:00.123Z")
+        assertEquals("2026-10-08 00:01", QmplusActivityPresentation.shanghaiTime(refreshed.fetchedAt))
+        assertEquals(cached.fetchedAt, restored.fetchedAt)
+        assertNull(QmplusActivityPresentation.shanghaiTime("invalid"))
+    }
+
     @Test fun api24UTCParserPreservesFractionsAndShanghaiDayBoundary() {
         val previousZone = TimeZone.getDefault()
         try {

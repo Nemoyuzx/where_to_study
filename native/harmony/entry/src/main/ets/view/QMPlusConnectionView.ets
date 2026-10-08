@@ -1124,6 +1124,7 @@ export struct QMPlusConnectionView {
           .height(ControlMetrics.height)
           .backgroundColor(AppTheme.surfaceVariant())
           .fontColor(AppTheme.primary())
+          .borderRadius(ControlMetrics.height / 2)
           .id('qmplus.login.close')
           .onClick(() => this.close())
         Text('QMplus')

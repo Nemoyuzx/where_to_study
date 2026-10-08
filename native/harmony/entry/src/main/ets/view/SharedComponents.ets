@@ -2,9 +2,9 @@
 import { AppTheme } from '../common/AppTheme';
 import { accessibility } from '@kit.AccessibilityKit';
 
-// Keep expansion top-anchored. A measured ideal-size body remains mounted
-// after its first expansion; clipping its viewport does not recreate drafts,
-// reset page sessions or initiate data loads on every tap.
+// A non-interactive vertical Scroll measures nested content independently of
+// its initially zero-height viewport. The one ideal-size body stays mounted
+// after first expansion; clipping does not recreate drafts or start data work.
 @ComponentV2
 export struct DisclosureClip {
   @Param expanded: boolean = false;
@@ -32,7 +32,7 @@ export struct DisclosureClip {
   }
 
   build() {
-    Column() {
+    Scroll() {
       if (this.mounted) {
         Column() { this.content(); }
           .width('100%').height(LayoutPolicy.fixAtIdealSize)
@@ -45,7 +45,11 @@ export struct DisclosureClip {
       }
     }
       .width('100%').height(this.viewportHeight).clip(true)
-      .alignItems(HorizontalAlign.Start)
+      .scrollable(ScrollDirection.Vertical)
+      .enableScrollInteraction(false)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.None)
+      .align(Alignment.TopStart)
       .hitTestBehavior(this.expanded ? HitTestMode.Default : HitTestMode.None)
       .accessibilityLevel(this.expanded ? 'auto' : 'no-hide-descendants')
   }
@@ -93,7 +97,7 @@ export struct SurfaceCard {
     .padding(this.cardPadding)
     .width('100%')
     .borderRadius(8)
-    .border({ width: this.showsBorder ? 1 : 0, color: AppTheme.border() })
+    .border({ width: this.showsBorder ? 1 : 0, radius: 8, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -158,6 +162,7 @@ export struct ChipButton {
     .borderRadius(8)
     .border({
       width: 1,
+      radius: 8,
       color: this.selected ? AppTheme.primaryFill() : AppTheme.border()
     })
     .onClick(() => {

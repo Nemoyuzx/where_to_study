@@ -19,6 +19,7 @@ export struct LanguagePickerView {
           .fontColor(AppTheme.primary())
           .backgroundColor(AppTheme.surfaceVariant())
           .height(ControlMetrics.height)
+          .borderRadius(ControlMetrics.height / 2)
           .id('settings.language.back')
           .onClick(() => this.onClose())
         Text(this.model.text('选择语言'))

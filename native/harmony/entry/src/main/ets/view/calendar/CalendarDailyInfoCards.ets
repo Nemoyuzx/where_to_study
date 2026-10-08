@@ -137,7 +137,7 @@ export struct CalendarDailyInfoCards {
     .padding(14)
     .width('100%')
     .borderRadius(10)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ radius: 10, width: 1, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -230,7 +230,7 @@ export struct CalendarDailyInfoCards {
     .padding(14)
     .width('100%')
     .borderRadius(10)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ radius: 10, width: 1, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
@@ -431,7 +431,7 @@ export struct CalendarDailyInfoCards {
     .padding(14)
     .width('100%')
     .borderRadius(10)
-    .border({ width: 1, color: AppTheme.border() })
+    .border({ radius: 10, width: 1, color: AppTheme.border() })
     .backgroundColor(AppTheme.surface())
     .alignItems(HorizontalAlign.Start)
   }
