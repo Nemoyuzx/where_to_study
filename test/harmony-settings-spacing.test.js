@@ -48,6 +48,18 @@ test('Harmony settings title uses the page gap without a second bottom inset', (
   assert.doesNotMatch(title, /\.(?:padding|margin)\(/)
 })
 
+test('Harmony demo entry lives in About rather than ahead of the personal account', () => {
+  const content = settings.slice(settings.indexOf('  settingsContent() {'), settings.indexOf('  settingsTitle() {'))
+  const about = settings.slice(settings.indexOf('  aboutSurface() {'), settings.indexOf('  linkButton(label:'))
+  const demo = settings.slice(settings.indexOf('  reviewDemoSurface() {'), settings.indexOf('  sectionTitle(title:'))
+  assert.doesNotMatch(content, /this\.reviewDemoSurface\(\)/)
+  assert.equal((settings.match(/this\.reviewDemoSurface\(\)/g) ?? []).length, 1)
+  assert.match(about, /this\.sectionTitle\('关于本应用'\)[\s\S]*this\.reviewDemoSurface\(\)[\s\S]*AppMeta\.appFilingLabel/)
+  assert.doesNotMatch(demo, /\.padding\(16\)|\.backgroundColor\(AppTheme\.surface\(\)\)/)
+  assert.match(demo, /this\.model\.enterReviewDemo\(\)/)
+  assert.match(demo, /this\.model\.exitReviewDemo\(\)/)
+})
+
 test('Harmony expanded QM content owns group spacing inside the measured disclosure viewport', () => {
   assert.match(read('SharedComponents.ets'), /Column\(\) \{ this\.content\(\); \}/)
   assert.match(qmplus, /DisclosureClip\(\{ expanded: this\.session\.qmplusDetailsExpanded \}\) \{\s*Column\(\{ space: 16 \}\)/)

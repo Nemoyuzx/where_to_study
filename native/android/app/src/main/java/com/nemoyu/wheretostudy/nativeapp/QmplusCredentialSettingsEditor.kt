@@ -24,33 +24,32 @@ internal class QmplusCredentialSettingsEditor(private val activity: MainActivity
         id = R.id.qmplus_saved_login_opt_in
         isChecked = selection.getBoolean("save_login_selected", true)
         minimumHeight = activity.dp(UiMetrics.controlHeightDp)
-        contentDescription = activity.uiText("保存 QMplus 登录信息并在官方页面自动填写（可选）")
+        contentDescription = activity.uiText("允许官方登录页自动填写")
     }
     private val account = input("QMplus 微软账号", R.id.qmplus_saved_login_account, false)
     private val password = input("QMplus 微软密码", R.id.qmplus_saved_login_password, true)
     private val saved = detail("已在本机安全保存 QMplus 登录资料。")
-    private val hiddenPassword = detail("已保存的密码不会回显。仅更新登录资料时需要重新填写。")
+    private val identityWarning = detail("保存新的登录信息会清除现有 QMplus 会话与快照，避免复用其他身份。")
     private val resultText = detail("")
     private val fields = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-    private val save = action("保存并授权 QMplus 官方网页自动填写") { save() }.apply { id = R.id.settings_qmplus_saved_login }
-    private val remove = action("关闭自动填写并删除 QMplus 登录信息") { disable() }
+    private val save = action("安全保存 QMplus 登录资料") { save() }.apply { id = R.id.settings_qmplus_saved_login }
+    private val remove = action("删除已保存的 QMplus 登录资料") { disable() }
 
     init {
         root.addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             addView(TextView(activity).apply {
-                text = activity.uiText("保存 QMplus 登录信息并在官方页面自动填写（可选）")
+                text = activity.uiText("允许官方登录页自动填写")
                 textSize = 15f; setThemeTextColor { Palette.text }; setLineSpacing(0f, 1.1f)
                 setPadding(0, 0, activity.dp(12), 0)
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(optIn)
         })
         append(root, detail("保存后会在本机安全存储中保留独立 QMplus 登录资料。首次默认开启自动填写，也可在保存前关闭。"))
-        append(root, saved); append(root, hiddenPassword)
-        append(root, detail("关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。"))
-        append(fields, account); append(fields, password)
-        append(fields, detail("已保存的账号和密码用于自动完成官方登录；只有验证码或 MFA 需要您操作。未知页面会暂停，可手动继续。"))
-        append(fields, detail("保存新的登录信息会清除现有 QMplus 会话与快照，避免复用其他身份。"))
+        append(root, saved)
+        fields.addView(account, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        append(fields, password)
+        append(fields, identityWarning)
         append(fields, save); append(fields, remove)
         append(root, fields); append(root, resultText)
         val watcher = object : TextWatcher {
@@ -79,12 +78,14 @@ internal class QmplusCredentialSettingsEditor(private val activity: MainActivity
         optIn.isEnabled = !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession
         fields.visibility = if (optIn.isChecked) View.VISIBLE else View.GONE
         saved.visibility = if (repository.savedLoginStatus.enabled) View.VISIBLE else View.GONE
-        hiddenPassword.visibility = saved.visibility
+        identityWarning.visibility = if (account.text.toString().trim().isNotEmpty() || password.text.isNotEmpty()) View.VISIBLE else View.GONE
         account.isEnabled = !busy; password.isEnabled = !busy
         save.isEnabled = !busy && optIn.isChecked && account.text.toString().trim().isNotEmpty() && password.text.isNotEmpty()
         remove.isEnabled = !repository.isLoading && !repository.isSavingLogin && !repository.isClearingSession
-        resultText.text = status?.let(activity::uiText).orEmpty()
-        resultText.visibility = if (status.isNullOrEmpty()) View.GONE else View.VISIBLE
+        val showResult = !status.isNullOrEmpty() &&
+            !(repository.savedLoginStatus.enabled && status == "已保存 QMplus 登录信息并授权官方网页自动填写")
+        resultText.text = if (showResult) status?.let(activity::uiText).orEmpty() else ""
+        resultText.visibility = if (showResult) View.VISIBLE else View.GONE
     }
 
     private fun save() {

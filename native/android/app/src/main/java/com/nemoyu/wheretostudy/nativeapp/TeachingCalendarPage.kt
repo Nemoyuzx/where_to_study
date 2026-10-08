@@ -386,6 +386,28 @@ object TeachingCalendarLogic {
         (monthViewHeightDp - verticalPaddingDp - weekdayReservedHeightDp -
             dragHandleReservedHeightDp).coerceAtLeast(0) / 6
 
+    fun collapsedMonthRowHeightPx(
+        contentWidthPx: Int,
+        horizontalCellMarginsPx: Int,
+        cellBottomMarginPx: Int,
+        availableGridHeightPx: Int,
+        rowCount: Int,
+        columnCount: Int = 7,
+    ): Int {
+        if (rowCount <= 0 || columnCount <= 0) return 0
+        val cellWidth = (contentWidthPx - horizontalCellMarginsPx.coerceAtLeast(0))
+            .coerceAtLeast(0) / columnCount
+        val squareRowHeight = cellWidth + cellBottomMarginPx.coerceAtLeast(0)
+        return minOf(squareRowHeight, availableGridHeightPx.coerceAtLeast(0) / rowCount)
+    }
+
+    fun monthRowHeightPx(position: Float, collapsedHeightPx: Int, expandedHeightPx: Int): Int =
+        interpolateMonthMetric(
+            collapsedHeightPx.coerceIn(0, expandedHeightPx.coerceAtLeast(0)),
+            expandedHeightPx.coerceAtLeast(0),
+            monthCellExpansionProgress(position),
+        )
+
     fun monthNavigationBottomInsetPx(
         bodyHeightPx: Int,
         navigationOverlapPx: Int?,
@@ -1000,6 +1022,7 @@ internal class TeachingCalendarPage(
         }
     private var renderedMonthSheetPosition = monthSheetPosition
     private var expandedMonthCellHeightDp = TeachingCalendarLogic.monthCellHeightDp(true)
+    private var collapsedMonthRowHeightPx: Int? = null
     private var monthExpansionAnimator: ValueAnimator? = null
     private var monthAnimationView: ViewGroup? = null
     private var agendaExpansionMotion: DisclosureMotionController? = null
@@ -1085,13 +1108,18 @@ internal class TeachingCalendarPage(
             ?: return 0f to 0f
         if (!grid.isLaidOut || grid.childCount == 0) return 0f to 0f
         val expandedPx = activity.dp(expandedMonthCellHeightDp.coerceAtLeast(0))
-        val compactPx = activity.dp(minOf(
-            TeachingCalendarLogic.monthCellHeightDp(false), expandedMonthCellHeightDp.coerceAtLeast(0),
-        ))
+        val compactPx = resolvedMonthRowHeightPx(TeachingCalendarLogic.monthSheetDetailsPosition)
         val density = activity.resources.displayMetrics.density
         return (grid.childCount * (expandedPx - compactPx) / density) to
             ((grid.childCount - 1) * compactPx / density)
     }
+
+    private fun resolvedMonthRowHeightPx(position: Float): Int = TeachingCalendarLogic.monthRowHeightPx(
+        position = position,
+        collapsedHeightPx = collapsedMonthRowHeightPx
+            ?: activity.dp(TeachingCalendarLogic.monthCellHeightDp(false)),
+        expandedHeightPx = activity.dp(expandedMonthCellHeightDp.coerceAtLeast(0)),
+    )
 
     private fun refreshSelectedMonthDetailsInPlace(expectedDateKey: String) {
         val root = calendarHostRoot ?: return
@@ -2559,18 +2587,13 @@ internal class TeachingCalendarPage(
         val dates = monthGridDates()
         val selectedWeekIndex = dates.indexOfFirst { sameDay(it, selectedDate) }
             .coerceAtLeast(0) / 7
-        val initialRowHeightPx = activity.dp(TeachingCalendarLogic.monthRowHeightDp(
-            position = renderedMonthSheetPosition,
-            rowIndex = selectedWeekIndex,
-            selectedWeekIndex = selectedWeekIndex,
-            expandedHeightDp = expandedMonthCellHeightDp,
-        ))
+        val initialRowHeightPx = resolvedMonthRowHeightPx(renderedMonthSheetPosition)
         val grid = LinearLayout(activity).apply {
             id = R.id.calendar_month_grid
             layoutDirection = View.LAYOUT_DIRECTION_LTR
             tag = selectedWeekIndex
             orientation = LinearLayout.VERTICAL
-            dates.chunked(7).forEachIndexed { rowIndex, week ->
+            dates.chunked(7).forEach { week ->
                 addView(LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     week.forEach { day ->
@@ -2582,12 +2605,7 @@ internal class TeachingCalendarPage(
                     }
                 }, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    activity.dp(TeachingCalendarLogic.monthRowHeightDp(
-                        position = renderedMonthSheetPosition,
-                        rowIndex = rowIndex,
-                        selectedWeekIndex = selectedWeekIndex,
-                        expandedHeightDp = expandedMonthCellHeightDp,
-                    )),
+                    initialRowHeightPx,
                 ))
             }
         }
@@ -2669,13 +2687,33 @@ internal class TeachingCalendarPage(
                         dragHandle.height / density.toDouble(),
                     ).toInt(),
                 )
-                if (expandedMonthCellHeightDp != measuredHeightDp) {
+                val row = grid.getChildAt(0) as? ViewGroup ?: return
+                val horizontalMarginsPx = (0 until row.childCount).sumOf { index ->
+                    val margins = row.getChildAt(index).layoutParams as? ViewGroup.MarginLayoutParams
+                    (margins?.leftMargin ?: 0) + (margins?.rightMargin ?: 0)
+                }
+                val cellMargins = row.getChildAt(0)?.layoutParams as? ViewGroup.MarginLayoutParams
+                val measuredCollapsedHeightPx = TeachingCalendarLogic.collapsedMonthRowHeightPx(
+                    contentWidthPx = row.width - row.paddingLeft - row.paddingRight,
+                    horizontalCellMarginsPx = horizontalMarginsPx,
+                    cellBottomMarginPx = cellMargins?.bottomMargin ?: 0,
+                    // The parent's measured height already excludes the phone
+                    // header and the observed navigation overlap/system insets.
+                    // Keep the existing expanded-grid budget and weighted details policy.
+                    availableGridHeightPx = activity.dp(measuredHeightDp) * grid.childCount,
+                    rowCount = grid.childCount,
+                    columnCount = row.childCount,
+                )
+                if (expandedMonthCellHeightDp != measuredHeightDp ||
+                    collapsedMonthRowHeightPx != measuredCollapsedHeightPx
+                ) {
                     expandedMonthCellHeightDp = measuredHeightDp
+                    collapsedMonthRowHeightPx = measuredCollapsedHeightPx
                     applyMonthSheetPosition(this, renderedMonthSheetPosition)
                 }
             }
-            addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
-                if (bottom - top != oldBottom - oldTop) updateMeasuredMonthHeight()
+            addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                updateMeasuredMonthHeight()
             }
             post { updateMeasuredMonthHeight() }
         }
@@ -2916,12 +2954,7 @@ internal class TeachingCalendarPage(
         }
         val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(sheetPosition)
         val initialCellHeightDp = measuredCellHeightDp
-            ?: TeachingCalendarLogic.monthRowHeightDp(
-                position = sheetPosition,
-                rowIndex = 0,
-                selectedWeekIndex = 0,
-                expandedHeightDp = expandedMonthCellHeightDp,
-            )
+            ?: (resolvedMonthRowHeightPx(sheetPosition) / activity.resources.displayMetrics.density).toInt()
         applyMonthDayCellProgress(cell, expandedProgress, initialCellHeightDp)
         UiText.localizeTree(cell)
     }
@@ -3015,13 +3048,8 @@ internal class TeachingCalendarPage(
         val expandedProgress = TeachingCalendarLogic.monthCellExpansionProgress(resolved)
         val grid = monthView.findViewById<ViewGroup>(R.id.calendar_month_grid)
         val selectedWeekIndex = (grid.tag as? Int) ?: 0
-        val rowHeightDp = TeachingCalendarLogic.monthRowHeightDp(
-            position = resolved,
-            rowIndex = selectedWeekIndex,
-            selectedWeekIndex = selectedWeekIndex,
-            expandedHeightDp = expandedMonthCellHeightDp,
-        )
-        val rowHeightPx = activity.dp(rowHeightDp)
+        val rowHeightPx = resolvedMonthRowHeightPx(resolved)
+        val rowHeightDp = (rowHeightPx / activity.resources.displayMetrics.density).toInt()
         grid.layoutParams = grid.layoutParams.apply {
             height = TeachingCalendarLogic.monthGridContentHeight(
                 rowCount = grid.childCount,

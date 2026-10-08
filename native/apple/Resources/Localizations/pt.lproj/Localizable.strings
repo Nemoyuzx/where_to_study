@@ -116,6 +116,7 @@
 "分钟" = "Minutos";
 "分钟前" = "min antes";
 "切换此节次" = "Alternar este período";
+"删除已保存的 QMplus 登录资料" = "Excluir dados salvos de acesso do QMplus";
 "删除本学期整门课程" = "Excluir esta disciplina do semestre";
 "删除本学期整门课程？" = "Excluir esta disciplina do semestre?";
 "删除课程" = "Excluir disciplina";
@@ -180,6 +181,7 @@
 "学校当前学期" = "Semestre atual da universidade";
 "学科竞赛" = "Competição acadêmica";
 "学科竞赛 DDL" = "Prazos de competições acadêmicas";
+"安全保存 QMplus 登录资料" = "Salvar acesso do QMplus com segurança";
 "完成" = "Concluído";
 "完整班车时刻表" = "Horário completo de ônibus";
 "宜" = "Recomendado";

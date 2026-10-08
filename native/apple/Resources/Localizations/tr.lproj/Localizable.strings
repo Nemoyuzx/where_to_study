@@ -116,6 +116,7 @@
 "分钟" = "Dakika";
 "分钟前" = "dakika önce";
 "切换此节次" = "Bu ders saatini değiştir";
+"删除已保存的 QMplus 登录资料" = "Kayıtlı QMplus girişini sil";
 "删除本学期整门课程" = "Dersi bu dönem için sil";
 "删除本学期整门课程？" = "Ders bu dönem için silinsin mi?";
 "删除课程" = "Dersi sil";
@@ -180,6 +181,7 @@
 "学校当前学期" = "Üniversitenin geçerli dönemi";
 "学科竞赛" = "Akademik yarışma";
 "学科竞赛 DDL" = "Akademik yarışma son tarihleri";
+"安全保存 QMplus 登录资料" = "QMplus girişini güvenle kaydet";
 "完成" = "Bitti";
 "完整班车时刻表" = "Tam servis çizelgesi";
 "宜" = "Önerilen";

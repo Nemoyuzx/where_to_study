@@ -136,12 +136,14 @@ test('Harmony language picker keeps its owner above settings without animating t
   assert.doesNotMatch(surface, /segmentedOptions\(/)
 })
 
-test('Harmony phone navigation keeps its animation on background/icon, not its text geometry', () => {
+test('Harmony phone navigation paints the single current route without crossfading old selection colors', () => {
   const navigation = root.slice(root.indexOf('  phoneNavigationItem(section: AppSection) {'),
     root.indexOf('  sectionView(section: AppSection) {'))
   assert.ok(navigation.length > 0)
-  assert.match(navigation, /Stack\(\) \{[\s\S]*?Column\(\) \{\}[\s\S]*?\.backgroundColor\([\s\S]*?\.animation\(\{ duration: 160/)
-  assert.match(navigation, /SymbolGlyph\([\s\S]*?\.fontColor\([\s\S]*?\.animation\(\{ duration: 160/)
+  assert.match(navigation, /\.backgroundColor\(this\.currentSection === section \? AppTheme\.background\(\) : Color\.Transparent\)/)
+  assert.match(navigation, /SymbolGlyph\([\s\S]*?\.fontColor\(\[this\.currentSection === section/)
+  assert.match(navigation, /\.accessibilitySelected\(this\.currentSection === section\)/)
+  assert.doesNotMatch(navigation, /\.animation\(|\.transition\(|animateTo\(|setTimeout|onTouch|stateStyles/)
   const label = navigation.slice(navigation.indexOf('Text(this.model.text(AppSectionInfo.title(section)))'))
   assert.ok(label.indexOf('.animation(') < 0 || label.indexOf('.animation(') > label.indexOf('.onClick('),
     'the translated label must not own a geometry animation')

@@ -2,6 +2,10 @@
 export class AppLocalizationCatalog {
   private static readonly values: Record<string, Record<string, string>> = {
   "zh-Hant": {
+    "QMplus 课程与活动": "QMplus 課程與活動",
+    "显示其他学期／历史课程": "顯示其他學期／歷史課程",
+    "当前筛选没有本学期或学期未确认的课程。": "目前篩選沒有本學期或學期未確認的課程。",
+    "%d 门课程": "%d 門課程",
     "发现新作业": "發現新作業",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "請在官方視窗完成驗證碼或 MFA，完成後將繼續同步。",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "自動登入已暫停，可選擇「手動繼續」查看官方頁面。",
@@ -585,6 +589,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "關閉「啟用 QMplus」只暫停連線與同步，保留登入資料、連線工作階段及課程快取。關閉自動填寫、刪除登入資料或登出並清除資料，請使用對應操作。"
   },
   "ja": {
+    "QMplus 课程与活动": "QMplusの授業と活動",
+    "显示其他学期／历史课程": "別の学期 / 過去の授業を表示",
+    "当前筛选没有本学期或学期未确认的课程。": "この条件に合う今学期または学期未確認の授業はありません。",
+    "%d 门课程": "%d科目",
     "发现新作业": "新しい課題が見つかりました",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "公式ウィンドウで CAPTCHA または MFA を完了してください。完了後に同期を続行します。",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "自動ログインを一時停止しました。「手動で続行」から公式ページを開けます。",
@@ -1168,6 +1176,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "「QMplus を有効にする」をオフにすると接続と同期だけが停止し、保存済みのログイン情報、セッション、授業キャッシュは保持されます。自動入力の停止、ログイン情報の削除、切断とデータ消去には、それぞれの操作を使用してください。"
   },
   "es": {
+    "QMplus 课程与活动": "Cursos y actividades de QMplus",
+    "显示其他学期／历史课程": "Mostrar cursos de otros semestres / históricos",
+    "当前筛选没有本学期或学期未确认的课程。": "No hay cursos actuales o de semestre sin confirmar que coincidan con el filtro.",
+    "%d 门课程": "%d cursos",
     "发现新作业": "Nuevas tareas encontradas",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Completa el CAPTCHA o la MFA en la ventana oficial. La sincronización continuará después.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "El inicio de sesión automático está en pausa. Elige «Continuar manualmente» para ver la página oficial.",
@@ -1751,6 +1763,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos."
   },
   "pt": {
+    "QMplus 课程与活动": "Disciplinas e atividades do QMplus",
+    "显示其他学期／历史课程": "Mostrar disciplinas de outros semestres / anteriores",
+    "当前筛选没有本学期或学期未确认的课程。": "O filtro atual não contém disciplinas deste semestre nem de semestre não confirmado.",
+    "%d 门课程": "%d disciplinas",
     "发现新作业": "Novas tarefas encontradas",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Conclua o CAPTCHA ou a MFA na janela oficial. A sincronização continuará depois.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "O início de sessão automático está pausado. Selecione «Continuar manualmente» para ver a página oficial.",
@@ -2334,6 +2350,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desativar “Ativar QMplus” apenas pausa a conexão e a sincronização; os dados de login salvos, a sessão e o cache de cursos são mantidos. Use os controles correspondentes para desativar o preenchimento automático, excluir dados de login ou desconectar e limpar dados."
   },
   "ar": {
+    "QMplus 课程与活动": "مقررات QMplus وأنشطتها",
+    "显示其他学期／历史课程": "عرض مقررات الفصول الأخرى / القديمة",
+    "当前筛选没有本学期或学期未确认的课程。": "لا تطابق المرشح مقررات حالية أو غير مؤكدة الفصل.",
+    "%d 门课程": "%d مقررات",
     "发现新作业": "تم العثور على واجبات جديدة",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "أكمل اختبار CAPTCHA أو المصادقة متعددة العوامل في النافذة الرسمية. ستستأنف المزامنة بعد ذلك.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "توقف تسجيل الدخول التلقائي مؤقتًا. اختر «المتابعة يدويًا» لعرض الصفحة الرسمية.",
@@ -2917,6 +2937,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "إيقاف «تفعيل QMplus» يوقف الاتصال والمزامنة فقط، مع الاحتفاظ ببيانات الدخول المحفوظة والجلسة وذاكرة المقررات المؤقتة. استخدم عناصر التحكم المخصصة لإيقاف التعبئة التلقائية أو حذف بيانات الدخول أو قطع الاتصال ومسح البيانات."
   },
   "ru": {
+    "QMplus 课程与活动": "Курсы и активности QMplus",
+    "显示其他学期／历史课程": "Показывать другие семестры / прошлые курсы",
+    "当前筛选没有本学期或学期未确认的课程。": "Фильтру не соответствуют текущие курсы или курсы с неподтверждённым семестром.",
+    "%d 门课程": "Курсов: %d",
     "发现新作业": "Найдены новые задания",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Пройдите CAPTCHA или MFA в официальном окне. Затем синхронизация продолжится.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "Автоматический вход приостановлен. Выберите «Продолжить вручную», чтобы открыть официальную страницу.",
@@ -3500,6 +3524,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Выключение «Включить QMplus» лишь приостанавливает подключение и синхронизацию; сохранённые данные входа, сеанс и кеш курсов сохраняются. Для отключения автозаполнения, удаления данных входа или отключения с очисткой данных используйте соответствующие действия."
   },
   "tr": {
+    "QMplus 课程与活动": "QMplus dersleri ve etkinlikleri",
+    "显示其他学期／历史课程": "Diğer dönem / geçmiş dersleri göster",
+    "当前筛选没有本学期或学期未确认的课程。": "Bu filtreye uyan geçerli veya dönemi doğrulanmamış ders yok.",
+    "%d 门课程": "%d ders",
     "发现新作业": "Yeni ödevler bulundu",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Resmî pencerede CAPTCHA veya MFA doğrulamasını tamamlayın. Ardından eşitleme devam eder.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "Otomatik oturum açma duraklatıldı. Resmî sayfayı görmek için “Manuel devam et”i seçin.",
@@ -4083,6 +4111,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "“QMplus’ı etkinleştir” seçeneğini kapatmak yalnızca bağlantı ve eşitlemeyi duraklatır; kayıtlı giriş bilgileri, oturum ve ders önbelleği korunur. Otomatik doldurmayı kapatmak, giriş bilgilerini silmek veya bağlantıyı kesip verileri temizlemek için ilgili kontrolleri kullanın."
   },
   "th": {
+    "QMplus 课程与活动": "รายวิชาและกิจกรรม QMplus",
+    "显示其他学期／历史课程": "แสดงวิชาภาคเรียนอื่น / วิชาเก่า",
+    "当前筛选没有本学期或学期未确认的课程。": "ตัวกรองปัจจุบันไม่พบวิชาภาคเรียนนี้หรือวิชาที่ยังไม่ยืนยันภาคเรียน",
+    "%d 门课程": "%d วิชา",
     "发现新作业": "พบงานใหม่",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "ทำ CAPTCHA หรือ MFA ในหน้าต่างทางการให้เสร็จ แล้วระบบจะซิงค์ต่อ",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "พักการเข้าสู่ระบบอัตโนมัติแล้ว เลือก “ดำเนินการต่อด้วยตนเอง” เพื่อดูหน้าทางการ",
@@ -4666,6 +4698,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "การปิด “เปิดใช้ QMplus” จะพักการเชื่อมต่อและการซิงค์เท่านั้น โดยเก็บข้อมูลเข้าสู่ระบบ เซสชัน และแคชรายวิชาไว้ หากต้องการปิดการกรอกอัตโนมัติ ลบข้อมูลเข้าสู่ระบบ หรือยกเลิกการเชื่อมต่อพร้อมล้างข้อมูล ให้ใช้ตัวควบคุมที่เกี่ยวข้อง"
   },
   "ms": {
+    "QMplus 课程与活动": "Kursus dan aktiviti QMplus",
+    "显示其他学期／历史课程": "Paparkan kursus semester lain / terdahulu",
+    "当前筛选没有本学期或学期未确认的课程。": "Tiada kursus semester semasa atau yang semesternya belum disahkan sepadan dengan penapis.",
+    "%d 门课程": "%d kursus",
     "发现新作业": "Tugasan baharu ditemui",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Lengkapkan CAPTCHA atau MFA dalam tetingkap rasmi. Penyegerakan akan diteruskan selepas itu.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "Log masuk automatik dijeda. Pilih “Teruskan secara manual” untuk melihat halaman rasmi.",
@@ -5249,6 +5285,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Mematikan “Dayakan QMplus” hanya menjeda sambungan dan penyegerakan; maklumat log masuk tersimpan, sesi dan cache kursus dikekalkan. Gunakan kawalan berasingan untuk mematikan autofill, memadam maklumat log masuk atau memutuskan sambungan dan mengosongkan data."
   },
   "vi": {
+    "QMplus 课程与活动": "Môn học và hoạt động QMplus",
+    "显示其他学期／历史课程": "Hiện môn học kỳ khác / môn cũ",
+    "当前筛选没有本学期或学期未确认的课程。": "Bộ lọc hiện tại không có môn thuộc học kỳ này hoặc môn chưa xác nhận học kỳ.",
+    "%d 门课程": "%d môn học",
     "发现新作业": "Đã tìm thấy bài tập mới",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Hoàn tất CAPTCHA hoặc MFA trong cửa sổ chính thức. Quá trình đồng bộ sẽ tiếp tục sau đó.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "Đăng nhập tự động đã tạm dừng. Chọn “Tiếp tục thủ công” để xem trang chính thức.",
@@ -5832,6 +5872,10 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Tắt “Bật QMplus” chỉ tạm dừng kết nối và đồng bộ; thông tin đăng nhập đã lưu, phiên và bộ nhớ đệm khóa học vẫn được giữ lại. Hãy dùng các thao tác riêng để tắt tự điền, xóa thông tin đăng nhập hoặc ngắt kết nối và xóa dữ liệu."
   },
   "id": {
+    "QMplus 课程与活动": "Mata kuliah dan kegiatan QMplus",
+    "显示其他学期／历史课程": "Tampilkan mata kuliah semester lain / lama",
+    "当前筛选没有本学期或学期未确认的课程。": "Tidak ada mata kuliah semester ini atau semester belum dipastikan yang cocok dengan filter.",
+    "%d 门课程": "%d mata kuliah",
     "发现新作业": "Tugas baru ditemukan",
     "请在官方窗口完成验证码或 MFA，完成后将继续同步。": "Selesaikan CAPTCHA atau MFA di jendela resmi. Sinkronisasi akan dilanjutkan setelahnya.",
     "自动登录已暂停，可选择“手动继续”查看官方页面。": "Login otomatis dijeda. Pilih “Lanjutkan secara manual” untuk melihat halaman resmi.",

@@ -377,7 +377,7 @@ class SettingsPage internal constructor(
         val notice = TextView(activity).apply {
             text = activity.uiText("登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。"); textSize = 12f
             setThemeTextColor { Palette.muted }; setLineSpacing(0f, 1.1f)
-            setPadding(0, 0, 0, activity.dp(if (isCompact) 8 else 12))
+            setPadding(0, 0, 0, activity.dp(10))
         }
         val repository = activity.qmplusState()
         if (qmplusDetailsExpanded == null) qmplusDetailsExpanded = repository.isFeatureEnabled
@@ -412,7 +412,7 @@ class SettingsPage internal constructor(
             addView(spacer(activity, 10)); addView(credentialEditor.view())
             addView(spacer(activity, 10))
             addView(TextView(activity).apply {
-                text = activity.uiText("QMplus 会话与教务账号隔离；断开连接或清除本地数据会删除该会话和课程快照。")
+                text = activity.uiText("QMplus 使用独立的官方网页登录，与北邮教务账号无关。")
                 textSize = 12f; setThemeTextColor { Palette.muted }; setLineSpacing(0f, 1.1f)
             })
         }

@@ -116,6 +116,7 @@
 "分钟" = "Minutes";
 "分钟前" = "min before";
 "切换此节次" = "Toggle this period";
+"删除已保存的 QMplus 登录资料" = "Delete Saved QMplus Login";
 "删除本学期整门课程" = "Delete this course for the semester";
 "删除本学期整门课程？" = "Delete this course for the semester?";
 "删除课程" = "Delete course";
@@ -180,6 +181,7 @@
 "学校当前学期" = "Current school semester";
 "学科竞赛" = "Academic Competition";
 "学科竞赛 DDL" = "Academic Competition Deadlines";
+"安全保存 QMplus 登录资料" = "Save QMplus Login Securely";
 "完成" = "Done";
 "完整班车时刻表" = "Full Shuttle Timetable";
 "宜" = "Recommended";

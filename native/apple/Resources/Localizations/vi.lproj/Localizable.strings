@@ -116,6 +116,7 @@
 "分钟" = "Phút";
 "分钟前" = "phút trước";
 "切换此节次" = "Bật/tắt tiết học này";
+"删除已保存的 QMplus 登录资料" = "Xóa thông tin đăng nhập QMplus đã lưu";
 "删除本学期整门课程" = "Xóa toàn bộ môn học trong học kỳ này";
 "删除本学期整门课程？" = "Xóa toàn bộ môn học trong học kỳ này?";
 "删除课程" = "Xóa môn học";
@@ -180,6 +181,7 @@
 "学校当前学期" = "Học kỳ hiện tại của trường";
 "学科竞赛" = "Cuộc thi học thuật";
 "学科竞赛 DDL" = "Hạn chót cuộc thi học thuật";
+"安全保存 QMplus 登录资料" = "Lưu thông tin đăng nhập QMplus an toàn";
 "完成" = "Hoàn tất";
 "完整班车时刻表" = "Toàn bộ lịch xe buýt trường";
 "宜" = "Nên";

@@ -109,10 +109,11 @@ test('info, disclosure, tab and course-row touch geometry stay distinct from tex
   }
   const tab=custom.find(button=>button.content.includes('CoursePageContract.symbol'))
   assert.ok(tab)
-  assert.ok(compact(tab.chain).includes('.constraintSize({minHeight:44})'))
+  assert.ok(compact(tab.chain).includes('.constraintSize({minHeight:ControlMetrics.height})'))
+  assert.doesNotMatch(tab.chain,/\.height\(/)
   assert.ok(compact(tab.chain).includes('.borderRadius(8)'))
   assert.doesNotMatch(tab.chain,/ControlMetrics\.height \/ 2/)
-  for(const [start,end] of [['  cloudCourseRow(', '  private currentQMPlusCourses('],['  qmPlusCourseRow(', '  @Builder\n  courseDisclosureButton(']]){
+  for(const [start,end] of [['  cloudCourseRow(', '  private visibleQMPlusCourses('],['  qmPlusCourseRow(', '  @Builder\n  courseDisclosureButton(']]){
     const row=view.slice(view.indexOf(start),view.indexOf(end))
     assert.match(row,/constraintSize\(\{ minHeight: 64 \}\)/)
     assert.doesNotMatch(row,/borderRadius\(ControlMetrics\.height \/ 2\)/)

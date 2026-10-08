@@ -1234,7 +1234,7 @@ private struct QMplusSettingsSurface: View {
                 QMplusCredentialSettingsEditor(authorization: store.credentialAuthorization, draft: store.credentialDraft,
                     language: model.appLanguage, sampleMode: model.isSampleMode,
                     save: store.saveCredentials, disable: store.disableCredentialAutofill)
-                Text(model.localized("QMplus 会话与教务账号隔离；断开连接或清除本地数据会删除该会话和课程快照。"))
+                Text(model.localized("QMplus 使用独立的官方网页登录，与北邮教务账号无关。"))
                     .font(.caption).foregroundStyle(theme.secondaryText)
                 }
                 }
