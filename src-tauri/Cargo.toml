@@ -14,6 +14,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 default = ["tauri-runtime"]
 tauri-runtime = []
 custom-protocol = ["tauri/custom-protocol"]
+# Explicit opt-in, Linux Debug only; additionally bound to the dedicated QA vault namespace.
+qa-qmplus-diagnostics = []
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -59,6 +61,7 @@ objc2-user-notifications = { version = "0.3.2", features = ["block2", "UNNotific
 wry = { version = "=0.57.0", default-features = false, features = ["os-webview"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+gtk = "=0.18.2"
 keyring = { version = "3.6", features = ["linux-native-sync-persistent", "crypto-rust"] }
 zbus = "5.19.0"
 

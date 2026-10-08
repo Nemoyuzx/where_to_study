@@ -20,6 +20,8 @@ pub mod holidays;
 pub mod models;
 pub mod qmplus;
 pub mod qmplus_feature;
+#[cfg(target_os = "linux")]
+mod qmplus_linux_ipc;
 pub mod qmplus_login;
 pub mod qmplus_profile;
 #[cfg(not(mobile))]
@@ -4032,6 +4034,8 @@ fn setup_app(app: &mut tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default().manage(qmplus::QmState::default());
+    #[cfg(target_os = "linux")]
+    let builder = qmplus_linux_ipc::configure(builder);
     #[cfg(not(mobile))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
         if let Some(window) = app.get_webview_window("main") {

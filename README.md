@@ -8,7 +8,7 @@
 
 0.4.0 仅通过同一个 [GitHub 预发布页面](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease) 更新，保持预发布状态，不替换 0.3.2 正式版，也不提交商店正式或新的外部 Beta 审核。附件批次、构建来源和可下载文件以该页面为准；各商店、TestFlight 与 GitHub 相互独立。
 
-0.4.0 新增课程页、QMplus 课程与作业、十三种语言和十款主题，各平台功能与验证边界见[分平台预发布说明](./docs/release-v0.4.0-prerelease-notes.md)。其中 Linux 冷启动后台取得新 QMplus 数据仍未通过验收，恢复缓存不代表本次登录成功；Windows 本轮仅验收构建及安装，未验证真实账号登录。0.3.2 的竞赛镜像、账户说明和完整班车时刻表见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。
+0.4.0 新增课程页、QMplus 课程与作业、十三种语言和十款主题，各平台功能与验证边界见[分平台预发布说明](./docs/release-v0.4.0-prerelease-notes.md)。Linux ARM64 在关闭诊断功能的隔离 Debug 候选中，两次普通冷启动均自动取得更新的 QMplus 快照；验证使用已有有效官方会话，不代替最终 Release 包、x86_64 运行或首次／过期会话 MFA 验收。Windows 本轮仅验收构建及安装，未验证真实账号登录。0.3.2 的竞赛镜像、账户说明和完整班车时刻表见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。
 
 | 设备 | 下载或测试渠道 | 安装方式 |
 | --- | --- | --- |

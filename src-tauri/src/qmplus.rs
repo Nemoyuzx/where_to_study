@@ -7,6 +7,213 @@ use std::sync::{
 use tauri::{Emitter, Manager};
 use zeroize::Zeroizing;
 
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+#[path = "qmplus_qa_auth_observer.rs"]
+mod qa_auth_observer;
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+#[path = "qmplus_qa_diagnostics.rs"]
+mod qa_diagnostics;
+macro_rules! qm_qa_mark {
+    ($state:expr, $milestone:ident) => {{
+        #[cfg(all(
+            target_os = "linux",
+            debug_assertions,
+            feature = "qa-qmplus-diagnostics"
+        ))]
+        $state
+            .qa_diagnostics
+            .mark(qa_diagnostics::Milestone::$milestone);
+    }};
+}
+
+// Non-QA expansion remains the original eval call and original script bytes.
+macro_rules! qm_qa_auth_eval {
+    ($window:expr, $script:expr, $app:expr, $revision:expr) => {{
+        #[cfg(all(
+            target_os = "linux",
+            debug_assertions,
+            feature = "qa-qmplus-diagnostics"
+        ))]
+        {
+            if qa_diagnostics::enabled() {
+                eval_qmplus_auth_qa(&$window, $script, $app.clone(), $revision)
+            } else {
+                $window.eval($script)
+            }
+        }
+        #[cfg(not(all(
+            target_os = "linux",
+            debug_assertions,
+            feature = "qa-qmplus-diagnostics"
+        )))]
+        {
+            $window.eval($script)
+        }
+    }};
+}
+
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+const QA_AUTH_EVAL_PREFIX: &str = "(()=>{try{";
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+const QA_AUTH_EVAL_SUFFIX: &str =
+    "\n;return 'WTS_QA_AUTH_RETURNED';}catch{return 'WTS_QA_AUTH_SYNC_THROWN';}})()";
+
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+fn eval_qmplus_auth_qa(
+    window: &tauri::WebviewWindow,
+    script: &str,
+    app: tauri::AppHandle,
+    revision: u64,
+) -> tauri::Result<()> {
+    // Defense in depth: the feature alone never instruments a normal namespace.
+    if !qa_diagnostics::enabled() {
+        return window.eval(script);
+    }
+    let state = app.state::<QmState>();
+    let Some(observed) = qa_auth_observer::transform(script) else {
+        qm_qa_mark!(state, AuthObserverTransformUnavailable);
+        return window.eval(script);
+    };
+    let probe = QaAuthProbe {
+        revision,
+        window_revision: state.window_revision.load(Ordering::SeqCst),
+        document_generation: state.qa_document_generation.load(Ordering::SeqCst),
+        credential_revision: crate::qmplus_login::revision(),
+    };
+    let observer_app = app.clone();
+    let wrapped = Zeroizing::new(format!(
+        "{QA_AUTH_EVAL_PREFIX}{}{QA_AUTH_EVAL_SUFFIX}",
+        observed.as_str()
+    ));
+    // This observes only the synchronous eval result. In particular, RETURNED
+    // does not mean a Promise resolved, an IPC report arrived or login succeeded.
+    let dispatched = window.eval_with_callback(wrapped.as_str(), move |result| {
+        let result = Zeroizing::new(result);
+        let state = app.state::<QmState>();
+        if state.revision.load(Ordering::SeqCst) != revision {
+            return;
+        }
+        qm_qa_mark!(state, AuthEvalCallbackReceived);
+        match result.as_str() {
+            "\"WTS_QA_AUTH_RETURNED\"" => qm_qa_mark!(state, AuthEvalReturned),
+            "\"WTS_QA_AUTH_SYNC_THROWN\"" => qm_qa_mark!(state, AuthEvalSyncThrown),
+            // Wry collapses eval errors and missing/unsupported values here.
+            // No callback data or exception text is stored or emitted.
+            _ => qm_qa_mark!(state, AuthEvalResultUnavailable),
+        }
+    });
+    if dispatched.is_ok() {
+        arm_qa_auth_probe(observer_app, probe);
+    }
+    dispatched
+}
+
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+#[derive(Clone, Copy)]
+struct QaAuthProbe {
+    revision: u64,
+    window_revision: u64,
+    document_generation: u64,
+    credential_revision: u64,
+}
+
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+fn qa_auth_probe_is_current(state: &QmState, probe: QaAuthProbe) -> bool {
+    qa_diagnostics::enabled()
+        && !state.feature_blocked.load(Ordering::SeqCst)
+        && state.owner_active.load(Ordering::SeqCst)
+        && !state.auth_suspended.load(Ordering::SeqCst)
+        && state.revision.load(Ordering::SeqCst) == probe.revision
+        && state.window_revision.load(Ordering::SeqCst) == probe.window_revision
+        && state.qa_document_generation.load(Ordering::SeqCst) == probe.document_generation
+        && crate::qmplus_login::revision() == probe.credential_revision
+        && state
+            .auth
+            .try_lock()
+            .ok()
+            .is_some_and(|auth| auth.ledger.accepts(probe.credential_revision))
+}
+
+#[cfg(all(
+    target_os = "linux",
+    debug_assertions,
+    feature = "qa-qmplus-diagnostics"
+))]
+fn arm_qa_auth_probe(app: tauri::AppHandle, probe: QaAuthProbe) {
+    let state = app.state::<QmState>();
+    if !qa_auth_probe_is_current(&state, probe)
+        || state
+            .qa_probe_generation
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |scheduled| {
+                (scheduled != probe.document_generation).then_some(probe.document_generation)
+            })
+            .is_err()
+    {
+        return;
+    }
+    // One bounded observation per evaluated document generation. This task
+    // cannot renew an owner, change a phase or schedule any authentication.
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        let state = app.state::<QmState>();
+        if !qa_auth_probe_is_current(&state, probe) {
+            return;
+        }
+        let Some(window) = app.get_webview_window("qmplus") else {
+            return;
+        };
+        qm_qa_mark!(state, AuthObserverReadRequested);
+        let callback_app = app.clone();
+        if window
+            .eval_with_callback(qa_auth_observer::READ_SCRIPT, move |result| {
+                let result = Zeroizing::new(result);
+                let state = callback_app.state::<QmState>();
+                if !qa_auth_probe_is_current(&state, probe) {
+                    return;
+                }
+                qm_qa_mark!(state, AuthObserverReadCallbackReceived);
+                state
+                    .qa_diagnostics
+                    .mark(qa_auth_observer::milestone(result.as_str()));
+            })
+            .is_err()
+        {
+            // Do not store the error or retry a failed read.
+            if qa_auth_probe_is_current(&state, probe) {
+                qm_qa_mark!(state, AuthObserverReadDispatchError);
+            }
+        }
+    });
+}
+
 pub const SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-sync.js");
 const AUTH_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-auth.js");
 const PAGE_SCRIPT: &str = include_str!("../../contracts/qmplus/qmplus-page.js");
@@ -131,28 +338,81 @@ pub struct QmState {
     cache_warning: AtomicBool,
     sync_in_progress: AtomicBool,
     sync_deadline: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    #[cfg(all(
+        target_os = "linux",
+        debug_assertions,
+        feature = "qa-qmplus-diagnostics"
+    ))]
+    qa_diagnostics: qa_diagnostics::Recorder,
+    #[cfg(all(
+        target_os = "linux",
+        debug_assertions,
+        feature = "qa-qmplus-diagnostics"
+    ))]
+    qa_document_generation: AtomicU64,
+    #[cfg(all(
+        target_os = "linux",
+        debug_assertions,
+        feature = "qa-qmplus-diagnostics"
+    ))]
+    qa_probe_generation: AtomicU64,
 }
 #[derive(Default, Clone, Serialize)]
 pub struct ConnectionStatus {
     phase: &'static str,
     reason: &'static str,
+    #[cfg(all(
+        target_os = "linux",
+        debug_assertions,
+        feature = "qa-qmplus-diagnostics"
+    ))]
+    #[serde(rename = "qaDiagnostics", skip_serializing_if = "Option::is_none")]
+    qa_diagnostics: Option<qa_diagnostics::Snapshot>,
 }
 fn record_connection_status(app: &tauri::AppHandle, phase: &'static str, reason: &'static str) {
     if let Ok(mut value) = app.state::<QmState>().connection_status.lock() {
-        *value = ConnectionStatus { phase, reason };
+        *value = ConnectionStatus {
+            phase,
+            reason,
+            #[cfg(all(
+                target_os = "linux",
+                debug_assertions,
+                feature = "qa-qmplus-diagnostics"
+            ))]
+            qa_diagnostics: None,
+        };
     }
     let _ = app.emit(
         "qmplus:connection-status",
-        ConnectionStatus { phase, reason },
+        ConnectionStatus {
+            phase,
+            reason,
+            #[cfg(all(
+                target_os = "linux",
+                debug_assertions,
+                feature = "qa-qmplus-diagnostics"
+            ))]
+            qa_diagnostics: None,
+        },
     );
 }
 #[tauri::command]
 pub fn load_qmplus_connection_status(state: tauri::State<'_, QmState>) -> ConnectionStatus {
-    state
+    #[allow(unused_mut)]
+    let mut value = state
         .connection_status
         .lock()
         .map(|v| v.clone())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    #[cfg(all(
+        target_os = "linux",
+        debug_assertions,
+        feature = "qa-qmplus-diagnostics"
+    ))]
+    {
+        value.qa_diagnostics = state.qa_diagnostics.snapshot();
+    }
+    value
 }
 struct AuthDocument {
     nonce: String,
@@ -518,6 +778,56 @@ fn show_login(window: &tauri::WebviewWindow) {
     let _ = window.show();
     let _ = window.set_focus();
 }
+
+#[cfg(target_os = "linux")]
+fn prepare_hidden_qmplus_layout(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use gtk::prelude::*;
+
+    // These GTK handles are main-thread-only. The connection and page-load
+    // callbacks call this synchronously, before dispatching any page script.
+    if !gtk::is_initialized_main_thread() {
+        return Err("QMplus 页面不可用。".into());
+    }
+    if window.is_visible().map_err(|_| "QMplus 页面不可用。")? {
+        return Ok(());
+    }
+    let scale = window.scale_factor().map_err(|_| "QMplus 页面不可用。")?;
+    if !scale.is_finite() || scale <= 0.0 {
+        return Err("QMplus 页面不可用。".into());
+    }
+    let size = window
+        .inner_size()
+        .map_err(|_| "QMplus 页面不可用。")?
+        .to_logical::<i32>(scale);
+    // Match the requested initial window size if GTK has not allocated it yet.
+    let width = if size.width > 1 { size.width } else { 1000 };
+    let height = if size.height > 1 { size.height } else { 760 };
+    let container = window.default_vbox().map_err(|_| "QMplus 页面不可用。")?;
+    let mut views = container
+        .children()
+        .into_iter()
+        .filter(|child| child.type_().name() == "WebKitWebView");
+    let view = views.next().ok_or("QMplus 页面不可用。")?;
+    if views.next().is_some() {
+        return Err("QMplus 页面不可用。".into());
+    }
+    let allocation = gtk::Allocation::new(0, 0, width, height);
+    // Visible child widgets still belong to an unmapped, hidden top-level.
+    // Allocate both now; an asynchronous with_webview callback could run after
+    // inspect. WebKit's render process still has the existing bounded settling
+    // period before the unchanged form and hit-test guards may accept it.
+    container.set_visible(true);
+    view.set_visible(true);
+    container.size_allocate(&allocation);
+    view.size_allocate(&allocation);
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn prepare_hidden_qmplus_layout(_window: &tauri::WebviewWindow) -> Result<(), String> {
+    Ok(())
+}
+
 fn valid_url(value: &str) -> bool {
     let Ok(u) = tauri::Url::parse(value) else {
         return false;
@@ -1034,6 +1344,7 @@ pub fn accept_qmplus_snapshot(
     payload: String,
     revision: u64,
 ) -> Result<(), String> {
+    qm_qa_mark!(state, SnapshotReceived);
     if !crate::qmplus_feature::enabled(&app).unwrap_or(false) {
         return Err("QMplus 尚未启用。".into());
     }
@@ -1057,6 +1368,7 @@ pub fn accept_qmplus_snapshot(
         record_connection_status(&app, "failed", "SYNC_FAILED");
         return Err(error);
     }
+    qm_qa_mark!(state, SnapshotPublished);
     state.sync_in_progress.store(false, Ordering::SeqCst);
     if let Some(deadline) = state
         .sync_deadline
@@ -1125,6 +1437,7 @@ pub fn accept_qmplus_auth(
     report: AuthReport,
     revision: u64,
 ) -> Result<bool, String> {
+    qm_qa_mark!(state, AuthReportReceived);
     if !crate::qmplus_feature::enabled(&app).unwrap_or(false) {
         return Err("QMplus 尚未启用。".into());
     }
@@ -1152,6 +1465,7 @@ pub fn accept_qmplus_auth(
         return Err("QMplus 登录状态已失效。".into());
     }
     let url = window.url().map_err(|_| "QMplus 页面不可用。")?;
+    qm_qa_mark!(state, AuthEnvelopeAccepted);
     let credential_revision = crate::qmplus_login::revision();
     // This exact common endpoint is a read-only verification surface. It must
     // never become a route to identity claims, saved secrets or submissions.
@@ -1225,6 +1539,7 @@ pub fn accept_qmplus_auth(
             return Ok(false);
         }
         if kind == "loading" {
+            qm_qa_mark!(state, PageLoading);
             return Ok(false);
         }
         if kind == "guest"
@@ -1497,6 +1812,7 @@ pub fn begin_qmplus_sync(
     state: tauri::State<'_, QmState>,
     revision: u64,
 ) -> Result<(), String> {
+    qm_qa_mark!(state, SyncBeginReceived);
     require_current_profile(&app, &state)?;
     if state.feature_blocked.load(Ordering::SeqCst)
         || *state.page_kind.lock().map_err(|_| "QMplus 页面不可用。")? != "authenticated"
@@ -1511,6 +1827,7 @@ pub fn begin_qmplus_sync(
     }
     state.stop_autofill();
     state.sync_in_progress.store(true, Ordering::SeqCst);
+    qm_qa_mark!(state, SyncStarted);
     let handle = app.clone();
     let mut timer = state
         .sync_deadline
@@ -1682,11 +1999,16 @@ fn connect_qmplus_on_main(
         .lock()
         .map_err(|_| "QMplus 页面不可用。")? = true;
     record_connection_status(&app, "checking", "");
+    qm_qa_mark!(state, AttemptStarted);
     if let Some(window) = app.get_webview_window("qmplus") {
         if quiet {
             let _ = window.hide();
         } else {
             let _ = window.show();
+        }
+        if prepare_hidden_qmplus_layout(&window).is_err() {
+            require_manual(&app, &window, "LAYOUT_UNAVAILABLE");
+            return Err("QMplus 页面不可用。".into());
         }
         window
             .navigate(
@@ -1694,12 +2016,14 @@ fn connect_qmplus_on_main(
                     .map_err(|_| "QMplus 地址无效。")?,
             )
             .map_err(|_| "无法打开 QMplus。")?;
+        qm_qa_mark!(state, NavigateAccepted);
         if quiet {
             arm_quiet_deadline(&app, &state, revision)?;
         }
         return Ok(());
     }
     let window_revision = state.window_revision.fetch_add(1, Ordering::SeqCst) + 1;
+    qm_qa_mark!(state, BuildRequested);
     let builder = tauri::WebviewWindowBuilder::new(
         &app,
         "qmplus",
@@ -1713,7 +2037,21 @@ fn connect_qmplus_on_main(
     .on_page_load(move |w, p| {
         let handle = w.app_handle();
         let state = handle.state::<QmState>();
-        if state.feature_blocked.load(Ordering::SeqCst) || !state.owner_active.load(Ordering::SeqCst) || state.window_revision.load(Ordering::SeqCst) != window_revision || require_current_profile(handle, &state).is_err() { return; }
+        #[cfg(all(target_os = "linux", debug_assertions, feature = "qa-qmplus-diagnostics"))]
+        {
+            if p.event() == tauri::webview::PageLoadEvent::Started {
+                if qa_diagnostics::enabled() {
+                    state.qa_document_generation.fetch_add(1, Ordering::SeqCst);
+                }
+                qm_qa_mark!(state, CommittedCallback);
+            } else if p.event() == tauri::webview::PageLoadEvent::Finished {
+                qm_qa_mark!(state, FinishedCallback);
+            }
+        }
+        if state.feature_blocked.load(Ordering::SeqCst) || !state.owner_active.load(Ordering::SeqCst) || state.window_revision.load(Ordering::SeqCst) != window_revision || require_current_profile(handle, &state).is_err() {
+            qm_qa_mark!(state, CallbackGuardRejected);
+            return;
+        }
         let revision = state.revision.load(Ordering::SeqCst);
         if p.event() == tauri::webview::PageLoadEvent::Started {
             *state.page_kind.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = "unknown";
@@ -1728,8 +2066,19 @@ fn connect_qmplus_on_main(
             return;
         }
         if p.event() == tauri::webview::PageLoadEvent::Finished {
-            let Some(current) = w.url().ok().filter(|u| u == p.url()) else { return; };
-            let Some(window) = handle.get_webview_window("qmplus") else { return; };
+            let Some(current) = w.url().ok().filter(|u| u == p.url()) else {
+                qm_qa_mark!(state, FinishedUrlUnavailableOrMismatch);
+                return;
+            };
+            let Some(window) = handle.get_webview_window("qmplus") else {
+                qm_qa_mark!(state, FinishedWindowMissing);
+                return;
+            };
+            if prepare_hidden_qmplus_layout(&window).is_err() {
+                require_manual(handle, &window, "LAYOUT_UNAVAILABLE");
+                return;
+            }
+            qm_qa_mark!(state, LayoutReady);
             if official_qm_page(&current) {
                 let nonce = match crate::scoped_cache::new_account_scope() {
                     Ok(v) => v.trim_start_matches("opaque-v1:").to_string(),
@@ -1738,6 +2087,7 @@ fn connect_qmplus_on_main(
                 state.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).document = Some(AuthDocument { nonce: nonce.clone(), url: current.clone() });
                 let encoded_nonce = serde_json::to_string(&nonce).unwrap_or_default();
                 let encoded_url = serde_json::to_string(current.as_str()).unwrap_or_default();
+                qm_qa_mark!(state, PageEvalRequested);
                 let _ = window.eval(format!("(()=>{{if(location.href!=={encoded_url})return;const kind={PAGE_SCRIPT};const reason=kind==='guest'&&{APPROVED_SSO}?'guest_sso':kind==='guest'&&{APPROVED_LOGIN_ENTRY}?'guest_login':kind;window.__TAURI_INTERNALS__.invoke('accept_qmplus_auth',{{revision:{revision},report:{{v:1,stage:'page',document:{encoded_nonce},accountMatch:false,reason}}}}).catch(()=>{{}});}})()"));
                 return;
             }
@@ -1750,6 +2100,7 @@ fn connect_qmplus_on_main(
                 // Microsoft may traverse a transport document before its MFA
                 // page. Preserve this owner's ledger only under the existing
                 // deadline: no new nonce, script, vault read, action or renewal.
+                qm_qa_mark!(state, PassiveTransit);
                 record_connection_status(handle, "checking", "MICROSOFT_TRANSIT");
                 return;
             }
@@ -1783,13 +2134,22 @@ fn connect_qmplus_on_main(
                 if(report.stage==='manual'&&report.reason!=='ALREADY_ATTEMPTED'){{finish();return;}}schedule(report.stage==='challenge'?750:350);}};poll();}})()"#,
                 nonce=serde_json::to_string(&nonce).unwrap_or_default(), url=serde_json::to_string(current.as_str()).unwrap_or_default(),
                 account=serde_json::to_string(account).unwrap_or_default()));
-            if w.eval(&*script).is_err() { require_manual(handle,&window,"SCRIPT_UNAVAILABLE"); }
+            qm_qa_mark!(state, AuthEvalRequested);
+            if qm_qa_auth_eval!(w, &*script, handle, revision).is_err() {
+                qm_qa_mark!(state, AuthEvalDispatchError);
+                require_manual(handle,&window,"SCRIPT_UNAVAILABLE");
+            }
         }
     });
     let window = profile
         .configure(builder)
         .build()
         .map_err(|_| "无法创建 QMplus 官方登录窗口。")?;
+    qm_qa_mark!(state, BuildReturned);
+    if prepare_hidden_qmplus_layout(&window).is_err() {
+        require_manual(&app, &window, "LAYOUT_UNAVAILABLE");
+        return Err("QMplus 页面不可用。".into());
+    }
     let handle = app.clone();
     window.on_window_event(move |event| {
         let state = handle.state::<QmState>();
@@ -1868,16 +2228,79 @@ fn arm_quiet_deadline(
         tokio::time::sleep(std::time::Duration::from_secs(25)).await;
         if handle.state::<QmState>().quiet_timeout_is_current(revision) {
             if let Some(window) = handle.get_webview_window("qmplus") {
+                qm_qa_mark!(handle.state::<QmState>(), DeadlineExpired);
                 require_manual(&handle, &window, "QUIET_TIMEOUT");
             }
         }
     }));
+    qm_qa_mark!(state, DeadlineArmed);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(all(
+        target_os = "linux",
+        debug_assertions,
+        feature = "qa-qmplus-diagnostics"
+    ))]
+    #[test]
+    fn qa_probe_rejects_retired_owners_and_changed_document_generations() {
+        fn fixture() -> (QmState, QaAuthProbe) {
+            let state = QmState::default();
+            let probe = QaAuthProbe {
+                revision: 9,
+                window_revision: 2,
+                document_generation: 3,
+                credential_revision: crate::qmplus_login::revision(),
+            };
+            state.owner_active.store(true, Ordering::SeqCst);
+            state.revision.store(probe.revision, Ordering::SeqCst);
+            state
+                .window_revision
+                .store(probe.window_revision, Ordering::SeqCst);
+            state
+                .qa_document_generation
+                .store(probe.document_generation, Ordering::SeqCst);
+            state
+                .auth
+                .lock()
+                .unwrap()
+                .ledger
+                .begin(probe.credential_revision);
+            (state, probe)
+        }
+        let (state, probe) = fixture();
+        assert_eq!(
+            qa_auth_probe_is_current(&state, probe),
+            qa_diagnostics::enabled()
+        );
+        state.qa_document_generation.fetch_add(1, Ordering::SeqCst);
+        assert!(!qa_auth_probe_is_current(&state, probe));
+        let (state, probe) = fixture();
+        state.revision.fetch_add(1, Ordering::SeqCst);
+        assert!(!qa_auth_probe_is_current(&state, probe));
+        let (state, probe) = fixture();
+        state.window_revision.fetch_add(1, Ordering::SeqCst);
+        assert!(!qa_auth_probe_is_current(&state, probe));
+        let (state, probe) = fixture();
+        state.owner_active.store(false, Ordering::SeqCst);
+        assert!(!qa_auth_probe_is_current(&state, probe));
+        let (state, probe) = fixture();
+        state.auth_suspended.store(true, Ordering::SeqCst);
+        assert!(!qa_auth_probe_is_current(&state, probe));
+        let (state, probe) = fixture();
+        state.feature_blocked.store(true, Ordering::SeqCst);
+        assert!(!qa_auth_probe_is_current(&state, probe));
+        let (state, probe) = fixture();
+        state.auth.lock().unwrap().ledger.stop();
+        assert!(!qa_auth_probe_is_current(&state, probe));
+        let (state, probe) = fixture();
+        let _guard = state.auth.lock().unwrap();
+        assert!(!qa_auth_probe_is_current(&state, probe));
+    }
 
     #[test]
     fn explicit_connect_defaults_do_not_become_background_refreshes() {

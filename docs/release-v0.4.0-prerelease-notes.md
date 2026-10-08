@@ -83,7 +83,7 @@ Windows本轮验收范围为构建、安装及包体检查，包括安装程序�
 - 同步QMplus设置及课程页账号、刷新、更多和私有详情按钮的主题样式修复。
 - 提供x86_64、aarch64的DEB和AppImage构建，安装验证限定为Ubuntu 24.04 x86_64 DEB，不扩写为aarch64安装验收。
 
-此前版本完成过真实MFA并取得新业务快照。后续多个候选的普通冷启动仅恢复原缓存，获取时间未前进；即使认证求值已经返回，静默同步仍出现`QUIET_TIMEOUT`。冷启动后台取得新数据尚未通过，保留缓存不代表本次登录或刷新成功。GTK及认证诊断实验留在本地，未作为本轮发布修复；最终包的构建来源及CI结果记录在预发布页面。
+此前版本完成过真实MFA并取得新业务快照，后续候选曾因网页与原生端的IPC消息被拒绝而静默同步超时。本轮修复Linux QMplus消息桥接，保留既有命令权限与消息校验。在关闭诊断功能、使用隔离凭据命名空间的同一ARM64 Debug候选中，两次正常退出后的普通冷启动均自动取得更新快照，获取时间分别前进；两次均未显示登录窗口，也未执行连接、手动继续、保存凭据或MFA操作。验证保留已有凭据和有效官方会话，不把恢复旧缓存当作刷新成功。这是本地Debug候选验收，不代表最终Release安装包、Linux x86_64运行或首次／过期会话MFA已通过；最终包的构建来源及CI结果记录在预发布页面。
 
 ## CLI / TUI 与工程
 
@@ -93,7 +93,7 @@ Windows本轮验收范围为构建、安装及包体检查，包括安装程序�
 
 ## 已知限制
 
-- Linux冷启动QMplus后台刷新尚未取得新数据，真实MFA曾成功不代表后续冷启动已通过；缓存仍标记原获取时间，不能当作本次刷新成功的证据。
+- Linux两次冷启动验证限定为关闭诊断功能、隔离凭据命名空间的ARM64 Debug候选及已有有效官方会话；最终Release包、x86_64运行和首次／过期会话MFA仍需单独验收。恢复缓存不能当作本次刷新成功的证据。
 - Android69仅验证已有有效官方会话的冷启动自动更新，首次登录及会话过期后的MFA不在该次验证范围。
 - HarmonyOS1002046新包自检最终结果尚未复核，QMplus真实重启验收未通过，个人运行截图尚未补齐；旧云测结果不可替代。iPhone、iPad及Duo更新截图仍需完成验收。
 - Windows本轮仅覆盖构建及安装验收。公共DMG未公证，Windows安装程序未获Authenticode签名。
@@ -107,7 +107,7 @@ Windows本轮验收范围为构建、安装及包体检查，包括安装程序�
 - **Android:** Courses, optional secure QMplus autofill, shared data, API 24 support and read-only cellular fallback. Async startup restoration, measured month geometry, adaptive Almanac labels and themed language transitions. APK 69 passes 450 Release unit tests, five native language tests and package gates; lint retains existing warnings. A real-account cold launch with an existing valid session produced a newer snapshot automatically. No cookie clearing or MFA occurred, so this does not validate first-time or expired-session MFA. Huawei draft saved without submission; review-locked vivo 0.3.2 skipped. No public AAB.
 - **HarmonyOS:** Shared course/task features, notices, deadline strips, thirteen languages and ten themes, async caches and measured calendar geometry. Build 1002046 adds spring feedback to mobile day/week timelines. Release HAP/APP, 405 tests, signatures and package gates passed; 217 source inputs match between SDK-tested and uploaded packages, whose hashes differ. DevEco upload and package legality passed; formal and test drafts saved without review submission or test release. Final self-check results are unverified; old 1002045 cloud results do not validate this build. Real QMplus restart acceptance and personal screenshots remain incomplete. No public Harmony package.
 - **Windows:** Shared course queries, official QMplus sessions, caches, notices and deadline strips; themed controls, revised settings and language transitions. This round covers build and installation gates, excluding real-account login/MFA validation. No Authenticode signature.
-- **Linux / Ubuntu:** Shared desktop features and UI fixes, with x86_64/aarch64 DEB/AppImage targets; installation validation is limited to Ubuntu 24.04 x86_64 DEB. Real MFA previously fetched a fresh snapshot, but later ordinary cold starts restored only cached data and quiet refresh timed out. Fresh background sync has not passed. Local GTK/authentication experiments are excluded from this release.
+- **Linux / Ubuntu:** Shared desktop features and UI fixes, with x86_64/aarch64 DEB/AppImage targets; installation validation is limited to Ubuntu 24.04 x86_64 DEB. The QMplus IPC bridge fix preserves existing command permissions and message checks. The same ARM64 Debug candidate, with diagnostics disabled and an isolated credential namespace, automatically fetched newer snapshots after two normal quits and cold launches. Existing credentials and a valid official session were retained; no login window, Connect, manual continuation, credential save or MFA action occurred. This does not validate final packaged Release binaries, Linux x86_64 runtime or first-time/expired-session MFA.
 - **CLI / TUI:** Shared data boundaries, legal files, five new TUI themes and repaired tar packaging. Four verified original Actions archives retain source commit `da7a166`; they are not relabeled as new desktop-commit builds.
 
 Version 0.4.0 remains prerelease only; stable 0.3.2 is unchanged. No formal or new external Beta review is submitted. The same prerelease page records the actual 11 public files, source commits, CI/local build provenance and hashes. It excludes AAB, Harmony packages, IPA and checksum sidecars; verification uses local files and remote metadata without Release re-download.
