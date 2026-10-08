@@ -4,11 +4,11 @@
 
 ## 下载与安装
 
-最新 GitHub 正式版是 [Where To Study v0.3.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。下表提供这个正式版的 Windows、Linux、macOS 和 Android 安装包。
+最新 GitHub 正式版仍是 [Where To Study v0.3.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。下表提供这个正式版的 Windows、Linux、macOS 和 Android 安装包。
 
-0.4.0 仅通过同一个 [GitHub 预发布页面](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease) 更新，保持预发布状态，不替换 0.3.2 正式版，也不提交商店正式或新的外部 Beta 审核。附件批次、构建来源和可下载文件以该页面为准；各商店、TestFlight 与 GitHub 相互独立。
+0.4.0 目前通过同一个 [GitHub 预发布页面](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease) 提供下载，正式发布及 latest 切换将在最新软件包、真实运行和截图门禁核对完成后进行；当前尚未完成该正式晋升。既有 0.3.2 版本、附件、正文和标签保留。附件批次、构建来源和可下载文件以该页面的实际记录为准；各商店、TestFlight 与 GitHub 相互独立，测试通过或草稿保存不代表已正式送审／上架。
 
-0.4.0 新增课程页、QMplus 课程与作业、十三种语言和十款主题，各平台功能与验证边界见[分平台预发布说明](./docs/release-v0.4.0-prerelease-notes.md)。Linux ARM64 在关闭诊断功能的隔离 Debug 候选中，两次普通冷启动均自动取得更新的 QMplus 快照；验证使用已有有效官方会话，不代替最终 Release 包、x86_64 运行或首次／过期会话 MFA 验收。Windows 本轮仅验收构建及安装，未验证真实账号登录。0.3.2 的竞赛镜像、账户说明和完整班车时刻表见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。
+0.4.0 新增课程页、QMplus 课程与作业、十三种语言和十款主题，各平台功能见[分平台说明](./docs/release-v0.4.0-prerelease-notes.md)。最终待交付的 Linux ARM64 DEB 内容与原始 AppImage 已完成真实有效会话的正常冷启动及更新快照验收；DEB 是解包后的原始内容运行，不扩写为 ARM64 系统安装、x86_64 真实账号运行、首次／过期 MFA 或所有网络条件。Windows 本轮仅验收构建及安装。0.3.2 的竞赛镜像、账户说明和完整班车时刻表见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。
 
 | 设备 | 下载或测试渠道 | 安装方式 |
 | --- | --- | --- |
@@ -18,7 +18,7 @@
 | Ubuntu/Debian Linux | [x86_64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-x86_64.deb) · [aarch64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-aarch64.deb) | 按处理器架构选择，用系统软件安装器打开。 |
 | 其他 Linux | [x86_64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-x86_64.AppImage) · [aarch64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-aarch64.AppImage) | 允许文件「作为程序执行」后打开。 |
 | iPhone/iPad（iOS/iPadOS 16+） | [TestFlight 公测邀请](https://testflight.apple.com/join/yuzpAtDJ) | 先安装 TestFlight；可安装版本以 Apple 页面为准。 |
-| HarmonyOS NEXT | AppGallery / DevEco 对应渠道 | 0.3.2 已上架；0.4.0 为测试预发布，能否加入测试及安装以华为对应页面为准。 |
+| HarmonyOS NEXT | AppGallery / DevEco 对应渠道 | 既有 0.3.2 版本保留；0.4.0 正式发布准备中，实际可安装版本及审核状态以华为对应页面为准。 |
 
 后续版本请查看[最新正式版页面](https://github.com/Nemoyuzx/where_to_study/releases/latest)。
 
@@ -187,7 +187,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 ./scripts/native-harmony-build.sh
 ```
 
-`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙 0.3.2 已上架；0.4.0（1002046）的本地 Release 测试、签名及包体门禁通过，已上传并保存正式及测试草稿，未提交审核或发布测试。该包自检最终结果尚未复核，旧 1002045 云测报告不能代替新包验证；详见[分平台更新说明](./docs/release-v0.4.0-prerelease-notes.md)。
+`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙当前 0.4.0（1002047）的本地 Release 测试405/405及正常安装验证已完成；对应最新实际包的上架自检／完整报告和正式送审状态须分别以该包回执核对，旧1002046云测不能替代1002047验证。软件包具备正式用途不等于应用已提交审核或上架；详见[分平台说明](./docs/release-v0.4.0-prerelease-notes.md)。
 
 Android 主界面仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri；QMplus 官方 SSO/MFA 在独立进程的 WebView 中完成，不读取系统浏览器 Cookie。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
