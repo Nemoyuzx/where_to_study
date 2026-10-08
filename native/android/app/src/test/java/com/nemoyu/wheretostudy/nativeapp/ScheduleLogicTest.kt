@@ -533,6 +533,46 @@ class ScheduleLogicTest {
     }
 
     @Test
+    fun foldedMonthCellsUseMeasuredWidthsAndOnlyShrinkWhenTheViewportCannotFit() {
+        fun height(width: Int, available: Int, rows: Int = 6, columns: Int = 7) =
+            TeachingCalendarLogic.collapsedMonthRowHeightPx(width, 2 * columns, 2, available, rows, columns)
+        // Every cell has a trailing 2 px margin and a 2 px bottom margin.
+        assertEquals(60, height(420, 600))
+        assertEquals(100, height(700, 900))
+        assertEquals(60, height(420, 360))
+        assertEquals(59, height(420, 359))
+        assertEquals(40, height(700, 240))
+        assertEquals(60, height(420, 300, rows = 5))
+        assertEquals(60, height(420, 240, rows = 4))
+        assertEquals(60, height(423, 600)) // Weighted columns differ by at most one pixel.
+        assertEquals(0, height(420, 0))
+        assertEquals(0, height(420, -1))
+        assertEquals(0, height(420, 600, rows = 0))
+        assertEquals(0, height(420, 600, columns = 0))
+        assertEquals(2, height(0, 600))
+        assertEquals(2, height(-1, 600))
+    }
+
+    @Test
+    fun measuredFoldedRowsRemainStableWhileClippingToTheSelectedWeek() {
+        for (width in listOf(280, 420, 700)) {
+            for (budget in listOf(0, 48, 240, 360, 720)) {
+                val expanded = budget / 6
+                val folded = TeachingCalendarLogic.collapsedMonthRowHeightPx(width, 14, 2, budget, 6)
+                for (position in listOf(0f, 0.5f, 1f, 1.5f, 2f)) {
+                    val row = TeachingCalendarLogic.monthRowHeightPx(position, folded, expanded)
+                    assertTrue(row in folded..expanded)
+                    assertTrue(TeachingCalendarLogic.monthGridViewportHeight(position, 6, row) <= budget)
+                }
+                assertEquals(expanded, TeachingCalendarLogic.monthRowHeightPx(0f, folded, expanded))
+                assertEquals(folded, TeachingCalendarLogic.monthRowHeightPx(1f, folded, expanded))
+                assertEquals(folded, TeachingCalendarLogic.monthRowHeightPx(2f, folded, expanded))
+                assertEquals(-3 * folded, TeachingCalendarLogic.monthGridTranslationY(2f, 3, folded))
+            }
+        }
+    }
+
+    @Test
     fun measuredExpandedMonthHeightDoesNotAlterDetailsOrSelectedWeekAnchors() {
         val expandedHeightDp = TeachingCalendarLogic.expandedMonthCellHeightDp(
             monthViewHeightDp = 1_020,

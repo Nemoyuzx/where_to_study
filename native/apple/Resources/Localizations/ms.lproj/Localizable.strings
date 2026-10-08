@@ -116,6 +116,7 @@
 "分钟" = "Minit";
 "分钟前" = "minit lebih awal";
 "切换此节次" = "Tukar waktu kelas ini";
+"删除已保存的 QMplus 登录资料" = "Padam maklumat log masuk QMplus yang disimpan";
 "删除本学期整门课程" = "Padam kursus ini untuk semester ini";
 "删除本学期整门课程？" = "Padam kursus ini untuk semester ini?";
 "删除课程" = "Padam kursus";
@@ -180,6 +181,7 @@
 "学校当前学期" = "Semester universiti semasa";
 "学科竞赛" = "Pertandingan akademik";
 "学科竞赛 DDL" = "Tarikh akhir pertandingan akademik";
+"安全保存 QMplus 登录资料" = "Simpan maklumat log masuk QMplus dengan selamat";
 "完成" = "Selesai";
 "完整班车时刻表" = "Jadual bas kampus lengkap";
 "宜" = "Sesuai";

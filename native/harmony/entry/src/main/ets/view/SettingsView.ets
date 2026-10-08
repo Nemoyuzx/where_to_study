@@ -234,7 +234,6 @@ export struct SettingsView {
       Column({ space: 16 }) {
         this.settingsTitle()
         this.referenceNotice()
-        this.reviewDemoSurface()
         if (AdaptiveLayoutPolicy.useTwoColumn(this.contentWidth)) {
           Row({ space: 16 }) {
             Column({ space: 16 }) {
@@ -360,10 +359,8 @@ export struct SettingsView {
         }, this.model.canEnterReviewDemo())
       }
     }
-    .padding(16)
     .width('100%')
-    .borderRadius(8)
-    .backgroundColor(AppTheme.surface())
+    .margin({ bottom: 8 })
     .alignItems(HorizontalAlign.Start)
   }
 
@@ -1769,6 +1766,7 @@ export struct SettingsView {
         .width('100%')
         .padding({ bottom: this.isCompact() ? 8 : 12 })
 
+      this.reviewDemoSurface()
       Button(this.model.text(AppMeta.appFilingLabel))
         .type(ButtonType.Normal)
         .stateEffect(true)

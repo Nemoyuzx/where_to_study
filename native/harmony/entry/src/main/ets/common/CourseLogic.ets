@@ -81,6 +81,23 @@ export class CourseQMPlusScope {
       course.currentTermStatus !== 'current');
   }
 
+  static visibleCourses(snapshot: QMPlusSnapshot | null, showsOtherTerms: boolean): QMPlusCourse[] {
+    return CourseQMPlusScope.courses(snapshot).filter((course: QMPlusCourse): boolean =>
+      showsOtherTerms || course.currentTermStatus !== 'other');
+  }
+
+  static hasHistoricalCourses(snapshot: QMPlusSnapshot | null): boolean {
+    return CourseQMPlusScope.courses(snapshot).some((course: QMPlusCourse): boolean =>
+      course.currentTermStatus === 'other');
+  }
+
+  static activitiesForCourse(snapshot: QMPlusSnapshot | null, courseID: string): QMPlusActivity[] {
+    if (snapshot === null || !CourseQMPlusScope.courses(snapshot).some(
+      (course: QMPlusCourse): boolean => course.id === courseID)) { return []; }
+    return QMPlusCourseworkPolicy.activities(snapshot.activities).filter((item: QMPlusActivity): boolean =>
+      item.courseID === courseID && (item.kind === 'assignment' || item.kind === 'quiz'));
+  }
+
   static currentActivities(snapshot: QMPlusSnapshot | null): QMPlusActivity[] {
     if (snapshot === null) { return []; }
     const currentIDs: Set<string> = new Set<string>(CourseQMPlusScope.currentCourses(snapshot)

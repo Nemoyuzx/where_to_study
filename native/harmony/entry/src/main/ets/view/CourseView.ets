@@ -200,15 +200,31 @@ export struct CourseView {
     return CoursePageContract.iconOnlyTabs(this.tabPickerWidth, maximumWidth, this.compactTabs());
   }
 
-  private overviewCount(): string {
+  private cloudCourseStatus(): string {
     const parts: string[] = [];
     if (this.model.cloudCoursesFetchedAt.length > 0) {
-      parts.push(this.localized('教学云 ', 'Teaching Cloud ') + this.cloudCourseGroups().length.toString() +
-        this.localized(' 门', ' courses'));
+      parts.push(this.model.text('%d 门课程').replace('%d', this.cloudCourseGroups().length.toString()));
+      parts.push(this.model.text('更新时间：') + this.model.cloudCoursesFetchedAt);
     }
-    if (this.model.qmplusEnabled && this.qmPlusSession.snapshot !== null && !this.model.isSampleMode()) {
-      parts.push('QMplus EBU ' + CourseQMPlusScope.courses(this.qmPlusSession.snapshot).length.toString() +
-        this.localized(' 门', ' courses'));
+    if (this.model.cloudCoursesError.length > 0) { parts.push(this.model.text(this.model.cloudCoursesError)); }
+    return parts.join(' · ');
+  }
+
+  private qmPlusCourseStatus(): string {
+    const parts: string[] = [];
+    if (this.qmPlusSession.snapshot !== null) {
+      parts.push(this.model.text('%d 门课程').replace('%d', this.visibleQMPlusCourses().length.toString()));
+      parts.push(this.model.text('更新时间：') + this.qmPlusSession.snapshot.fetchedAt);
+      if (this.qmPlusSession.snapshot.partial) {
+        parts.push(this.model.text('部分课程或活动无法读取，以下为已核实的结果。'));
+      }
+      if (this.qmPlusSession.showingStalePartial) {
+        parts.push(this.model.text('本次仅部分同步成功，继续显示上次完整资料；时间仍以上次同步为准，仅供对照。'));
+      }
+    }
+    if (this.qmPlusSession.error.length > 0) {
+      parts.push(this.model.text(this.qmPlusSession.error) + (this.qmPlusSession.errorCode.length > 0 &&
+        this.qmPlusSession.errorCode !== 'QM_LOGIN_REQUIRED' ? ' (' + this.qmPlusSession.errorCode + ')' : ''));
     }
     return parts.join(' · ');
   }
@@ -285,7 +301,7 @@ export struct CourseView {
 
   build() {
     Column({ space: 0 }) {
-      Column({ space: 16 }) {
+      Column({ space: 8 }) {
         if (this.session.selectedCourseSource.length > 0) {
           Row({ space: 10 }) {
             Button(this.localized('返回', 'Back'))
@@ -305,12 +321,6 @@ export struct CourseView {
           .width('100%')
         } else {
           PageTitle({ eyebrow: 'Where To Study', title: this.model.text('课程') })
-          if (this.overviewCount().length > 0) {
-            Text(this.overviewCount())
-              .fontSize(12)
-              .fontColor(AppTheme.secondaryText())
-              .id('courses.overview.count')
-          }
           this.tabPicker()
         }
       }
@@ -391,7 +401,6 @@ export struct CourseView {
             .fontSize('14vp')
             .fontWeight(this.selectedTab() === tab ? FontWeight.Bold : FontWeight.Regular)
             .fontColor(AppTheme.text())
-            .maxLines(1)
             .accessibilityLevel('no')
         }
       }
@@ -399,8 +408,8 @@ export struct CourseView {
     }
     .type(ButtonType.Normal)
     .layoutWeight(1)
-    .constraintSize({ minHeight: 44 })
-    .padding({ left: 6, right: 6, top: 4, bottom: 4 })
+    .constraintSize({ minHeight: ControlMetrics.height })
+    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
     .borderRadius(8)
     .backgroundColor(this.selectedTab() === tab ? AppTheme.surface() : Color.Transparent)
     .accessibilityText(this.model.text(CoursePageContract.title(tab)))
@@ -605,16 +614,6 @@ export struct CourseView {
           .fontColor(AppTheme.primary())
           .onClick(() => this.onOpenSettings())
       }
-      if (this.model.cloudCoursesFetchedAt.length > 0) {
-        Text(this.model.text('更新时间：') + this.model.cloudCoursesFetchedAt)
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
-      }
-      if (this.model.cloudCoursesError.length > 0) {
-        Text(this.model.text(this.model.cloudCoursesError))
-          .fontSize(13)
-          .fontColor(AppTheme.danger())
-      }
       if (this.model.cloudCoursesLoading && this.model.cloudCourses.length === 0) {
         LoadingProgress().width(24).height(24).color(AppTheme.primary())
       } else if (this.model.cloudCourses.length === 0) {
@@ -628,6 +627,12 @@ export struct CourseView {
             Divider().strokeWidth(0.5).color(AppTheme.border()).margin({ left: 52 })
           }
         }, (course: UCloudCourseGroup) => course.id)
+      }
+      if (this.cloudCourseStatus().length > 0) {
+        Text(this.cloudCourseStatus())
+          .fontSize(12)
+          .fontColor(this.model.cloudCoursesError.length > 0 ? AppTheme.danger() : AppTheme.secondaryText())
+          .width('100%')
       }
       Button(this.model.text('打开教学云平台'))
         .type(ButtonType.Normal)
@@ -739,23 +744,20 @@ export struct CourseView {
     }.width('100%').alignItems(HorizontalAlign.Start)
   }
 
-  private currentQMPlusCourses(): QMPlusCourse[] {
-    return CourseQMPlusScope.currentCourses(this.qmPlusSession.snapshot);
+  private visibleQMPlusCourses(): QMPlusCourse[] {
+    return CourseQMPlusScope.visibleCourses(this.qmPlusSession.snapshot, this.session.showsOtherQMplusTerms);
   }
 
-  private otherQMPlusCourses(): QMPlusCourse[] {
-    return CourseQMPlusScope.otherCourses(this.qmPlusSession.snapshot);
+  private hasHistoricalQMPlusCourses(): boolean {
+    return CourseQMPlusScope.hasHistoricalCourses(this.qmPlusSession.snapshot);
   }
 
   private courseActivityCount(courseID: string): number {
-    return CourseQMPlusScope.currentActivities(this.qmPlusSession.snapshot)
-      .filter((item: QMPlusActivity): boolean =>
-      item.courseID === courseID).length;
+    return this.visibleQMActivitiesFor(courseID).length;
   }
 
   private visibleQMActivitiesFor(courseID: string): QMPlusActivity[] {
-    return CourseQMPlusScope.currentActivities(this.qmPlusSession.snapshot)
-      .filter((item: QMPlusActivity): boolean => item.courseID === courseID);
+    return CourseQMPlusScope.activitiesForCourse(this.qmPlusSession.snapshot, courseID);
   }
 
   private qmTime(utc: string): string {
@@ -766,7 +768,7 @@ export struct CourseView {
   qmPlusSection() {
     Column({ space: 9 }) {
       Row({ space: 8 }) {
-        Text(this.model.text('QMplus 当前课程'))
+        Text(this.model.text('QMplus 课程与活动'))
           .fontSize(17)
           .fontWeight(FontWeight.Bold)
           .fontColor(AppTheme.text())
@@ -792,48 +794,40 @@ export struct CourseView {
         'Times below are converted to Beijing time; original London wording is unchanged.'))
         .fontSize(12)
         .fontColor(AppTheme.secondaryText())
-      if (this.qmPlusSession.error.length > 0) {
-        Text(this.model.text(this.qmPlusSession.error) + (this.qmPlusSession.errorCode.length > 0 &&
-          this.qmPlusSession.errorCode !== 'QM_LOGIN_REQUIRED' ? ' (' + this.qmPlusSession.errorCode + ')' : ''))
-          .fontSize(12)
-          .fontColor(AppTheme.danger())
-      }
       if (this.qmPlusSession.snapshot !== null) {
-        Text(this.model.text('更新时间：') + (this.qmPlusSession.snapshot?.fetchedAt ?? ''))
-          .fontSize(12)
-          .fontColor(AppTheme.secondaryText())
-        if (this.qmPlusSession.snapshot?.partial) {
-          Text(this.model.text('部分课程或活动无法读取，以下为已核实的结果。'))
-            .fontSize(12)
-            .fontColor(AppTheme.secondaryText())
+        if (this.hasHistoricalQMPlusCourses()) {
+          Row({ space: 10 }) {
+            Text(this.model.text('显示其他学期／历史课程'))
+              .fontSize(14)
+              .fontColor(AppTheme.text())
+              .layoutWeight(1)
+            Toggle({ type: ToggleType.Switch, isOn: this.session.showsOtherQMplusTerms })
+              .selectedColor(AppTheme.primaryFill())
+              .enabled(!this.model.isSampleMode())
+              .id('courses.qmplus.other-terms')
+              .onChange((enabled: boolean): void => { this.session.showsOtherQMplusTerms = enabled; })
+          }
+          .width('100%')
+          .constraintSize({ minHeight: ControlMetrics.height })
+          .alignItems(VerticalAlign.Center)
         }
-        if (this.qmPlusSession.showingStalePartial) {
-          Text(this.model.text('本次仅部分同步成功，继续显示上次完整资料；时间仍以上次同步为准，仅供对照。'))
-            .fontSize(12)
-            .fontColor(AppTheme.secondaryText())
-        }
-        if (this.currentQMPlusCourses().length === 0) {
-          Text(this.model.text('暂无已确认的当前学期 QMplus 课程。'))
+        if (this.visibleQMPlusCourses().length === 0) {
+          Text(this.model.text('当前筛选没有本学期或学期未确认的课程。'))
             .fontSize(13)
             .fontColor(AppTheme.secondaryText())
         }
-        ForEach(this.currentQMPlusCourses(), (course: QMPlusCourse, index: number) => {
+        ForEach(this.visibleQMPlusCourses(), (course: QMPlusCourse, index: number) => {
           this.qmPlusCourseRow(course)
-          if (index < this.currentQMPlusCourses().length - 1) {
+          if (index < this.visibleQMPlusCourses().length - 1) {
             Divider().strokeWidth(0.5).color(AppTheme.border()).margin({ left: 52 })
           }
         }, (course: QMPlusCourse) => course.id)
-        if (this.otherQMPlusCourses().length > 0) {
-          Text(this.model.text('其它或学期未确认的课程：'))
-            .fontSize(12)
-            .fontColor(AppTheme.secondaryText())
-          ForEach(this.otherQMPlusCourses(), (course: QMPlusCourse, index: number) => {
-            this.qmPlusCourseRow(course)
-            if (index < this.otherQMPlusCourses().length - 1) {
-              Divider().strokeWidth(0.5).color(AppTheme.border()).margin({ left: 52 })
-            }
-          }, (course: QMPlusCourse) => course.id)
-        }
+      }
+      if (this.qmPlusCourseStatus().length > 0) {
+        Text(this.qmPlusCourseStatus())
+          .fontSize(12)
+          .fontColor(this.qmPlusSession.error.length > 0 ? AppTheme.danger() : AppTheme.secondaryText())
+          .width('100%')
       }
     }
     .width('100%')
@@ -862,7 +856,7 @@ export struct CourseView {
           this.courseChip($r('sys.symbol.clock'), course.currentTermStatus === 'current' ?
             this.localized('当前学期', 'Current term') : course.currentTermStatus === 'other' ?
               this.localized('其它学期', 'Other term') : this.localized('学期未确认', 'Term unconfirmed'))
-          if (course.currentTermStatus === 'current' && this.courseActivityCount(course.id) > 0) {
+          if (this.courseActivityCount(course.id) > 0) {
             this.courseChip($r('sys.symbol.checkmark_circle'),
               this.localized('已获取 ', 'Fetched ') + this.courseActivityCount(course.id).toString())
           }

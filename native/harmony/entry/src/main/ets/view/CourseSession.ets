@@ -4,6 +4,7 @@ import { CoursePageTab } from '../common/CourseLogic';
 @ObservedV2
 export class CourseSession {
   @Trace selectedTabRawValue: string = CoursePageTab.current;
+  @Trace showsOtherQMplusTerms: boolean = false;
   @Trace visibleQMActivities: number = 40;
   @Trace visibleCloudAssignments: number = 40;
   @Trace selectedCourseSource: string = '';

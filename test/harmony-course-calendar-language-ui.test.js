@@ -12,7 +12,7 @@ function assertCourseTapOwnership(source){
   assert.match(view,/courses.cloud.info.[\s\S]*?\.onClick\(\(\) => this.openCourse\('ucloud'/)
   assert.match(view,/courses.qmplus.info.[\s\S]*?\.onClick\(\(\) => this.openCourse\('qmplus'/)
   assert.doesNotMatch(view,/stopPropagation/)
-  for(const [start,end,kind] of [['  cloudCourseRow(', '  private currentQMPlusCourses(', 'ucloud'],
+  for(const [start,end,kind] of [['  cloudCourseRow(', '  private visibleQMPlusCourses(', 'ucloud'],
     ['  qmPlusCourseRow(', '  @Builder\n  courseDisclosureButton(', 'qmplus']]){
     const row=view.slice(view.indexOf(start),view.indexOf(end))
     const disclosure=row.indexOf(`.onClick(() => this.toggleCourseInline('${kind}'`)

@@ -828,18 +828,16 @@ export struct RootView {
   @Builder
   phoneNavigationItem(section: AppSection) {
     Stack() {
-      // 背景单独动画，语言导致的文字宽度/换行不参与整列布局过渡。
+      // 选中态直接跟随唯一路由，不让旧项淡出与新项高亮重叠。
       Column() {}
         .width('100%')
         .height(50)
         .borderRadius(26)
         .backgroundColor(this.currentSection === section ? AppTheme.background() : Color.Transparent)
-        .animation({ duration: 160, curve: Curve.EaseOut })
       Column({ space: 2 }) {
         SymbolGlyph(AppSectionInfo.symbol(section))
           .fontSize(22)
           .fontColor([this.currentSection === section ? AppTheme.primary() : AppTheme.secondaryText()])
-          .animation({ duration: 160, curve: Curve.EaseOut })
         Text(this.model.text(AppSectionInfo.title(section)))
           .fontSize(11)
           .fontWeight(this.currentSection === section ? FontWeight.Bold : FontWeight.Regular)
@@ -852,6 +850,9 @@ export struct RootView {
     .layoutWeight(1)
     .height(50)
     .id(AppSectionInfo.accessibilityId(section))
+    .accessibilityGroup(true)
+    .accessibilityText(this.model.text(AppSectionInfo.title(section)))
+    .accessibilitySelected(this.currentSection === section)
     .onClick(() => {
       this.selectSection(section);
     })
