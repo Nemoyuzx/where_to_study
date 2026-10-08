@@ -2,6 +2,8 @@
 export class AppLocalizationCatalog {
   private static readonly values: Record<string, Record<string, string>> = {
   "zh-Hant": {
+    "GitHub 主源": "GitHub 主源",
+    "站点镜像": "站點鏡像",
     "QMplus 课程与活动": "QMplus 課程與活動",
     "显示其他学期／历史课程": "顯示其他學期／歷史課程",
     "当前筛选没有本学期或学期未确认的课程。": "目前篩選沒有本學期或學期未確認的課程。",
@@ -589,6 +591,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "關閉「啟用 QMplus」只暫停連線與同步，保留登入資料、連線工作階段及課程快取。關閉自動填寫、刪除登入資料或登出並清除資料，請使用對應操作。"
   },
   "ja": {
+    "GitHub 主源": "GitHubの主な情報源",
+    "站点镜像": "サイトのミラー",
     "QMplus 课程与活动": "QMplusの授業と活動",
     "显示其他学期／历史课程": "別の学期 / 過去の授業を表示",
     "当前筛选没有本学期或学期未确认的课程。": "この条件に合う今学期または学期未確認の授業はありません。",
@@ -1176,6 +1180,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "「QMplus を有効にする」をオフにすると接続と同期だけが停止し、保存済みのログイン情報、セッション、授業キャッシュは保持されます。自動入力の停止、ログイン情報の削除、切断とデータ消去には、それぞれの操作を使用してください。"
   },
   "es": {
+    "GitHub 主源": "Fuente principal de GitHub",
+    "站点镜像": "Espejo del sitio",
     "QMplus 课程与活动": "Cursos y actividades de QMplus",
     "显示其他学期／历史课程": "Mostrar cursos de otros semestres / históricos",
     "当前筛选没有本学期或学期未确认的课程。": "No hay cursos actuales o de semestre sin confirmar que coincidan con el filtro.",
@@ -1763,6 +1769,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desactivar «Activar QMplus» solo pausa la conexión y la sincronización; se conservan las credenciales guardadas, la sesión y la caché de cursos. Usa los controles correspondientes para desactivar el autocompletado, borrar credenciales o desconectar y borrar datos."
   },
   "pt": {
+    "GitHub 主源": "Fonte principal do GitHub",
+    "站点镜像": "Espelho do site",
     "QMplus 课程与活动": "Disciplinas e atividades do QMplus",
     "显示其他学期／历史课程": "Mostrar disciplinas de outros semestres / anteriores",
     "当前筛选没有本学期或学期未确认的课程。": "O filtro atual não contém disciplinas deste semestre nem de semestre não confirmado.",
@@ -2350,6 +2358,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Desativar “Ativar QMplus” apenas pausa a conexão e a sincronização; os dados de login salvos, a sessão e o cache de cursos são mantidos. Use os controles correspondentes para desativar o preenchimento automático, excluir dados de login ou desconectar e limpar dados."
   },
   "ar": {
+    "GitHub 主源": "المصدر الرئيسي على GitHub",
+    "站点镜像": "مرآة الموقع",
     "QMplus 课程与活动": "مقررات QMplus وأنشطتها",
     "显示其他学期／历史课程": "عرض مقررات الفصول الأخرى / القديمة",
     "当前筛选没有本学期或学期未确认的课程。": "لا تطابق المرشح مقررات حالية أو غير مؤكدة الفصل.",
@@ -2937,6 +2947,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "إيقاف «تفعيل QMplus» يوقف الاتصال والمزامنة فقط، مع الاحتفاظ ببيانات الدخول المحفوظة والجلسة وذاكرة المقررات المؤقتة. استخدم عناصر التحكم المخصصة لإيقاف التعبئة التلقائية أو حذف بيانات الدخول أو قطع الاتصال ومسح البيانات."
   },
   "ru": {
+    "GitHub 主源": "Основной источник GitHub",
+    "站点镜像": "Зеркало сайта",
     "QMplus 课程与活动": "Курсы и активности QMplus",
     "显示其他学期／历史课程": "Показывать другие семестры / прошлые курсы",
     "当前筛选没有本学期或学期未确认的课程。": "Фильтру не соответствуют текущие курсы или курсы с неподтверждённым семестром.",
@@ -3524,6 +3536,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Выключение «Включить QMplus» лишь приостанавливает подключение и синхронизацию; сохранённые данные входа, сеанс и кеш курсов сохраняются. Для отключения автозаполнения, удаления данных входа или отключения с очисткой данных используйте соответствующие действия."
   },
   "tr": {
+    "GitHub 主源": "GitHub ana kaynak",
+    "站点镜像": "Site aynası",
     "QMplus 课程与活动": "QMplus dersleri ve etkinlikleri",
     "显示其他学期／历史课程": "Diğer dönem / geçmiş dersleri göster",
     "当前筛选没有本学期或学期未确认的课程。": "Bu filtreye uyan geçerli veya dönemi doğrulanmamış ders yok.",
@@ -4111,6 +4125,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "“QMplus’ı etkinleştir” seçeneğini kapatmak yalnızca bağlantı ve eşitlemeyi duraklatır; kayıtlı giriş bilgileri, oturum ve ders önbelleği korunur. Otomatik doldurmayı kapatmak, giriş bilgilerini silmek veya bağlantıyı kesip verileri temizlemek için ilgili kontrolleri kullanın."
   },
   "th": {
+    "GitHub 主源": "แหล่งข้อมูลหลักบน GitHub",
+    "站点镜像": "เว็บไซต์มิเรอร์",
     "QMplus 课程与活动": "รายวิชาและกิจกรรม QMplus",
     "显示其他学期／历史课程": "แสดงวิชาภาคเรียนอื่น / วิชาเก่า",
     "当前筛选没有本学期或学期未确认的课程。": "ตัวกรองปัจจุบันไม่พบวิชาภาคเรียนนี้หรือวิชาที่ยังไม่ยืนยันภาคเรียน",
@@ -4698,6 +4714,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "การปิด “เปิดใช้ QMplus” จะพักการเชื่อมต่อและการซิงค์เท่านั้น โดยเก็บข้อมูลเข้าสู่ระบบ เซสชัน และแคชรายวิชาไว้ หากต้องการปิดการกรอกอัตโนมัติ ลบข้อมูลเข้าสู่ระบบ หรือยกเลิกการเชื่อมต่อพร้อมล้างข้อมูล ให้ใช้ตัวควบคุมที่เกี่ยวข้อง"
   },
   "ms": {
+    "GitHub 主源": "Sumber utama GitHub",
+    "站点镜像": "Cermin laman",
     "QMplus 课程与活动": "Kursus dan aktiviti QMplus",
     "显示其他学期／历史课程": "Paparkan kursus semester lain / terdahulu",
     "当前筛选没有本学期或学期未确认的课程。": "Tiada kursus semester semasa atau yang semesternya belum disahkan sepadan dengan penapis.",
@@ -5285,6 +5303,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Mematikan “Dayakan QMplus” hanya menjeda sambungan dan penyegerakan; maklumat log masuk tersimpan, sesi dan cache kursus dikekalkan. Gunakan kawalan berasingan untuk mematikan autofill, memadam maklumat log masuk atau memutuskan sambungan dan mengosongkan data."
   },
   "vi": {
+    "GitHub 主源": "Nguồn chính GitHub",
+    "站点镜像": "Máy chủ gương của trang",
     "QMplus 课程与活动": "Môn học và hoạt động QMplus",
     "显示其他学期／历史课程": "Hiện môn học kỳ khác / môn cũ",
     "当前筛选没有本学期或学期未确认的课程。": "Bộ lọc hiện tại không có môn thuộc học kỳ này hoặc môn chưa xác nhận học kỳ.",
@@ -5872,6 +5892,8 @@ export class AppLocalizationCatalog {
     "关闭“启用 QMplus”只暂停连接和同步，保留登录资料、会话及课程缓存。关闭自动填写、删除登录资料或退出并清除数据，请使用对应操作。": "Tắt “Bật QMplus” chỉ tạm dừng kết nối và đồng bộ; thông tin đăng nhập đã lưu, phiên và bộ nhớ đệm khóa học vẫn được giữ lại. Hãy dùng các thao tác riêng để tắt tự điền, xóa thông tin đăng nhập hoặc ngắt kết nối và xóa dữ liệu."
   },
   "id": {
+    "GitHub 主源": "Sumber utama GitHub",
+    "站点镜像": "Cermin situs",
     "QMplus 课程与活动": "Mata kuliah dan kegiatan QMplus",
     "显示其他学期／历史课程": "Tampilkan mata kuliah semester lain / lama",
     "当前筛选没有本学期或学期未确认的课程。": "Tidak ada mata kuliah semester ini atau semester belum dipastikan yang cocok dengan filter.",
