@@ -2,3 +2,6 @@ LICENSE text eol=lf
 THIRD_PARTY_LICENSES.html text eol=lf
 THIRD_PARTY_NOTICES.md text eol=lf
 scripts/git-hooks/pre-push text eol=lf
+src-tauri/src/qmplus_linux_ipc.rs text eol=lf
+test/fixtures/tauri-2.12.1/ipc.js text eol=lf
+test/fixtures/tauri-2.12.1/core.js text eol=lf

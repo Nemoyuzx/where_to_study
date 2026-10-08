@@ -4,12 +4,15 @@ import {readFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
 import vm from 'node:vm'
 
-const read=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8')
+const readRaw=path=>readFileSync(new URL(`../${path}`,import.meta.url),'utf8')
+// Rust source semantics and ordinary metadata are independent of checkout EOL.
+// Vendored upstream byte pins below deliberately use readRaw instead.
+const read=path=>readRaw(path).replace(/\r\n/g,'\n')
 const source=read('src-tauri/src/qmplus_linux_ipc.rs')
 // Exact test-only upstream sources, with their original dual-license notices:
 // https://github.com/tauri-apps/tauri/tree/tauri-v2.12.1/crates/tauri/scripts
-const upstreamIpc=read('test/fixtures/tauri-2.12.1/ipc.js')
-const upstreamCore=read('test/fixtures/tauri-2.12.1/core.js')
+const upstreamIpc=readRaw('test/fixtures/tauri-2.12.1/ipc.js')
+const upstreamCore=readRaw('test/fixtures/tauri-2.12.1/core.js')
 const raw=name=>source.match(new RegExp(`const ${name}: &str = r#"([\\s\\S]*?)"#;`))[1]
 const stock=raw('STOCK_IPC_SCRIPT'),serializer=raw('STOCK_PROCESS_IPC_MESSAGE'),dispatch=raw('QMPLUS_DISPATCH')
 const hash=value=>createHash('sha256').update(value).digest('hex')
@@ -110,6 +113,14 @@ function fixture({candidate=true,label='qmplus',windowLabel=label,page=tenant,fe
 }
 const report=`{revision:7,report:{v:1,stage:'loading',document:'fixtureNonce',accountMatch:false,reason:'LOADING'}}`
 const normalise=value=>JSON.stringify(value,(_key,item)=>Object.prototype.toString.call(item)==='[object ArrayBuffer]'?{binary:[...new Uint8Array(item)]}:item)
+
+test('Git pins IPC source and upstream fixture bytes to LF on every checkout',()=>{
+  const attributes=read('.gitattributes').split('\n').map(line=>line.trim())
+  for(const path of ['src-tauri/src/qmplus_linux_ipc.rs','test/fixtures/tauri-2.12.1/ipc.js','test/fixtures/tauri-2.12.1/core.js']) {
+    assert.ok(attributes.includes(`${path} text eol=lf`),path)
+    assert.equal(readRaw(path).includes('\r'),false,path)
+  }
+})
 
 test('portable capability matcher preserves exact origins, paths and terminal wildcard boundaries',()=>{
   const tenantBase=tenant.slice(0,tenant.lastIndexOf('/'))
