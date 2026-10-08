@@ -4,21 +4,21 @@
 
 ## 下载与安装
 
-最新 GitHub 正式版仍是 [Where To Study v0.3.2](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。下表提供这个正式版的 Windows、Linux、macOS 和 Android 安装包。
+最新 GitHub 正式版是 [Where To Study v0.4.0](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0)。推荐从[最新正式版页面](https://github.com/Nemoyuzx/where_to_study/releases/latest)下载，下表提供0.4.0各平台的安装文件。
 
-0.4.0 目前通过同一个 [GitHub 预发布页面](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.4.0-prerelease) 提供下载，正式发布及 latest 切换将在最新软件包、真实运行和截图门禁核对完成后进行；当前尚未完成该正式晋升。既有 0.3.2 版本、附件、正文和标签保留。附件批次、构建来源和可下载文件以该页面的实际记录为准；各商店、TestFlight 与 GitHub 相互独立，测试通过或草稿保存不代表已正式送审／上架。
+0.4.0 提供原生Android71、Apple124及各桌面／终端客户端。Android收起状态的月历按实际可用尺寸计算正方形日期格，QMplus文案与iOS同步精简；语言切换遵循系统减少动态效果设置。GitHub发布与各商店审核独立，商店可用版本以对应页面为准。[0.3.2历史版本](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)及其原附件保留。
 
-0.4.0 新增课程页、QMplus 课程与作业、十三种语言和十款主题，各平台功能见[分平台说明](./docs/release-v0.4.0-prerelease-notes.md)。最终待交付的 Linux ARM64 DEB 内容与原始 AppImage 已完成真实有效会话的正常冷启动及更新快照验收；DEB 是解包后的原始内容运行，不扩写为 ARM64 系统安装、x86_64 真实账号运行、首次／过期 MFA 或所有网络条件。Windows 本轮仅验收构建及安装。0.3.2 的竞赛镜像、账户说明和完整班车时刻表见[正式版分平台说明](https://github.com/Nemoyuzx/where_to_study/releases/tag/v0.3.2)。
+0.4.0 新增课程页、QMplus 课程与作业、十三种语言和十款主题，各平台功能见[分平台说明](./docs/release-v0.4.0-prerelease-notes.md)。Windows/Linux 桌面包已通过原构建及包体门禁，Linux ARM64 实际包已完成保留会话的正常冷启动与新数据验收；Windows 本轮未验证真实账号登录。
 
 | 设备 | 下载或测试渠道 | 安装方式 |
 | --- | --- | --- |
-| Windows x64 | [安装程序](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-windows-x64-setup.exe) | 双击安装；支持 Intel/AMD 64 位电脑。 |
-| macOS 13+ | [Universal DMG](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-native-macos-universal.dmg) | 打开 DMG，将应用拖入「应用程序」；兼容 Apple 芯片与 Intel。 |
-| Android | [Universal APK](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-native-android-universal.apk) | 在设备上打开 APK，按系统提示安装。 |
-| Ubuntu/Debian Linux | [x86_64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-x86_64.deb) · [aarch64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-aarch64.deb) | 按处理器架构选择，用系统软件安装器打开。 |
-| 其他 Linux | [x86_64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-x86_64.AppImage) · [aarch64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.3.2/Where-To-Study-v0.3.2-linux-aarch64.AppImage) | 允许文件「作为程序执行」后打开。 |
+| Windows x64 | [安装程序](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.4.0/Where-To-Study-v0.4.0-windows-x64-setup.exe) | 双击安装；支持 Intel/AMD 64 位电脑。 |
+| macOS 13+ | [Universal DMG](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.4.0/Where-To-Study-v0.4.0-native-macos-universal.dmg) | 打开 DMG，将应用拖入「应用程序」；兼容 Apple 芯片与 Intel。 |
+| Android | [Universal APK](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.4.0/Where-To-Study-v0.4.0-native-android-universal.apk) | 在设备上打开 APK，按系统提示安装。 |
+| Ubuntu/Debian Linux | [x86_64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.4.0/Where-To-Study-v0.4.0-linux-x86_64.deb) · [aarch64 DEB](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.4.0/Where-To-Study-v0.4.0-linux-aarch64.deb) | 按处理器架构选择，用系统软件安装器打开。 |
+| 其他 Linux | [x86_64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.4.0/Where-To-Study-v0.4.0-linux-x86_64.AppImage) · [aarch64 AppImage](https://github.com/Nemoyuzx/where_to_study/releases/download/v0.4.0/Where-To-Study-v0.4.0-linux-aarch64.AppImage) | 允许文件「作为程序执行」后打开。 |
 | iPhone/iPad（iOS/iPadOS 16+） | [TestFlight 公测邀请](https://testflight.apple.com/join/yuzpAtDJ) | 先安装 TestFlight；可安装版本以 Apple 页面为准。 |
-| HarmonyOS NEXT | AppGallery / DevEco 对应渠道 | 既有 0.3.2 版本保留；0.4.0 正式发布准备中，实际可安装版本及审核状态以华为对应页面为准。 |
+| HarmonyOS NEXT | AppGallery / DevEco 对应渠道 | 0.4.0 已上传，实际可安装版本及审核状态以华为对应页面为准。 |
 
 后续版本请查看[最新正式版页面](https://github.com/Nemoyuzx/where_to_study/releases/latest)。
 
@@ -38,10 +38,10 @@ Linux 的 `x86_64` 对应普通 Intel/AMD 64 位电脑，`aarch64` 对应 ARM 64
 
 - **课表与空教室：** 个人课表通过移动教务 HTTPS 接口获取并缓存；空教室一次查询西土城与沙河两个校区，可按教学楼和个人空闲节次筛选。课程可仅在本地删除某次排课或本学期整门课，并在设置中恢复；不会向学校退课。[课程管理说明](./docs/course-management-v0.2.9.md)
 - **教学日历：** 日、周、月、年视图展示课程、期末考试和各类 DDL；公历周与教学周并列显示，Apple、Android 和鸿蒙客户端支持导入设备系统日历。月视图日期详情包含课程、云课堂作业、黄历宜忌与活动截止信息。日程可收藏为本地快照，也可接入符合[自定义日程接口规范](./docs/custom-schedule-api.md)的公开 HTTPS JSON 地址。
-- **课程（0.4.0 预发布）：** 新增独立一级页面，查看教学云当前课程，以及 QMplus 中名称以 `EBU` 开头的英方课程和已发布作业／Quiz。点击课程行展开任务与截止时间，点击独立的圈 i 信息按钮进入详情；教师、待交／已交数量只在接口明确提供时显示。0.4.0 将成绩、考试和课程作业查询迁入此页。QMplus 与教务账号独立，功能默认关闭：在[官方窗口](https://qmplus.qmul.ac.uk/my/)登录，也可在独立 QMplus 设置中使用本机安全保存和自动填写。保存／自动填写选项默认开启，但只有用户主动保存独立凭据并授权后才实际生效；验证码及 MFA 仍由你完成。课程学期不明或截止时间未公布时保留“未确认”，不猜测日期。[QMplus 接入与限制](./docs/qmplus-integration.md) · [成绩与考试说明](./docs/academic-query-contract.md)
+- **课程（0.4.0）：** 新增独立一级页面，查看教学云当前课程，以及 QMplus 中名称以 `EBU` 开头的英方课程和已发布作业／Quiz。点击课程行展开任务与截止时间，点击独立的圈 i 信息按钮进入详情；教师、待交／已交数量只在接口明确提供时显示。0.4.0 将成绩、考试和课程作业查询迁入此页。QMplus 与教务账号独立，功能默认关闭：在[官方窗口](https://qmplus.qmul.ac.uk/my/)登录，也可在独立 QMplus 设置中使用本机安全保存和自动填写。保存／自动填写选项默认开启，但只有用户主动保存独立凭据并授权后才实际生效；验证码及 MFA 仍由你完成。课程学期不明或截止时间未公布时保留“未确认”，不猜测日期。[QMplus 接入与限制](./docs/qmplus-integration.md) · [成绩与考试说明](./docs/academic-query-contract.md)
 - **信息查询：** 0.3.2 的查询页包含公开班车、重要事件及需学校账号的成绩、考试和课程作业；从 0.4.0 起，个人查询迁至“课程”页，独立查询页只保留班车和重要事件。从 0.3.2 起，班车除当日班次外还可查看完整的时段、方向和星期时刻表，法定节假日会提示以学校放假安排为准。教务密码应使用移动教务密码，可能与统一认证密码不同；可选的教学云密码通常使用统一认证密码，未单独设置时沿用教务密码。
 - **提醒与小组件：** 每日课程摘要默认提醒时间为北京时间 07:30；课前提醒默认提前 10 分钟，可自定义 1–5 次。两类提醒都默认关闭。iOS、macOS、Android 小组件与鸿蒙服务卡片优先显示今日课程，有空间时补充明日课程；Windows/Linux 提供运行时通知，不提供课程小组件。[课前提醒与平台限制](./docs/pre-class-reminders.md)
-- **外观与语言：** 0.3.2图形客户端支持简体中文、English及预设／自定义颜色主题；0.4.0预发布扩展至十三种界面语言、十款预设主题，默认配色不变。第三方接口返回的课程、天气、黄历和活动文字保持原文。[主题说明](./docs/color-themes.md)
+- **外观与语言：** 0.3.2图形客户端支持简体中文、English及预设／自定义颜色主题；0.4.0扩展至十三种界面语言、十款预设主题，默认配色不变。第三方接口返回的课程、天气、黄历和活动文字保持原文。[主题说明](./docs/color-themes.md)
 
 法定节假日、天气、黄历与活动日程来自下述公开数据源。页面展示的数据仅供参考，请以学校和活动主办方的实际通知为准。完整隐私声明见 [Privacy Policy / 隐私政策](./PRIVACY.md)。
 
@@ -187,7 +187,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 ./scripts/native-harmony-build.sh
 ```
 
-`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式，可用于首次体验。鸿蒙当前 0.4.0（1002047）的本地 Release 测试405/405及正常安装验证已完成；对应最新实际包的上架自检／完整报告和正式送审状态须分别以该包回执核对，旧1002046云测不能替代1002047验证。软件包具备正式用途不等于应用已提交审核或上架；详见[分平台说明](./docs/release-v0.4.0-prerelease-notes.md)。
+`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式。鸿蒙0.4.0（1002048）标准Release测试405/405通过并已生成签名包，导航单选、历史课程开关、课程标题／tab紧凑布局及关于页示例入口已更新；商店上架、自检报告及审核状态以对应渠道实际记录为准，旧1002046报告不能代替新包结果。软件包具备正式用途不等于应用已提交审核或上架。
 
 Android 主界面仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri；QMplus 官方 SSO/MFA 在独立进程的 WebView 中完成，不读取系统浏览器 Cookie。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
