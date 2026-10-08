@@ -187,7 +187,7 @@ arm64 Linux 将文件名中的 `x86_64` 改为 `aarch64`。也可以按 CLI/TUI 
 ./scripts/native-harmony-build.sh
 ```
 
-`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式。鸿蒙0.4.0（1002048）标准Release测试405/405通过并已生成签名包，导航单选、历史课程开关、课程标题／tab紧凑布局及关于页示例入口已更新；商店上架、自检报告及审核状态以对应渠道实际记录为准，旧1002046报告不能代替新包结果。软件包具备正式用途不等于应用已提交审核或上架。
+`native/apple`、`native/android` 与 `native/harmony` 分别是当前 Apple、Android 和鸿蒙客户端源码。Apple 客户端另有不连接教务服务的内置示例模式。鸿蒙0.4.0（1002049）标准Release测试405/405通过并已生成签名包，导航单选、历史课程开关、课程标题／tab紧凑布局、关于页示例入口及随列表滚动的活动来源区已更新；商店上架、自检报告及审核状态以对应渠道实际记录为准，旧1002046报告不能代替新包结果。软件包具备正式用途不等于应用已提交审核或上架。
 
 Android 主界面仅使用 `native/android` 的 Kotlin + Android Framework Views 工程，不依赖 Tauri；QMplus 官方 SSO/MFA 在独立进程的 WebView 中完成，不读取系统浏览器 Cookie。旧 `src-tauri/gen/android` 工程、Tauri Android npm 命令和 CI 构建任务均已移除，避免误生成或误发布另一套 Android 包。
 
