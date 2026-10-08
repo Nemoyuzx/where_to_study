@@ -1,0 +1,4 @@
+# Verified historical false positive: a Swift account-validation guard, not a credential.
+# Scope this exception
+# to the exact commit, file, rule, and line; keep all real credential detection enabled.
+1096aa8ee64e8074270571c8a3f97f7b45180e31:native/apple/Sources/Shared/QMplusAutofillPipeline.swift:generic-api-key:64
