@@ -101,6 +101,33 @@ final class LanguageChangeTransitionTests: XCTestCase {
         XCTAssertFalse(detached.isTransitioning)
     }
 
+    func testWrongLocaleCannotTriggerNormalFadeAndTimeoutStillCleansUp() async throws {
+        try XCTSkipIf(UIAccessibility.isReduceMotionEnabled)
+        let fixture = makeFixture()
+        defer { fixture.host.removeFromSuperview(); fixture.window.isHidden = true }
+        fixture.host.localeIdentifier = "zh-Hans"
+        var commits = 0
+        fixture.transition.request(current: .simplifiedChinese, target: .english,
+                                   label: "English", reduceMotion: false) { commits += 1 }
+        try await waitUntil { commits == 1 }
+        let cover = try XCTUnwrap(fixture.window.subviews.first { $0.accessibilityIdentifier == "overlay.language-transition" } as? UIVisualEffectView)
+        fixture.transition.layoutDidSettle(localeIdentifier: "wrong")
+        XCTAssertNotNil(cover.effect)
+        XCTAssertEqual(cover.accessibilityValue, "covered")
+        // 0.4 waits for language tasks and stable geometry for up to twelve
+        // seconds. Preserve that production gate instead of restoring 0.3's
+        // one-second timeout just to satisfy this imported regression test.
+        let deadline = ProcessInfo.processInfo.systemUptime + LanguageChangeTransition.layoutTimeout + 1
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if !fixture.transition.isTransitioning { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(fixture.transition.isTransitioning)
+        XCTAssertNil(cover.superview)
+        XCTAssertEqual(cover.accessibilityValue, "covered", "Timeout cleanup is not successful target-layout readiness")
+        XCTAssertEqual(commits, 1)
+    }
+
     private func makeFixture() -> (window: UIWindow, host: LanguageChangeTransitionHostView, transition: LanguageChangeTransition) {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
         window.rootViewController = UIViewController()

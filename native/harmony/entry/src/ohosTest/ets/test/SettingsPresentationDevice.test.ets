@@ -5,7 +5,7 @@
 import { describe, it, expect } from '@ohos/hypium';
 import { Component, DisplayRotation, Driver, ON, Point, Rect } from '@ohos.UiTest';
 import AbilityDelegatorRegistry from '@ohos.app.ability.abilityDelegatorRegistry';
-import { display } from '@kit.ArkUI';
+import { display, FrameNode, UIContext, window } from '@kit.ArkUI';
 
 const BUNDLE_NAME: string = 'com.nemoyu.wheretostudy';
 
@@ -79,6 +79,125 @@ async function visibleSetting(driver: Driver, id: string): Promise<Component | n
 function boundsText(bounds: Rect): string {
   return '[' + bounds.left.toString() + ',' + bounds.top.toString() + ',' +
     bounds.right.toString() + ',' + bounds.bottom.toString() + ']';
+}
+
+async function targetWindow(): Promise<window.Window> {
+  // getAppContext() 是测试进程的 ApplicationContext，不能用于取得目标 UIAbility
+  // 的顶层窗口（真机报 Get top window failed）。AbilityDelegator 官方接口返回
+  // 本进程正在显示的 UIAbility，再用其 UIAbilityContext 查询真实 app window。
+  const delegator = AbilityDelegatorRegistry.getAbilityDelegator();
+  const targetAbility = await delegator.getCurrentTopAbility();
+  return window.getLastWindow(targetAbility.context);
+}
+
+async function targetUIContext(): Promise<UIContext> {
+  return (await targetWindow()).getUIContext();
+}
+
+function attachedNode(ui: UIContext, id: string): FrameNode | null {
+  try {
+    return ui.getAttachedFrameNodeById(id);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function waitForSameWindowToReturn(mainWindow: window.Window, driver: Driver): Promise<UIContext> {
+  const deadline: number = Date.now() + 3000;
+  let lastReason: string = 'window has not regained focus';
+  while (Date.now() < deadline) {
+    try {
+      let candidate: window.Window = mainWindow;
+      try {
+        // 常规路径重新取前台 owner；Home 刚结束时该 API 会暂时失败，
+        // 此时保留已验证的旧 Window，不能把失败解释成“遮罩不存在”。
+        candidate = await targetWindow();
+      } catch (e) {
+        candidate = mainWindow;
+      }
+      if (candidate.isFocused() && await hasID(driver, 'settings_scroll')) {
+        // Home 后 getCurrentTopAbility() 在测试进程可能仍报错；复用 Home 前
+        // 官方 API 返回的真实 Window owner，只在它重新聚焦且Scroll真挂载后
+        // 读取它的新 UIContext。FrameNode 获取异常不能当作“遮罩不存在”。
+        const ui: UIContext = candidate.getUIContext();
+        const scroll: FrameNode | null = ui.getAttachedFrameNodeById('settings_scroll');
+        if (scroll !== null && scroll.getMeasuredSize().width > 0) { return ui; }
+        lastReason = 'focused window has no measured settings_scroll';
+      }
+    } catch (e) {
+      lastReason = e instanceof Error ? e.message : String(e);
+    }
+    await nextRenderSample();
+  }
+  throw new Error('返回前台后真实原窗口未就绪：' + lastReason);
+}
+
+async function nextRenderSample(): Promise<void> {
+  await new Promise<void>((resolve): void => {
+    setTimeout((): void => resolve(), 16);
+  });
+}
+
+class LanguageBlurObservation {
+  sawCover: boolean = false;
+  coveredWholeApp: boolean = false;
+  sawTargetUnderCover: boolean = false;
+  stableTargetSamples: number = 0;
+  finishedAfterMs: number = -1;
+}
+
+class LanguageBlurCapture {
+  private pending: Promise<boolean> | null = null;
+  start(driver: Driver, path: string): void {
+    this.pending = driver.screenCap(path).catch((): boolean => false);
+  }
+  async finish(): Promise<boolean> {
+    const pending: Promise<boolean> | null = this.pending;
+    return pending !== null ? await pending : false;
+  }
+}
+
+async function observeLanguageBlur(ui: UIContext, targetLanguage: string, startedAt: number,
+  deadlineMs: number, captureOnce: (() => void) | null = null): Promise<LanguageBlurObservation> {
+  const observed: LanguageBlurObservation = new LanguageBlurObservation();
+  let lastCardY: number = Number.NaN;
+  let lastOptionY: number = Number.NaN;
+  let captureStarted: boolean = false;
+  while (Date.now() - startedAt < deadlineMs) {
+    const overlay: FrameNode | null = attachedNode(ui, 'language_transition_overlay');
+    const scroll: FrameNode | null = attachedNode(ui, 'settings_scroll');
+    if (overlay !== null) {
+      observed.sawCover = true;
+      if (scroll !== null) {
+        const coverSize = overlay.getMeasuredSize();
+        const scrollSize = scroll.getMeasuredSize();
+        // 设置Scroll本身覆盖根内容，不把系统状态栏猜成app内容尺寸。
+        observed.coveredWholeApp = observed.coveredWholeApp ||
+          coverSize.width >= scrollSize.width - 1 && coverSize.height >= scrollSize.height - 1;
+      }
+      const card: FrameNode | null = attachedNode(ui, 'settings_language_surface');
+      const option: FrameNode | null = attachedNode(ui, 'settings.language.current.target.' + targetLanguage);
+      if (card !== null && option !== null && option.getMeasuredSize().width > 0) {
+        observed.sawTargetUnderCover = true;
+        if (captureOnce !== null && !captureStarted) {
+          captureStarted = true;
+          captureOnce(); // concurrent SDK evidence must not replace frame sampling
+        }
+        const cardY: number = card.getPositionToWindow().y;
+        const optionY: number = option.getPositionToWindow().y;
+        observed.stableTargetSamples = Number.isFinite(lastCardY) &&
+          Math.abs(cardY - lastCardY) <= 1 && Math.abs(optionY - lastOptionY) <= 1 ?
+          observed.stableTargetSamples + 1 : 0;
+        lastCardY = cardY;
+        lastOptionY = optionY;
+      }
+    } else if (observed.sawCover) {
+      observed.finishedAfterMs = Date.now() - startedAt;
+      return observed;
+    }
+    await nextRenderSample();
+  }
+  return observed;
 }
 
 async function observeLanguageAnchorUntilStable(driver: Driver, id: string,
@@ -399,6 +518,124 @@ export default function settingsPresentationDeviceTest() {
           ' delta=' + chineseDelta.toString() + ' rowHeight=' + chineseRowHeight.toString());
       } catch (e) {
         throw await withFailureEvidence(driver, 'language-scroll', e);
+      } finally {
+        await AbilityDelegatorRegistry.getAbilityDelegator().startAbility({
+          bundleName: BUNDLE_NAME,
+          abilityName: 'EntryAbility',
+          parameters: { 'reviewDemo': true, 'privacyConsentAcceptedForTesting': true }
+        });
+      }
+    });
+
+    it('language_blur_covers_app_until_target_layout_then_finishes_before_deadline', 0, async () => {
+      const driver: Driver = await launchReviewDemo(true);
+      try {
+        await openSettings(driver);
+        await (await scrollToSetting(driver, 'settings.language.open')).click();
+        const english: Component = await driver.findComponent(ON.id('settings.language.option.en'));
+        const rect: Rect = await english.getBounds();
+        const ui: UIContext = await targetUIContext();
+        const startedAt: number = Date.now();
+        const tap: Promise<void> = driver.click(Math.round((rect.left + rect.right) / 2),
+          Math.round((rect.top + rect.bottom) / 2));
+        // 直接读取目标window的真实FrameNode；UiTest.click的完成时机不是中间帧，
+        // 因而观察与注入手势并行，不用固定sleep冒充动画验证。
+        const capture: LanguageBlurCapture = new LanguageBlurCapture();
+        const captureRequested: boolean = AbilityDelegatorRegistry.getArguments()
+          .parameters['captureLanguageBlurForTesting'] === 'true';
+        const capturePath: string = AbilityDelegatorRegistry.getAbilityDelegator().getAppContext()
+          .filesDir + '/settings-language-blur-material.png';
+        const observed: LanguageBlurObservation = await observeLanguageBlur(ui, 'en', startedAt, 4500,
+          captureRequested ? (): void => { capture.start(driver, capturePath); } : null);
+        await tap;
+        if (captureRequested) {
+          const captured: boolean = await capture.finish();
+          console.info('HarmonyLanguageBlurMaterial captured=' + captured.toString() + ' path=' + capturePath);
+          expect(captured).assertTrue();
+        }
+        if (!observed.sawCover || !observed.coveredWholeApp || !observed.sawTargetUnderCover ||
+          observed.stableTargetSamples < 1 || observed.finishedAfterMs < 0 ||
+          observed.finishedAfterMs >= 4500) {
+          throw new Error('语言遮罩/目标布局未按中间帧结束：cover=' + observed.sawCover.toString() +
+            ' whole=' + observed.coveredWholeApp.toString() +
+            ' target=' + observed.sawTargetUnderCover.toString() +
+            ' stable=' + observed.stableTargetSamples.toString() +
+            ' elapsed=' + observed.finishedAfterMs.toString());
+        }
+        expect(await (await driver.findComponent(ON.id('settings.language.current'))).getText())
+          .assertEqual('English');
+        expect(attachedNode(ui, 'settings.language.current.target.en') !== null).assertTrue();
+        console.info('HarmonyLanguageBlur covered=true target=true stable=' +
+          observed.stableTargetSamples.toString() + ' elapsedMs=' + observed.finishedAfterMs.toString());
+      } catch (e) {
+        throw await withFailureEvidence(driver, 'language-blur-layout', e);
+      } finally {
+        await AbilityDelegatorRegistry.getAbilityDelegator().startAbility({
+          bundleName: BUNDLE_NAME,
+          abilityName: 'EntryAbility',
+          parameters: { 'reviewDemo': true, 'privacyConsentAcceptedForTesting': true }
+        });
+      }
+    });
+
+    it('language_blur_background_cancels_old_owner_without_losing_last_choice', 0, async () => {
+      const driver: Driver = await launchReviewDemo(true);
+      try {
+        await openSettings(driver);
+        await (await scrollToSetting(driver, 'settings.language.open')).click();
+        const english: Component = await driver.findComponent(ON.id('settings.language.option.en'));
+        const rect: Rect = await english.getBounds();
+        const mainWindow: window.Window = await targetWindow();
+        const ui: UIContext = mainWindow.getUIContext();
+        const tap: Promise<void> = driver.click(Math.round((rect.left + rect.right) / 2),
+          Math.round((rect.top + rect.bottom) / 2));
+        const startedAt: number = Date.now();
+        let coverSeen: boolean = false;
+        while (Date.now() - startedAt < 700) {
+          if (attachedNode(ui, 'language_transition_overlay') !== null) {
+            coverSeen = true;
+            break;
+          }
+          await nextRenderSample();
+        }
+        if (!coverSeen) { throw new Error('背景测试未观察到切换遮罩，不能冒称旧owner清理'); }
+        // 旧owner仍持遮罩时立即退到后台；等待 click Promise 会把测试变成
+        // “动画已经结束再退后台”，无法验证窗口事件取消路径。
+        if (attachedNode(ui, 'language_transition_overlay') === null) {
+          throw new Error('按 Home 前遮罩已消失，未测到中途后台取消');
+        }
+        await driver.pressHome();
+        await tap;
+        let didBackground: boolean = false;
+        const backgroundDeadline: number = Date.now() + 1000;
+        while (Date.now() < backgroundDeadline) {
+          try {
+            if (!mainWindow.isFocused()) { didBackground = true; break; }
+          } catch (e) {
+            // 窗口正隐藏，下一帧再读；异常不等于已经进入后台。
+          }
+          await nextRenderSample();
+        }
+        if (!didBackground) { throw new Error('Home 后原窗口始终聚焦，不能冒称后台清理'); }
+        await AbilityDelegatorRegistry.getAbilityDelegator().startAbility({
+          bundleName: BUNDLE_NAME, abilityName: 'EntryAbility'
+        });
+        const resumedUI: UIContext = await waitForSameWindowToReturn(mainWindow, driver);
+        const recoveryDeadline: number = Date.now() + 1300;
+        while (Date.now() < recoveryDeadline) {
+          // 已验证原窗口重新聚焦且settings_scroll实测挂载；这里使用严格
+          // FrameNode 读取，不能将API异常伪装成 overlay=null。
+          if (resumedUI.getAttachedFrameNodeById('language_transition_overlay') === null &&
+            resumedUI.getAttachedFrameNodeById('settings.language.current.target.en') !== null) {
+            expect(await (await driver.findComponent(ON.id('settings.language.current'))).getText())
+              .assertEqual('English');
+            return;
+          }
+          await nextRenderSample();
+        }
+        throw new Error('返回前台后旧语言遮罩未清理，或最后一次语言选择被吞掉');
+      } catch (e) {
+        throw await withFailureEvidence(driver, 'language-blur-background', e);
       } finally {
         await AbilityDelegatorRegistry.getAbilityDelegator().startAbility({
           bundleName: BUNDLE_NAME,

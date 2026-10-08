@@ -1093,7 +1093,7 @@ class MainActivity : Activity() {
         val languageOwner = languageResourceRevision.incrementAndGet()
         captureUiSession()
         try{preferences.languageCode=language.code}catch(_:Exception){
-            Toast.makeText(this,uiText("无法保存语言设置。"),Toast.LENGTH_LONG).show();return
+            Toast.makeText(this,uiText("无法保存语言设置"),Toast.LENGTH_LONG).show();return
         }
         languageResources=AppLocale.wrap(applicationContext,language.code).resources
         activitySession.detachObservers()

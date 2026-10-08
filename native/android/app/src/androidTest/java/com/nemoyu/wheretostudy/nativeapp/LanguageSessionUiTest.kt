@@ -301,10 +301,11 @@ class LanguageSessionUiTest {
         val deadline = SystemClock.elapsedRealtime() + 5_000
         var ready = false
         while (!ready && SystemClock.elapsedRealtime() < deadline) {
-            scenario.onActivity { ready = AppLocale.resolvedLanguage(it) == language }
+            scenario.onActivity { ready = AppLocale.resolvedLanguage(it) == language &&
+                it.languageTransitionPhase() == "idle" }
             if (!ready) SystemClock.sleep(10)
         }
-        assertTrue("The recreated Activity must use the requested localized Context", ready)
+        assertTrue("The Activity must finish the transition with the requested localized Context", ready)
         val frames = java.util.concurrent.CountDownLatch(1)
         scenario.onActivity { activity -> activity.window.decorView.postOnAnimation {
             activity.window.decorView.postOnAnimation { activity.window.decorView.postOnAnimation { frames.countDown() } }

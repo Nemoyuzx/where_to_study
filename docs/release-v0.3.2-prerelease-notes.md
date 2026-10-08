@@ -1,6 +1,38 @@
 # Where To Study v0.3.2-prerelease
 
+> 以下为当时预发布阶段的历史回执；0.3.2 后续已转为正式发布。维护分支合入 main 后删除，历史构建仍由提交与版本标签保留。
+
 GitHub 预发布仍为草稿，未公开。11 个安装文件已补齐，各商店的 0.3.2 正式审核已提交；审核中不等于已经上架。课程、QMplus、新语言及新作业提醒属于 0.4.0，不包含在本版本。
+
+## 本轮更新（2026-10-05）
+
+GitHub 当时继续保留 **draft + pre-release**，只更新现有测试包，不公开、不转正式版。本轮包由 `codex/v032-language-hotfix` 的 `fced615e` 构建，完整回执见[本轮记录](https://github.com/Nemoyuzx/where_to_study/blob/7eae8d444b671d4bc4dffaccf2ec9ec80768bdf2/docs/release-v0.3.2-prerelease.md)。下面的 103／61／1002038 为历史记录，不代表本次新包。
+
+### iOS / iPadOS — 0.3.2（108）
+
+全窗口系统模糊层保留原页面与草稿，目标语言布局就绪才淡出；超时仅清理，不把超时当作布局完成。本机已有语言切换界面回归通过；用户随后要求停止本机自动化测试，已停止，不再启动新的自动化测试。2026-10-05 10:47 +0800 已取得 TestFlight 上传成功回执；不提交正式审核，成功后不检查处理状态。
+
+### macOS — 0.3.2（108）
+
+新增独立全窗口原生材质，覆盖侧栏和当前内容，尊重 Reduce Motion。单元回归通过，界面 runner 曾遇本机签名／窗口命中问题，未宣称该界面回归通过；按用户要求不再进行本机自动化测试。2026-10-05 10:44 +0800 已取得 TestFlight 上传成功回执，GitHub 草稿的原生 Universal DMG 已更新；公共 DMG 仍为 ad-hoc、未公证。
+
+### Android — 0.3.2（65）
+
+全应用区域语言模糊过渡使用系统 RenderEffect，较旧系统采用有界的应用内回退，回收位图与工作线程；不采集系统桌面，保留查询、草稿和滚动位置。签名 Universal APK 编译与既有发布门禁通过，已更新同一 GitHub 草稿的 APK，不上传 AAB。
+
+### HarmonyOS — 0.3.2（1002042）
+
+独立系统材质层比较语言卡片和目标控件的 x、y、宽、高，连续三个有效帧稳定后才揭开；节点缺失重置采样，后台／离页／超时撤销旧回调。原生编译通过。2026-10-05 11:22 +0800 已通过 DevEco 仅测试上传，结果页显示云测试通过；不提交正式审核、不上传 GitHub 鸿蒙包。
+
+### Windows / Linux / Ubuntu
+
+Tauri 源码增加全屏 WebView 材质过渡、布局稳定和有界清理，不重新挂载整页或发起查询。新安装包仍等待用户确认 GitHub 构建恢复；不触发受限 CI、不修改服务器或创建定时任务。
+
+### English — this update
+
+Keep the existing GitHub release both **draft and pre-release**. iOS/iPadOS and macOS build 108 uploaded successfully; Android APK 65 and macOS DMG 108 replaced in the draft. HarmonyOS 1002042 uploaded for testing through DevEco, with its quick cloud test passed. Add platform-native/app-only full-window language material while preserving views, drafts, scroll and cache. Layout readiness—not timeout—controls the reveal; stale/background work is canceled. macOS GUI regression is not claimed as passed. Local automated testing stopped at the user's request. No AAB or HarmonyOS package on GitHub, no formal store review submission. Windows/Linux await build availability, without scheduled retries.
+
+## 历史记录（此前 103／61／1002038）
 
 ## iOS / iPadOS
 

@@ -70,6 +70,8 @@ targets:
     scheme:
       testTargets:
         - WhereToStudyMacTests
+        - name: WhereToStudyMacUITests
+          parallelizable: false
   WhereToStudyWidget:
     type: app-extension
     platform: macOS
@@ -215,6 +217,19 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.tests
+        CODE_SIGNING_ALLOWED: NO
+  WhereToStudyMacUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: MacUITests
+    dependencies:
+      - target: WhereToStudyMac
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.nemoyu.wheretostudy.native.macos.ui-tests
+        TEST_TARGET_NAME: WhereToStudyMac
         CODE_SIGNING_ALLOWED: NO
   WhereToStudyiOSTests:
     type: bundle.unit-test

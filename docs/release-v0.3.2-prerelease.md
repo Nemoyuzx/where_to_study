@@ -1,6 +1,20 @@
 # 0.3.2 预发布构建与上传记录
 
-## 当前进度（2026-10-04，英文导航等距与模糊过渡）
+> 以下保留预发布阶段的历史状态与构建回执，不代表当前发布状态；0.3.2 后续已正式发布，维护分支已合入 main。
+
+## 当前进度（2026-10-05，全平台系统材质语言过渡）
+
+构建源码 `fced615e` 已推送 `codex/v032-language-hotfix`。独立 0.3.2 工作树未混入 0.4.0 的课程、QMplus 和新语言；也未回退当前主线或移动旧标签。版本矩阵为 Apple **108**、Android **65**、HarmonyOS **1002042**。
+
+- **macOS：2026-10-05 10:44:13 +0800**，**iOS/iPadOS：10:47:12 +0800**，0.3.2（108）均取得 `Upload succeeded` 与 `EXPORT SUCCEEDED`。各平台沿用已记录的本地 Xcode 签名／上传途径，仅上传 TestFlight 测试包，不提交正式审核、不检查 App Store Connect 后续处理、不重复上传同构建。
+- GitHub 同一 `v0.3.2-prerelease` 保留 `draft=true`、`prerelease=true` 和名称 `Where To Study v0.3.2-prerelease`。仅替换 Android Universal APK 65 与原生 macOS Universal DMG 108。APK **1,198,142 bytes**、SHA-256 `b10bea266cc32b78c208b7b52a9fa7d1c881b58c37ffc144fcbbfa890428d327`；DMG **8,192,858 bytes**、SHA-256 `8150d640edcaf5b626588aa5dcf9cc0b79fc6b55e647f4f99023f42c64ca846c`。GitHub API 名称、大小和 digest 与本地匹配，没有回下载；无 AAB、鸿蒙包或 Apple 商店归档。公共 DMG 仍为 ad-hoc、未公证。
+- **2026-10-05 11:22 +0800**，HarmonyOS 通过 DevEco 第二项“生成.app包并上传至AppGallery Connect进行测试”完成上传，结果页显示“云测试结果：通过”。最终签名包 `pack.info` 为 **0.3.2（1002042，build 2）**且 release 模式校验通过；APP **1,402,169 bytes**／SHA-256 `d4d5f82ed6cb05de846bb7256144ce811acf021884b5c7ee198ed596621f1415`，HAP **2,176,524 bytes**／`6ddc19fcb622762127087a719503d02c215ff39ef00cf62da2700a1c77b7799c`。仅测试，没有提交正式审核或向 GitHub 上传鸿蒙包；快速云测试不等于新真机视觉回归。
+- 用户提出“不用本机做自动化测试”前：Node **280 通过 / 1 项 Windows 条件跳过**，iOS 语言单元 **7 项**及界面 **3 项**通过，HarmonyOS **281 项**通过。macOS 单元 **429 项（1 跳过）**通过，但界面 runner 因签名／窗口命中问题未通过，不能冒称视觉回归成功。Android 签名发布构建及既有门禁通过。用户提出限制后，已停止且不再启动本机自动化测试；后续只有静态核查、编译、签名和上传。
+- Windows/Linux 新安装包仍等待 GitHub 构建恢复，不 dispatch 受限工作流、不改服务器、不创建定时任务、不以旧包冒充本轮更新。
+
+本轮日志在忽略目录 `release-artifacts/v0.3.2-all-platform-blur-108/`。后续 0.4.0 Apple 上传须递增至至少 **109**，不能重传已成功的 107 或 108。
+
+## 历史进度（2026-10-04，英文导航等距与模糊过渡）
 
 本轮源码 `7208587e6a06d0eeb2a318fe8b02b86a135f8786` 已推送 main。包内版本仍为 **0.3.2**，Apple 构建号为 **103**；Android **61**、HarmonyOS **1002038** 沿用本日已验证包，没有无意义重建或重传。0.4.0 的课程／QMplus 等改动已另行保存，本轮未混入。
 

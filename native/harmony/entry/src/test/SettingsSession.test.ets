@@ -62,6 +62,16 @@ export default function settingsSessionTest() {
       expect(session.takeLanguageRequest()).assertNull();
     });
 
+    it('language_cover_request_keeps_only_latest_target_without_touching_other_drafts', 0, () => {
+      const session: SettingsSession = new SettingsSession();
+      session.editCustomDeadlineURL('https://example.org/unsaved.json');
+      session.requestLanguage(AppLanguage.english);
+      session.requestLanguage(AppLanguage.simplifiedChinese);
+      expect(session.takeLanguageRequest()).assertEqual(AppLanguage.simplifiedChinese);
+      expect(session.takeLanguageRequest()).assertNull();
+      expect(session.customDeadlineURLDraft).assertEqual('https://example.org/unsaved.json');
+    });
+
     it('presentation_seed_requires_debug_review_flag_and_is_one_shot_in_memory', 0, () => {
       expect(SettingsPresentationSeedPolicy.allows(false, true, true)).assertFalse();
       expect(SettingsPresentationSeedPolicy.allows(true, false, true)).assertFalse();
