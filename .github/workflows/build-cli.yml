@@ -62,7 +62,7 @@ jobs:
         run: cargo build --manifest-path wts-cli/Cargo.toml --release --locked
 
       - name: Upload CLI binary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: where-to-study-cli-macos-arm64
           path: wts-cli/target/release/where-to-study-cli
@@ -123,7 +123,7 @@ jobs:
           (cd release-artifacts && sha256sum "$archive" > "$archive.sha256")
 
       - name: Upload Linux CLI archive
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: where-to-study-cli-linux-${{ matrix.arch }}
           path: |
@@ -147,7 +147,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download Linux CLI release artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: where-to-study-cli-linux-*
           path: release-artifacts
