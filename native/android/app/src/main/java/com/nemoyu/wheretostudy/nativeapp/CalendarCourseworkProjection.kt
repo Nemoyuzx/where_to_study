@@ -49,7 +49,7 @@ internal object CalendarCourseworkProjection {
     }
 
     fun qmplus(snapshot: QmplusSnapshot, showsOtherTerms: Boolean): List<TimelineDeadline> {
-        val visible = QmplusSnapshotCodec.ebuOnly(snapshot)
+        val visible = QmplusSnapshotCodec.assessmentCourses(snapshot)
         val courses = visible.courses.filter { it.currentTermStatus == "current" || showsOtherTerms }.associateBy { it.id }
         val evidence = visible.activities.groupBy { Triple(it.courseID, it.kind, it.id) }
         return visible.activities.filter { it.courseID in courses }.mapNotNull { item ->

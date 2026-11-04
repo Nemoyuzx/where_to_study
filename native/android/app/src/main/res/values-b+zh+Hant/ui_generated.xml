@@ -86,7 +86,7 @@
     <string name="ui_generated_17833c4bd8f7c2">"數量僅統計已同步且有明確提交狀態的作業。時間以北京時間顯示，倫敦時間遵守夏令時間。"</string>
     <string name="ui_generated_17847bee97a4f7">"示例成績，未連接學校服務"</string>
     <string name="ui_generated_17cef164f92212">"民俗資訊僅供參考 · 第三方來源：UAPI"</string>
-    <string name="ui_generated_17dbd8355b5e29">"登入完成後會自動同步一次 EBU 課程與活動；失敗時可手動重試。"</string>
+    <string name="ui_generated_17dbd8355b5e29">"登入完成後會自動同步一次 課程與活動；失敗時可手動重試。"</string>
     <string name="ui_generated_17e5be2984a3c6">"無法儲存移動網絡設定，請重試。"</string>
     <string name="ui_generated_17fff140548bbf">"學年學期"</string>
     <string name="ui_generated_186be2232e2c9b">"資料來源"</string>
@@ -531,7 +531,7 @@
     <string name="ui_generated_9586e7491b5dbd">"當天沒有課程作業截止"</string>
     <string name="ui_generated_958c4bbf1e4d5a">"中號"</string>
     <string name="ui_generated_960567769d479c">"退出並清除 QMplus 會話與已儲存登入資訊"</string>
-    <string name="ui_generated_9614c9084183e5">"其他／學期未確認的 EBU 課程"</string>
+    <string name="ui_generated_9614c9084183e5">"其他／學期未確認的 課程"</string>
     <string name="ui_generated_972279090941cd">"不同意，暫不使用"</string>
     <string name="ui_generated_978971f7bbd114">"本機獲取時間："</string>
     <string name="ui_generated_97b5e548717da0">"QMplus 安全設定未能儲存，請重試。"</string>
@@ -834,7 +834,7 @@
     <string name="ui_generated_f0456de5fa75e8">"本學期沒有已刪除課程。"</string>
     <string name="ui_generated_f079d9d65e9133">"打開 QMplus 官方課程頁"</string>
     <string name="ui_generated_f0c58227c753f6">"課程恢復未儲存，請重試"</string>
-    <string name="ui_generated_f0d56a750c980b">"EBU 課程"</string>
+    <string name="ui_generated_f0d56a750c980b">"課程"</string>
     <string name="ui_generated_f0ed77791a4599">"其它學期"</string>
     <string name="ui_generated_f19c9933747cd7">"取色器"</string>
     <string name="ui_generated_f1a73f9bd31880">"自定義日程地址必須是無憑據的 HTTPS URL。"</string>

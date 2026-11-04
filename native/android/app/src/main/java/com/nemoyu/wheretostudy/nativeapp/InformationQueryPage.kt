@@ -1006,11 +1006,11 @@ internal class InformationQueryPage(
         }
         val repository = qmplusRepository
         if (repository?.isFeatureEnabled != true) { qmplusRows = emptyList(); return@privateQueryContent }
-        val snapshot = repository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val snapshot = repository?.snapshot?.let(QmplusSnapshotCodec::assessmentCourses)
         val current = snapshot?.courses?.let(QmplusActivityPresentation::currentCourses)
         val others = snapshot?.courses?.filter { it.currentTermStatus == "other" }.orEmpty()
         val visible = current?.let { it + if (sessionState.showsOtherQmCourses) others else emptyList() }
-        addView(courseSectionHeader("QMplus · EBU", visible?.size, R.id.course_qmplus_refresh,
+        addView(courseSectionHeader("QMplus", visible?.size, R.id.course_qmplus_refresh,
             repository != null && !repository.isLoading && !repository.isClearingSession && repository.connection == null,
             if (repository?.manualContinuationRequired == true) activity.uiText("手动继续") else activity.getString(R.string.qmplus_connect_sync)) { activity.connectQmplus() })
         if (snapshot == null) addView(statusCard(activity.getString(
@@ -1100,7 +1100,7 @@ internal class InformationQueryPage(
 
     private fun appendQmplusCourseRows(list: LinearLayout, advance: Boolean) {
         if (advance && (!list.isAttachedToWindow || !root.isAttachedToWindow)) return
-        val snapshot = qmplusRepository?.snapshot?.let(QmplusSnapshotCodec::ebuOnly) ?: return
+        val snapshot = qmplusRepository?.snapshot?.let(QmplusSnapshotCodec::assessmentCourses) ?: return
         val target = if (advance) (list.childCount + 20).coerceAtMost(qmplusRows.size)
             else sessionState.visibleQmplusRowCount.coerceAtMost(qmplusRows.size)
         for (index in list.childCount until target) {
@@ -1153,7 +1153,7 @@ internal class InformationQueryPage(
     private fun populateInlineAssignments(key: String, body: LinearLayout) {
         body.removeAllViews()
         val cloud = CourseDirectoryLogic.teachingCloudGroupForKey(dailyInfoRepository.currentTeachingCloudCourses().orEmpty(), key)
-        val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::assessmentCourses)
         val qm = snapshot?.courses?.firstOrNull { "qmplus.course.${it.id}" == key }
         val cloudItems = cloud?.let { CourseDirectoryLogic.teachingCloudAssignments(it, dailyInfoRepository.allAssignments()) }
         val qmItems = qm?.let { course -> snapshot?.activities.orEmpty().filter { it.courseID == course.id } }.orEmpty()
@@ -1231,7 +1231,7 @@ internal class InformationQueryPage(
 
     private fun courseDetailsBody(key: String): LinearLayout? {
         val cloud = CourseDirectoryLogic.teachingCloudGroupForKey(dailyInfoRepository.currentTeachingCloudCourses().orEmpty(), key)
-        val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val snapshot = qmplusRepository?.takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::assessmentCourses)
         val qm = snapshot?.courses?.firstOrNull { "qmplus.course.${it.id}" == key }
         if (cloud == null && qm == null) return null
         return LinearLayout(activity).apply {

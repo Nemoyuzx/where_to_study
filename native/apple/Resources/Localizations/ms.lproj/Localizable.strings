@@ -467,7 +467,7 @@
 "留空使用教务密码" = "Biarkan kosong untuk menggunakan kata laluan akademik";
 "登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。" = "Log masuk dan penyegerakan berjalan di latar belakang. Tetingkap rasmi dibuka secara automatik hanya untuk CAPTCHA atau MFA. Halaman yang tidak dikenali dijeda supaya anda boleh meneruskan secara manual.";
 "登录后同步" = "Segerakkan selepas log masuk";
-"登录完成后会自动同步一次 EBU 课程与活动；失败时可手动重试。" = "Selepas log masuk, kursus dan aktiviti EBU disegerakkan sekali secara automatik. Jika gagal, cuba lagi secara manual.";
+"登录完成后会自动同步一次 EBU 课程与活动；失败时可手动重试。" = "Selepas log masuk, kursus dan aktiviti disegerakkan sekali secara automatik. Jika gagal, cuba lagi secara manual.";
 "登录状态已过期，请刷新重试。" = "Sesi log masuk anda telah tamat. Muat semula untuk mencuba lagi.";
 "确认删除" = "Sahkan pemadaman";
 "示例作业，未连接教学云" = "Tugasan contoh; tidak disambungkan ke Teaching Cloud";

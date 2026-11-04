@@ -9,7 +9,7 @@ import org.junit.Test
 class QmplusSnapshotCodecTest {
     @Test fun restoredSnapshotFooterTimeKeepsItsOriginalMinuteUntilAnotherSnapshotArrives() {
         val cached = sample().copy(fetchedAt = "2026-10-07T15:59:00Z")
-        val restored = QmplusSnapshotCodec.ebuOnly(QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(cached)))
+        val restored = QmplusSnapshotCodec.assessmentCourses(QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(cached)))
         assertEquals("2026-10-07 23:59", QmplusActivityPresentation.shanghaiTime(restored.fetchedAt))
         val refreshed = restored.copy(fetchedAt = "2026-10-07T16:01:00.123Z")
         assertEquals("2026-10-08 00:01", QmplusActivityPresentation.shanghaiTime(refreshed.fetchedAt))
@@ -159,21 +159,22 @@ class QmplusSnapshotCodecTest {
         listOf(QmplusActivityItem("2", "1", "Raw quiz", "quiz", "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=2",
             null, "2026-03-29T01:30:00.000Z", null, null, 2700, "unknown", "restricted", "Time limit: 45 minutes")), emptyList())
 
-    @Test fun oldSnapshotsExposeOnlyEbuCoursesAndTheirActivitiesWithoutChangingRawNames() {
+    @Test fun oldSnapshotsRetainAllEnrolledCoursesAndTheirActivitiesWithoutChangingRawNames() {
         val original = sample()
         val ebu = original.courses.single().copy(name = "EBU5303 设置")
         val secondEbu = ebu.copy(id = "4", name = "ebu5405 Raw name", url = "https://qmplus.qmul.ac.uk/course/view.php?id=4")
-        val other = ebu.copy(id = "3", name = "Other department", url = "https://qmplus.qmul.ac.uk/course/view.php?id=3")
+        val other = ebu.copy(id = "3", name = "BBC6521 Project", url = "https://qmplus.qmul.ac.uk/course/view.php?id=3")
+        val general = ebu.copy(id = "5", name = "General Training", url = "https://qmplus.qmul.ac.uk/course/view.php?id=5")
         val unrelated = original.activities.single().copy(id = "5", courseID = "3", url = "https://qmplus.qmul.ac.uk/mod/quiz/view.php?id=5")
         val decoded = QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(original.copy(
-            courses = listOf(ebu, other, secondEbu), activities = original.activities + unrelated)))
-        val visible = QmplusSnapshotCodec.ebuOnly(decoded)
-        assertEquals(listOf("1", "4"), visible.courses.map { it.id })
-        assertEquals(listOf("2"), visible.activities.map { it.id })
+            courses = listOf(ebu, other, secondEbu, general), activities = original.activities + unrelated)))
+        val visible = QmplusSnapshotCodec.assessmentCourses(decoded)
+        assertEquals(listOf("1", "3"), visible.courses.map { it.id })
+        assertEquals(listOf("2", "5"), visible.activities.map { it.id })
         assertEquals("EBU5303 设置", visible.courses.first().name)
         assertEquals("unknown", visible.courses.first().currentTermStatus)
-        assertEquals(3, decoded.courses.size)
-        assertTrue(QmplusSnapshotCodec.ebuOnly(original).courses.isEmpty())
+        assertEquals(4, decoded.courses.size)
+        assertTrue(QmplusSnapshotCodec.assessmentCourses(original).courses.isEmpty())
     }
 
     @Test fun assessmentTimeRowsContainOnlyKnownFieldsForTheirActualKind() {
@@ -237,7 +238,7 @@ class QmplusSnapshotCodecTest {
             activities = listOf(review, assignment, sameNamedQuiz))
         val decoded = QmplusSnapshotCodec.decode(QmplusSnapshotCodec.encode(legacy))
         assertEquals(listOf("2", "4"), decoded.activities.map { it.id })
-        assertEquals(listOf("2", "4"), QmplusSnapshotCodec.ebuOnly(legacy).activities.map { it.id })
+        assertEquals(listOf("2", "4"), QmplusSnapshotCodec.assessmentCourses(legacy).activities.map { it.id })
         assertNull(decoded.activities.first().dueAt)
         assertEquals(review.title, decoded.activities.last().title)
         assertEquals(legacy.fetchedAt, decoded.fetchedAt)

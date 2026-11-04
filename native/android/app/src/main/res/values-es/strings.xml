@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Ocultar otras asignaturas / semestre sin confirmar (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Cargando asignaturas…"</string>
     <string name="qmplus_local_data_clear_pending">"Se han borrado los datos locales. La sesión web de QMplus se está borrando de forma asíncrona; no se puede reconectar hasta que termine."</string>
-    <string name="qmplus_no_courses">"No hay asignaturas EBU para el semestre actual."</string>
+    <string name="qmplus_no_courses">"No hay asignaturas para el semestre actual."</string>
     <string name="qmplus_not_connected">"QMplus no está conectado. Completa SSO / MFA en la página oficial desde Ajustes y sincroniza los cursos."</string>
     <string name="qmplus_not_published">"Sin publicar / sin confirmar"</string>
     <string name="qmplus_open_activity">"Abrir actividad oficial"</string>

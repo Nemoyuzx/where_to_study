@@ -11,8 +11,8 @@ const source=(policy+logic+session).replace(/^import[^\n]+\n/gm,'').replace(/@Ob
 const module={exports:{}}
 new Function('module','exports',transformSync(source,{loader:'ts',format:'cjs',target:'es2022'}).code)(module,module.exports)
 const {CourseQMPlusScope:scope,CourseSession}=module.exports
-const courses=[{id:'current',name:' EBU Current',currentTermStatus:'current'},
-  {id:'other',name:'ebu History',currentTermStatus:'other'},
+const courses=[{id:'current',name:' BBC6521 Project',currentTermStatus:'current'},
+  {id:'other',name:'EBU History',currentTermStatus:'other'},
   {id:'unknown',name:'EBU Undated',currentTermStatus:'unknown'},
   {id:'foreign',name:'Course EBU',currentTermStatus:'other'}]
 const activity=(id,courseID,kind='assignment',title=id)=>({id,courseID,kind,title,dueAt:null,closesAt:null,status:'unknown'})
@@ -21,7 +21,7 @@ const snapshot={fetchedAt:'2026-10-09T00:00:00.000Z',partial:true,courses,
     activity('unknown-a','unknown'),activity('foreign-a','foreign'),activity('forum','other','forum'),
     activity('admin','other','assignment','Coursework Mark Review Request')]}
 
-test('Harmony matches Apple current plus unknown default and shows only cached EBU history on demand',()=>{
+test('Harmony matches Apple current plus unknown default and shows only cached EBU or BBC history on demand',()=>{
   const before=JSON.stringify(snapshot),owner=new CourseSession()
   assert.equal(owner.showsOtherQMplusTerms,false)
   assert.deepEqual(scope.visibleCourses(snapshot,owner.showsOtherQMplusTerms).map(course=>course.id),['current','unknown'])
@@ -29,7 +29,7 @@ test('Harmony matches Apple current plus unknown default and shows only cached E
   owner.showsOtherQMplusTerms=true
   assert.deepEqual(scope.visibleCourses(snapshot,owner.showsOtherQMplusTerms).map(course=>course.id),['current','other','unknown'])
   assert.equal(scope.hasHistoricalCourses({...snapshot,courses:[courses[2],courses[3]]}),false,
-    'unknown and non-EBU courses never create a history switch')
+    'unknown and non-EBU/BBC courses never create a history switch')
   assert.deepEqual(scope.visibleCourses(null,true),[])
   assert.equal(scope.hasHistoricalCourses(null),false)
   assert.equal(JSON.stringify(snapshot),before)
@@ -37,7 +37,7 @@ test('Harmony matches Apple current plus unknown default and shows only cached E
 test('cached historical and unknown activities keep undated items and administrative filters without changing calendar scope',()=>{
   assert.deepEqual(scope.activitiesForCourse(snapshot,'other').map(item=>item.id),['history-undated','history-quiz'])
   assert.deepEqual(scope.activitiesForCourse(snapshot,'unknown').map(item=>item.id),['unknown-a'])
-  assert.deepEqual(scope.activitiesForCourse(snapshot,'foreign'),[])
+  assert.deepEqual(scope.activitiesForCourse(snapshot,'foreign').map(item=>item.id),[])
   assert.deepEqual(scope.activitiesForCourse(null,'current'),[])
   assert.deepEqual(scope.currentActivities(snapshot).map(item=>item.id),['current-a'])
   assert.equal(scope.activitiesForCourse(snapshot,'other')[0],snapshot.activities[1])

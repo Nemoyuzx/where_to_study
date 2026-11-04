@@ -86,7 +86,7 @@
     <string name="ui_generated_17833c4bd8f7c2">"จำนวนนี้นับเฉพาะงานที่ซิงค์และมีสถานะการส่งชัดเจน เวลาแสดงตามเวลาปักกิ่ง ส่วนเวลาลอนดอนคำนึงถึงเวลาออมแสง"</string>
     <string name="ui_generated_17847bee97a4f7">"คะแนนตัวอย่าง ไม่ได้เชื่อมต่อบริการมหาวิทยาลัย"</string>
     <string name="ui_generated_17cef164f92212">"ข้อมูลคติความเชื่อใช้เพื่ออ้างอิงเท่านั้น · แหล่งข้อมูล: UAPI"</string>
-    <string name="ui_generated_17dbd8355b5e29">"หลังลงชื่อเข้าใช้จะซิงค์รายวิชาและกิจกรรม EBU อัตโนมัติหนึ่งครั้ง หากล้มเหลวสามารถลองเองได้"</string>
+    <string name="ui_generated_17dbd8355b5e29">"หลังลงชื่อเข้าใช้จะซิงค์รายวิชาและกิจกรรม อัตโนมัติหนึ่งครั้ง หากล้มเหลวสามารถลองเองได้"</string>
     <string name="ui_generated_17e5be2984a3c6">"บันทึกการตั้งค่าข้อมูลมือถือไม่ได้ โปรดลองอีกครั้ง"</string>
     <string name="ui_generated_17fff140548bbf">"ปีการศึกษาและภาคเรียน"</string>
     <string name="ui_generated_186be2232e2c9b">"แหล่งข้อมูล"</string>
@@ -531,7 +531,7 @@
     <string name="ui_generated_9586e7491b5dbd">"วันนี้ไม่มีกำหนดส่งงานรายวิชา"</string>
     <string name="ui_generated_958c4bbf1e4d5a">"ขนาดกลาง"</string>
     <string name="ui_generated_960567769d479c">"ออกและล้างเซสชันพร้อมข้อมูลลงชื่อเข้าใช้ QMplus ที่บันทึกไว้"</string>
-    <string name="ui_generated_9614c9084183e5">"วิชา EBU อื่น / ยังไม่ยืนยันภาคเรียน"</string>
+    <string name="ui_generated_9614c9084183e5">"วิชา อื่น / ยังไม่ยืนยันภาคเรียน"</string>
     <string name="ui_generated_972279090941cd">"ไม่ยอมรับและหยุดใช้งาน"</string>
     <string name="ui_generated_978971f7bbd114">"ดึงข้อมูลบนเครื่องเมื่อ: "</string>
     <string name="ui_generated_97b5e548717da0">"บันทึกการตั้งค่าความปลอดภัย QMplus ไม่ได้ โปรดลองอีกครั้ง"</string>
@@ -834,7 +834,7 @@
     <string name="ui_generated_f0456de5fa75e8">"ภาคเรียนนี้ไม่มีรายวิชาที่ลบแล้ว"</string>
     <string name="ui_generated_f079d9d65e9133">"เปิดหน้ารายวิชา QMplus ทางการ"</string>
     <string name="ui_generated_f0c58227c753f6">"บันทึกการกู้คืนรายวิชาไม่ได้ โปรดลองอีกครั้ง"</string>
-    <string name="ui_generated_f0d56a750c980b">"รายวิชา EBU"</string>
+    <string name="ui_generated_f0d56a750c980b">"รายวิชา "</string>
     <string name="ui_generated_f0ed77791a4599">"ภาคเรียนอื่น"</string>
     <string name="ui_generated_f19c9933747cd7">" ตัวเลือกสี"</string>
     <string name="ui_generated_f1a73f9bd31880">"URL กำหนดการที่กำหนดเองต้องเป็น HTTPS URL ที่ไม่มีข้อมูลรับรอง"</string>

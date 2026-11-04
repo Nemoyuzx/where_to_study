@@ -61,7 +61,8 @@ struct QMplusCourseSelection: Equatable, Sendable {
     let activities: [QMplusActivity]
 
     static func includesCourse(_ course: QMplusCourse) -> Bool {
-        course.name.range(of: "EBU", options: [.anchored, .caseInsensitive]) != nil
+        let name = course.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.hasPrefix("EBU") || name.hasPrefix("BBC")
     }
 
     static func includesActivity(_ activity: QMplusActivity) -> Bool {

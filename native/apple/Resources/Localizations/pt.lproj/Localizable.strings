@@ -467,7 +467,7 @@
 "留空使用教务密码" = "Deixe em branco para usar a senha acadêmica";
 "登录与同步在后台完成，只在需要验证码或 MFA 时自动显示官方窗口。无法识别的页面会暂停，您可手动继续。" = "O início de sessão e a sincronização decorrem em segundo plano. A janela oficial só abre automaticamente para CAPTCHA ou MFA. As páginas não reconhecidas ficam em pausa para continuar manualmente.";
 "登录后同步" = "Sincronizar após entrar";
-"登录完成后会自动同步一次 EBU 课程与活动；失败时可手动重试。" = "Após o login, as disciplinas e atividades EBU serão sincronizadas automaticamente uma vez. Em caso de falha, você pode tentar novamente manualmente.";
+"登录完成后会自动同步一次 EBU 课程与活动；失败时可手动重试。" = "Após o login, as disciplinas e atividades serão sincronizadas automaticamente uma vez. Em caso de falha, você pode tentar novamente manualmente.";
 "登录状态已过期，请刷新重试。" = "A sessão expirou. Atualize e tente novamente.";
 "确认删除" = "Confirmar exclusão";
 "示例作业，未连接教学云" = "Tarefa de demonstração, sem conexão à nuvem de ensino";

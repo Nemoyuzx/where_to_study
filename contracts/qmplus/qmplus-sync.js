@@ -227,7 +227,7 @@
         offset = next;
         if (list.length >= 100 || p === 3) { warn('QM_COURSE_LIMIT'); break; }
       }
-      result.courses = list.slice(0,100).filter(c => /^EBU/i.test(text(c.fullname))).map(c => ({id:String(c.id),name:text(c.fullname),short_name:text(c.shortname),url:safeURL(c.viewurl||`/course/view.php?id=${c.id}`),start_at:epoch(c.startdate),end_at:epoch(c.enddate),current_term_status:currentTermStatus(c, options.now || Date.now())}));
+      result.courses = list.slice(0,100).filter(c => /^(?:EBU|BBC)/.test(text(c.fullname))).map(c => ({id:String(c.id),name:text(c.fullname),short_name:text(c.shortname),url:safeURL(c.viewurl||`/course/view.php?id=${c.id}`),start_at:epoch(c.startdate),end_at:epoch(c.enddate),current_term_status:currentTermStatus(c, options.now || Date.now())}));
       const selected = result.courses.filter(c => c.current_term_status === 'current');
       if (!selected.length) return result;
       // Discover the complete current-course catalogue before spending the

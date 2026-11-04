@@ -86,7 +86,7 @@
     <string name="ui_generated_17833c4bd8f7c2">"Counts refer only to synchronized assignments with explicit submission states. Dates use Beijing time; London daylight saving is respected."</string>
     <string name="ui_generated_17847bee97a4f7">"Sample grades; no school connection"</string>
     <string name="ui_generated_17cef164f92212">"Folklore is for reference only · Source: UAPI"</string>
-    <string name="ui_generated_17dbd8355b5e29">"After sign-in, EBU courses and activities sync once automatically. If it fails, you can retry manually."</string>
+    <string name="ui_generated_17dbd8355b5e29">"After sign-in, courses and activities sync once automatically. If it fails, you can retry manually."</string>
     <string name="ui_generated_17e5be2984a3c6">"Could not save the mobile-data setting. Please retry."</string>
     <string name="ui_generated_17fff140548bbf">"Semester"</string>
     <string name="ui_generated_186be2232e2c9b">"Source"</string>
@@ -531,7 +531,7 @@
     <string name="ui_generated_9586e7491b5dbd">"No assignment deadlines today"</string>
     <string name="ui_generated_958c4bbf1e4d5a">"Medium"</string>
     <string name="ui_generated_960567769d479c">"Sign Out and Delete Saved QMplus Login"</string>
-    <string name="ui_generated_9614c9084183e5">"Other / unconfirmed EBU courses"</string>
+    <string name="ui_generated_9614c9084183e5">"Other / unconfirmed courses"</string>
     <string name="ui_generated_972279090941cd">"Decline and Stop Using"</string>
     <string name="ui_generated_978971f7bbd114">"Fetched on this device: "</string>
     <string name="ui_generated_97b5e548717da0">"Unable to save QMplus security settings. Please retry."</string>
@@ -834,7 +834,7 @@
     <string name="ui_generated_f0456de5fa75e8">"No deleted courses this semester."</string>
     <string name="ui_generated_f079d9d65e9133">"Open Official QMplus Course"</string>
     <string name="ui_generated_f0c58227c753f6">"Course restoration was not saved. Please try again."</string>
-    <string name="ui_generated_f0d56a750c980b">"EBU courses"</string>
+    <string name="ui_generated_f0d56a750c980b">"courses"</string>
     <string name="ui_generated_f0ed77791a4599">"Other term"</string>
     <string name="ui_generated_f19c9933747cd7">" picker"</string>
     <string name="ui_generated_f1a73f9bd31880">"The custom schedule URL must be a credential-free HTTPS URL."</string>

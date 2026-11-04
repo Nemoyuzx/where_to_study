@@ -1,7 +1,7 @@
 // Presentation derives only from already verified source fields. Never join
 // different teaching platforms or infer submission from quiz completion.
-export function isEbuCourse(course) {
-  return typeof course?.name === 'string' && /^EBU/i.test(course.name.trim())
+export function isQmplusCourse(course) {
+  return typeof course?.name === 'string' && /^(?:EBU|BBC)/.test(course.name.trim())
 }
 
 // Cache presentation uses the same conservative policy as WTSQmProtocol and
@@ -25,7 +25,7 @@ export function isQmplusAssessmentActivity(item) {
 }
 
 export function qmplusActivitiesForCourse(snapshot, course) {
-  if (course?.current_term_status !== 'current' || !isEbuCourse(course)) return []
+  if (course?.current_term_status !== 'current' || !isQmplusCourse(course)) return []
   return (Array.isArray(snapshot?.activities) ? snapshot.activities : [])
     .filter(item => item.course_id === course.id && isQmplusAssessmentActivity(item))
 }

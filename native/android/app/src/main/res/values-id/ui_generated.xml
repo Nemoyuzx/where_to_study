@@ -86,7 +86,7 @@
     <string name="ui_generated_17833c4bd8f7c2">"Jumlah hanya menghitung tugas tersinkron dengan status pengumpulan yang jelas. Waktu ditampilkan menurut waktu Beijing; perhitungan waktu London mengikuti waktu musim panas."</string>
     <string name="ui_generated_17847bee97a4f7">"Nilai contoh; tidak terhubung ke layanan kampus"</string>
     <string name="ui_generated_17cef164f92212">"Informasi tradisi hanya sebagai referensi · Sumber: UAPI"</string>
-    <string name="ui_generated_17dbd8355b5e29">"Setelah masuk, mata kuliah dan kegiatan EBU disinkronkan sekali secara otomatis. Jika gagal, coba lagi secara manual."</string>
+    <string name="ui_generated_17dbd8355b5e29">"Setelah masuk, mata kuliah dan kegiatan disinkronkan sekali secara otomatis. Jika gagal, coba lagi secara manual."</string>
     <string name="ui_generated_17e5be2984a3c6">"Pengaturan data seluler tidak dapat disimpan. Coba lagi."</string>
     <string name="ui_generated_17fff140548bbf">"Tahun akademik dan semester"</string>
     <string name="ui_generated_186be2232e2c9b">"Sumber data"</string>
@@ -531,7 +531,7 @@
     <string name="ui_generated_9586e7491b5dbd">"Tidak ada tenggat tugas mata kuliah hari ini"</string>
     <string name="ui_generated_958c4bbf1e4d5a">"Sedang"</string>
     <string name="ui_generated_960567769d479c">"Keluar serta hapus sesi dan detail masuk QMplus tersimpan"</string>
-    <string name="ui_generated_9614c9084183e5">"Mata kuliah EBU lain / semester belum dipastikan"</string>
+    <string name="ui_generated_9614c9084183e5">"Mata kuliah lain / semester belum dipastikan"</string>
     <string name="ui_generated_972279090941cd">"Tidak setuju, berhenti menggunakan"</string>
     <string name="ui_generated_978971f7bbd114">"Diambil di perangkat ini pada: "</string>
     <string name="ui_generated_97b5e548717da0">"Pengaturan keamanan QMplus tidak dapat disimpan. Coba lagi."</string>
@@ -834,7 +834,7 @@
     <string name="ui_generated_f0456de5fa75e8">"Tidak ada mata kuliah yang dihapus semester ini."</string>
     <string name="ui_generated_f079d9d65e9133">"Buka halaman mata kuliah resmi QMplus"</string>
     <string name="ui_generated_f0c58227c753f6">"Pemulihan mata kuliah tidak tersimpan. Coba lagi"</string>
-    <string name="ui_generated_f0d56a750c980b">"Mata kuliah EBU"</string>
+    <string name="ui_generated_f0d56a750c980b">"Mata kuliah "</string>
     <string name="ui_generated_f0ed77791a4599">"Semester lain"</string>
     <string name="ui_generated_f19c9933747cd7">" pemilih warna"</string>
     <string name="ui_generated_f1a73f9bd31880">"Alamat jadwal khusus harus berupa URL HTTPS tanpa kredensial."</string>

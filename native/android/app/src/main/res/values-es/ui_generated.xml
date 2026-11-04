@@ -86,7 +86,7 @@
     <string name="ui_generated_17833c4bd8f7c2">"Solo se cuentan las tareas sincronizadas con estado de entrega explícito. Las fechas se muestran en hora de Pekín; la hora de Londres respeta el horario de verano."</string>
     <string name="ui_generated_17847bee97a4f7">"Notas de ejemplo; sin conexión a la universidad"</string>
     <string name="ui_generated_17cef164f92212">"La información tradicional es orientativa · Fuente externa: UAPI"</string>
-    <string name="ui_generated_17dbd8355b5e29">"Después de iniciar sesión, los cursos y actividades EBU se sincronizan automáticamente una vez. Si falla, puedes reintentarlo manualmente."</string>
+    <string name="ui_generated_17dbd8355b5e29">"Después de iniciar sesión, los cursos y actividades se sincronizan automáticamente una vez. Si falla, puedes reintentarlo manualmente."</string>
     <string name="ui_generated_17e5be2984a3c6">"No se pudo guardar el ajuste de datos móviles. Inténtalo de nuevo."</string>
     <string name="ui_generated_17fff140548bbf">"Semestre"</string>
     <string name="ui_generated_186be2232e2c9b">"Fuente de datos"</string>
@@ -531,7 +531,7 @@
     <string name="ui_generated_9586e7491b5dbd">"No hay entregas de tareas este día"</string>
     <string name="ui_generated_958c4bbf1e4d5a">"Mediano"</string>
     <string name="ui_generated_960567769d479c">"Cerrar sesión y borrar la sesión y los datos de inicio de sesión guardados de QMplus"</string>
-    <string name="ui_generated_9614c9084183e5">"Otros cursos EBU / semestre sin confirmar"</string>
+    <string name="ui_generated_9614c9084183e5">"Otros cursos / semestre sin confirmar"</string>
     <string name="ui_generated_972279090941cd">"Rechazar y dejar de usar"</string>
     <string name="ui_generated_978971f7bbd114">"Obtenido en el dispositivo: "</string>
     <string name="ui_generated_97b5e548717da0">"No se pudieron guardar los ajustes de seguridad de QMplus. Inténtalo de nuevo."</string>
@@ -834,7 +834,7 @@
     <string name="ui_generated_f0456de5fa75e8">"No hay asignaturas eliminadas este semestre."</string>
     <string name="ui_generated_f079d9d65e9133">"Abrir la asignatura oficial de QMplus"</string>
     <string name="ui_generated_f0c58227c753f6">"No se guardó la restauración del curso. Reinténtalo."</string>
-    <string name="ui_generated_f0d56a750c980b">"Cursos EBU"</string>
+    <string name="ui_generated_f0d56a750c980b">"Cursos "</string>
     <string name="ui_generated_f0ed77791a4599">"Otros semestres"</string>
     <string name="ui_generated_f19c9933747cd7">"Selector de color"</string>
     <string name="ui_generated_f1a73f9bd31880">"La URL del horario personalizado debe usar HTTPS y no incluir credenciales."</string>

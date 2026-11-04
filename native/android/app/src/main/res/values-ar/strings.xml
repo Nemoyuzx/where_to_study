@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"إخفاء المقررات الأخرى / غير مؤكدة الفصل (%1$d) ⌃"</string>
     <string name="qmplus_loading">"جارٍ قراءة المقررات…"</string>
     <string name="qmplus_local_data_clear_pending">"مُسحت بيانات الأعمال المحلية. تُمسح جلسة QMplus على الويب بشكل غير متزامن، ولا يمكن إعادة الاتصال حتى يكتمل ذلك."</string>
-    <string name="qmplus_no_courses">"لا توجد مقررات EBU للفصل الحالي."</string>
+    <string name="qmplus_no_courses">"لا توجد مقررات للفصل الحالي."</string>
     <string name="qmplus_not_connected">"QMplus غير متصل. أكمل SSO / MFA الرسمي في الإعدادات ثم زامن المقررات."</string>
     <string name="qmplus_not_published">"غير منشور / غير مؤكد"</string>
     <string name="qmplus_open_activity">"فتح الفعالية الرسمية"</string>

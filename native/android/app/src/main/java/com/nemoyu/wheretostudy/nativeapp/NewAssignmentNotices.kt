@@ -9,7 +9,7 @@ import org.json.JSONObject
 internal data class NewAssignmentNotice(val id: String, val title: String, val course: String?, val deadline: String?) {
     companion object {
         fun qmplus(snapshot: QmplusSnapshot): List<NewAssignmentNotice> {
-            val visible = QmplusSnapshotCodec.ebuOnly(snapshot)
+            val visible = QmplusSnapshotCodec.assessmentCourses(snapshot)
             val courses = visible.courses.filter { it.currentTermStatus != "other" }.associateBy { it.id }
             return visible.activities.filter { it.courseID in courses && it.kind in setOf("assignment", "quiz") }
                 .map { NewAssignmentNotice("${it.courseID}:${it.kind}:${it.id}", it.title, courses[it.courseID]?.name,

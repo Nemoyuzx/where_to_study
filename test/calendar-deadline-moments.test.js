@@ -24,20 +24,21 @@ test('only explicit valid deadline timestamps project; UTC dates convert indepen
   assert.equal(raw.source,undefined,'the full owner record is not mutated')
 })
 
-test('QM points use due or quiz close only, current EBU policy and exact source-specific click payloads',()=>{
-  const courses=[{id:'ebu',name:'EBU Course',current_term_status:'current'},{id:'other',name:'Other',current_term_status:'current'},{id:'unknown',name:'EBU Unknown',current_term_status:'unknown'}]
+test('QM points use due or quiz close only, current EBU and BBC policy and exact source-specific click payloads',()=>{
+  const courses=[{id:'ebu',name:'EBU Course',current_term_status:'current'},{id:'other',name:'BBC6521 Project',current_term_status:'current'},{id:'general',name:'General Training',current_term_status:'current'},{id:'unknown',name:'EBU Unknown',current_term_status:'unknown'}]
   const activities=[
     {id:'assignment',course_id:'ebu',kind:'assignment',title:'Assignment',due_at:'2026-10-07T04:00:00Z'},
     {id:'quiz',course_id:'ebu',kind:'quiz',title:'Quiz',closes_at:'2026-10-07T04:00:00Z',due_at:'2026-10-07T05:00:00Z'},
     {id:'cutoff-only',course_id:'ebu',kind:'assignment',title:'No due time',cutoff_at:'2026-10-07T04:00:00Z'},
     {id:'admin',course_id:'ebu',kind:'assignment',title:'Coursework Mark Review Request',due_at:'2026-10-07T04:00:00Z'},
     {id:'other',course_id:'other',kind:'assignment',title:'Other',due_at:'2026-10-07T04:00:00Z'},
+    {id:'general',course_id:'general',kind:'assignment',title:'General',due_at:'2026-10-07T04:00:00Z'},
     {id:'unknown',course_id:'unknown',kind:'assignment',title:'Unknown',due_at:'2026-10-07T04:00:00Z'},
   ]
   const groups=domain.courseDeadlineMomentGroups({assignments:[task('cloud','2026-10-07 12:00:00')],qm:{courses,activities}})
   assert.equal(groups.length,1)
-  assert.deepEqual(groups[0].items.map(item=>item.source),['ucloud','qmplus','qmplus'])
-  assert.deepEqual(groups[0].items.map(item=>item.assignmentItem.id),['cloud','assignment','quiz'])
+  assert.deepEqual(groups[0].items.map(item=>item.source),['ucloud','qmplus','qmplus','qmplus'])
+  assert.deepEqual(groups[0].items.map(item=>item.assignmentItem.id),['cloud','assignment','quiz','other'])
   assert.equal(groups[0].items[2].assignmentItem.source,'qmplus')
   assert.equal(groups[0].items[2].clock,'12:00')
   assert(!Object.hasOwn(groups[0],'duration'));assert(!Object.hasOwn(groups[0],'endMinutes'))

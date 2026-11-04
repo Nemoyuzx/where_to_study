@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Sembunyikan mata kuliah lain / semester belum dipastikan (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Sedang memuat mata kuliah…"</string>
     <string name="qmplus_local_data_clear_pending">"Data bisnis lokal telah dihapus. Sesi web QMplus sedang dihapus secara asinkron; koneksi ulang dinonaktifkan hingga selesai."</string>
-    <string name="qmplus_no_courses">"Belum ada mata kuliah EBU untuk semester ini."</string>
+    <string name="qmplus_no_courses">"Belum ada mata kuliah untuk semester ini."</string>
     <string name="qmplus_not_connected">"QMplus belum terhubung. Selesaikan masuk SSO/MFA resmi di Pengaturan, lalu sinkronkan mata kuliah."</string>
     <string name="qmplus_not_published">"Belum diumumkan / belum dipastikan"</string>
     <string name="qmplus_open_activity">"Buka kegiatan resmi"</string>

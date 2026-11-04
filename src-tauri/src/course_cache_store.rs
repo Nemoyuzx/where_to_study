@@ -334,7 +334,7 @@ fn qm_ids(value: &Snapshot) -> Vec<String> {
                         .name
                         .trim()
                         .get(..3)
-                        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("EBU"))
+                        .is_some_and(|prefix| prefix == "EBU" || prefix == "BBC")
             })?;
             Some(format!("{}:{}:{}", course.id, item.kind, item.id))
         })
