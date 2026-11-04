@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Recolher outras disciplinas / semestre não confirmado (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Carregando disciplinas…"</string>
     <string name="qmplus_local_data_clear_pending">"Os dados locais foram limpos. A sessão web do QMplus está sendo limpa de forma assíncrona; não é possível reconectar até a conclusão."</string>
-    <string name="qmplus_no_courses">"Não há disciplinas EBU para o semestre atual."</string>
+    <string name="qmplus_no_courses">"Não há disciplinas para o semestre atual."</string>
     <string name="qmplus_not_connected">"QMplus não conectado. Conclua SSO / MFA na página oficial pelas Configurações e sincronize as disciplinas."</string>
     <string name="qmplus_not_published">"Não publicado / não confirmado"</string>
     <string name="qmplus_open_activity">"Abrir atividade oficial"</string>

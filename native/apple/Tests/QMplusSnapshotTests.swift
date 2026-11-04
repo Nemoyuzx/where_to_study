@@ -188,10 +188,10 @@ final class QMplusSnapshotTests: XCTestCase {
         XCTAssertNotEqual(AppLocalization.string("显示其他学期／历史课程", language: .english), "显示其他学期／历史课程")
     }
 
-    func testCachedNonEBUCoursesAndTheirActivitiesStayExcludedEvenWithHistoryEnabled() throws {
+    func testCachedCoursesKeepEBUAndBBCAndDropOtherPrefixes() throws {
         let base = try QMplusSnapshotPolicy.decode(payload())
         let original = try XCTUnwrap(base.courses.first)
-        let included = QMplusCourse(id: "3", name: "eBu Synthetic course", shortName: nil,
+        let included = QMplusCourse(id: "3", name: "BBC6521 Project", shortName: nil,
                                    url: try XCTUnwrap(URL(string: "https://qmplus.qmul.ac.uk/course/view.php?id=3")),
                                    startAt: nil, endAt: nil, currentTermStatus: .current)
         let activity = QMplusActivity(id: "4", courseID: "3", title: "Original API quiz", kind: .quiz,
@@ -204,7 +204,7 @@ final class QMplusSnapshotTests: XCTestCase {
             let selection = QMplusCourseSelection(snapshot: snapshot, showsOtherTerms: history)
             XCTAssertEqual(selection.courses.map(\.id), ["3"])
             XCTAssertEqual(selection.activities.map(\.id), ["4"])
-            XCTAssertEqual(selection.courses.first?.name, "eBu Synthetic course")
+            XCTAssertEqual(selection.courses.last?.name, "BBC6521 Project")
         }
         XCTAssertEqual(snapshot.courses.count, 2, "The complete old snapshot must not be rewritten")
         XCTAssertEqual(snapshot.activities.count, 2)

@@ -76,11 +76,11 @@ export default function courseLogicTest() {
         .assertEqual('Assignments');
     });
 
-    it('legacy_qmplus_snapshot_shows_only_trimmed_ebu_courses_and_their_current_activities', 0, () => {
+    it('legacy_qmplus_snapshot_keeps_bbc_projects_and_current_activities', 0, () => {
       const courses: QMPlusCourse[] = [
         new QMPlusCourse('1', '  EBU Design', 'Design', null, null, null, 'current'),
-        new QMPlusCourse('2', '中文课程', 'EBU Alias', null, null, null, 'current'),
-        new QMPlusCourse('3', 'ebu History', 'History', null, null, null, 'other'),
+        new QMPlusCourse('2', 'BBC6521 Project', 'Project', null, null, null, 'current'),
+        new QMPlusCourse('3', 'EBU History', 'History', null, null, null, 'other'),
         new QMPlusCourse('4', 'EBU Term Unknown', 'Unknown', null, null, null, 'unknown')
       ];
       const activities: QMPlusActivity[] = [
@@ -104,14 +104,17 @@ export default function courseLogicTest() {
       const warnings: string[] = [];
       const snapshot: QMPlusSnapshot = new QMPlusSnapshot('2026-10-03T10:00:00.000Z',
         false, courses, activities, warnings);
-      expect(CourseQMPlusScope.isEBUName(' eBu Design ')).assertTrue();
-      expect(CourseQMPlusScope.isEBUName('Course EBU')).assertFalse();
-      expect(CourseQMPlusScope.currentCourses(snapshot).length).assertEqual(1);
+      expect(CourseQMPlusScope.isCourseName(' eBu Design ')).assertFalse();
+      expect(CourseQMPlusScope.isCourseName('  EBU Design ')).assertTrue();
+      expect(CourseQMPlusScope.isCourseName('BBC6521 Project')).assertTrue();
+      expect(CourseQMPlusScope.isCourseName('bbc6521 Project')).assertFalse();
+      expect(CourseQMPlusScope.isCourseName('Course EBU')).assertFalse();
+      expect(CourseQMPlusScope.currentCourses(snapshot).length).assertEqual(2);
       expect(CourseQMPlusScope.currentCourses(snapshot)[0].id).assertEqual('1');
       expect(CourseQMPlusScope.otherCourses(snapshot).length).assertEqual(2);
       expect(CourseQMPlusScope.otherCourses(snapshot)[0].id).assertEqual('3');
       expect(CourseQMPlusScope.otherCourses(snapshot)[1].id).assertEqual('4');
-      expect(CourseQMPlusScope.currentActivities(snapshot).length).assertEqual(1);
+      expect(CourseQMPlusScope.currentActivities(snapshot).length).assertEqual(2);
       expect(CourseQMPlusScope.currentActivities(snapshot)[0].id).assertEqual('11');
     });
 

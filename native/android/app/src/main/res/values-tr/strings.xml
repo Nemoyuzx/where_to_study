@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Diğer / dönemi doğrulanmamış dersleri gizle (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Dersler yükleniyor…"</string>
     <string name="qmplus_local_data_clear_pending">"Yerel iş verileri temizlendi. QMplus web oturumu arka planda temizleniyor; tamamlanana kadar yeniden bağlanılamaz."</string>
-    <string name="qmplus_no_courses">"Geçerli dönemde EBU dersi yok."</string>
+    <string name="qmplus_no_courses">"Geçerli dönemde dersi yok."</string>
     <string name="qmplus_not_connected">"QMplus bağlı değil. Ayarlarda resmi SSO / MFA girişini tamamlayıp dersleri eşitleyin."</string>
     <string name="qmplus_not_published">"Yayımlanmadı / doğrulanmadı"</string>
     <string name="qmplus_open_activity">"Resmi etkinliği aç"</string>

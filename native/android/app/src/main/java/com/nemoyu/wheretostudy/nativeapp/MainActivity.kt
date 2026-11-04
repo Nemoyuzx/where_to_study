@@ -1124,7 +1124,7 @@ class MainActivity : Activity() {
     internal fun showCachedCourseDetails(key: String): Boolean {
         if (!isCurrentUiOwner()) return false
         val cloud = calendarDailyInfoRepository.currentTeachingCloudCourses()?.any { "teaching-cloud.course.${it.id}" == key } == true
-        val qm = qmplusState().takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)
+        val qm = qmplusState().takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::assessmentCourses)
             ?.courses?.any { "qmplus.course.${it.id}" == key } == true
         if (!cloud && !qm) return false
         courseSessionState.selectedMode = InformationQueryMode.COURSES

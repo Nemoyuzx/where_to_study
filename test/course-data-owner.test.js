@@ -90,17 +90,18 @@ test('QM changed during an existing read queues one local reread and consumes co
   await flush()
 })
 
-test('QM notices include assignments and quizzes only from current EBU courses, excluding admin mark review',()=>{
+test('QM notices include assignments and quizzes only from current EBU and BBC courses, excluding admin mark review',()=>{
   const {owner}=fixture()
   const activities=[
     {id:'assign',course_id:'ebu',kind:'assignment',title:'Coursework'},
     {id:'quiz',course_id:'ebu',kind:'quiz',title:'Quiz',closes_at:'2026-10-08T12:00:00Z'},
     {id:'review',course_id:'ebu',kind:'assignment',title:'Coursework Mark Review Request'},
     {id:'other',course_id:'other',kind:'quiz',title:'Other course'},
+    {id:'general',course_id:'general',kind:'quiz',title:'General course'},
   ]
-  owner.acceptNewAssignments('qmplus',{fetched_at:'2026-10-06T10:00:00Z',courses:[{id:'ebu',name:'EBU Fixture',current_term_status:'current'},{id:'other',name:'Other fixture',current_term_status:'current'}],activities,
+  owner.acceptNewAssignments('qmplus',{fetched_at:'2026-10-06T10:00:00Z',courses:[{id:'ebu',name:'EBU Fixture',current_term_status:'current'},{id:'other',name:'BBC6521 Project',current_term_status:'current'},{id:'general',name:'General Training',current_term_status:'current'}],activities,
     new_assignment_ids:activities.map(item=>`${item.course_id}:${item.kind}:${item.id}`)})
-  assert.deepEqual(owner.state.newAssignments.map(item=>item.id),['assign','quiz'])
+  assert.deepEqual(owner.state.newAssignments.map(item=>item.id),['assign','quiz','other'])
   assert.equal(owner.state.newAssignments[1].deadline,'2026-10-08T12:00:00Z')
 })
 

@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Скрыть другие курсы / неподтверждённый семестр (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Загрузка курсов…"</string>
     <string name="qmplus_local_data_clear_pending">"Локальные данные очищены. Веб-сеанс QMplus удаляется асинхронно; повторное подключение недоступно до завершения."</string>
-    <string name="qmplus_no_courses">"Нет курсов EBU текущего семестра."</string>
+    <string name="qmplus_no_courses">"Нет курсов текущего семестра."</string>
     <string name="qmplus_not_connected">"QMplus не подключён. Пройдите официальный SSO / MFA в настройках и синхронизируйте курсы."</string>
     <string name="qmplus_not_published">"Не опубликовано / не подтверждено"</string>
     <string name="qmplus_open_activity">"Открыть официальную активность"</string>

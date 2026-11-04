@@ -86,7 +86,7 @@
     <string name="ui_generated_17833c4bd8f7c2">"A contagem inclui apenas tarefas sincronizadas com estado de entrega explícito. As datas usam o horário de Pequim; o horário de Londres respeita o horário de verão."</string>
     <string name="ui_generated_17847bee97a4f7">"Notas de demonstração, sem conexão aos serviços da universidade"</string>
     <string name="ui_generated_17cef164f92212">"Informações tradicionais apenas para referência · Fonte externa: UAPI"</string>
-    <string name="ui_generated_17dbd8355b5e29">"Após o login, as disciplinas e atividades EBU serão sincronizadas automaticamente uma vez. Em caso de falha, você pode tentar novamente manualmente."</string>
+    <string name="ui_generated_17dbd8355b5e29">"Após o login, as disciplinas e atividades serão sincronizadas automaticamente uma vez. Em caso de falha, você pode tentar novamente manualmente."</string>
     <string name="ui_generated_17e5be2984a3c6">"Não foi possível salvar a configuração de dados móveis. Tente novamente."</string>
     <string name="ui_generated_17fff140548bbf">"Ano e semestre"</string>
     <string name="ui_generated_186be2232e2c9b">"Fonte de dados"</string>
@@ -531,7 +531,7 @@
     <string name="ui_generated_9586e7491b5dbd">"Não há entregas de tarefas nesse dia"</string>
     <string name="ui_generated_958c4bbf1e4d5a">"Médio"</string>
     <string name="ui_generated_960567769d479c">"Sair e limpar a sessão e os dados de login salvos do QMplus"</string>
-    <string name="ui_generated_9614c9084183e5">"Outras disciplinas EBU / semestre não confirmado"</string>
+    <string name="ui_generated_9614c9084183e5">"Outras disciplinas / semestre não confirmado"</string>
     <string name="ui_generated_972279090941cd">"Não concordar e parar de usar"</string>
     <string name="ui_generated_978971f7bbd114">"Obtido no dispositivo em: "</string>
     <string name="ui_generated_97b5e548717da0">"Não foi possível salvar as configurações de segurança do QMplus. Tente novamente."</string>
@@ -834,7 +834,7 @@
     <string name="ui_generated_f0456de5fa75e8">"Não há disciplinas excluídas neste semestre."</string>
     <string name="ui_generated_f079d9d65e9133">"Abrir disciplina oficial do QMplus"</string>
     <string name="ui_generated_f0c58227c753f6">"A restauração da disciplina não foi salva. Tente novamente"</string>
-    <string name="ui_generated_f0d56a750c980b">"Disciplinas EBU"</string>
+    <string name="ui_generated_f0d56a750c980b">"Disciplinas "</string>
     <string name="ui_generated_f0ed77791a4599">"Outros semestres"</string>
     <string name="ui_generated_f19c9933747cd7">"Seletor de cores"</string>
     <string name="ui_generated_f1a73f9bd31880">"A URL da agenda personalizada deve usar HTTPS e não conter credenciais."</string>

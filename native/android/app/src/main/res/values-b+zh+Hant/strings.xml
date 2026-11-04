@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"收起其他 / 學期未確認課程（%1$d） ⌃"</string>
     <string name="qmplus_loading">"正在讀取課程…"</string>
     <string name="qmplus_local_data_clear_pending">"本地業務數據已清除，QMplus 網頁會話正在異步清除；完成前不能再次連接。"</string>
-    <string name="qmplus_no_courses">"暫無目前學期 EBU 課程。"</string>
+    <string name="qmplus_no_courses">"暫無目前學期 課程。"</string>
     <string name="qmplus_not_connected">"尚未連接 QMplus，請在設定中完成官方 SSO / MFA 登錄後同步課程。"</string>
     <string name="qmplus_not_published">"未公佈 / 尚未確認"</string>
     <string name="qmplus_open_activity">"打開官方活動"</string>

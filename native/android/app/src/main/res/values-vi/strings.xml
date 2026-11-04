@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Ẩn môn khác / chưa rõ học kỳ (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Đang đọc môn học…"</string>
     <string name="qmplus_local_data_clear_pending">"Dữ liệu nghiệp vụ trên máy đã được xóa. Phiên web QMplus đang được xóa bất đồng bộ; không thể kết nối lại trước khi hoàn tất."</string>
-    <string name="qmplus_no_courses">"Chưa có môn EBU của học kỳ hiện tại."</string>
+    <string name="qmplus_no_courses">"Chưa có môn của học kỳ hiện tại."</string>
     <string name="qmplus_not_connected">"Chưa kết nối QMplus. Hãy hoàn tất đăng nhập SSO / MFA chính thức trong Cài đặt, rồi đồng bộ môn học."</string>
     <string name="qmplus_not_published">"Chưa công bố / chưa xác nhận"</string>
     <string name="qmplus_open_activity">"Mở hoạt động chính thức"</string>

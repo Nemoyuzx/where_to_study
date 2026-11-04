@@ -1,7 +1,7 @@
 // One app-lifetime owner for course/assignment DTOs. Secrets and browser state
 // never enter this store, localStorage or diagnostics.
 import {AssignmentSeen} from './assignment-seen.js'
-import {isEbuCourse,isQmplusAssessmentActivity} from './course-domain.js'
+import {isQmplusCourse,isQmplusAssessmentActivity} from './course-domain.js'
 const noticeSources=['ucloud','qmplus']
 const newSummary=()=>({count:0,preview:[],latest:null,consumed:null})
 // Native publications have a validated RFC3339 fetched_at. Retain nanoseconds
@@ -68,7 +68,7 @@ export class CourseDataOwner {
     if(!noticeSources.includes(source)||!value||value.partial||!Array.isArray(value.courses))return
     const items=source==='ucloud'?value?.assignments:value?.activities
     if(!Array.isArray(items))return
-    const eligible=(items||[]).filter(item=>source==='ucloud'||(['assignment','quiz'].includes(item.kind)&&isQmplusAssessmentActivity(item)&&value.courses?.some(course=>course.id===item.course_id&&course.current_term_status==='current'&&isEbuCourse(course))))
+    const eligible=(items||[]).filter(item=>source==='ucloud'||(['assignment','quiz'].includes(item.kind)&&isQmplusAssessmentActivity(item)&&value.courses?.some(course=>course.id===item.course_id&&course.current_term_status==='current'&&isQmplusCourse(course))))
     const identity=item=>source==='ucloud'?item.id:`${item.course_id}:${item.kind}:${item.id}`
     const summary=this.noticeSummaries[source]
     const native=this.nativeNotices||Array.isArray(value.new_assignment_ids)

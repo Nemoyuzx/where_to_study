@@ -6,7 +6,7 @@
 
 返回：`schema_version:1, source:"qmplus", fetched_at, ok, partial, courses, activities, warnings`；失败有固定 `error_code`。最大 UTF-8 **512 KiB**，100 课程、500 活动、40 警告，每请求20秒、总120秒、串行单飞。native 必须再次校验来源、schema、字段数量、长度和官方业务 URL，不能信任网页输入。
 
-课程：`id,name,short_name,url,start_at,end_at,current_term_status`。**仅保留完整课程名去空白后以 EBU 开头的 QMplus 课程及其所属活动**，大小写不敏感；其他课程既不显示，也不读取模块详情。状态为 `current/other/unknown`，依实际起止时间与课程学年标记判定；没有可靠学期证据时标注未知，不把历史课程强算成本学期。教学云平台课程不适用此筛选。
+课程：`id,name,short_name,url,start_at,end_at,current_term_status`。**仅保留完整课程名去空白后以大写 EBU 或 BBC 开头的 QMplus 课程及其所属活动**；其他课程既不显示，也不读取模块详情。状态为 `current/other/unknown`，依实际起止时间与课程学年标记判定；没有可靠学期证据时标注未知，不把历史课程强算成本学期。教学云平台课程不适用此筛选。
 
 活动：`id,course_id,title,kind,url,due_at,opens_at,closes_at,cutoff_at,time_limit_seconds,status,detail_status,raw_time_text`。kind=`assignment/quiz`；detail_status=`available/restricted/unavailable`。日期 nullable UTC RFC3339；原网页的伦敦日期遵守夏令时，原始时间说明最多1000字符。未验证个人延期/截止不能捏造；未发布截止的活动仍展示“未公布”。Quiz 开放区间不是固定考试时段。
 

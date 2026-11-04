@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Sembunyikan kursus lain / semester belum disahkan (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Sedang memuatkan kursus…"</string>
     <string name="qmplus_local_data_clear_pending">"Data perniagaan setempat telah dipadam. Sesi web QMplus sedang dibersihkan secara tak segerak; sambungan semula dilumpuhkan sehingga selesai."</string>
-    <string name="qmplus_no_courses">"Belum ada kursus EBU untuk semester semasa."</string>
+    <string name="qmplus_no_courses">"Belum ada kursus untuk semester semasa."</string>
     <string name="qmplus_not_connected">"QMplus belum disambungkan. Lengkapkan log masuk SSO/MFA rasmi dalam Tetapan, kemudian segerakkan kursus."</string>
     <string name="qmplus_not_published">"Belum diumumkan / belum disahkan"</string>
     <string name="qmplus_open_activity">"Buka aktiviti rasmi"</string>

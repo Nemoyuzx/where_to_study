@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"Hide other / unconfirmed-term courses (%1$d) ⌃"</string>
     <string name="qmplus_loading">"Loading courses…"</string>
     <string name="qmplus_local_data_clear_pending">"Local business data cleared. The QMplus web session is clearing asynchronously; reconnect is disabled until it completes."</string>
-    <string name="qmplus_no_courses">"No current-term EBU courses."</string>
+    <string name="qmplus_no_courses">"No current-term courses."</string>
     <string name="qmplus_not_connected">"QMplus not connected. Complete official SSO / MFA in Settings, then sync courses."</string>
     <string name="qmplus_not_published">"Not published / unconfirmed"</string>
     <string name="qmplus_open_activity">"Open Official Activity"</string>

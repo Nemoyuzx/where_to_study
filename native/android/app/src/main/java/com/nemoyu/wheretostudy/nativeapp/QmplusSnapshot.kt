@@ -81,8 +81,11 @@ internal object QmplusPolicy {
 
 internal object QmplusSnapshotCodec {
     /** Scope older local snapshots for presentation without changing BUPT/UCloud data. */
-    fun ebuOnly(snapshot: QmplusSnapshot): QmplusSnapshot {
-        val courses = snapshot.courses.filter { it.name.trimStart().startsWith("EBU", ignoreCase = true) }
+    fun assessmentCourses(snapshot: QmplusSnapshot): QmplusSnapshot {
+        val courses = snapshot.courses.filter {
+            val name = it.name.trim()
+            name.startsWith("EBU") || name.startsWith("BBC")
+        }
         val ids = courses.map { it.id }.toSet()
         return snapshot.copy(courses = courses,
             activities = QmplusCourseworkPolicy.activities(snapshot.activities).filter { it.courseID in ids })

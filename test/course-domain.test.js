@@ -1,11 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {assignmentsForCourse, groupTeachingCloudCourses, teachingCloudCourseIDs, isEbuCourse, submissionCounts, courseTimestamp, courseActivityKey, CourseRequestOwner} from '../src/course-domain.js'
+import {assignmentsForCourse, groupTeachingCloudCourses, teachingCloudCourseIDs, isQmplusCourse, submissionCounts, courseTimestamp, courseActivityKey, CourseRequestOwner} from '../src/course-domain.js'
 
-test('QM EBU scope is anchored on the full name, not a substring or short-name guess',()=>{
-  assert.equal(isEbuCourse({name:'  ebu1234 - Fixture'}),true)
-  assert.equal(isEbuCourse({name:'Training EBU1234',short_name:'EBU1234'}),false)
-  assert.equal(isEbuCourse({name:null}),false)
+test('QM course names keep only trimmed uppercase EBU and BBC prefixes',()=>{
+  assert.equal(isQmplusCourse({name:'  EBU1234 - Fixture'}),true)
+  assert.equal(isQmplusCourse({name:'BBC6521 Project'}),true)
+  assert.equal(isQmplusCourse({name:'  ebu1234 - Fixture'}),false)
+  assert.equal(isQmplusCourse({name:'  bbc1 Project'}),false)
+  assert.equal(isQmplusCourse({name:'Training EBU1234',short_name:'EBU1234'}),false)
+  assert.equal(isQmplusCourse({name:'General Training'}),false)
+  assert.equal(isQmplusCourse({name:'  '}),false)
+  assert.equal(isQmplusCourse({name:null}),false)
 })
 test('course association uses official ID and rejects ambiguous same-name old cache',()=>{
   const a={id:'a',name:'Same'},b={id:'b',name:'Same'}

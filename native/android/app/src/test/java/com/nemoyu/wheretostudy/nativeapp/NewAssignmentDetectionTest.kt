@@ -59,10 +59,11 @@ class NewAssignmentDetectionTest {
             QmplusActivityItem(id, course, title, kind, "https://qmplus.qmul.ac.uk/mod/$kind/view.php?id=$id",
                 null, null, null, null, null, null, null, null)
         val snapshot = QmplusSnapshot("2026-10-06T00:00:00Z",
-            listOf(course("ebu", "EBU Test"), course("other", "Other course"), course("old", "EBU Old", "other")),
+            listOf(course("ebu", "EBU Test"), course("bbc", "BBC6521 Project"), course("lower", "bbc6521 Project"), course("other", "Other course"), course("old", "EBU Old", "other")),
             listOf(activity("assignment"), activity("quiz", kind = "quiz"),
                 activity("review", title = "COURSEWORK MARK REVIEW REQUEST"),
+                activity("bbc", course = "bbc"), activity("lower", course = "lower"),
                 activity("other", course = "other"), activity("old", course = "old")), emptyList())
-        assertEquals(listOf("ebu:assignment:assignment", "ebu:quiz:quiz"), NewAssignmentNotice.qmplus(snapshot).map { it.id })
+        assertEquals(listOf("ebu:assignment:assignment", "ebu:quiz:quiz", "bbc:assignment:bbc"), NewAssignmentNotice.qmplus(snapshot).map { it.id })
     }
 }

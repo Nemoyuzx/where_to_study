@@ -6,7 +6,7 @@ import AnimatedDisclosure from './AnimatedDisclosure.jsx'
 import {BookOpen,CheckCircle2,CalendarClock,Clock3,RefreshCw,ExternalLink,ChevronDown,Info,Settings2,X} from 'lucide-react'
 import GradesPanel from './GradesPanel.jsx'
 import PrivateQueriesPanel from './PrivateQueriesPanel.jsx'
-import {assignmentsForCourse,groupTeachingCloudCourses,teachingCloudCourseIDs,isEbuCourse,qmplusActivitiesForCourse,submissionCounts,courseTimestamp,courseActivityKey,CourseRequestOwner} from './course-domain.js'
+import {assignmentsForCourse,groupTeachingCloudCourses,teachingCloudCourseIDs,isQmplusCourse,qmplusActivitiesForCourse,submissionCounts,courseTimestamp,courseActivityKey,CourseRequestOwner} from './course-domain.js'
 
 function time(value,language) {
   const date=new Date(courseTimestamp(value))
@@ -121,7 +121,7 @@ export function CalendarAssignmentCourseDetail({item,language,courseDataOwner,ha
   const data=useCourseData(courseDataOwner)
   const directory=useMemo(()=>groupTeachingCloudCourses(data.courses||[]),[data.courses])
   const source=item.source==='qmplus'?'qmplus':'ucloud'
-  const course=source==='qmplus'?(data.qm?.courses||[]).find(course=>course.id===item.course_id&&course.current_term_status==='current'&&isEbuCourse(course)):calendarCourseForAssignment(item,directory)
+  const course=source==='qmplus'?(data.qm?.courses||[]).find(course=>course.id===item.course_id&&course.current_term_status==='current'&&isQmplusCourse(course)):calendarCourseForAssignment(item,directory)
   const items=source==='qmplus'?(course?qmplusActivitiesForCourse(data.qm,course):[item]):course&&data.assignments!==null?assignmentsForCourse(data.assignments,course,data.courses||[]):[item]
   useEffect(()=>{if(source==='qmplus'&&!data.qm)onClose()},[source,data.qm,onClose])
   async function refresh() {
@@ -162,7 +162,7 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
   }
   function open(source,course) {owner.current.next('detail');setSelection({source,id:source==='ucloud'?course.presentation_key:course.id});setDetailError('');setDetailBusy(false)}
   function closeDetail(){owner.current.next('detail');setSelection(null);setDetailBusy(false);setDetailError('')}
-  const eligibleQmCourses=(qm?.courses||[]).filter(isEbuCourse)
+  const eligibleQmCourses=(qm?.courses||[]).filter(isQmplusCourse)
   const qmCourses=eligibleQmCourses.filter(course=>course.current_term_status==='current')
   const otherQmCourses=eligibleQmCourses.filter(course=>course.current_term_status!=='current')
   const selectedCourse=selection&&(selection.source==='qmplus'
@@ -184,12 +184,12 @@ export default function CourseHub({command,language,hasAcademicAccount,onOpenAcc
       <div className="course-list">{cloudCourses.map(course=><CourseRow key={course.presentation_key} course={course} items={cloudActivities(course)} language={language} source="ucloud" busy={detailBusy} error={detailError} onRefresh={refreshAssignments} onOpen={()=>open('ucloud',course)}/>)}</div>
       {courses?.length===0&&<p>{text('当前接口没有返回课程。', 'No current courses returned.')}</p>}
       {qmplusEnabled&&<>
-      <header className="query-section-header"><div><div className="qmplus-title"><h2>QMplus · {text('EBU 课程', 'EBU courses')}</h2><small>{text('仅适用国院','For the International School only')}</small></div>{qm&&<small>{qmCourses.length} {text('门', 'courses')}</small>}</div><div className="course-actions"><button onClick={()=>courseDataOwner?.syncQM(false).catch(()=>setError('无法打开 QMplus。'))}><ExternalLink size={16}/>{text('连接／同步', 'Connect / sync')}</button><button onClick={()=>courseDataOwner?.reloadQM().catch(()=>{})}><RefreshCw size={16}/>{text('读取同步结果', 'Load synchronized data')}</button></div></header>
+      <header className="query-section-header"><div><div className="qmplus-title"><h2>QMplus · {text('课程', 'Courses')}</h2><small>{text('仅适用国院','For the International School only')}</small></div>{qm&&<small>{qmCourses.length} {text('门', 'courses')}</small>}</div><div className="course-actions"><button onClick={()=>courseDataOwner?.syncQM(false).catch(()=>setError('无法打开 QMplus。'))}><ExternalLink size={16}/>{text('连接／同步', 'Connect / sync')}</button><button onClick={()=>courseDataOwner?.reloadQM().catch(()=>{})}><RefreshCw size={16}/>{text('读取同步结果', 'Load synchronized data')}</button></div></header>
       {qm?.cache_warning&&<p role="status">{text('本次课程数据已读取，但本地缓存未更新。重启后可能显示此前缓存。','Course data was loaded, but the local cache was not updated. A restart may show the previous cache.')}</p>}
       {qm?.partial&&<p role="status">{text('同步不完整，可能保留上次成功数据及其原同步时间。', 'Partial synchronization; previous data and its original timestamp may be retained.')}</p>}
       {!qm&&<p>{text('请在设置连接 QMplus，并在官方网页完成 SSO／MFA。', 'Connect QMplus in Settings and complete official SSO/MFA.')}</p>}
       <div className="course-list">{qmCourses.map(course=><CourseRow key={course.id} course={course} items={qmActivities(course)} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div>
-      {otherQmCourses.length>0&&<details className="course-other-terms"><summary>{text('其他／学期未确认的 EBU 课程', 'Other / unconfirmed EBU courses')} ({otherQmCourses.length})</summary><div className="course-list">{otherQmCourses.map(course=><CourseRow key={course.id} course={course} items={[]} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div></details>}
+      {otherQmCourses.length>0&&<details className="course-other-terms"><summary>{text('其他／学期未确认的 EBU 课程', 'Other / unconfirmed courses')} ({otherQmCourses.length})</summary><div className="course-list">{otherQmCourses.map(course=><CourseRow key={course.id} course={course} items={[]} language={language} source="qmplus" onOpen={()=>open('qmplus',course)}/>)}</div></details>}
       {qm&&<small>{text('最近同步', 'Last synchronized')}：{time(qm.fetched_at,language)} · QMplus</small>}
       </>}
     </>}

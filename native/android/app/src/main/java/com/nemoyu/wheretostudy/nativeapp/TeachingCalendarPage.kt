@@ -4569,7 +4569,7 @@ internal class TeachingCalendarPage(
                 courseDetailKey = matches.singleOrNull()?.let { "teaching-cloud.course.${it.id}" },
             ))
         }
-        activity.qmplusState().takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::ebuOnly)?.let { snapshot ->
+        activity.qmplusState().takeIf { it.isFeatureEnabled }?.snapshot?.let(QmplusSnapshotCodec::assessmentCourses)?.let { snapshot ->
             val courseIDs = snapshot.courses.filter { it.currentTermStatus == "current" || activity.calendarShowsOtherQMplusCourses() }
                 .map { it.id }.toSet()
             snapshot.activities.filter { it.courseID in courseIDs }.forEach { item ->

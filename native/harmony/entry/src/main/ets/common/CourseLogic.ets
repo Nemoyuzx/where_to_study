@@ -48,7 +48,7 @@ export class CoursePageContract {
   }
 }
 
-// 对旧的本地快照也应用同一展示范围；不以“当前”状态替代 EBU 名称过滤。
+// 旧快照也只保留去空白后以大写 EBU 或 BBC 开头的课名；学期筛选保持独立。
 export class CourseQMPlusScope {
   static shanghaiTime(utc: string): string {
     const epoch: number = new Date(utc).getTime();
@@ -62,13 +62,13 @@ export class CourseQMPlusScope {
       pad(local.getUTCDate()) + ' ' + pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes());
   }
 
-  static isEBUName(name: string): boolean {
-    return /^EBU/i.test(name.trim());
+  static isCourseName(name: string): boolean {
+    return /^(?:EBU|BBC)/.test(name.trim());
   }
 
   static courses(snapshot: QMPlusSnapshot | null): QMPlusCourse[] {
     return (snapshot?.courses ?? []).filter((course: QMPlusCourse): boolean =>
-      CourseQMPlusScope.isEBUName(course.name));
+      CourseQMPlusScope.isCourseName(course.name));
   }
 
   static currentCourses(snapshot: QMPlusSnapshot | null): QMPlusCourse[] {

@@ -86,7 +86,7 @@
     <string name="ui_generated_17833c4bd8f7c2">"Учитываются только синхронизированные задания с явным статусом сдачи. Даты указаны по Пекину; летнее время Лондона учитывается."</string>
     <string name="ui_generated_17847bee97a4f7">"Примеры оценок; без подключения к университету"</string>
     <string name="ui_generated_17cef164f92212">"Традиционные сведения для справки · Источник: UAPI"</string>
-    <string name="ui_generated_17dbd8355b5e29">"После входа курсы и активности EBU автоматически синхронизируются один раз. При сбое можно повторить вручную."</string>
+    <string name="ui_generated_17dbd8355b5e29">"После входа курсы и активности автоматически синхронизируются один раз. При сбое можно повторить вручную."</string>
     <string name="ui_generated_17e5be2984a3c6">"Не удалось сохранить настройку мобильных данных. Повторите попытку."</string>
     <string name="ui_generated_17fff140548bbf">"Семестр"</string>
     <string name="ui_generated_186be2232e2c9b">"Источник"</string>
@@ -531,7 +531,7 @@
     <string name="ui_generated_9586e7491b5dbd">"Сегодня нет сроков заданий"</string>
     <string name="ui_generated_958c4bbf1e4d5a">"Средний"</string>
     <string name="ui_generated_960567769d479c">"Выйти и удалить сохранённый вход QMplus"</string>
-    <string name="ui_generated_9614c9084183e5">"Другие курсы EBU / семестр не подтверждён"</string>
+    <string name="ui_generated_9614c9084183e5">"Другие курсы / семестр не подтверждён"</string>
     <string name="ui_generated_972279090941cd">"Отклонить и не использовать"</string>
     <string name="ui_generated_978971f7bbd114">"Получено на устройстве: "</string>
     <string name="ui_generated_97b5e548717da0">"Не удалось сохранить настройки безопасности QMplus. Повторите попытку."</string>
@@ -834,7 +834,7 @@
     <string name="ui_generated_f0456de5fa75e8">"В этом семестре нет удалённых курсов."</string>
     <string name="ui_generated_f079d9d65e9133">"Открыть официальный курс QMplus"</string>
     <string name="ui_generated_f0c58227c753f6">"Восстановление курса не сохранено. Повторите попытку."</string>
-    <string name="ui_generated_f0d56a750c980b">"Курсы EBU"</string>
+    <string name="ui_generated_f0d56a750c980b">"Курсы "</string>
     <string name="ui_generated_f0ed77791a4599">"Другие семестры"</string>
     <string name="ui_generated_f19c9933747cd7">" палитра"</string>
     <string name="ui_generated_f1a73f9bd31880">"URL пользовательского календаря должен быть HTTPS без учётных данных."</string>

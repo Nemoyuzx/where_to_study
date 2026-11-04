@@ -71,7 +71,7 @@
     <string name="qmplus_hide_other_courses">"ซ่อนวิชาอื่น / ยังไม่ยืนยันภาคเรียน (%1$d) ⌃"</string>
     <string name="qmplus_loading">"กำลังอ่านรายวิชา…"</string>
     <string name="qmplus_local_data_clear_pending">"ล้างข้อมูลใช้งานในเครื่องแล้ว เซสชันเว็บ QMplus กำลังถูกล้างแบบอะซิงโครนัส จึงยังเชื่อมต่อใหม่ไม่ได้จนกว่าจะเสร็จ"</string>
-    <string name="qmplus_no_courses">"ยังไม่มีรายวิชา EBU ของภาคเรียนปัจจุบัน"</string>
+    <string name="qmplus_no_courses">"ยังไม่มีรายวิชา ของภาคเรียนปัจจุบัน"</string>
     <string name="qmplus_not_connected">"ยังไม่เชื่อมต่อ QMplus โปรดทำ SSO/MFA ทางการในตั้งค่าแล้วซิงค์รายวิชา"</string>
     <string name="qmplus_not_published">"ยังไม่ประกาศ / ยังไม่ยืนยัน"</string>
     <string name="qmplus_open_activity">"เปิดกิจกรรมทางการ"</string>
